@@ -34,12 +34,14 @@ export default function QuestDetail({ questId }) {
     return () => clearInterval(t)
   }, [timerStart])
 
+  // Compared across the WHOLE family, not just this kid: re-using a sibling's
+  // photo is exactly the cheat this check exists to catch.
   const previousHashes = useMemo(
     () =>
       state.submissions
-        .filter((s) => s.kidId === kid?.id && s.hash)
-        .map((s) => ({ hash: s.hash, submissionId: s.id })),
-    [state.submissions, kid?.id],
+        .filter((s) => s.hash)
+        .map((s) => ({ hash: s.hash, submissionId: s.id, kidId: s.kidId })),
+    [state.submissions],
   )
 
   if (!quest || !kid) {
@@ -53,6 +55,9 @@ export default function QuestDetail({ questId }) {
 
   const diff = DIFFICULTY[quest.difficulty] || DIFFICULTY.medium
   const cat = CATEGORY_MAP[quest.category]
+  // Only 'assigned' and 'redo' quests can be worked on. Anything else is either
+  // sitting with the parent or already paid out.
+  const isOpen = quest.status === 'assigned' || quest.status === 'redo'
   const onTime = quest.timerSeconds ? elapsed > 0 && elapsed <= quest.timerSeconds * 1000 : true
   const preview = calcReward(quest, { elite, streak: kid.streak.count, onTime })
 
@@ -65,6 +70,7 @@ export default function QuestDetail({ questId }) {
         quest,
         context: {
           captureSource: captured.source,
+          kidId: kid.id,
           previousHashes,
           secondsSinceQuestOpened: Math.round((Date.now() - openedAt.current) / 1000),
         },
@@ -78,14 +84,23 @@ export default function QuestDetail({ questId }) {
   }
 
   const submit = () => {
-    const photoId = photo ? uid('photo') : null
-    if (photo && photoId) putPhoto(photoId, photo.dataUrl)
+    // Storing the photo can fail — localStorage is capped at about 5MB. If it
+    // does, the submission still goes through, but it must say so: telling a
+    // parent "no photo required" when their kid took one is worse than useless.
+    let photoId = null
+    let photoUnavailable = false
+    if (photo) {
+      const id = uid('photo')
+      if (putPhoto(id, photo.dataUrl)) photoId = id
+      else photoUnavailable = true
+    }
     dispatch({
       type: 'SUBMIT_QUEST',
       submission: {
         questId: quest.id,
         kidId: kid.id,
         photoId,
+        photoUnavailable,
         hash: report?.hash || null,
         report,
         note: note.trim(),
@@ -99,7 +114,7 @@ export default function QuestDetail({ questId }) {
   }
 
   /* ---------- camera ---------- */
-  if (mode === 'camera') {
+  if (mode === 'camera' && isOpen) {
     return (
       <Screen>
         <h1 className="font-display text-xl font-extrabold mb-1">Photograph your work</h1>
@@ -126,7 +141,7 @@ export default function QuestDetail({ questId }) {
   }
 
   /* ---------- review before sending ---------- */
-  if (mode === 'review') {
+  if (mode === 'review' && isOpen) {
     const meta = report ? VERDICT_META[report.verdict] : null
     return (
       <Screen>
@@ -171,9 +186,15 @@ export default function QuestDetail({ questId }) {
         </Field>
 
         <div className="flex gap-2 mt-2">
-          <Button variant="soft" className="flex-1" onClick={() => { setPhoto(null); setReport(null); setMode('camera') }}>
-            Retake
-          </Button>
+          {quest.requiresPhoto ? (
+            <Button variant="soft" className="flex-1" onClick={() => { setPhoto(null); setReport(null); setMode('camera') }}>
+              Retake
+            </Button>
+          ) : (
+            <Button variant="soft" className="flex-1" onClick={() => setMode('detail')}>
+              Back
+            </Button>
+          )}
           <Button className="flex-1" onClick={submit}>Send to parent</Button>
         </div>
       </Screen>
@@ -245,7 +266,7 @@ export default function QuestDetail({ questId }) {
         </ul>
       </Card>
 
-      {quest.timerSeconds > 0 && (
+      {quest.timerSeconds > 0 && isOpen && (
         <Card className="mb-3 text-center">
           <SectionTitle>Race the clock</SectionTitle>
           <div className="font-display text-3xl font-extrabold" style={{ color: onTime ? 'var(--good)' : 'var(--bad)' }}>
@@ -265,12 +286,25 @@ export default function QuestDetail({ questId }) {
         </Card>
       )}
 
-      {quest.requiresPhoto ? (
-        <Button className="w-full" onClick={() => setMode('camera')}>📷 Take photo proof</Button>
+      {isOpen ? (
+        <>
+          {quest.requiresPhoto ? (
+            <Button className="w-full" onClick={() => setMode('camera')}>📷 Take photo proof</Button>
+          ) : (
+            <Button className="w-full" onClick={() => setMode('review')}>Mark as done</Button>
+          )}
+          <p className="text-xs text-muted text-center mt-2">Your parent approves it before XP is awarded.</p>
+        </>
+      ) : quest.status === 'submitted' ? (
+        <Banner tone="info" icon="⏳" title="Sent to your parent">
+          You have already sent this one in. You will get your XP when they approve it — there is
+          nothing else to do here.
+        </Banner>
       ) : (
-        <Button className="w-full" onClick={() => setMode('review')}>Mark as done</Button>
+        <Banner tone="good" icon="✅" title="Done and approved">
+          This quest is finished and the XP is already in your total.
+        </Banner>
       )}
-      <p className="text-xs text-muted text-center mt-2">Your parent approves it before XP is awarded.</p>
     </Screen>
   )
 }

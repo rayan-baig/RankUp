@@ -83,6 +83,38 @@ export function deletePhoto(id) {
   localStorage.setItem(PHOTO_KEY, JSON.stringify(photos))
 }
 
+/**
+ * Delete any stored photo that no submission points at any more.
+ *
+ * Deleting a kid or a quest removes their submissions, which used to leave the
+ * photos behind forever — invisible, taking up the storage budget, and (the part
+ * that actually matters) keeping pictures of a child's home on the device after
+ * the parent thought they had deleted them.
+ *
+ * Called after every save, so it self-heals no matter which path removed the
+ * submission. Returns the number of photos removed.
+ */
+export function purgeOrphanPhotos(state) {
+  const photos = readPhotos()
+  const ids = Object.keys(photos)
+  if (!ids.length) return 0
+
+  const referenced = new Set(
+    (state.submissions || []).map((s) => s.photoId).filter(Boolean),
+  )
+  const orphans = ids.filter((id) => !referenced.has(id))
+  if (!orphans.length) return 0
+
+  orphans.forEach((id) => delete photos[id])
+  try {
+    localStorage.setItem(PHOTO_KEY, JSON.stringify(photos))
+  } catch (err) {
+    console.warn('[RankUp] Could not purge old photos:', err)
+    return 0
+  }
+  return orphans.length
+}
+
 export function storageUsageBytes() {
   let total = 0
   for (const k of [KEY, PHOTO_KEY]) total += (localStorage.getItem(k) || '').length * 2

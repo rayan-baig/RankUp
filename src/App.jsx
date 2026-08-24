@@ -79,6 +79,14 @@ export default function App() {
     document.documentElement.dataset.reduceMotion = state.settings.reduceMotion ? 'true' : 'false'
   }, [state.settings.reduceMotion])
 
+  // Dimension Lockouts end on a timer. Sweep them on load and every 30s so a kid
+  // is let back in promptly and the override history stops saying "Active".
+  useEffect(() => {
+    dispatch({ type: 'EXPIRE_LOCKOUTS' })
+    const t = setInterval(() => dispatch({ type: 'EXPIRE_LOCKOUTS' }), 30000)
+    return () => clearInterval(t)
+  }, [dispatch])
+
   // Route guards.
   useEffect(() => {
     if (!state.onboarded && route !== '/welcome') {

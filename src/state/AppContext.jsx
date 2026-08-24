@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import { reducer, isElite, guildCapacity, activeLockout } from './reducer.js'
 import { createInitialState, TIERS } from './initialState.js'
-import { loadState, saveState, clearState } from '../lib/storage.js'
+import { loadState, saveState, clearState, purgeOrphanPhotos } from '../lib/storage.js'
 import { resolveKidTheme } from '../data/kidThemes.js'
 import { resolveParentTheme } from '../data/parentThemes.js'
 import { levelFromXp } from '../lib/xp.js'
@@ -23,7 +23,11 @@ export function AppProvider({ children }) {
   // Debounced save: writing on every keystroke would be wasteful.
   useEffect(() => {
     clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => saveState(state), 250)
+    saveTimer.current = setTimeout(() => {
+      saveState(state)
+      // Drop photos nothing points at any more — see purgeOrphanPhotos.
+      purgeOrphanPhotos(state)
+    }, 250)
     return () => clearTimeout(saveTimer.current)
   }, [state])
 
@@ -44,7 +48,9 @@ export function useApp() {
 export function useKid(kidId) {
   const { state } = useApp()
   const id = kidId ?? state.session.kidId
-  return state.kids.find((k) => k.id === id) || null
+  // Fall back to the first kid rather than null. A session pointing at a kid who
+  // has since been removed used to render a completely blank screen.
+  return state.kids.find((k) => k.id === id) || state.kids[0] || null
 }
 
 export function useKidTheme(kidId) {

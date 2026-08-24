@@ -189,19 +189,26 @@ export async function analyseLocally(dataUrl, context = {}) {
   if (context.previousHashes?.length) {
     let best = 64
     let bestId = null
+    let bestKidId = null
     for (const prev of context.previousHashes) {
       const d = hammingDistance(hash, prev.hash)
       if (d < best) {
         best = d
         bestId = prev.submissionId
+        bestKidId = prev.kidId ?? null
       }
     }
     if (best <= 6) {
+      const sameKid = !context.kidId || bestKidId === context.kidId
       flags.push({
         id: 'duplicate',
         severity: 'high',
-        label: 'Nearly identical to an earlier submission',
-        detail: 'This looks like the same photo that was sent in before.',
+        label: sameKid
+          ? 'Nearly identical to an earlier submission'
+          : "Nearly identical to another child's submission",
+        detail: sameKid
+          ? 'This looks like the same photo that was sent in before.'
+          : 'This looks like a photo that was already submitted from a different kid profile in this family.',
         relatedSubmissionId: bestId,
       })
       score -= 50

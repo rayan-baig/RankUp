@@ -64,6 +64,12 @@ export default function ParentApprovals() {
               <button type="button" onClick={() => setZoom(photo)} className="block w-full mb-3">
                 <img src={photo} alt={`Proof for ${quest.title}`} className="w-full" style={{ borderRadius: 'var(--radius)' }} />
               </button>
+            ) : sub.photoUnavailable ? (
+              <Banner tone="warn" icon="⚠️" title="Photo could not be saved">
+                {kid.name} took a photo but this device ran out of storage space, so it was lost.
+                That is a fault in the app, not a sign of anything — ask them to show you, or send
+                the quest back for a fresh photo.
+              </Banner>
             ) : (
               <Banner tone="info" icon="📝" title="No photo required">
                 This quest was marked done without photo proof.

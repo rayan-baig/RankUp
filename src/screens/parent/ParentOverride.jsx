@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useApp, useElite } from '../../state/AppContext.jsx'
-import { activeLockout } from '../../state/reducer.js'
+import { activeLockout, overrideHasExpired } from '../../state/reducer.js'
 import { levelFromXp, formatXp } from '../../lib/xp.js'
 import { resolveKidTheme } from '../../data/kidThemes.js'
 import { relativeTime, formatDuration } from '../../lib/dates.js'
@@ -217,9 +217,15 @@ export default function ParentOverride() {
                 </div>
                 <div className="text-right shrink-0">
                   <div className="text-[11px] text-muted">{relativeTime(o.createdAt)}</div>
-                  {o.kind !== 'tax' && (
-                    <Chip tone={o.liftedAt ? 'var(--good)' : 'var(--bad)'}>{o.liftedAt ? 'Lifted' : 'Active'}</Chip>
-                  )}
+                  {o.kind !== 'tax' && (() => {
+                    const timedOut = o.endedBy === 'timer' || overrideHasExpired(o)
+                    const done = Boolean(o.liftedAt) || timedOut
+                    return (
+                      <Chip tone={done ? 'var(--good)' : 'var(--bad)'}>
+                        {!done ? 'Active' : timedOut ? 'Expired' : 'Lifted'}
+                      </Chip>
+                    )
+                  })()}
                 </div>
               </div>
             </Card>

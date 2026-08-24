@@ -37,6 +37,7 @@ Other commands:
 | `npm run build` | Makes the optimised version in `dist/` that gets deployed |
 | `npm run preview` | Serves the built version, to check it before deploying |
 | `npm run lint` | Checks the code for obvious mistakes |
+| `npm run test:smoke` | Drives the app in a real browser and checks the rules that keep the game honest — see [tests/README.md](tests/README.md) |
 
 ---
 
@@ -75,6 +76,8 @@ api/
   verify-photo.js  the server-side Claude vision call (see docs/AI-CHECK.md)
 supabase/
   schema.sql       the database design, ready for when you wire up a backend
+tests/
+  integrity.mjs    browser tests for the rules that must never break
 docs/              plain-language explanations of every decision
 ```
 
@@ -105,3 +108,4 @@ push. Step-by-step: [docs/DEPLOY.md](docs/DEPLOY.md).
 | [docs/LEGAL.md](docs/LEGAL.md) | COPPA, Kids Category, Play Families |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Suggested build order from here |
 | [docs/GAME-DESIGN.md](docs/GAME-DESIGN.md) | XP curve, themes, tiers, guilds |
+| [tests/README.md](tests/README.md) | What the smoke tests cover and how to run them |

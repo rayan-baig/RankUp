@@ -41,6 +41,11 @@ export function activeLockout(kid) {
   return kid.lockout
 }
 
+/** True once a Dimension Lockout's timer has run out, even if nothing cleared it yet. */
+export function overrideHasExpired(override) {
+  return Boolean(override.kind === 'dimension' && override.until && Date.now() >= override.until)
+}
+
 /* ------------------------------------------------------------------ */
 /* Reducer                                                             */
 /* ------------------------------------------------------------------ */
@@ -104,6 +109,9 @@ export function reducer(state, action) {
         kids: state.kids.filter((k) => k.id !== action.kidId),
         quests: state.quests.filter((q) => q.kidId !== action.kidId),
         submissions: state.submissions.filter((s) => s.kidId !== action.kidId),
+        redemptions: state.redemptions.filter((r) => r.kidId !== action.kidId),
+        notes: state.notes.filter((n) => n.kidId !== action.kidId),
+        overrides: state.overrides.filter((o) => o.kidId !== action.kidId),
         session: {
           ...state.session,
           kidId: state.session.kidId === action.kidId ? (state.kids.find((k) => k.id !== action.kidId)?.id ?? null) : state.session.kidId,
@@ -183,6 +191,15 @@ export function reducer(state, action) {
     /* ---------- submissions ---------- */
 
     case 'SUBMIT_QUEST': {
+      // One pending submission per quest, ever. Without this a kid can open an
+      // already-submitted quest, send a second photo, and have a parent approve
+      // both — awarding the XP twice for one chore.
+      const alreadyPending = state.submissions.some(
+        (s) => s.questId === action.submission.questId && s.status === 'pending',
+      )
+      const quest = state.quests.find((q) => q.id === action.submission.questId)
+      if (alreadyPending || !quest || quest.status === 'approved') return state
+
       const submission = {
         id: uid('sub'),
         status: 'pending',
@@ -210,7 +227,9 @@ export function reducer(state, action) {
       if (!submission || submission.status !== 'pending') return state
       const quest = state.quests.find((q) => q.id === submission.questId)
       const kid = state.kids.find((k) => k.id === submission.kidId)
-      if (!quest || !kid) return state
+      // Second guard on the same exploit: even if a stray pending submission
+      // exists, a quest can only ever pay out once.
+      if (!quest || !kid || quest.status === 'approved') return state
 
       const reward = calcReward(quest, {
         elite: isElite(state),
@@ -369,12 +388,39 @@ export function reducer(state, action) {
       return logEvent(next, { type: 'override_applied', kidId, meta: { kind, reason: override.reason } })
     }
 
+    /**
+     * Dimension Lockouts end on a timer, but nothing was writing that down: the
+     * kid regained access (activeLockout checks the clock) while the override
+     * history went on claiming the lockout was still active. Dispatched by the
+     * app on load and on a timer.
+     */
+    case 'EXPIRE_LOCKOUTS': {
+      const now = Date.now()
+      const expired = state.overrides.filter(
+        (o) => !o.liftedAt && o.kind === 'dimension' && o.until && now >= o.until,
+      )
+      if (!expired.length) return state
+      const expiredIds = new Set(expired.map((o) => o.id))
+      return {
+        ...state,
+        overrides: state.overrides.map((o) =>
+          // endedBy distinguishes "ran out on its own" from "a parent lifted it".
+          expiredIds.has(o.id) ? { ...o, liftedAt: o.until, endedBy: 'timer' } : o,
+        ),
+        kids: state.kids.map((k) =>
+          k.lockout && expiredIds.has(k.lockout.overrideId) ? { ...k, lockout: null } : k,
+        ),
+      }
+    }
+
     case 'LIFT_OVERRIDE': {
       const override = state.overrides.find((o) => o.id === action.overrideId)
       if (!override) return state
       let next = {
         ...state,
-        overrides: state.overrides.map((o) => (o.id === action.overrideId ? { ...o, liftedAt: Date.now() } : o)),
+        overrides: state.overrides.map((o) =>
+          o.id === action.overrideId ? { ...o, liftedAt: Date.now(), endedBy: 'parent' } : o,
+        ),
       }
       next = mapKid(next, override.kidId, (k) =>
         k.lockout?.overrideId === override.id ? { ...k, lockout: null } : k,
@@ -436,7 +482,7 @@ export function reducer(state, action) {
       const today = dayKey()
       if (!kid || kid.lastLoginBonus === today) return state
       const coins = 5
-      let next = mapKid(state, kid.id, (k) => ({ ...k, coins: k.coins + coins, lastLoginBonus: today }))
+      const next = mapKid(state, kid.id, (k) => ({ ...k, coins: k.coins + coins, lastLoginBonus: today }))
       return logEvent(next, { type: 'login_bonus', kidId: kid.id, meta: { coins } })
     }
 

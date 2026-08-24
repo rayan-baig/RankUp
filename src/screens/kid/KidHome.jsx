@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
 import { levelFromXp, formatXp, xpToNext } from '../../lib/xp.js'
 import { nextEvolution } from '../../data/kidThemes.js'
@@ -10,6 +10,14 @@ import { navigate } from '../../lib/router.js'
 
 /** Countdown to the end of Sunday — the weekend challenge window. */
 function useWeekendCountdown() {
+  // Re-render once a minute, otherwise the "ends in" figure freezes at whatever
+  // it was when the screen first opened.
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 60000)
+    return () => clearInterval(t)
+  }, [])
+
   const end = useMemo(() => {
     const now = new Date()
     const d = new Date(now)

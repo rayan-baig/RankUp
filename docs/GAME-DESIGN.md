@@ -52,6 +52,18 @@ Same formula for all 15 themes; only the name and icon change. That keeps a rewa
 priced at "50" meaning the same amount of work no matter which world a kid picked — which
 matters when siblings compare.
 
+### One payout per quest
+
+A quest can only ever award XP once. There is a guard when a submission is
+created (a quest with a pending submission refuses a second one) and another
+when one is approved (a quest already marked approved refuses to pay out again),
+and the kid's screen replaces the submit controls with a "sent to your parent"
+message once work is in.
+
+All three are needed. Without them a kid could reopen a submitted quest, send a
+second photo, and have a parent approve both — collecting the XP twice for one
+chore. `tests/integrity.mjs` checks this on every run.
+
 ### Streaks
 
 A streak advances the first time a quest is **approved** on a given day. Approval, not

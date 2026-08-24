@@ -62,7 +62,13 @@ thing that has to change first. → [docs/BACKEND.md](BACKEND.md)
 
 Photos are also stored locally, downsized to about 40–80 KB each. Browsers cap
 `localStorage` at roughly 5 MB, so after a few dozen photos the oldest ones are dropped
-to make room.
+to make room. Photos belonging to a deleted kid or quest are purged automatically after
+every save — deleting a child's profile really does remove their pictures from the
+device.
+
+If storage is full when a photo is taken, the submission still goes through and the
+parent is told the photo was lost, rather than being shown "no photo required" as though
+none was ever taken.
 
 ---
 
