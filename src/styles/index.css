@@ -1,0 +1,176 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fallback values so the very first paint (before a theme is applied) is sane. */
+:root {
+  --bg: #070c22;
+  --surface: #101a3d;
+  --surface-2: #16234f;
+  --line: #2b3f7d;
+  --ink: #e8f0ff;
+  --ink-muted: #93a7d8;
+  --accent: #3fe0ff;
+  --accent-2: #b46bff;
+  --good: #1baf7a;
+  --warn: #eda100;
+  --bad: #e34948;
+  --radius: 16px;
+  --shadow: 0 10px 30px -12px rgb(0 0 0 / 0.55);
+  --font-display: Outfit;
+  --font-body: Inter;
+  --font-mono: 'JetBrains Mono';
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none;
+  }
+
+  /* Stops iOS zooming in when a kid taps a text field. */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  button {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-display), system-ui, sans-serif;
+    letter-spacing: -0.01em;
+  }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
+}
+
+@layer components {
+  /* The phone-sized column everything lives in. */
+  .shell {
+    @apply mx-auto w-full max-w-phone min-h-full relative;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+
+  .card-flat {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-3 font-semibold text-[15px] transition-transform;
+    border-radius: var(--radius);
+    min-height: 48px;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.45; pointer-events: none; }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--bg);
+    border: 1px solid var(--accent);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+
+  .btn-soft {
+    background: var(--surface-2);
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+
+  .btn-danger {
+    background: var(--bad);
+    color: #fff;
+    border: 1px solid var(--bad);
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--ink-muted);
+  }
+
+  .field {
+    @apply w-full px-3.5 py-3 outline-none;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    color: var(--ink);
+  }
+  .field::placeholder { color: var(--ink-muted); opacity: 0.75; }
+  .field:focus { border-color: var(--accent); }
+
+  .label {
+    @apply block text-xs font-semibold uppercase tracking-wider mb-1.5;
+    color: var(--ink-muted);
+  }
+
+  .section-title {
+    @apply text-xs font-bold uppercase tracking-[0.14em] mb-2;
+    color: var(--ink-muted);
+  }
+}
+
+/* --- Motion ------------------------------------------------------- */
+
+@keyframes rankup-float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
+@keyframes rankup-drift { from { transform: translate3d(0,0,0) } to { transform: translate3d(0,-100vh,0) } }
+@keyframes rankup-pulse { 0%,100% { opacity: 0.35 } 50% { opacity: 1 } }
+@keyframes rankup-spin { to { transform: rotate(360deg) } }
+@keyframes rankup-pop { 0% { transform: scale(0.7); opacity: 0 } 60% { transform: scale(1.06) } 100% { transform: scale(1); opacity: 1 } }
+@keyframes rankup-sparkle { 0% { transform: translate(0,0) scale(1); opacity: 1 } 100% { transform: translate(var(--dx), var(--dy)) scale(0); opacity: 0 } }
+@keyframes rankup-slide-up { from { transform: translateY(18px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+@keyframes rankup-glitch {
+  0%, 100% { clip-path: inset(0 0 0 0); transform: translate(0) }
+  20% { clip-path: inset(12% 0 40% 0); transform: translate(-4px) }
+  40% { clip-path: inset(60% 0 8% 0); transform: translate(5px) }
+  60% { clip-path: inset(30% 0 55% 0); transform: translate(-3px) }
+  80% { clip-path: inset(75% 0 5% 0); transform: translate(2px) }
+}
+
+.anim-pop { animation: rankup-pop 260ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+.anim-slide-up { animation: rankup-slide-up 240ms ease-out both; }
+.anim-float { animation: rankup-float 3.6s ease-in-out infinite; }
+.anim-glitch { animation: rankup-glitch 420ms steps(2) 3; }
+
+[data-reduce-motion='true'] * {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
