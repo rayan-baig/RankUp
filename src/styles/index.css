@@ -160,6 +160,7 @@
 .anim-slide-up { animation: rankup-slide-up 240ms ease-out both; }
 .anim-float { animation: rankup-float 3.6s ease-in-out infinite; }
 .anim-glitch { animation: rankup-glitch 420ms steps(2) 3; }
+.anim-pulse { animation: rankup-pulse 1.1s ease-in-out infinite; }
 
 [data-reduce-motion='true'] * {
   animation-duration: 0.001ms !important;

@@ -16,6 +16,10 @@ Cost: nothing. Value: highest of anything on this list.
 
 ### 2. Supabase project, auth, and ONE quest syncing between two devices
 
+**Half of this exists already.** Device pairing is built and tested: a kid gets a
+six-digit code, the parent types it in, the two are linked.
+→ [SYNC.md](SYNC.md). What remains is making data actually travel across that link.
+
 Not the whole app. One quest, one parent device, one kid device. → [BACKEND.md](BACKEND.md)
 
 This is the step that turns a demo into a product, and it is the one most likely to

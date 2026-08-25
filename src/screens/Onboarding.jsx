@@ -5,12 +5,16 @@ import { KID_THEMES } from '../data/kidThemes.js'
 import { ADAPTIVE_SUPPORTS } from '../data/questTemplates.js'
 import { Button, Card, Field, TextInput, TextArea, Banner, ProgressBar } from '../components/ui.jsx'
 import ThemePicker from '../components/ThemePicker.jsx'
+import KidDeviceSetup from './kid/KidDeviceSetup.jsx'
 import { navigate } from '../lib/router.js'
 
 const STEPS = ['Welcome', 'Your family', 'Add a kid', 'Pick a theme']
 
 export default function Onboarding() {
   const { dispatch } = useApp()
+  // null until someone says whose phone this is. A parent sets up the family;
+  // a kid's phone joins one with a pairing code and never creates an account.
+  const [mode, setMode] = useState(null)
   const [step, setStep] = useState(0)
   const [family, setFamily] = useState({ name: '', parentName: '', pin: '' })
   const [kid, setKid] = useState({ name: '', hasNeeds: false, notes: '', supports: [] })
@@ -39,6 +43,58 @@ export default function Onboarding() {
 
   const toggleSupport = (s) =>
     setKid((k) => ({ ...k, supports: k.supports.includes(s) ? k.supports.filter((x) => x !== s) : [...k.supports, s] }))
+
+  if (mode === 'kid') return <KidDeviceSetup onBack={() => setMode(null)} />
+
+  if (mode === null) {
+    return (
+      <div className="shell px-5 py-8 min-h-screen flex flex-col justify-center">
+        <div className="text-center mb-7 anim-slide-up">
+          <div className="text-5xl mb-3" aria-hidden="true">🏆</div>
+          <h1 className="font-display text-3xl font-extrabold leading-tight">RankUp</h1>
+          <p className="text-muted mt-2">
+            Chores become quests. Kids earn XP for finishing them — and you approve every one.
+          </p>
+        </div>
+
+        <p className="section-title text-center">Whose phone is this?</p>
+
+        <button
+          type="button"
+          onClick={() => setMode('parent')}
+          className="card w-full text-left p-4 mb-3 flex items-center gap-4 transition-transform active:scale-[0.98]"
+        >
+          <span className="text-3xl" aria-hidden="true">🧑‍🍳</span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-display font-bold">I'm a parent</span>
+            <span className="block text-xs text-muted">
+              Set up your family, add kids and assign quests.
+            </span>
+          </span>
+          <span aria-hidden="true" className="text-muted">›</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMode('kid')}
+          className="card w-full text-left p-4 flex items-center gap-4 transition-transform active:scale-[0.98]"
+        >
+          <span className="text-3xl" aria-hidden="true">🎮</span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-display font-bold">I'm a kid</span>
+            <span className="block text-xs text-muted">
+              Get a code to connect to your grown-up's account.
+            </span>
+          </span>
+          <span aria-hidden="true" className="text-muted">›</span>
+        </button>
+
+        <p className="text-xs text-muted text-center mt-6">
+          A kid's phone never creates its own account — it joins a parent's.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="shell px-4 py-6 min-h-screen flex flex-col">
@@ -161,11 +217,9 @@ export default function Onboarding() {
       )}
 
       <div className="flex gap-2 mt-6 sticky bottom-3">
-        {step > 0 && (
-          <Button variant="ghost" onClick={() => setStep((s) => s - 1)}>
-            Back
-          </Button>
-        )}
+        <Button variant="ghost" onClick={() => (step === 0 ? setMode(null) : setStep((s) => s - 1))}>
+          Back
+        </Button>
         <Button className="flex-1" disabled={!canContinue} onClick={() => (step === 3 ? finish() : setStep((s) => s + 1))}>
           {step === 3 ? 'Start playing' : 'Continue'}
         </Button>

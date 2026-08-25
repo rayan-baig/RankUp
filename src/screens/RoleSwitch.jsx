@@ -29,7 +29,8 @@ export default function RoleSwitch() {
   }
 
   const submitPin = () => {
-    if (pin === state.family.pin) {
+    // An empty stored PIN must never be matched by an empty box.
+    if (state.family.pin && pin === state.family.pin) {
       dispatch({ type: 'UNLOCK_PARENT' })
       setPinOpen(false)
       setPin('')

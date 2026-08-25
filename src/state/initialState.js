@@ -126,6 +126,24 @@ export function createInitialState() {
     version: 1,
     createdAt: Date.now(),
     onboarded: false,
+    /**
+     * What this installation is.
+     *
+     *   role 'parent' — the family account: assigns quests, approves proof.
+     *   role 'kid'    — a child's own phone, linked to a parent by a 6-digit
+     *                   pairing code. Holds only that one child's profile.
+     *   role null     — not set up yet.
+     *
+     * `pendingPairing` is the code a kid's device is currently showing while it
+     * waits for a parent to type it in.
+     */
+    device: {
+      role: null,
+      linkedKidId: null,
+      familyName: null,
+      pairedAt: null,
+    },
+    pendingPairing: null,
     session: { role: null, kidId: null, parentUnlocked: false },
     family: {
       id: uid('fam'),

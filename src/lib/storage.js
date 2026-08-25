@@ -10,8 +10,29 @@
  * Supabase later means rewriting this file, not the rest of the app.
  */
 
-const KEY = 'rankup.state.v1'
-const PHOTO_KEY = 'rankup.photos.v1'
+/**
+ * Device namespace.
+ *
+ * Normally there is one store per browser, which is one device. Adding
+ * `?device=kid` to the address gives that tab its own separate store, so a
+ * parent device and a kid device can be run side by side on one computer while
+ * building and testing pairing. It is a development convenience only — on two
+ * real phones each has its own storage already and no parameter is needed.
+ */
+function deviceSuffix() {
+  try {
+    const name = new URLSearchParams(window.location.search).get('device')
+    if (!name) return ''
+    return `.${name.replace(/[^a-z0-9_-]/gi, '').slice(0, 24)}`
+  } catch {
+    return ''
+  }
+}
+
+export const DEVICE_NAME = deviceSuffix().replace(/^\./, '') || null
+
+const KEY = `rankup.state.v1${deviceSuffix()}`
+const PHOTO_KEY = `rankup.photos.v1${deviceSuffix()}`
 
 export function loadState() {
   try {

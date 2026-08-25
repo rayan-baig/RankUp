@@ -42,6 +42,9 @@ export const readState = (page) =>
 export async function setUpFamily(page) {
   await page.goto(BASE, { waitUntil: 'networkidle' })
   await page.waitForTimeout(400)
+  // Setup now opens by asking whose phone this is.
+  await page.getByRole('button', { name: /I'm a parent/ }).click()
+  await page.waitForTimeout(300)
   await page.getByRole('button', { name: 'Continue' }).click()
   await page.locator('input').nth(0).fill('Sam')
   await page.locator('input').nth(2).fill('1234')

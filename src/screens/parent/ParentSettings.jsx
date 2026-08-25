@@ -3,7 +3,8 @@ import { useApp } from '../../state/AppContext.jsx'
 import { PARENT_THEMES } from '../../data/parentThemes.js'
 import { clearState, storageUsageBytes } from '../../lib/storage.js'
 import { relativeTime } from '../../lib/dates.js'
-import { Screen, Card, Button, SectionTitle, Field, TextInput, TextArea, Toggle, Banner, Modal, DemoTag, Select, Chip } from '../../components/ui.jsx'
+import { canSyncAcrossDevices } from '../../lib/sync/index.js'
+import { Screen, Card, Button, SectionTitle, Field, TextInput, TextArea, Toggle, Banner, Modal, Select, Chip } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
 
 export default function ParentSettings() {
@@ -16,6 +17,7 @@ export default function ParentSettings() {
 
   const usageKb = Math.round(storageUsageBytes() / 1024)
   const kidNotes = state.notes.filter((n) => n.kidId === noteKid).slice(-6)
+  const linkedCount = state.kids.filter((k) => k.pairedDeviceAt).length
 
   return (
     <Screen>
@@ -182,15 +184,35 @@ export default function ParentSettings() {
 
       <SectionTitle>Family sync</SectionTitle>
       <Card className="mb-4">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="font-semibold text-sm">Devices</span>
-          <DemoTag>Mockup</DemoTag>
+        <button
+          type="button"
+          onClick={() => navigate('/parent/pair')}
+          className="w-full flex items-center gap-3 text-left"
+        >
+          <span className="text-2xl" aria-hidden="true">🔗</span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold text-sm">Link a kid's device</span>
+            <span className="block text-xs text-muted">
+              Enter the six-digit code from their phone.
+              {linkedCount > 0 && ` ${linkedCount} linked.`}
+            </span>
+          </span>
+          <span aria-hidden="true" className="text-muted">›</span>
+        </button>
+
+        <div className="mt-3">
+          {canSyncAcrossDevices ? (
+            <Banner tone="good" icon="☁️" title="Connected to your sync service">
+              Quests, approvals and XP are shared between linked devices.
+            </Banner>
+          ) : (
+            <Banner tone="warn" icon="⚠️" title="Pairing works, syncing does not">
+              The pairing flow above is real, but there is no server behind it yet, so it only
+              connects two tabs of this browser. Quests and XP still live on this device alone.
+              See docs/SYNC.md.
+            </Banner>
+          )}
         </div>
-        <p className="text-sm text-muted">
-          There is no sync. Everything you see is stored in this browser on this device only —
-          open RankUp on another phone and it starts empty. Making the parent's phone and the kid's
-          phone see the same data is the single biggest remaining job. See docs/BACKEND.md.
-        </p>
         <p className="text-xs text-muted mt-2">Local data in use: about {usageKb} KB.</p>
       </Card>
 

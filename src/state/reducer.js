@@ -1,7 +1,7 @@
 import { uid } from '../lib/id.js'
 import { dayKey, daysBetween } from '../lib/dates.js'
 import { calcReward, levelFromXp, testScoreBonus } from '../lib/xp.js'
-import { createInitialState, TIERS, monthKey } from './initialState.js'
+import { createInitialState, TIERS, monthKey, makeKid } from './initialState.js'
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -60,11 +60,84 @@ export function reducer(state, action) {
     case 'RESET':
       return createInitialState()
 
+    /* ---------- device pairing ---------- */
+
+    /**
+     * A kid's device has generated a code and is waiting for a parent to enter
+     * it. Deliberately stores almost nothing: until a parent claims this device
+     * there is no verified consent, so the app collects the child's first name
+     * and a theme choice and nothing else. No quests, no photos, no XP.
+     */
+    case 'START_PAIRING':
+      return {
+        ...state,
+        device: { ...state.device, role: 'kid', linkedKidId: null },
+        pendingPairing: action.record,
+      }
+
+    case 'CANCEL_PAIRING':
+      return { ...state, pendingPairing: null }
+
+    /** A parent claimed this device's code. It is now part of their family. */
+    case 'PAIRING_CLAIMED': {
+      const pending = state.pendingPairing
+      if (!pending) return state
+      const kid = makeKid({ name: pending.kidName, themeId: pending.themeId })
+      const linked = { ...kid, id: pending.kidId || kid.id }
+      const next = {
+        ...state,
+        onboarded: true,
+        device: {
+          role: 'kid',
+          linkedKidId: linked.id,
+          familyName: action.familyName || 'your family',
+          pairedAt: Date.now(),
+        },
+        pendingPairing: null,
+        family: { ...state.family, name: action.familyName || state.family.name },
+        kids: [linked],
+        session: { role: 'kid', kidId: linked.id, parentUnlocked: false },
+      }
+      return logEvent(next, { type: 'device_paired', kidId: linked.id })
+    }
+
+    /**
+     * The parent's side: a code was accepted, so this kid joins the family.
+     * If a profile with that name already exists it is linked rather than
+     * duplicated — a parent who set the kid up here first, then handed them a
+     * phone, should not end up with two Avas.
+     */
+    case 'ADOPT_PAIRED_KID': {
+      const { kid: paired } = action
+      const existing = state.kids.find(
+        (k) => k.name.trim().toLowerCase() === paired.name.trim().toLowerCase(),
+      )
+      if (existing) {
+        const next = mapKid(state, existing.id, (k) => ({
+          ...k,
+          pairedDeviceAt: Date.now(),
+          pairedCodeId: paired.id,
+        }))
+        return logEvent(next, { type: 'device_linked', kidId: existing.id, meta: { merged: true } })
+      }
+      const kid = { ...makeKid({ name: paired.name, themeId: paired.themeId }), id: paired.id, pairedDeviceAt: Date.now() }
+      const next = { ...state, kids: [...state.kids, kid] }
+      return logEvent(next, { type: 'device_linked', kidId: kid.id, meta: { merged: false } })
+    }
+
+    /** Cut a kid's device loose. Their profile and progress stay with the family. */
+    case 'UNLINK_KID_DEVICE':
+      return logEvent(
+        mapKid(state, action.kidId, (k) => ({ ...k, pairedDeviceAt: null, pairedCodeId: null })),
+        { type: 'device_unlinked', kidId: action.kidId },
+      )
+
     case 'COMPLETE_ONBOARDING': {
       const { family, kid, guildName } = action
       const next = {
         ...state,
         onboarded: true,
+        device: { ...state.device, role: 'parent', linkedKidId: null },
         family: { ...state.family, ...family },
         kids: [...state.kids, kid],
         guild: { ...state.guild, name: guildName || `${family.name || kid.name}'s Guild`, leaderKidId: kid.id },

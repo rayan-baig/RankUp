@@ -16,6 +16,12 @@ way a person would and then assert on what actually ended up in storage.
 **`flows.mjs`** walks the everyday paths: send back → redo → approve, and
 completing a quest that needs no photo.
 
+**`pairing.mjs`** runs two devices side by side — a parent tab and a kid tab on
+`?device=kid`, which has its own separate storage — and checks the whole linking
+flow: a wrong code is refused, five wrong guesses kill the code, a claimed code
+cannot be reused, the kid device ends up in the right family, and a kid's device
+has no Parent Mode and no openable theme lock.
+
 ## Running them
 
 Playwright is deliberately **not** a dependency of this project — it downloads a

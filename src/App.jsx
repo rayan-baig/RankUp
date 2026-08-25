@@ -21,6 +21,7 @@ import QuestDetail from './screens/kid/QuestDetail.jsx'
 import KidGuild from './screens/kid/KidGuild.jsx'
 import KidShop from './screens/kid/KidShop.jsx'
 import KidProfile from './screens/kid/KidProfile.jsx'
+import KidPairing from './screens/kid/KidPairing.jsx'
 import ParentDashboard from './screens/parent/ParentDashboard.jsx'
 import ParentApprovals from './screens/parent/ParentApprovals.jsx'
 import ParentAssign from './screens/parent/ParentAssign.jsx'
@@ -28,6 +29,7 @@ import ParentKids from './screens/parent/ParentKids.jsx'
 import ParentBlueprint from './screens/parent/ParentBlueprint.jsx'
 import ParentOverride from './screens/parent/ParentOverride.jsx'
 import ParentAlliance from './screens/parent/ParentAlliance.jsx'
+import ParentPairKid from './screens/parent/ParentPairKid.jsx'
 import ParentPlan from './screens/parent/ParentPlan.jsx'
 import ParentSettings from './screens/parent/ParentSettings.jsx'
 
@@ -68,7 +70,10 @@ export default function App() {
     [activeKid],
   )
   const parentTheme = useMemo(() => resolveParentTheme(state.family.parentThemeId), [state.family.parentThemeId])
-  const theme = isParentArea ? parentTheme : kidTheme || parentTheme
+  const pendingTheme = state.pendingPairing
+    ? resolveKidTheme(state.pendingPairing.themeId, 1)
+    : null
+  const theme = isParentArea ? parentTheme : pendingTheme || kidTheme || parentTheme
 
   // Push the active theme's colours into CSS variables.
   useEffect(() => {
@@ -94,21 +99,49 @@ export default function App() {
       return
     }
     if (state.onboarded && route === '/welcome') {
-      // Straight into Parent Mode — setup finishes with the parent holding the phone.
-      navigate(state.session.parentUnlocked ? '/parent' : '/switch')
+      // A kid's device goes to their own home. A parent's finishes setup holding
+      // the phone, so it goes straight into Parent Mode.
+      if (state.device?.role === 'kid') navigate('/kid')
+      else navigate(state.session.parentUnlocked ? '/parent' : '/switch')
       return
     }
     if (state.onboarded && route === '/') {
-      navigate('/switch')
+      navigate(state.device?.role === 'kid' ? '/kid' : '/switch')
+      return
+    }
+    // A kid's own device has no parent side at all — not behind a PIN, not at
+    // all. The parent's tools live on the parent's phone. It has no profile
+    // switcher either: there is exactly one profile on it.
+    if (state.onboarded && state.device?.role === 'kid' && (isParentArea || route === '/switch')) {
+      navigate('/kid')
       return
     }
     // Parent Mode always needs the PIN gate, even on a direct link.
     if (state.onboarded && isParentArea && !state.session.parentUnlocked) {
       navigate('/switch')
     }
-  }, [state.onboarded, state.session.parentUnlocked, route, isParentArea])
+  }, [state.onboarded, state.session.parentUnlocked, state.device?.role, route, isParentArea])
 
-  if (!state.onboarded) return <Onboarding />
+  if (!state.onboarded) {
+    // A kid's device that has already generated a code goes straight back to it
+    // on reload, rather than making them start setup over.
+    if (state.pendingPairing) {
+      // Use the theme the kid just chose — it is the first thing they picked and
+      // seeing it immediately is half the point of picking it.
+      const chosen = resolveKidTheme(state.pendingPairing.themeId, 1)
+      return (
+        <>
+          <ThemeBackground theme={chosen} />
+          <KidPairing
+            name={state.pendingPairing.kidName}
+            themeId={state.pendingPairing.themeId}
+            onCancel={() => dispatch({ type: 'CANCEL_PAIRING' })}
+          />
+        </>
+      )
+    }
+    return <Onboarding />
+  }
 
   /* A locked-out kid sees nothing but the lockout screen. */
   const lock = isKidArea && activeKid ? activeLockout(activeKid) : null
@@ -170,6 +203,7 @@ function renderRoute(route, fullPath, activeKid) {
   if (route === '/parent/blueprint') return <ParentBlueprint initialKidId={queryParam(fullPath, 'kid') || activeKid?.id} />
   if (route === '/parent/override') return <ParentOverride />
   if (route === '/parent/alliance') return <ParentAlliance />
+  if (route === '/parent/pair') return <ParentPairKid />
   if (route === '/parent/plan') return <ParentPlan />
   if (route === '/parent/settings') return <ParentSettings />
 

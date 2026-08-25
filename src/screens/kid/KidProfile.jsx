@@ -35,8 +35,13 @@ export default function KidProfile() {
   const tier = avatarTier(level)
   const evolution = nextEvolution(kid.themeId, level)
 
+  // A kid's own device holds no PIN — the parent's PIN lives on the parent's
+  // phone. Without this guard an empty box would match the empty stored value
+  // and unlock the theme picker, which is exactly what the lock exists to stop.
+  const canUnlockHere = Boolean(state.family.pin)
+
   const tryUnlock = () => {
-    if (pin === state.family.pin) {
+    if (canUnlockHere && pin === state.family.pin) {
       setThemeUnlocked(true)
       setPinOpen(false)
       setPin('')
@@ -148,9 +153,15 @@ export default function KidProfile() {
           a parent has to enter the PIN to change it.
         </p>
         {!themeUnlocked ? (
-          <Button variant="soft" className="w-full" onClick={() => setPinOpen(true)}>
-            🔒 Ask a parent to change the theme
-          </Button>
+          canUnlockHere ? (
+            <Button variant="soft" className="w-full" onClick={() => setPinOpen(true)}>
+              🔒 Ask a parent to change the theme
+            </Button>
+          ) : (
+            <Banner tone="info" icon="🔒" title="Only on your parent's phone">
+              Theme changes happen in Parent Mode. Ask them to open RankUp and change it for you.
+            </Banner>
+          )
         ) : (
           <div className="mt-3">
             <ThemePicker value={draftTheme} onChange={setDraftTheme} previewLevel={level} />
@@ -172,9 +183,11 @@ export default function KidProfile() {
         )}
       </Card>
 
-      <Button variant="ghost" className="w-full" onClick={() => navigate('/switch')}>
-        Switch profile
-      </Button>
+      {state.device?.role !== 'kid' && (
+        <Button variant="ghost" className="w-full" onClick={() => navigate('/switch')}>
+          Switch profile
+        </Button>
+      )}
 
       <Modal
         open={pinOpen}

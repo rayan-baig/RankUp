@@ -36,6 +36,8 @@ Legend: ✅ genuinely works · 🟡 works but only on this device · ❌ looks r
 | System Override Protocol | ✅ | Currency Tax, Dimension Lockout and Red Security Lockdown all genuinely work |
 | AI Behaviour Blueprints | ✅ | Charts are computed from this family's real activity log |
 | Elite cosmetics (frames, drop selectors) | ✅ | |
+| Kid-device pairing by 6-digit code | ✅ | Expiry, 5-attempt limit, one-time use — [docs/SYNC.md](SYNC.md). Between two phones it needs Supabase; without it, two tabs of one browser |
+| A kid's device has no Parent Mode | ✅ | Not behind a PIN — not present at all |
 
 ### The camera caveat
 
@@ -60,6 +62,10 @@ Practically: **a parent's phone and a kid's phone are two separate, unconnected 
 of the app.** For a single-device family demo this is fine. For real use it is the one
 thing that has to change first. → [docs/BACKEND.md](BACKEND.md)
 
+The two devices can now *find* each other — the six-digit pairing flow is built and
+tested — but nothing flows across the link yet. Pairing establishes who belongs to whom;
+sharing the actual quests and XP is the next job. → [docs/SYNC.md](SYNC.md)
+
 Photos are also stored locally, downsized to about 40–80 KB each. Browsers cap
 `localStorage` at roughly 5 MB, so after a few dozen photos the oldest ones are dropped
 to make room. Photos belonging to a deleted kid or quest are purged automatically after
@@ -80,7 +86,7 @@ none was ever taken.
 | **Guild chat** | Messages stay in this browser | Same, plus moderation — kid-to-kid chat is a serious safety surface |
 | **Weekend Challenge** | The countdown is real; the event is not | Server-run events |
 | **Parent Alliance leaderboard** | The nine other families are sample data, and no discount reaches any bill | Shared database **and** a billing system that can apply a discount |
-| **Family sync device list** | There is no sync | See BACKEND.md |
+| **Sync after pairing** | Pairing is real (below); sharing quests and XP across the link is not | See SYNC.md |
 | **Reminders** | The toggles save, nothing is ever scheduled | Push notifications: a server, plus home-screen install on iOS |
 | **Subscriptions** | Switching plans flips feature flags. No card, no charge, no receipt | Stripe, or Apple/Google in-app purchase — [docs/PAYMENTS.md](PAYMENTS.md) |
 | **Accounts** | The parent PIN keeps a kid out of Parent Mode on this device. It is not a login. | Real auth — [docs/BACKEND.md](BACKEND.md) |

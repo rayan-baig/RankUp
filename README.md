@@ -50,8 +50,10 @@ accidentally promise something that does not exist.
 
 The three biggest gaps, in one line each:
 
-1. **No accounts and no sync.** Everything is stored in one browser on one device. A
-   parent's phone and a kid's phone see completely separate data. → [docs/BACKEND.md](docs/BACKEND.md)
+1. **No accounts, and sync is half done.** A kid's device can now be linked to a parent
+   with a six-digit code, and that flow is real and tested. But nothing yet flows across
+   the link — quests and XP still live on each device separately.
+   → [docs/SYNC.md](docs/SYNC.md)
 2. **No real payments.** Switching between Standard and Elite flips feature flags. No
    card, no charge. → [docs/PAYMENTS.md](docs/PAYMENTS.md)
 3. **Guilds, friends and the Parent Alliance are sample data.** Labelled as such
@@ -69,6 +71,7 @@ payment**. → [docs/LEGAL.md](docs/LEGAL.md)
 src/
   data/            the 15 kid themes, 10 parent themes, quest packs
   lib/             game rules (XP, levels), the photo checks, storage, routing
+  lib/sync/        device pairing — the local and Supabase backends
   state/           the single store: what the app knows and how it changes
   components/      reusable pieces (buttons, cards, avatar, camera, charts)
   screens/         one file per screen, split into kid/ and parent/
@@ -101,6 +104,7 @@ push. Step-by-step: [docs/DEPLOY.md](docs/DEPLOY.md).
 |---|---|
 | [docs/STATUS.md](docs/STATUS.md) | What actually works and what is a mockup |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Why web app, why Vite, why localStorage first |
+| [docs/SYNC.md](docs/SYNC.md) | Linking a kid's device with a 6-digit code |
 | [docs/BACKEND.md](docs/BACKEND.md) | How to add accounts and sync with Supabase |
 | [docs/AI-CHECK.md](docs/AI-CHECK.md) | How photo verification works and how to turn on the Claude layer |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Getting it online |

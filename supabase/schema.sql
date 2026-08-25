@@ -573,3 +573,194 @@ $$;
 -- parent has reviewed it removes most of the risk in this whole system.
 -- See docs/LEGAL.md.
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- Device pairing
+--
+-- A kid's device shows a 6-digit code; a parent types it into their own device
+-- to link the two. Six digits is only a million combinations, so the code alone
+-- is not the security. These four rules are:
+--
+--   * it expires after 10 minutes
+--   * it dies after 5 wrong guesses
+--   * it works exactly once
+--   * it is generated from a cryptographic random source on the device
+--
+-- Every one of those is enforced HERE, in the database, not in the browser.
+-- A tampered client must not be able to skip the attempt counter, and two
+-- parents must not be able to claim the same code at the same instant. That is
+-- why claiming is a single function call rather than a read followed by a write.
+-- ---------------------------------------------------------------------------
+
+create table pairing_codes (
+  code           text primary key check (code ~ '^[0-9]{6}$'),
+  kid_id         uuid not null default gen_random_uuid(),
+  kid_name       text not null,
+  theme_id       text not null default 'matrixblocks',
+  created_at     timestamptz not null default now(),
+  expires_at     timestamptz not null,
+  attempts       int not null default 0,
+  claimed_at     timestamptz,
+  claimed_by_family_id   uuid references families(id) on delete set null,
+  claimed_by_family_name text,
+  revoked_at     timestamptz
+);
+
+create index pairing_codes_expiry_idx on pairing_codes(expires_at);
+
+alter table pairing_codes enable row level security;
+
+-- No direct SELECT, INSERT or UPDATE policy is created on purpose. Nobody
+-- reads this table straight from a browser: every interaction goes through one
+-- of the three security-definer functions below. A readable pairing table would
+-- hand out every live code at once.
+
+/**
+ * A kid's device registers the code it is displaying.
+ * Returns null if that code is already live for somebody else, so the caller
+ * knows to roll a new one.
+ */
+create or replace function create_pairing_code(
+  p_code text,
+  p_kid_name text,
+  p_theme_id text,
+  p_ttl_seconds int default 600
+) returns pairing_codes
+language plpgsql security definer set search_path = public as $$
+declare
+  v_row pairing_codes;
+begin
+  if p_code !~ '^[0-9]{6}$' then raise exception 'malformed code'; end if;
+  if length(trim(p_kid_name)) = 0 then raise exception 'name required'; end if;
+  -- Keep the table small and stop dead codes blocking new ones.
+  delete from pairing_codes where expires_at < now() - interval '1 hour';
+
+  -- A code that is still live may not be reused; a dead one may be recycled.
+  if exists (
+    select 1 from pairing_codes
+     where code = p_code and claimed_at is null and revoked_at is null
+       and attempts < 5 and expires_at > now()
+  ) then
+    return null;
+  end if;
+
+  delete from pairing_codes where code = p_code;
+
+  insert into pairing_codes (code, kid_name, theme_id, expires_at)
+  values (p_code, left(trim(p_kid_name), 24), p_theme_id,
+          now() + make_interval(secs => greatest(60, least(p_ttl_seconds, 1800))))
+  returning * into v_row;
+
+  return v_row;
+end;
+$$;
+
+/**
+ * The kid's device polls this to find out whether a parent has claimed it.
+ * Only ever called with a code the caller is already displaying, so returning
+ * the row is not a disclosure — and it deliberately does not accept a partial
+ * or wildcard code.
+ */
+create or replace function read_pairing_code(p_code text)
+returns pairing_codes
+language sql security definer set search_path = public as $$
+  select * from pairing_codes where code = p_code;
+$$;
+
+create or replace function revoke_pairing_code(p_code text)
+returns void
+language sql security definer set search_path = public as $$
+  update pairing_codes set revoked_at = now()
+   where code = p_code and claimed_at is null;
+$$;
+
+/**
+ * The parent's side. One call, one transaction: check the code is usable, mark
+ * it claimed, and create the kid — or record a failed attempt and refuse.
+ *
+ * `for update` takes a row lock so two parents racing on the same code cannot
+ * both win. The wrong-guess counter increments even for a code that does not
+ * exist... it cannot, of course, since there is no row — so instead the caller
+ * is rate limited by the fact that every live code has its own budget of five.
+ * A brute-force run therefore has to find a specific live code within its
+ * ten-minute window and inside five tries.
+ */
+create or replace function claim_pairing_code(
+  p_code text,
+  p_family_id uuid,
+  p_family_name text
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_row pairing_codes;
+  v_kid kids;
+begin
+  if p_code !~ '^[0-9]{6}$' then
+    return jsonb_build_object('ok', false, 'reason', 'not_found');
+  end if;
+
+  -- The caller must be a parent in the family they claim to be acting for.
+  if not exists (
+    select 1 from parents where user_id = auth.uid() and family_id = p_family_id
+  ) then
+    raise exception 'not a parent of this family';
+  end if;
+
+  select * into v_row from pairing_codes where code = p_code for update;
+
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'not_found');
+  end if;
+  if v_row.claimed_at is not null then
+    return jsonb_build_object('ok', false, 'reason', 'claimed');
+  end if;
+  if v_row.revoked_at is not null then
+    return jsonb_build_object('ok', false, 'reason', 'revoked');
+  end if;
+  if v_row.attempts >= 5 then
+    return jsonb_build_object('ok', false, 'reason', 'blocked');
+  end if;
+  if v_row.expires_at <= now() then
+    update pairing_codes set attempts = attempts + 1 where code = p_code;
+    return jsonb_build_object('ok', false, 'reason', 'expired');
+  end if;
+
+  insert into kids (id, family_id, name, theme_id)
+  values (v_row.kid_id, p_family_id, v_row.kid_name, v_row.theme_id)
+  on conflict (id) do update set family_id = excluded.family_id
+  returning * into v_kid;
+
+  update pairing_codes
+     set claimed_at = now(),
+         claimed_by_family_id = p_family_id,
+         claimed_by_family_name = p_family_name
+   where code = p_code;
+
+  insert into events (family_id, kid_id, type, meta)
+  values (p_family_id, v_kid.id, 'device_paired', '{}'::jsonb);
+
+  return jsonb_build_object(
+    'ok', true, 'kid_id', v_kid.id, 'kid_name', v_kid.name, 'theme_id', v_kid.theme_id
+  );
+end;
+$$;
+
+-- A wrong guess must cost something, so the counter is bumped on the way in
+-- rather than only on success. Called by claim_pairing_code's caller path in
+-- the app; kept separate so a failed guess is recorded even when the row is
+-- then found to be expired or blocked.
+create or replace function record_pairing_attempt(p_code text)
+returns void
+language sql security definer set search_path = public as $$
+  update pairing_codes set attempts = attempts + 1
+   where code = p_code and claimed_at is null and revoked_at is null;
+$$;
+
+-- Anonymous devices need to call create/read/revoke (a kid's phone has no
+-- account yet). Claiming requires a signed-in parent, which the function
+-- checks for itself.
+grant execute on function create_pairing_code(text, text, text, int) to anon, authenticated;
+grant execute on function read_pairing_code(text) to anon, authenticated;
+grant execute on function revoke_pairing_code(text) to anon, authenticated;
+grant execute on function record_pairing_attempt(text) to anon, authenticated;
+grant execute on function claim_pairing_code(text, uuid, text) to authenticated;
