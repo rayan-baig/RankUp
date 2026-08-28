@@ -6,6 +6,8 @@ import { ADAPTIVE_SUPPORTS } from '../data/questTemplates.js'
 import { Button, Card, Field, TextInput, TextArea, Banner, ProgressBar } from '../components/ui.jsx'
 import ThemePicker from '../components/ThemePicker.jsx'
 import KidDeviceSetup from './kid/KidDeviceSetup.jsx'
+import SignIn from './SignIn.jsx'
+import { transport } from '../lib/sync/transport.js'
 import { navigate } from '../lib/router.js'
 
 const STEPS = ['Welcome', 'Your family', 'Add a kid', 'Pick a theme']
@@ -16,6 +18,9 @@ export default function Onboarding() {
   // a kid's phone joins one with a pairing code and never creates an account.
   const [mode, setMode] = useState(null)
   const [step, setStep] = useState(0)
+  // With a backend configured the parent needs a real account before anything
+  // can sync. Without one the app is device-only and there is nothing to join.
+  const [signedIn, setSignedIn] = useState(!transport.isConfigured() || Boolean(transport.currentUserId()))
   const [family, setFamily] = useState({ name: '', parentName: '', pin: '' })
   const [kid, setKid] = useState({ name: '', hasNeeds: false, notes: '', supports: [] })
   const [themeId, setThemeId] = useState(KID_THEMES[0].id)
@@ -26,15 +31,31 @@ export default function Onboarding() {
     (step === 2 && kid.name.trim()) ||
     step === 3
 
-  const finish = () => {
+  const finish = async () => {
+    const familyName = family.name.trim() || `${family.parentName.trim()}'s family`
     const newKid = makeKid({
       name: kid.name.trim(),
       themeId,
       accessibility: { hasNeeds: kid.hasNeeds, notes: kid.notes.trim(), supports: kid.supports },
     })
+
+    // The server assigns the real family id, so both devices agree on it.
+    let familyId = null
+    if (transport.isConfigured()) {
+      try {
+        const result = await transport.rpc('create_family', {
+          p_family_name: familyName,
+          p_parent_name: family.parentName.trim(),
+        })
+        familyId = result?.family_id || null
+      } catch (err) {
+        console.warn('[RankUp] Could not create the family on the server:', err.message)
+      }
+    }
+
     dispatch({
       type: 'COMPLETE_ONBOARDING',
-      family: { ...family, name: family.name.trim() || `${family.parentName.trim()}'s family` },
+      family: { ...family, name: familyName, ...(familyId ? { id: familyId } : {}) },
       kid: newKid,
       guildName: `${kid.name.trim()}'s Guild`,
     })
@@ -45,6 +66,10 @@ export default function Onboarding() {
     setKid((k) => ({ ...k, supports: k.supports.includes(s) ? k.supports.filter((x) => x !== s) : [...k.supports, s] }))
 
   if (mode === 'kid') return <KidDeviceSetup onBack={() => setMode(null)} />
+
+  if (mode === 'parent' && !signedIn) {
+    return <SignIn onDone={() => setSignedIn(true)} onBack={() => setMode(null)} />
+  }
 
   if (mode === null) {
     return (

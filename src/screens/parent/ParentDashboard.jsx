@@ -6,6 +6,7 @@ import { resolveKidTheme } from '../../data/kidThemes.js'
 import { activeLockout } from '../../state/reducer.js'
 import Avatar from '../../components/Avatar.jsx'
 import { Screen, Card, Button, SectionTitle, Stat, ProgressBar, EmptyState, Banner, Chip } from '../../components/ui.jsx'
+import SyncBadge from '../../components/SyncBadge.jsx'
 import { navigate } from '../../lib/router.js'
 
 export default function ParentDashboard() {
@@ -30,6 +31,7 @@ export default function ParentDashboard() {
       <header className="mb-3">
         <p className="text-xs uppercase tracking-widest text-muted">Parent dashboard</p>
         <h1 className="font-display text-2xl font-extrabold truncate">{state.family.name || 'Your family'}</h1>
+        <SyncBadge className="mt-0.5" />
       </header>
 
       <div className="flex gap-2 mb-3">

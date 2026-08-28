@@ -17,30 +17,13 @@
  * tampered client skip the attempt counter entirely.
  */
 
-const URL_BASE = import.meta.env?.VITE_SUPABASE_URL || ''
-const ANON_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY || ''
+import { transport, isConfigured } from './transport.js'
 
 export function isSupabaseConfigured() {
-  return Boolean(URL_BASE && ANON_KEY)
+  return isConfigured()
 }
 
-function headers() {
-  return {
-    'Content-Type': 'application/json',
-    apikey: ANON_KEY,
-    Authorization: `Bearer ${ANON_KEY}`,
-  }
-}
-
-async function rpc(fn, body) {
-  const res = await fetch(`${URL_BASE}/rest/v1/rpc/${fn}`, {
-    method: 'POST',
-    headers: headers(),
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) throw new Error(`${fn} failed: ${res.status}`)
-  return res.json()
-}
+const rpc = (fn, body) => transport.rpc(fn, body)
 
 export const supabaseAdapter = {
   id: 'supabase',
@@ -49,11 +32,21 @@ export const supabaseAdapter = {
 
   async publishCode(record) {
     try {
+      // The kid's phone signs in anonymously first. It has no account, but it
+      // needs an identity or row level security has no way to recognise it
+      // after pairing — see transport.signInAnonymously.
+      let userId = transport.currentUserId()
+      if (!userId) {
+        const session = await transport.signInAnonymously()
+        userId = session?.user?.id || null
+      }
+
       const result = await rpc('create_pairing_code', {
         p_code: record.code,
         p_kid_name: record.kidName,
         p_theme_id: record.themeId,
         p_ttl_seconds: Math.round((record.expiresAt - record.createdAt) / 1000),
+        p_kid_user_id: userId,
       })
       // The function returns null when the code is already live for someone
       // else, so the caller can roll a new one.

@@ -595,6 +595,11 @@ $$;
 create table pairing_codes (
   code           text primary key check (code ~ '^[0-9]{6}$'),
   kid_id         uuid not null default gen_random_uuid(),
+  -- The anonymous account the kid's device signed in as. Recorded here so that,
+  -- when a parent claims the code, the resulting kids row is tied to that
+  -- device and row level security can recognise it. Without this a kid's phone
+  -- has no identity and cannot read its own quests.
+  kid_user_id    uuid references auth.users(id) on delete set null,
   kid_name       text not null,
   theme_id       text not null default 'matrixblocks',
   created_at     timestamptz not null default now(),
@@ -624,7 +629,8 @@ create or replace function create_pairing_code(
   p_code text,
   p_kid_name text,
   p_theme_id text,
-  p_ttl_seconds int default 600
+  p_ttl_seconds int default 600,
+  p_kid_user_id uuid default null
 ) returns pairing_codes
 language plpgsql security definer set search_path = public as $$
 declare
@@ -646,9 +652,10 @@ begin
 
   delete from pairing_codes where code = p_code;
 
-  insert into pairing_codes (code, kid_name, theme_id, expires_at)
+  insert into pairing_codes (code, kid_name, theme_id, expires_at, kid_user_id)
   values (p_code, left(trim(p_kid_name), 24), p_theme_id,
-          now() + make_interval(secs => greatest(60, least(p_ttl_seconds, 1800))))
+          now() + make_interval(secs => greatest(60, least(p_ttl_seconds, 1800))),
+          p_kid_user_id)
   returning * into v_row;
 
   return v_row;
@@ -725,9 +732,10 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'expired');
   end if;
 
-  insert into kids (id, family_id, name, theme_id)
-  values (v_row.kid_id, p_family_id, v_row.kid_name, v_row.theme_id)
-  on conflict (id) do update set family_id = excluded.family_id
+  insert into kids (id, family_id, name, theme_id, user_id)
+  values (v_row.kid_id, p_family_id, v_row.kid_name, v_row.theme_id, v_row.kid_user_id)
+  on conflict (id) do update
+    set family_id = excluded.family_id, user_id = excluded.user_id
   returning * into v_kid;
 
   update pairing_codes
@@ -759,7 +767,7 @@ $$;
 -- Anonymous devices need to call create/read/revoke (a kid's phone has no
 -- account yet). Claiming requires a signed-in parent, which the function
 -- checks for itself.
-grant execute on function create_pairing_code(text, text, text, int) to anon, authenticated;
+grant execute on function create_pairing_code(text, text, text, int, uuid) to anon, authenticated;
 grant execute on function read_pairing_code(text) to anon, authenticated;
 grant execute on function revoke_pairing_code(text) to anon, authenticated;
 grant execute on function record_pairing_attempt(text) to anon, authenticated;

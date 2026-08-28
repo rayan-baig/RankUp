@@ -6,6 +6,7 @@ import { dayKey, lastSevenDays, formatDuration } from '../../lib/dates.js'
 import Avatar, { avatarTier, nextTierLevel } from '../../components/Avatar.jsx'
 import QuestCard from '../../components/QuestCard.jsx'
 import { Screen, Card, Button, ProgressBar, Stat, SectionTitle, EmptyState, Banner, DemoTag, Chip } from '../../components/ui.jsx'
+import SyncBadge from '../../components/SyncBadge.jsx'
 import { navigate } from '../../lib/router.js'
 
 /** Countdown to the end of Sunday — the weekend challenge window. */
@@ -62,6 +63,7 @@ export default function KidHome() {
       <header className="flex items-center justify-between mb-3">
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-widest text-muted">{theme.name}</p>
+          <SyncBadge />
           <h1 className="font-display text-2xl font-extrabold truncate">Hi {kid.name} 👋</h1>
         </div>
         <button type="button" onClick={() => navigate('/kid/profile')} className="chip shrink-0">

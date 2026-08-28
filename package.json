@@ -9,7 +9,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext .js,.jsx",
-    "test:smoke": "node tests/integrity.mjs && node tests/flows.mjs && node tests/pairing.mjs"
+    "test:smoke": "node tests/integrity.mjs && node tests/flows.mjs && node tests/pairing.mjs",
+    "test:sync": "node tests/sync.mjs",
+    "test:db": "./supabase/test/run.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

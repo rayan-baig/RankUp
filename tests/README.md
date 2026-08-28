@@ -22,6 +22,12 @@ flow: a wrong code is refused, five wrong guesses kill the code, a claimed code
 cannot be reused, the kid device ends up in the right family, and a kid's device
 has no Parent Mode and no openable theme lock.
 
+**`sync.mjs`** is the important one: it runs a parent device and a kid device
+against a real Postgres and checks that a quest assigned on one appears on the
+other, that photo proof comes back, and that approved XP lands on the kid's
+phone. It needs the local backend running — see
+[../supabase/test/README.md](../supabase/test/README.md).
+
 ## Running them
 
 Playwright is deliberately **not** a dependency of this project — it downloads a
@@ -38,6 +44,18 @@ Then, with the app running in another terminal:
 ```bash
 npm run dev          # terminal 1
 npm run test:smoke   # terminal 2
+```
+
+The database rules have their own suite, which needs no browser at all:
+
+```bash
+npm run test:db
+```
+
+And the cross-device loop, once the local backend is up:
+
+```bash
+npm run test:sync
 ```
 
 Screenshots land in `tests/screenshots/`. Set `BASE_URL` to test a deployed

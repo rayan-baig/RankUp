@@ -2,6 +2,7 @@ import { uid } from '../lib/id.js'
 import { dayKey, daysBetween } from '../lib/dates.js'
 import { calcReward, levelFromXp, testScoreBonus } from '../lib/xp.js'
 import { createInitialState, TIERS, monthKey, makeKid } from './initialState.js'
+import { ENTITIES } from '../lib/sync/mappers.js'
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -9,6 +10,19 @@ import { createInitialState, TIERS, monthKey, makeKid } from './initialState.js'
 
 function mapKid(state, kidId, fn) {
   return { ...state, kids: state.kids.map((k) => (k.id === kidId ? fn(k) : k)) }
+}
+
+/**
+ * Ask for a server call without breaking the reducer's purity.
+ *
+ * Some changes cannot be a plain table write: awarding XP, deciding a
+ * submission, spending currency. Those run as database functions so a tampered
+ * device cannot fake them. The reducer records the request here and the
+ * provider moves it into the outbox — which keeps this file free of side
+ * effects while keeping the arguments where they are actually computed.
+ */
+function queueRpc(state, fn, args) {
+  return { ...state, syncQueue: [...(state.syncQueue || []), { fn, args }] }
 }
 
 function logEvent(state, event) {
@@ -56,6 +70,60 @@ export function reducer(state, action) {
 
     case 'HYDRATE':
       return action.state
+
+    /**
+     * Fold a server snapshot into local state.
+     *
+     * The merge rules, stated once so they are not re-invented per entity:
+     *
+     *   - XP, currency and streaks always take the server's value. Only
+     *     approve_submission moves those, it runs inside the database, and a
+     *     device's own copy is a guess that may be behind.
+     *   - Everything else merges field by field onto whatever is already here,
+     *     which preserves the local-only bits the server does not store (a
+     *     kid's best times, a cached photo, an AI report's detail).
+     *   - Rows the server reports as deleted are removed.
+     *
+     * There is deliberately no "last write wins on the whole row": that is how
+     * a parent approving on one phone silently reverts a kid's theme change on
+     * another.
+     */
+    case 'MERGE_SNAPSHOT': {
+      const snap = action.snapshot
+      let next = { ...state }
+
+      for (const [snapshotKey, { key, mapper }] of Object.entries(ENTITIES)) {
+        const incoming = snap[snapshotKey]
+        if (!incoming?.length) continue
+        const byId = new Map((next[key] || []).map((item) => [item.id, item]))
+        for (const row of incoming) {
+          byId.set(row.id, mapper.fromRow(row, byId.get(row.id) || {}))
+        }
+        next = { ...next, [key]: [...byId.values()] }
+      }
+
+      for (const deletion of snap.deletions || []) {
+        const entity = Object.values(ENTITIES).find((e) => e.table === deletion.table_name)
+        if (!entity) continue
+        next = { ...next, [entity.key]: (next[entity.key] || []).filter((i) => i.id !== deletion.row_id) }
+      }
+
+      const family = snap.families?.[0]
+      if (family) {
+        next = {
+          ...next,
+          family: {
+            ...next.family,
+            id: family.id,
+            name: family.name,
+            parentThemeId: next.family.parentThemeId,
+            tier: family.tier,
+          },
+        }
+      }
+
+      return { ...next, lastSyncedAt: Date.now() }
+    }
 
     case 'RESET':
       return createInitialState()
@@ -284,7 +352,23 @@ export function reducer(state, action) {
         submissions: [...state.submissions, submission],
         quests: state.quests.map((q) => (q.id === submission.questId ? { ...q, status: 'submitted' } : q)),
       }
-      return logEvent(next, {
+      const withRpc = queueRpc(next, 'submit_quest', {
+        p_submission_id: submission.id,
+        p_quest_id: submission.questId,
+        p_kid_id: submission.kidId,
+        p_payload: {
+          photo_hash: submission.hash || null,
+          capture_source: submission.captureSource || 'none',
+          note: submission.note || '',
+          test_score: submission.testScore ?? null,
+          elapsed_ms: submission.elapsedMs ?? null,
+          on_time: submission.onTime !== false,
+          ai_verdict: submission.report?.verdict || null,
+          ai_score: submission.report?.score ?? null,
+          ai_report: submission.report || null,
+        },
+      })
+      return logEvent(withRpc, {
         type: 'quest_submitted',
         kidId: submission.kidId,
         meta: {
@@ -349,6 +433,13 @@ export function reducer(state, action) {
             : k.bestTimes,
       }))
 
+      next = queueRpc(next, 'approve_submission', {
+        p_submission_id: action.submissionId,
+        p_xp: xp,
+        p_coins: coins,
+        p_note: action.note || '',
+      })
+
       next = logEvent(next, {
         type: 'quest_approved',
         kidId: kid.id,
@@ -377,11 +468,19 @@ export function reducer(state, action) {
           q.id === submission.questId ? { ...q, status: 'redo', redoNote: action.note || '', redoCount: (q.redoCount || 0) + 1 } : q,
         ),
       }
-      return logEvent(next, { type: 'quest_rejected', kidId: submission.kidId, meta: { questId: submission.questId, reason: action.note || '' } })
+      const rejected = queueRpc(next, 'reject_submission', {
+        p_submission_id: action.submissionId,
+        p_note: action.note || '',
+      })
+      return logEvent(rejected, { type: 'quest_rejected', kidId: submission.kidId, meta: { questId: submission.questId, reason: action.note || '' } })
     }
 
     case 'CLEAR_LEVEL_UP':
       return { ...state, pendingLevelUp: null }
+
+    /** The provider has moved these into the outbox. */
+    case 'DRAIN_SYNC_QUEUE':
+      return { ...state, syncQueue: [] }
 
     /* ---------- rewards ---------- */
 
@@ -396,13 +495,19 @@ export function reducer(state, action) {
       const kid = state.kids.find((k) => k.id === action.kidId)
       if (!reward || !kid || kid.coins < reward.cost) return state
       let next = mapKid(state, kid.id, (k) => ({ ...k, coins: k.coins - reward.cost }))
+      const redemptionId = uid('rd')
       next = {
         ...next,
         redemptions: [
           ...next.redemptions,
-          { id: uid('rd'), rewardId: reward.id, kidId: kid.id, name: reward.name, cost: reward.cost, at: Date.now(), status: 'requested' },
+          { id: redemptionId, rewardId: reward.id, kidId: kid.id, name: reward.name, cost: reward.cost, at: Date.now(), status: 'requested' },
         ],
       }
+      next = queueRpc(next, 'redeem_reward', {
+        p_redemption_id: redemptionId,
+        p_reward_id: reward.id,
+        p_kid_id: kid.id,
+      })
       return logEvent(next, { type: 'reward_redeemed', kidId: kid.id, meta: { name: reward.name, cost: reward.cost } })
     }
 
@@ -447,6 +552,7 @@ export function reducer(state, action) {
         override.percent = percent
         override.amount = taken
         next = mapKid(next, kidId, (k) => ({ ...k, coins: k.coins - taken }))
+        next = queueRpc(next, 'apply_currency_tax', { p_kid_id: kidId, p_percent: percent })
         override.liftedAt = Date.now() // a tax is instantaneous, not an ongoing state
       } else if (kind === 'dimension') {
         const minutes = Math.max(5, action.minutes || 60)
@@ -555,7 +661,8 @@ export function reducer(state, action) {
       const today = dayKey()
       if (!kid || kid.lastLoginBonus === today) return state
       const coins = 5
-      const next = mapKid(state, kid.id, (k) => ({ ...k, coins: k.coins + coins, lastLoginBonus: today }))
+      let next = mapKid(state, kid.id, (k) => ({ ...k, coins: k.coins + coins, lastLoginBonus: today }))
+      next = queueRpc(next, 'claim_login_bonus', { p_kid_id: kid.id, p_coins: coins })
       return logEvent(next, { type: 'login_bonus', kidId: kid.id, meta: { coins } })
     }
 
