@@ -37,6 +37,8 @@ Legend: ✅ genuinely works · 🟡 works but only on this device · ❌ looks r
 | AI Behaviour Blueprints | ✅ | Charts are computed from this family's real activity log |
 | Elite cosmetics (frames, drop selectors) | ✅ | |
 | Kid-device pairing by 6-digit code | ✅ | Expiry, 5-attempt limit, one-time use — [docs/SYNC.md](SYNC.md). Between two phones it needs Supabase; without it, two tabs of one browser |
+| Cross-device sync | ✅ *with a backend* | Quests, submissions, approvals and XP travel between paired devices. Offline-first with an outbox. Needs Supabase — [docs/SYNC.md](SYNC.md) |
+| Real cross-family guilds | ✅ *with a backend* | Invite codes, real rosters, real chat. **A child joins only once a parent on each side approves.** Needs Supabase |
 | A kid's device has no Parent Mode | ✅ | Not behind a PIN — not present at all |
 
 ### The camera caveat
@@ -82,8 +84,8 @@ none was ever taken.
 
 | Thing | What is fake | What it would take |
 |---|---|---|
-| **Guild roster** | Everyone outside your family is sample data. Invites are saved locally and sent nowhere. | Shared database + accounts + parental consent for kid-to-kid contact |
-| **Guild chat** | Messages stay in this browser | Same, plus moderation — kid-to-kid chat is a serious safety surface |
+| **Guild roster** | ✅ real now — see the working list below | — |
+| **Guild chat** | ✅ real now, with a contact-detail guard and reporting | Human moderation at scale is still an open question |
 | **Weekend Challenge** | The countdown is real; the event is not | Server-run events |
 | **Parent Alliance leaderboard** | The nine other families are sample data, and no discount reaches any bill | Shared database **and** a billing system that can apply a discount |
 | **Sync after pairing** | Pairing is real (below); sharing quests and XP across the link is not | See SYNC.md |

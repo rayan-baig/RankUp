@@ -9,7 +9,19 @@
 
 const BASE = import.meta.env?.VITE_SUPABASE_URL || ''
 const ANON = import.meta.env?.VITE_SUPABASE_ANON_KEY || ''
-const SESSION_KEY = 'rankup.session.v1'
+/**
+ * The signed-in session is namespaced per device for the same reason the app
+ * state is: with `?device=` running a second device in one browser, a shared
+ * session key would silently sign both of them in as the same account.
+ */
+function sessionKey() {
+  try {
+    const device = new URLSearchParams(window.location.search).get('device')
+    return device ? `rankup.session.v1.${device.replace(/[^a-z0-9_-]/gi, '')}` : 'rankup.session.v1'
+  } catch {
+    return 'rankup.session.v1'
+  }
+}
 
 export function isConfigured() {
   return Boolean(BASE && ANON)
@@ -18,15 +30,15 @@ export function isConfigured() {
 /** The signed-in user's token, if there is one. */
 export function getSession() {
   try {
-    return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null')
+    return JSON.parse(localStorage.getItem(sessionKey()) || 'null')
   } catch {
     return null
   }
 }
 
 export function setSession(session) {
-  if (session) localStorage.setItem(SESSION_KEY, JSON.stringify(session))
-  else localStorage.removeItem(SESSION_KEY)
+  if (session) localStorage.setItem(sessionKey(), JSON.stringify(session))
+  else localStorage.removeItem(sessionKey())
 }
 
 function headers(extra = {}) {

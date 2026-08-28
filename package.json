@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "lint": "eslint src --ext .js,.jsx",
     "test:smoke": "node tests/integrity.mjs && node tests/flows.mjs && node tests/pairing.mjs",
-    "test:sync": "node tests/sync.mjs",
+    "test:sync": "node tests/sync.mjs && node tests/guilds.mjs",
     "test:db": "./supabase/test/run.sh"
   },
   "dependencies": {

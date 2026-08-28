@@ -28,6 +28,11 @@ other, that photo proof comes back, and that approved XP lands on the kid's
 phone. It needs the local backend running — see
 [../supabase/test/README.md](../supabase/test/README.md).
 
+**`guilds.mjs`** runs two unrelated families side by side and proves the rule
+that makes guilds safe to ship: a child does not join until a parent on each
+side has agreed. One parent approving alone is not enough. It also checks the
+contact-detail guard and that a normal message crosses families.
+
 ## Running them
 
 Playwright is deliberately **not** a dependency of this project — it downloads a

@@ -29,6 +29,7 @@ import ParentKids from './screens/parent/ParentKids.jsx'
 import ParentBlueprint from './screens/parent/ParentBlueprint.jsx'
 import ParentOverride from './screens/parent/ParentOverride.jsx'
 import ParentAlliance from './screens/parent/ParentAlliance.jsx'
+import ParentGuilds from './screens/parent/ParentGuilds.jsx'
 import ParentPairKid from './screens/parent/ParentPairKid.jsx'
 import ParentPlan from './screens/parent/ParentPlan.jsx'
 import ParentSettings from './screens/parent/ParentSettings.jsx'
@@ -203,6 +204,7 @@ function renderRoute(route, fullPath, activeKid) {
   if (route === '/parent/blueprint') return <ParentBlueprint initialKidId={queryParam(fullPath, 'kid') || activeKid?.id} />
   if (route === '/parent/override') return <ParentOverride />
   if (route === '/parent/alliance') return <ParentAlliance />
+  if (route === '/parent/guilds') return <ParentGuilds />
   if (route === '/parent/pair') return <ParentPairKid />
   if (route === '/parent/plan') return <ParentPlan />
   if (route === '/parent/settings') return <ParentSettings />
