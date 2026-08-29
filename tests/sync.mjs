@@ -136,6 +136,13 @@ if (visible) {
   await parent.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
   await parent.waitForTimeout(4000)
   await parent.screenshot({ path:`${SHOT}/sync-parent-review.png` })
+  // The photo is the whole point of the review screen: a parent asked to
+  // approve a picture they cannot see is just clicking yes.
+  const proof = await parent.locator('img[alt^="Proof for"]').count()
+  proof
+    ? pass('the photo itself reached the parent phone, not just the row')
+    : fail('the photo itself reached the parent phone', 'no proof image on the review screen')
+
   const inQueue = await parent.getByText('Tidy the bookshelf').count()
   inQueue ? pass('the submission reached the parent phone')
           : fail('submission reached the parent', 'not in the review queue')

@@ -87,6 +87,7 @@ export const CLAIM_ERRORS = {
   not_found: "That code doesn't match any device waiting to be linked. Check the digits and try again.",
   expired: 'That code has expired. Ask them to tap "New code" on their device.',
   blocked: 'That code has been tried too many times and is no longer valid. Ask them for a new one.',
+  too_many: 'Too many wrong codes from this phone. Wait about ten minutes, then try again.',
   claimed: 'That device has already been linked to a family.',
   revoked: 'That code was cancelled. Ask them for a new one.',
   already_linked: 'That device is already linked to your family.',

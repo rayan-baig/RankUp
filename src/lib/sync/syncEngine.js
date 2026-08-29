@@ -30,12 +30,33 @@ function cursorKey() {
   }
 }
 
+/**
+ * A cursor belongs to the account that earned it.
+ *
+ * family_snapshot reports the server's current revision to every caller,
+ * including one who is allowed to see nothing yet. So a kid's device polling
+ * while it waits to be paired would store a cursor at the head of the log, and
+ * then only ever ask for rows written AFTER pairing — every quest the parent
+ * had already assigned would be invisible, forever. Stamping the cursor with
+ * the user it was earned as means a device that changes identity (pairing, or
+ * signing in) starts again from zero and pulls the whole family.
+ */
 export function getCursor() {
-  return Number(localStorage.getItem(cursorKey()) || 0)
+  try {
+    const saved = JSON.parse(localStorage.getItem(cursorKey()) || 'null')
+    if (!saved || typeof saved !== 'object') return 0
+    if (saved.uid !== (transport.currentUserId() || null)) return 0
+    return Number(saved.rev) || 0
+  } catch {
+    return 0
+  }
 }
 
 export function setCursor(rev) {
-  localStorage.setItem(cursorKey(), String(rev))
+  localStorage.setItem(
+    cursorKey(),
+    JSON.stringify({ uid: transport.currentUserId() || null, rev: Number(rev) || 0 }),
+  )
 }
 
 export function resetCursor() {

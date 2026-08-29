@@ -36,8 +36,17 @@ export default function ParentPairKid() {
       setCode('')
       return
     }
-    dispatch({ type: 'ADOPT_PAIRED_KID', kid: result.kid })
-    setLinked(result.kid)
+    // If this family already has a profile with that name, pairing joins it
+    // rather than making a second one, and the kid's device needs to hear
+    // which profile it landed on.
+    const existing = state.kids.find(
+      (k) => k.name.trim().toLowerCase() === result.kid.name.trim().toLowerCase(),
+    )
+    const kid = { ...result.kid, id: existing?.id || result.kid.id }
+    await syncAdapter.attachKid?.(value, kid.id)
+
+    dispatch({ type: 'ADOPT_PAIRED_KID', kid })
+    setLinked(kid)
     setCode('')
   }
 

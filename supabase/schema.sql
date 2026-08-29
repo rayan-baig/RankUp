@@ -688,6 +688,36 @@ language sql security definer set search_path = public as $$
 $$;
 
 /**
+ * Failed claims, counted per account.
+ *
+ * The five-attempt counter on a code only bites when a guess lands on a code
+ * that exists. Someone typing random six-digit numbers never touches it, so on
+ * its own it does not stop a brute-force run through the whole million. This
+ * counts every failed claim against the account making it instead, which does.
+ *
+ * No policies and no grants: nothing outside claim_pairing_code reads or
+ * writes this.
+ */
+create table if not exists pairing_claim_attempts (
+  id       bigserial primary key,
+  user_id  uuid not null,
+  tried_at timestamptz not null default now()
+);
+create index if not exists pairing_claim_attempts_idx
+  on pairing_claim_attempts (user_id, tried_at);
+alter table pairing_claim_attempts enable row level security;
+
+-- Ten failures inside ten minutes and the account is done guessing for a while.
+-- A parent mistyping six digits will not reach it; a script needs about two
+-- thousand years to walk the code space at that rate, and every code it is
+-- hunting expires in ten minutes.
+create or replace function pairing_attempts_exhausted()
+returns boolean language sql stable security definer set search_path = public as $$
+  select count(*) >= 10 from pairing_claim_attempts
+   where user_id = auth.uid() and tried_at > now() - interval '10 minutes';
+$$;
+
+/**
  * The parent's side. One call, one transaction: check the code is usable, mark
  * it claimed, and create the kid — or record a failed attempt and refuse.
  *
@@ -719,6 +749,15 @@ begin
     raise exception 'not a parent of this family';
   end if;
 
+  -- Count this try before looking anything up, so a guess costs the same
+  -- whether or not it happens to hit a live code. Otherwise the timing alone
+  -- would tell an attacker which codes exist.
+  delete from pairing_claim_attempts where tried_at < now() - interval '1 hour';
+  if pairing_attempts_exhausted() then
+    return jsonb_build_object('ok', false, 'reason', 'too_many');
+  end if;
+  insert into pairing_claim_attempts (user_id) values (auth.uid());
+
   select * into v_row from pairing_codes where code = p_code for update;
 
   if not found then
@@ -738,17 +777,52 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'expired');
   end if;
 
-  insert into kids (id, family_id, name, theme_id, user_id)
-  values (v_row.kid_id, p_family_id, v_row.kid_name, v_row.theme_id, v_row.kid_user_id)
-  on conflict (id) do update
-    set family_id = excluded.family_id, user_id = excluded.user_id
-  returning * into v_kid;
+  /**
+   * Attach to an existing profile rather than making a second one.
+   *
+   * The ordinary way a family arrives here is: a parent sets everything up on
+   * their own phone, adds "Ava", assigns her chores — and only later hands Ava
+   * a device to pair. Creating a fresh row at that point leaves two Avas: one
+   * holding all the quests and XP, and one holding the phone. The child opens
+   * the app to an empty list.
+   *
+   * So an existing child of the same name who has no device yet is adopted
+   * instead. Only one without a device, so pairing can never take over a
+   * sibling's profile.
+   */
+  select * into v_kid from kids
+   where family_id = p_family_id
+     and lower(trim(name)) = lower(trim(v_row.kid_name))
+     and user_id is null
+   order by created_at
+   limit 1;
+
+  if found then
+    update kids
+       set user_id = v_row.kid_user_id,
+           theme_id = coalesce(nullif(v_row.theme_id, ''), theme_id)
+     where id = v_kid.id
+    returning * into v_kid;
+
+    -- The kid's device is watching the pairing row for the id to use, so point
+    -- it at the profile it was actually joined to.
+    update pairing_codes set kid_id = v_kid.id where code = p_code;
+  else
+    insert into kids (id, family_id, name, theme_id, user_id)
+    values (v_row.kid_id, p_family_id, v_row.kid_name, v_row.theme_id, v_row.kid_user_id)
+    on conflict (id) do update
+      set family_id = excluded.family_id, user_id = excluded.user_id
+    returning * into v_kid;
+  end if;
 
   update pairing_codes
      set claimed_at = now(),
          claimed_by_family_id = p_family_id,
          claimed_by_family_name = p_family_name
    where code = p_code;
+
+  -- A successful link is proof this was a real parent, not a script.
+  delete from pairing_claim_attempts where user_id = auth.uid();
 
   insert into events (family_id, kid_id, type, meta)
   values (p_family_id, v_kid.id, 'device_paired', '{}'::jsonb);

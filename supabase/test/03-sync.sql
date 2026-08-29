@@ -111,4 +111,25 @@ begin
        where k->>'id' = 'c4444444-0000-0000-0000-000000000001'));
 end $$;
 
+-- A device with no family yet must be handed nothing at all — not even a
+-- revision number. This is the bug that made a freshly paired kid's phone open
+-- to an empty quest list: it had been polling while it waited, banked the
+-- server's current revision, and afterwards only ever asked for writes newer
+-- than that.
+do $$
+declare snap jsonb;
+begin
+  set local role postgres;
+  insert into auth.users (id, email)
+  values ('c9999999-9999-9999-9999-999999999999', null)
+  on conflict do nothing;
+  set local role app_user;
+
+  perform become('c9999999-9999-9999-9999-999999999999');
+  snap := family_snapshot(0);
+  perform ok('a device belonging to no family is given no snapshot', snap is null);
+  perform ok('and so cannot bank a revision to skip past',
+    snap is null or snap->>'server_rev' is null);
+end $$;
+
 reset role;

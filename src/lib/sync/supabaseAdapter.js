@@ -109,6 +109,11 @@ export const supabaseAdapter = {
     }
   },
 
+  /** claim_pairing_code already repointed the code at the joined profile. */
+  async attachKid() {
+    return { ok: true }
+  },
+
   async claimCode(code, { familyId, familyName }) {
     try {
       const result = await rpc('claim_pairing_code', {

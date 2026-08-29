@@ -9,7 +9,9 @@ set client_min_messages to notice;
 
 insert into auth.users (id, email) values
   ('a1111111-1111-1111-1111-111111111111', 'pair-parent@example.com'),
-  ('a5555555-5555-5555-5555-555555555555', null);
+  ('a5555555-5555-5555-5555-555555555555', null),
+  ('a7777777-7777-7777-7777-777777777777', null),
+  ('a6666666-6666-6666-6666-666666666666', null);
 insert into families (id, name) values
   ('a2222222-0000-0000-0000-000000000001', 'Pairing Family');
 insert into parents (user_id, family_id, name) values
@@ -127,6 +129,107 @@ begin
   v_res := claim_pairing_code('444444', 'a2222222-0000-0000-0000-000000000001', 'Pairing Family');
   perform ok('a revoked code is refused',
     (v_res->>'ok')::boolean = false and v_res->>'reason' = 'revoked');
+end $$;
+
+-- ---------- pairing joins an existing profile, it does not duplicate ----------
+--
+-- The ordinary case: a parent sets the family up, adds a child and assigns
+-- chores, then hands that child a phone days later. Creating a second profile
+-- at that point would leave the child staring at an empty quest list.
+do $$
+declare res jsonb; v_existing uuid;
+begin
+  set local role postgres;
+  insert into kids (id, family_id, name, xp)
+  values (gen_random_uuid(), 'a2222222-0000-0000-0000-000000000001', 'Robin', 250)
+  returning id into v_existing;
+  insert into quests (family_id, kid_id, title, xp)
+  values ('a2222222-0000-0000-0000-000000000001', v_existing, 'Already assigned', 20);
+  set local role app_user;
+
+  perform become(null);
+  perform create_pairing_code('555555', 'Robin', 'apex', 600,
+                              'a7777777-7777-7777-7777-777777777777');
+  perform become('a1111111-1111-1111-1111-111111111111');
+  res := claim_pairing_code('555555', 'a2222222-0000-0000-0000-000000000001', 'Pairing Family');
+
+  perform ok('pairing joins the profile that already exists',
+    (res->>'kid_id')::uuid = v_existing);
+  perform ok('so the child keeps their XP', (select xp from kids where id = v_existing) = 250);
+  perform ok('and the chores already assigned to them',
+    (select count(*) from quests where kid_id = v_existing) = 1);
+
+  set local role postgres;
+  perform ok('no duplicate profile was created',
+    (select count(*) from kids where family_id = 'a2222222-0000-0000-0000-000000000001'
+      and lower(name) = 'robin') = 1);
+  perform ok('the pairing row points at the joined profile, so the device agrees',
+    (select kid_id from pairing_codes where code = '555555') = v_existing);
+  set local role app_user;
+end $$;
+
+-- A sibling's profile must never be taken over.
+do $$
+declare res jsonb; v_taken uuid;
+begin
+  set local role postgres;
+  insert into kids (id, family_id, name, user_id)
+  values (gen_random_uuid(), 'a2222222-0000-0000-0000-000000000001', 'Sam',
+          'a6666666-6666-6666-6666-666666666666')
+  returning id into v_taken;
+  set local role app_user;
+
+  perform become(null);
+  perform create_pairing_code('666666', 'Sam', 'apex', 600, null);
+  perform become('a1111111-1111-1111-1111-111111111111');
+  res := claim_pairing_code('666666', 'a2222222-0000-0000-0000-000000000001', 'Pairing Family');
+
+  perform ok('a profile that already has a device is NOT taken over',
+    (res->>'kid_id')::uuid <> v_taken);
+end $$;
+
+-- ---------- guessing is throttled per account, not just per code ----------
+--
+-- The counter on a code only moves when a guess lands on one that exists, so
+-- on its own it would let a script walk the whole million-code space unnoticed.
+do $$
+declare res jsonb; i int;
+begin
+  set local role postgres;
+  delete from pairing_claim_attempts;
+  set local role app_user;
+
+  perform become(null);
+  perform create_pairing_code('777777', 'Wren', 'apex', 600, null);
+  perform become('a1111111-1111-1111-1111-111111111111');
+
+  -- Ten misses at codes that do not exist. The real code is never touched.
+  for i in 1..10 loop
+    res := claim_pairing_code(lpad((100000 + i)::text, 6, '0'),
+                              'a2222222-0000-0000-0000-000000000001', 'Pairing Family');
+  end loop;
+  perform ok('random guesses are still refused', (res->>'ok')::boolean = false);
+
+  res := claim_pairing_code('777777', 'a2222222-0000-0000-0000-000000000001', 'Pairing Family');
+  perform ok('after ten misses the account cannot guess again',
+    (res->>'ok')::boolean = false and res->>'reason' = 'too_many');
+  perform ok('and the code it was hunting is untouched',
+    (select claimed_at from pairing_codes where code = '777777') is null);
+
+  -- Clearing the record lets an honest parent back in, and a real link wipes
+  -- the account's failures so one bad evening does not follow them around.
+  set local role postgres;
+  delete from pairing_claim_attempts;
+  set local role app_user;
+  perform become('a1111111-1111-1111-1111-111111111111');
+  res := claim_pairing_code('777777', 'a2222222-0000-0000-0000-000000000001', 'Pairing Family');
+  perform ok('once the window passes the same parent can link normally',
+    (res->>'ok')::boolean = true);
+  set local role postgres;
+  perform ok('a successful link clears the account''s failures',
+    (select count(*) from pairing_claim_attempts
+      where user_id = 'a1111111-1111-1111-1111-111111111111') = 0);
+  set local role app_user;
 end $$;
 
 -- ---------- the pairing table itself must not be readable ----------

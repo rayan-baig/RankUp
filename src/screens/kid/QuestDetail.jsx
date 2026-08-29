@@ -100,6 +100,9 @@ export default function QuestDetail({ questId }) {
         questId: quest.id,
         kidId: kid.id,
         photoId,
+        // Sent to the server so the parent's phone can show it, then dropped
+        // from local state — this device already has it in its photo store.
+        photoData: photo?.dataUrl || null,
         photoUnavailable,
         hash: report?.hash || null,
         report,

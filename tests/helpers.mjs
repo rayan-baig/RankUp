@@ -26,6 +26,13 @@ export async function launch() {
   })
   const page = await ctx.newPage()
   const errors = []
+  if (process.env.TEST_HTTP_LOG) {
+    page.on('response', async (r) => {
+      if (r.status() >= 400) {
+        console.log('HTTP', r.status(), r.url(), (await r.text().catch(() => '')).slice(0, 200))
+      }
+    })
+  }
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))
   page.on('console', (m) => {
     // Google Fonts is blocked in some sandboxes; that is not an app error.
@@ -44,8 +51,15 @@ export async function setUpFamily(page) {
   await page.waitForTimeout(400)
   // Setup now opens by asking whose phone this is.
   await page.getByRole('button', { name: /I'm a parent/ }).click()
-  await page.waitForTimeout(300)
+  await page.waitForTimeout(400)
+  // Setup opens with an account, so the family exists server-side before a
+  // child's name is ever typed — consent needs something to attach to.
+  await page.locator('input[type=email]').fill(`test${Date.now()}@example.com`)
+  await page.locator('input[type=password]').fill('correct-horse-battery')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await page.waitForTimeout(1600)
   await page.getByRole('button', { name: 'Continue' }).click()
+  await page.waitForTimeout(400)
   await page.locator('input').nth(0).fill('Sam')
   await page.locator('input').nth(2).fill('1234')
   await page.getByRole('button', { name: 'Continue' }).click()

@@ -84,6 +84,7 @@ const server = http.createServer(async (req, res) => {
 
   const url = new URL(req.url, 'http://localhost')
   const userId = userIdFrom(req)
+  if (process.env.MOCK_LOG) console.log(req.method, url.pathname, 'as', userId || '(anon)')
 
   try {
     // --- call a database function -------------------------------------------

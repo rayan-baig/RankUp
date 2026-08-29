@@ -73,16 +73,45 @@ function stripServerOwned(table, row) {
 }
 
 /**
+ * The only table a kid's device may write to directly.
+ *
+ * Everything else a kid does — submitting a quest, redeeming a reward,
+ * claiming a login bonus — goes through a database function, so the server
+ * decides the outcome rather than the phone. Row level security already
+ * refuses the rest (see supabase/test/01-security.sql), so pushing them would
+ * achieve nothing except a rejected round trip per change and a red line in
+ * the console. Left out on purpose: submissions, which a kid does create — but
+ * through submit_quest, so the row is already there by the time this runs and
+ * the upsert would arrive as an update, which only a parent may do.
+ */
+const KID_WRITABLE = new Set(['notes'])
+
+/**
+ * Tables no device ever writes directly, whatever role it is in.
+ *
+ * A submission is created by submit_quest and a redemption by redeem_reward —
+ * both carry the whole row, photo included — because the outcome has to be
+ * decided by the server rather than by the phone claiming it. Pushing the same
+ * row again afterwards can only be an update, which row level security allows
+ * to a parent and refuses to a kid; either way it changes nothing. It matters
+ * most on a shared phone, where one parent account plays both roles and the
+ * insert is refused outright.
+ */
+const FUNCTION_OWNED = new Set(['submissions', 'redemptions'])
+
+/**
  * Compare state against the shadow and queue whatever changed.
  * `photoFor` supplies a submission's image, which lives outside the state object.
  */
-export function queueChanges(state, { photoFor } = {}) {
+export function queueChanges(state, { photoFor, role } = {}) {
   if (!state.family?.id) return 0
   const shadow = readShadow()
   const familyId = state.family.id
   let queued = 0
 
   for (const [snapshotKey, { key: stateKey, mapper, table }] of Object.entries(ENTITIES)) {
+    if (FUNCTION_OWNED.has(table)) continue
+    if (role === 'kid' && !KID_WRITABLE.has(table)) continue
     const rows = state[stateKey] || []
     const seen = new Set()
 

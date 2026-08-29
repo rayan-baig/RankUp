@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { reducer, isElite, guildCapacity, activeLockout } from './reducer.js'
 import { createInitialState, TIERS } from './initialState.js'
-import { loadState, saveState, clearState, purgeOrphanPhotos, getPhoto } from '../lib/storage.js'
+import { loadState, saveState, clearState, purgeOrphanPhotos, getPhoto, putPhoto } from '../lib/storage.js'
 import { createSyncEngine, SYNC_STATUS } from '../lib/sync/syncEngine.js'
 import { queueChanges, recordServerState } from '../lib/sync/shadow.js'
 import { enqueue as enqueueOp } from '../lib/sync/outbox.js'
@@ -49,6 +49,34 @@ export function AppProvider({ children }) {
     engine.start()
     return () => engine.stop()
   }, [])
+
+  // The moment a kid's device is linked, it is holding nothing: no quests, no
+  // XP, no rewards. Waiting out the ordinary eight-second poll there means the
+  // child's first sight of the app is an empty screen, so pull immediately.
+  useEffect(() => {
+    if (!state.device?.pairedAt) return
+    engineRef.current?.sync()
+  }, [state.device?.pairedAt])
+
+  /**
+   * Bring photos that arrived from another device into this one's photo store.
+   *
+   * The parent is being asked to approve a picture, so they have to be able to
+   * see it. It travels inside the submission row rather than as a separate
+   * upload, and this is where it stops being a lump of base64 in state and
+   * becomes a photo the review screen can show — and, just as importantly, one
+   * that gets destroyed with the rest when the parent decides.
+   */
+  useEffect(() => {
+    const arrived = (state.submissions || []).filter((s) => s.photoData && !s.photoId)
+    if (!arrived.length) return
+    const photos = arrived.map((s) => {
+      const photoId = `photo_${s.id}`
+      putPhoto(photoId, s.photoData)
+      return { submissionId: s.id, photoId }
+    })
+    dispatch({ type: 'ATTACH_SYNCED_PHOTOS', photos })
+  }, [state.submissions])
 
   // Move any server calls the reducer asked for into the outbox.
   useEffect(() => {
@@ -154,7 +182,7 @@ export function AppProvider({ children }) {
           recordServerState(state, { photoFor })
           mergingRef.current = false
         } else {
-          queueChanges(state, { photoFor })
+          queueChanges(state, { photoFor, role: state.device?.role })
         }
       }
     }, 250)

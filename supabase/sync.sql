@@ -113,6 +113,15 @@ declare
   cutoff bigint := coalesce(p_since, 0);
   head   bigint := last_value from sync_rev;
 begin
+  -- A caller who is in no family yet — a kid's phone waiting to be paired —
+  -- can see nothing, and must NOT be handed a cursor. If it banked one it
+  -- would afterwards only ask for writes newer than the moment it was still a
+  -- stranger, and every quest assigned before pairing would stay invisible to
+  -- it forever. Returning nothing makes the device try again from zero.
+  if current_family_id() is null then
+    return null;
+  end if;
+
   return jsonb_build_object(
     'server_rev',  head,
     'families',    coalesce((select jsonb_agg(to_jsonb(f)) from families f    where f.rev > cutoff), '[]'::jsonb),

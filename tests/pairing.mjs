@@ -38,8 +38,14 @@ await parent.waitForTimeout(500)
   : fail('a fresh device asks whose phone it is', 'fork missing')
 
 await parent.getByRole('button', { name: /I'm a parent/ }).click()
-await parent.waitForTimeout(300)
+await parent.waitForTimeout(400)
+// Setup opens with an account, so the family exists before consent is signed.
+await parent.locator('input[type=email]').fill(`pair${Date.now()}@example.com`)
+await parent.locator('input[type=password]').fill('correct-horse-battery')
+await parent.getByRole('button', { name: 'Create account' }).click()
+await parent.waitForTimeout(1600)
 await parent.getByRole('button', { name: 'Continue' }).click()
+await parent.waitForTimeout(400)
 await parent.locator('input').nth(0).fill('Sam')
 await parent.locator('input').nth(1).fill('The Rivera family')
 await parent.locator('input').nth(2).fill('1234')
@@ -93,17 +99,6 @@ alerted > 0 ? pass('a wrong code shows an error') : fail('a wrong code shows an 
   ? pass('a wrong code does not link anything')
   : fail('a wrong code does not link anything', 'device changed state')
 
-console.log('\n=== Five wrong guesses kill the code ===')
-for (let i = 0; i < 4; i += 1) {
-  const guess = String((Number(code) + 100 + i) % 1000000).padStart(6, '0')
-  await typeCode(guess) // eslint-disable-line no-await-in-loop
-}
-await typeCode(code)
-const blocked = await parent.locator('[role=alert]').textContent().catch(() => '')
-;/too many times/i.test(blocked || '')
-  ? pass('the real code stops working after five wrong guesses')
-  : fail('the real code stops working after five wrong guesses', `error was: ${blocked}`)
-
 console.log('\n=== A fresh code links the two devices ===')
 await kid.getByRole('button', { name: 'New code' }).click()
 await kid.waitForTimeout(1500)
@@ -156,5 +151,26 @@ await kid.screenshot({ path: `${SHOT_DIR}/pairing-kid-profile.png` })
 ;(await kid.getByText(/Only on your parent's phone/).count()) > 0
   ? pass('the theme lock cannot be opened with an empty PIN on a kid device')
   : fail('the theme lock holds on a kid device', 'PIN prompt still offered')
+
+/**
+ * A code is six digits, so the only thing standing between a stranger and
+ * someone else's child is how many guesses they get. The counter on a code
+ * itself is not enough — it never moves for a guess at a code that does not
+ * exist — so the account doing the guessing is what gets cut off. Last,
+ * because it deliberately locks this parent out.
+ */
+console.log('\n=== Guessing at codes gets the account cut off ===')
+await parent.evaluate(() => { window.location.hash = '/parent/pair' })
+await parent.waitForTimeout(700)
+let throttled = ''
+for (let i = 0; i < 12; i += 1) {
+  const guess = String((Number(code2) + 100 + i) % 1000000).padStart(6, '0')
+  await typeCode(guess) // eslint-disable-line no-await-in-loop
+  throttled = await parent.locator('[role=alert]').textContent().catch(() => '') // eslint-disable-line no-await-in-loop
+  if (/too many/i.test(throttled || '')) break
+}
+;/too many/i.test(throttled || '')
+  ? pass('a run of wrong codes stops the account guessing')
+  : fail('a run of wrong codes stops the account guessing', `error was: ${throttled}`)
 
 await finish(errors, fails, browser)

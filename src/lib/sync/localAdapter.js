@@ -147,6 +147,22 @@ export const localAdapter = {
     return { ok: true, kid: { id: record.kidId, name: record.kidName, themeId: record.themeId } }
   },
 
+  /**
+   * The parent joined this code to a profile that already existed, so point the
+   * code at that profile. The kid's device is watching this record and takes
+   * its identity from it — without this it would keep the placeholder id it
+   * generated and find an empty quest list. Supabase does the same thing inside
+   * claim_pairing_code, which is why the other adapter has nothing to do here.
+   */
+  async attachKid(code, kidId) {
+    const all = readAll()
+    if (!all[code] || !kidId) return { ok: false }
+    all[code] = { ...all[code], kidId }
+    writeAll(all)
+    broadcast(code)
+    return { ok: true }
+  },
+
   /** Used only by the tests, to prove the attempt limit actually bites. */
   async _recordFailedAttempt(code) {
     const all = readAll()

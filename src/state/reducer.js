@@ -134,6 +134,22 @@ export function reducer(state, action) {
       return { ...next, lastSyncedAt: Date.now() }
     }
 
+    /**
+     * A photo taken on a kid's phone travels inside the submission row and
+     * arrives here as raw data. Once the device has written it to its own photo
+     * store it is addressed by id like any other, and the copy in state is
+     * dropped so the same image is not held twice.
+     */
+    case 'ATTACH_SYNCED_PHOTOS': {
+      const byId = new Map(action.photos.map((p) => [p.submissionId, p.photoId]))
+      return {
+        ...state,
+        submissions: (state.submissions || []).map((s) =>
+          byId.has(s.id) ? { ...s, photoId: byId.get(s.id), photoData: null } : s,
+        ),
+      }
+    }
+
     case 'RESET':
       return createInitialState()
 
@@ -149,6 +165,11 @@ export function reducer(state, action) {
       return {
         ...state,
         device: { ...state.device, role: 'kid', linkedKidId: null },
+        // Every install invents a family id for itself so it works offline. On
+        // a kid's phone that id is fiction — the real family is the parent's —
+        // and writing rows into it just fills the outbox with rejections.
+        // Dropped here, and supplied for real by the first sync after pairing.
+        family: { ...state.family, id: null },
         pendingPairing: action.record,
       }
 
@@ -160,7 +181,11 @@ export function reducer(state, action) {
       const pending = state.pendingPairing
       if (!pending) return state
       const kid = makeKid({ name: pending.kidName, themeId: pending.themeId })
-      const linked = { ...kid, id: pending.kidId || kid.id }
+      // The parent may already have a profile for this child, in which case
+      // pairing joined it rather than making a second one. The id that comes
+      // back with the claim is the one that owns the quests, so it wins over
+      // the placeholder this device generated.
+      const linked = { ...kid, id: action.kidId || pending.kidId || kid.id }
       const next = {
         ...state,
         onboarded: true,
@@ -171,6 +196,9 @@ export function reducer(state, action) {
           pairedAt: Date.now(),
         },
         pendingPairing: null,
+        // Deliberately does not touch family.id: a sync may already have landed
+        // between the parent typing the code and this arriving, and it would be
+        // holding the real one.
         family: { ...state.family, name: action.familyName || state.family.name },
         kids: [linked],
         session: { role: 'kid', kidId: linked.id, parentUnlocked: false },
@@ -350,11 +378,14 @@ export function reducer(state, action) {
       const quest = state.quests.find((q) => q.id === action.submission.questId)
       if (alreadyPending || !quest || quest.status === 'approved') return state
 
+      // The image is carried to the server, not kept in state: this device
+      // holds it in its photo store, addressed by photoId.
+      const { photoData, ...fields } = action.submission
       const submission = {
         id: uid('sub'),
         status: 'pending',
         submittedAt: Date.now(),
-        ...action.submission,
+        ...fields,
       }
       const next = {
         ...state,
@@ -366,6 +397,7 @@ export function reducer(state, action) {
         p_quest_id: submission.questId,
         p_kid_id: submission.kidId,
         p_payload: {
+          photo_data: photoData || null,
           photo_hash: submission.hash || null,
           capture_source: submission.captureSource || 'none',
           note: submission.note || '',

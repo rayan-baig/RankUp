@@ -66,7 +66,11 @@ export default function KidPairing({ name, themeId, onCancel }) {
         setStatus('claimed')
         // Small pause so the kid sees the confirmation before the app changes.
         setTimeout(() => {
-          dispatch({ type: 'PAIRING_CLAIMED', familyName: latest.claimedByFamilyName })
+          dispatch({
+            type: 'PAIRING_CLAIMED',
+            familyName: latest.claimedByFamilyName,
+            kidId: latest.kidId,
+          })
         }, 1400)
       }
     })
