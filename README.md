@@ -41,6 +41,11 @@ Other commands:
 
 ---
 
+## Launching
+
+Everything in the code is done. What remains needs your accounts and one
+conversation with a lawyer: **[docs/LAUNCH.md](docs/LAUNCH.md)**.
+
 ## Read this before you show it to anyone
 
 This build has a **complete, working core loop** and **several screens that are
@@ -111,6 +116,7 @@ push. Step-by-step: [docs/DEPLOY.md](docs/DEPLOY.md).
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Getting it online |
 | [docs/PAYMENTS.md](docs/PAYMENTS.md) | What subscriptions would actually take |
 | [docs/LEGAL.md](docs/LEGAL.md) | COPPA, Kids Category, Play Families |
+| **[docs/LAUNCH.md](docs/LAUNCH.md)** | **The checklist to get live — start here** |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Suggested build order from here |
 | [docs/GAME-DESIGN.md](docs/GAME-DESIGN.md) | XP curve, themes, tiers, guilds |
 | [tests/README.md](tests/README.md) | What the smoke tests cover and how to run them |
