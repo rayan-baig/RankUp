@@ -6,6 +6,7 @@ import { createSyncEngine, SYNC_STATUS } from '../lib/sync/syncEngine.js'
 import { queueChanges, recordServerState } from '../lib/sync/shadow.js'
 import { enqueue as enqueueOp } from '../lib/sync/outbox.js'
 import { transport } from '../lib/sync/transport.js'
+import { NOTICES, notifyLocally, notifyRemote, getPrefs as notificationPrefs } from '../lib/notifications.js'
 import { resolveKidTheme } from '../data/kidThemes.js'
 import { resolveParentTheme } from '../data/parentThemes.js'
 import { levelFromXp } from '../lib/xp.js'
@@ -57,6 +58,72 @@ export function AppProvider({ children }) {
     }
     dispatch({ type: 'DRAIN_SYNC_QUEUE' })
   }, [state.syncQueue])
+
+  /**
+   * Send the notifications the reducer asked for.
+   *
+   * Local first, because that works with no keys and no server and is what most
+   * people will actually have. Then the remote push, which reaches the other
+   * device when the app is closed — the case that matters for a parent who
+   * needs to review something.
+   */
+  useEffect(() => {
+    if (!state.noticeQueue?.length) return
+    const queue = state.noticeQueue
+    dispatch({ type: 'DRAIN_NOTICE_QUEUE' })
+
+    if (!notificationPrefs().enabled) return
+    queue.forEach((notice) => {
+      const payload = NOTICES[notice.kind]?.(...(notice.args || []))
+      if (!payload) return
+      // Do not buzz the device that caused it — only the other side.
+      const forThisDevice =
+        (notice.role === 'parent' && state.device?.role !== 'kid') ||
+        (notice.role === 'kid' && state.device?.role === 'kid')
+      if (!forThisDevice) notifyLocally(payload)
+      notifyRemote({ familyId: state.family.id, role: notice.role, kidId: notice.kidId, payload })
+    })
+  }, [state.noticeQueue, state.device?.role, state.family.id])
+
+  /**
+   * Daily reminders.
+   *
+   * Checks the clock once a minute and fires each enabled reminder at most once
+   * a day. That genuinely works — but only while RankUp is open, which is the
+   * honest limit of a reminder with no server behind it. A reminder that arrives
+   * with the app closed needs scheduled push; docs/NOTIFICATIONS.md says so and
+   * the settings screen says so too.
+   */
+  useEffect(() => {
+    const FIRED_KEY = 'rankup.reminders.fired.v1'
+    const check = () => {
+      if (!notificationPrefs().enabled) return
+      const now = new Date()
+      const today = now.toISOString().slice(0, 10)
+      const minutes = now.getHours() * 60 + now.getMinutes()
+      let fired = {}
+      try { fired = JSON.parse(localStorage.getItem(FIRED_KEY) || '{}') } catch { fired = {} }
+
+      let changed = false
+      for (const reminder of state.settings.reminders || []) {
+        if (!reminder.on) continue
+        const [h, m] = (reminder.time || '00:00').split(':').map(Number)
+        const due = h * 60 + m
+        // Fire if the time has passed today, but not if it is hours stale —
+        // opening the app at 9pm should not replay the morning reminder.
+        if (minutes < due || minutes - due > 90) continue
+        if (fired[reminder.id] === today) continue
+        notifyLocally(NOTICES.reminder(reminder.label))
+        fired[reminder.id] = today
+        changed = true
+      }
+      if (changed) localStorage.setItem(FIRED_KEY, JSON.stringify(fired))
+    }
+
+    check()
+    const t = setInterval(check, 60000)
+    return () => clearInterval(t)
+  }, [state.settings.reminders])
 
   /**
    * Push soon after something changes, rather than waiting for the next poll.

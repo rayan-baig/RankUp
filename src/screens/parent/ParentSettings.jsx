@@ -5,6 +5,7 @@ import { clearState, storageUsageBytes } from '../../lib/storage.js'
 import { relativeTime } from '../../lib/dates.js'
 import { canSyncAcrossDevices } from '../../lib/sync/index.js'
 import { Screen, Card, Button, SectionTitle, Field, TextInput, TextArea, Toggle, Banner, Modal, Select, Chip } from '../../components/ui.jsx'
+import NotificationSettings from '../../components/NotificationSettings.jsx'
 import { navigate } from '../../lib/router.js'
 
 export default function ParentSettings() {
@@ -164,11 +165,13 @@ export default function ParentSettings() {
         </Button>
       </Card>
 
-      <SectionTitle>Reminders</SectionTitle>
+      <NotificationSettings />
+
+      <SectionTitle>Daily reminders</SectionTitle>
       <Card className="mb-4">
-        <Banner tone="warn" icon="🔔" title="Not working yet">
-          These toggles are saved but nothing is scheduled. Real reminders need push notifications,
-          which need a server and, on iOS, the app installed to the home screen.
+        <Banner tone="info" icon="⏰" title="Fires while RankUp is open">
+          These check the time once a minute and notify this device. Reminders that arrive with
+          the app closed need scheduled server-side push — see docs/NOTIFICATIONS.md.
         </Banner>
         <div className="mt-2">
           {state.settings.reminders.map((r) => (

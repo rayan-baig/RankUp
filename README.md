@@ -56,8 +56,8 @@ The three biggest gaps, in one line each:
    → [docs/SYNC.md](docs/SYNC.md)
 2. **No real payments.** Switching between Standard and Elite flips feature flags. No
    card, no charge. → [docs/PAYMENTS.md](docs/PAYMENTS.md)
-3. **Guilds, friends and the Parent Alliance are sample data.** Labelled as such
-   everywhere they appear.
+3. **The Parent Alliance is still sample data.** Guilds and sync are real now; the
+   tournament is not, because its prize is a discount on a bill that does not exist.
 
 And one thing you must not skip: this is a kids' app, so **COPPA and the app-store
 family policies apply before you collect one real child's data or take one real
@@ -104,7 +104,8 @@ push. Step-by-step: [docs/DEPLOY.md](docs/DEPLOY.md).
 |---|---|
 | [docs/STATUS.md](docs/STATUS.md) | What actually works and what is a mockup |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Why web app, why Vite, why localStorage first |
-| [docs/SYNC.md](docs/SYNC.md) | Linking a kid's device with a 6-digit code |
+| [docs/SYNC.md](docs/SYNC.md) | Linking devices, and how data travels between them |
+| [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) | Telling people when something happened |
 | [docs/BACKEND.md](docs/BACKEND.md) | How to add accounts and sync with Supabase |
 | [docs/AI-CHECK.md](docs/AI-CHECK.md) | How photo verification works and how to turn on the Claude layer |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Getting it online |

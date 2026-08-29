@@ -39,6 +39,7 @@ Legend: ✅ genuinely works · 🟡 works but only on this device · ❌ looks r
 | Kid-device pairing by 6-digit code | ✅ | Expiry, 5-attempt limit, one-time use — [docs/SYNC.md](SYNC.md). Between two phones it needs Supabase; without it, two tabs of one browser |
 | Cross-device sync | ✅ *with a backend* | Quests, submissions, approvals and XP travel between paired devices. Offline-first with an outbox. Needs Supabase — [docs/SYNC.md](SYNC.md) |
 | Real cross-family guilds | ✅ *with a backend* | Invite codes, real rosters, real chat. **A child joins only once a parent on each side approves.** Needs Supabase |
+| Notifications | ✅ | Submissions, approvals, send-backs and daily reminders. Works with no server while the app is open; background delivery needs VAPID keys — [docs/NOTIFICATIONS.md](NOTIFICATIONS.md) |
 | A kid's device has no Parent Mode | ✅ | Not behind a PIN — not present at all |
 
 ### The camera caveat
@@ -89,7 +90,8 @@ none was ever taken.
 | **Weekend Challenge** | The countdown is real; the event is not | Server-run events |
 | **Parent Alliance leaderboard** | The nine other families are sample data, and no discount reaches any bill | Shared database **and** a billing system that can apply a discount |
 | **Sync after pairing** | Pairing is real (below); sharing quests and XP across the link is not | See SYNC.md |
-| **Reminders** | The toggles save, nothing is ever scheduled | Push notifications: a server, plus home-screen install on iOS |
+| **Reminders while the app is closed** | Reminders fire only while RankUp is open | A scheduled server job — [docs/NOTIFICATIONS.md](NOTIFICATIONS.md) |
+| **Background push delivery** | Written and wired, but never actually delivered a message — no push service is reachable from the sandbox | Test on two real phones |
 | **Subscriptions** | Switching plans flips feature flags. No card, no charge, no receipt | Stripe, or Apple/Google in-app purchase — [docs/PAYMENTS.md](PAYMENTS.md) |
 | **Accounts** | The parent PIN keeps a kid out of Parent Mode on this device. It is not a login. | Real auth — [docs/BACKEND.md](BACKEND.md) |
 

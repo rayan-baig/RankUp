@@ -25,6 +25,15 @@ function queueRpc(state, fn, args) {
   return { ...state, syncQueue: [...(state.syncQueue || []), { fn, args }] }
 }
 
+/**
+ * Ask for a notification to be sent, without the reducer doing it itself.
+ * Same shape as queueRpc, and for the same reason: the reducer stays pure and
+ * the provider does the talking.
+ */
+function queueNotice(state, notice) {
+  return { ...state, noticeQueue: [...(state.noticeQueue || []), notice] }
+}
+
 function logEvent(state, event) {
   const entry = { id: uid('ev'), at: Date.now(), day: dayKey(), ...event }
   return { ...state, events: [...state.events, entry].slice(-2000) }
@@ -368,7 +377,15 @@ export function reducer(state, action) {
           ai_report: submission.report || null,
         },
       })
-      return logEvent(withRpc, {
+      const questForNotice = state.quests.find((q) => q.id === submission.questId)
+      const kidForNotice = state.kids.find((k) => k.id === submission.kidId)
+      const notified = queueNotice(withRpc, {
+        role: 'parent',
+        kind: 'submission',
+        args: [kidForNotice?.name || 'Your kid', questForNotice?.title || 'a quest'],
+      })
+
+      return logEvent(notified, {
         type: 'quest_submitted',
         kidId: submission.kidId,
         meta: {
@@ -440,6 +457,13 @@ export function reducer(state, action) {
         p_note: action.note || '',
       })
 
+      next = queueNotice(next, {
+        role: 'kid',
+        kidId: kid.id,
+        kind: 'approved',
+        args: [quest.title, xp],
+      })
+
       next = logEvent(next, {
         type: 'quest_approved',
         kidId: kid.id,
@@ -456,7 +480,7 @@ export function reducer(state, action) {
     case 'REJECT_SUBMISSION': {
       const submission = state.submissions.find((s) => s.id === action.submissionId)
       if (!submission || submission.status !== 'pending') return state
-      const next = {
+      let next = {
         ...state,
         submissions: state.submissions.map((s) =>
           s.id === action.submissionId
@@ -468,6 +492,13 @@ export function reducer(state, action) {
           q.id === submission.questId ? { ...q, status: 'redo', redoNote: action.note || '', redoCount: (q.redoCount || 0) + 1 } : q,
         ),
       }
+      const questRejected = state.quests.find((q) => q.id === submission.questId)
+      next = queueNotice(next, {
+        role: 'kid',
+        kidId: submission.kidId,
+        kind: 'rejected',
+        args: [questRejected?.title || 'a quest'],
+      })
       const rejected = queueRpc(next, 'reject_submission', {
         p_submission_id: action.submissionId,
         p_note: action.note || '',
@@ -481,6 +512,9 @@ export function reducer(state, action) {
     /** The provider has moved these into the outbox. */
     case 'DRAIN_SYNC_QUEUE':
       return { ...state, syncQueue: [] }
+
+    case 'DRAIN_NOTICE_QUEUE':
+      return { ...state, noticeQueue: [] }
 
     /* ---------- rewards ---------- */
 

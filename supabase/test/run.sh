@@ -11,7 +11,7 @@ psql -q -tAc "drop database if exists $DB;" postgres >/dev/null 2>&1
 psql -q -tAc "create database $DB;" postgres >/dev/null 2>&1
 psql -q -v ON_ERROR_STOP=1 -f "$HERE/00-shim.sql" "$DB" >/dev/null 2>&1 || { echo "shim failed"; exit 1; }
 
-for f in "$HERE/../schema.sql" "$HERE/../sync.sql" "$HERE/../guilds.sql"; do
+for f in "$HERE/../schema.sql" "$HERE/../sync.sql" "$HERE/../guilds.sql" "$HERE/../notifications.sql"; do
   if ! psql -q -v ON_ERROR_STOP=1 -f "$f" "$DB" >"$OUT" 2>&1; then
     echo "$(basename "$f") FAILED TO APPLY:"; cat "$OUT"; exit 1
   fi
