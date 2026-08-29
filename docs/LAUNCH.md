@@ -1,7 +1,8 @@
 # Launch checklist
 
 Everything in the code is done. What is left is the things only you can do —
-they need your accounts, your bank details, and one conversation with a lawyer.
+they need your accounts, your bank details, and a decision about how you want
+to cover the legal side (section 7).
 
 Work down the list. Nothing below is optional if real families are going to use
 this.
@@ -152,9 +153,9 @@ Be honest about these when you launch.
 ## Running the tests
 
 ```bash
-npm run test:db      # 124 database checks — no browser needed
-npm run test:smoke   # 39 browser checks, no backend required
-npm run test:sync    # 22 browser checks against a real backend
+npm run test:db      # 141 database checks — no browser needed
+npm run test:smoke   # 40 browser checks, no backend required
+npm run test:sync    # 23 browser checks against a real backend
 ```
 
 `supabase/test/README.md` explains how to stand the local backend up.
