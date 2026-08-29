@@ -36,3 +36,4 @@ exception when duplicate_object then null; end $$;
 
 grant usage on schema public, auth to anon, authenticated, app_user;
 grant authenticated, anon to app_user;
+

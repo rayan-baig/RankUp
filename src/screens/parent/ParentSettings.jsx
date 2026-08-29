@@ -6,6 +6,7 @@ import { relativeTime } from '../../lib/dates.js'
 import { canSyncAcrossDevices } from '../../lib/sync/index.js'
 import { Screen, Card, Button, SectionTitle, Field, TextInput, TextArea, Toggle, Banner, Modal, Select, Chip } from '../../components/ui.jsx'
 import NotificationSettings from '../../components/NotificationSettings.jsx'
+import DataRights from '../../components/DataRights.jsx'
 import { navigate } from '../../lib/router.js'
 
 export default function ParentSettings() {
@@ -263,9 +264,14 @@ export default function ParentSettings() {
         <Chip>Plan: {state.family.tier === 'elite' ? 'Elite Pass' : 'Standard'}</Chip>
       </Card>
 
-      <Button variant="danger" className="w-full" onClick={() => setReset(true)}>
-        Erase all local data
+      <DataRights />
+
+      <Button variant="ghost" className="w-full" onClick={() => setReset(true)}>
+        Erase local data on this device only
       </Button>
+      <p className="text-xs text-muted text-center mt-2 mb-4">
+        Clears this device without touching your account or anything synced.
+      </p>
 
       <Modal
         open={reset}

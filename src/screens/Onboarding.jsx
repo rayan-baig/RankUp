@@ -7,6 +7,7 @@ import { Button, Card, Field, TextInput, TextArea, Banner, ProgressBar } from '.
 import ThemePicker from '../components/ThemePicker.jsx'
 import KidDeviceSetup from './kid/KidDeviceSetup.jsx'
 import SignIn from './SignIn.jsx'
+import ParentalConsent from './ParentalConsent.jsx'
 import { transport } from '../lib/sync/transport.js'
 import { navigate } from '../lib/router.js'
 
@@ -21,6 +22,36 @@ export default function Onboarding() {
   // With a backend configured the parent needs a real account before anything
   // can sync. Without one the app is device-only and there is nothing to join.
   const [signedIn, setSignedIn] = useState(!transport.isConfigured() || Boolean(transport.currentUserId()))
+  // Consent has to come before a child exists — the database enforces the same
+  // rule, so skipping this would simply fail when the kid is created.
+  const [consented, setConsented] = useState(false)
+  const [serverFamilyId, setServerFamilyId] = useState(null)
+  const [creating, setCreating] = useState(false)
+
+  /**
+   * Create the family on the server as soon as its name is known.
+   *
+   * It has to exist before consent can be recorded, because consent belongs to
+   * a family and is given by a parent OF that family. Doing it at the end of
+   * onboarding, as this originally did, meant consent had nothing to attach to.
+   */
+  const ensureFamily = async () => {
+    if (!transport.isConfigured() || serverFamilyId) return true
+    setCreating(true)
+    try {
+      const result = await transport.rpc('create_family', {
+        p_family_name: family.name.trim() || `${family.parentName.trim()}'s family`,
+        p_parent_name: family.parentName.trim(),
+      })
+      if (result?.family_id) setServerFamilyId(result.family_id)
+      return Boolean(result?.family_id)
+    } catch (err) {
+      console.warn('[RankUp] Could not create the family:', err.message)
+      return false
+    } finally {
+      setCreating(false)
+    }
+  }
   const [family, setFamily] = useState({ name: '', parentName: '', pin: '' })
   const [kid, setKid] = useState({ name: '', hasNeeds: false, notes: '', supports: [] })
   const [themeId, setThemeId] = useState(KID_THEMES[0].id)
@@ -39,19 +70,8 @@ export default function Onboarding() {
       accessibility: { hasNeeds: kid.hasNeeds, notes: kid.notes.trim(), supports: kid.supports },
     })
 
-    // The server assigns the real family id, so both devices agree on it.
-    let familyId = null
-    if (transport.isConfigured()) {
-      try {
-        const result = await transport.rpc('create_family', {
-          p_family_name: familyName,
-          p_parent_name: family.parentName.trim(),
-        })
-        familyId = result?.family_id || null
-      } catch (err) {
-        console.warn('[RankUp] Could not create the family on the server:', err.message)
-      }
-    }
+    // Created back at step 1, so both devices agree on the id.
+    const familyId = serverFamilyId
 
     dispatch({
       type: 'COMPLETE_ONBOARDING',
@@ -69,6 +89,10 @@ export default function Onboarding() {
 
   if (mode === 'parent' && !signedIn) {
     return <SignIn onDone={() => setSignedIn(true)} onBack={() => setMode(null)} />
+  }
+
+  if (mode === 'parent' && !consented && step >= 2) {
+    return <ParentalConsent onDone={() => setConsented(true)} onBack={() => setStep(1)} />
   }
 
   if (mode === null) {
@@ -245,8 +269,16 @@ export default function Onboarding() {
         <Button variant="ghost" onClick={() => (step === 0 ? setMode(null) : setStep((s) => s - 1))}>
           Back
         </Button>
-        <Button className="flex-1" disabled={!canContinue} onClick={() => (step === 3 ? finish() : setStep((s) => s + 1))}>
-          {step === 3 ? 'Start playing' : 'Continue'}
+        <Button
+          className="flex-1"
+          disabled={!canContinue || creating}
+          onClick={async () => {
+            if (step === 3) return finish()
+            if (step === 1) await ensureFamily()
+            setStep((s) => s + 1)
+          }}
+        >
+          {creating ? 'Setting up…' : step === 3 ? 'Start playing' : 'Continue'}
         </Button>
       </div>
     </div>

@@ -29,6 +29,7 @@ import ParentKids from './screens/parent/ParentKids.jsx'
 import ParentBlueprint from './screens/parent/ParentBlueprint.jsx'
 import ParentOverride from './screens/parent/ParentOverride.jsx'
 import ParentAlliance from './screens/parent/ParentAlliance.jsx'
+import LegalDoc from './screens/LegalDoc.jsx'
 import ParentGuilds from './screens/parent/ParentGuilds.jsx'
 import ParentPairKid from './screens/parent/ParentPairKid.jsx'
 import ParentPlan from './screens/parent/ParentPlan.jsx'
@@ -95,6 +96,7 @@ export default function App() {
 
   // Route guards.
   useEffect(() => {
+    if (route.startsWith('/legal/')) return
     if (!state.onboarded && route !== '/welcome') {
       navigate('/welcome')
       return
@@ -122,6 +124,17 @@ export default function App() {
       navigate('/switch')
     }
   }, [state.onboarded, state.session.parentUnlocked, state.device?.role, route, isParentArea])
+
+  // The privacy policy and terms are readable without an account — a parent
+  // deciding whether to sign up should not have to sign up to read them.
+  if (route.startsWith('/legal/')) {
+    return (
+      <>
+        <ParentBackground theme={parentTheme} />
+        <LegalDoc which={route.endsWith('terms') ? 'terms' : 'privacy'} />
+      </>
+    )
+  }
 
   if (!state.onboarded) {
     // A kid's device that has already generated a code goes straight back to it
@@ -188,6 +201,8 @@ export default function App() {
 }
 
 function renderRoute(route, fullPath, activeKid) {
+  if (route === '/legal/terms') return <LegalDoc which="terms" />
+  if (route === '/legal/privacy') return <LegalDoc which="privacy" />
   if (route === '/switch' || route === '/') return <RoleSwitch />
 
   if (route === '/kid') return <KidHome />

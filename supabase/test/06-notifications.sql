@@ -12,6 +12,8 @@ insert into auth.users (id, email) values
 insert into families (id, name) values ('b2222222-0000-0000-0000-000000000001', 'Notify Family');
 insert into parents (user_id, family_id, name) values
   ('b1111111-1111-1111-1111-111111111111', 'b2222222-0000-0000-0000-000000000001', 'Nina');
+select seed_consent('b2222222-0000-0000-0000-000000000001', 'b1111111-1111-1111-1111-111111111111');
+
 insert into kids (id, family_id, user_id, name) values
   ('b4444444-0000-0000-0000-000000000001', 'b2222222-0000-0000-0000-000000000001',
    'b3333333-3333-3333-3333-333333333333', 'Nico');

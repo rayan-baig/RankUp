@@ -15,6 +15,8 @@ insert into families (id, name) values
 insert into parents (user_id, family_id, name) values
   ('a1111111-1111-1111-1111-111111111111', 'a2222222-0000-0000-0000-000000000001', 'Pair Parent');
 
+select seed_consent('a2222222-0000-0000-0000-000000000001', 'a1111111-1111-1111-1111-111111111111');
+
 grant usage on schema public to anon, authenticated;
 grant all on all tables in schema public to anon, authenticated;
 grant all on all sequences in schema public to anon, authenticated;

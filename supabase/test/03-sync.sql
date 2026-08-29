@@ -13,6 +13,8 @@ insert into families (id, name) values
   ('c2222222-0000-0000-0000-000000000001', 'Sync Family');
 insert into parents (user_id, family_id, name) values
   ('c1111111-1111-1111-1111-111111111111', 'c2222222-0000-0000-0000-000000000001', 'Sync Parent');
+select seed_consent('c2222222-0000-0000-0000-000000000001', 'c1111111-1111-1111-1111-111111111111');
+
 insert into kids (id, family_id, user_id, name) values
   ('c4444444-0000-0000-0000-000000000001', 'c2222222-0000-0000-0000-000000000001',
    'c3333333-3333-3333-3333-333333333333', 'Sam');
