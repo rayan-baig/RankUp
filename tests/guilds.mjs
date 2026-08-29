@@ -40,6 +40,15 @@ async function makeFamily(page, device, familyName, kidName) {
   await page.locator('input').nth(1).fill(familyName)
   await page.locator('input').nth(2).fill('1234')
   await page.getByRole('button', { name: 'Continue' }).click()
+  await page.waitForTimeout(1500)
+  // Consent now stands between the family details and the first child.
+  if (await page.getByText('What RankUp collects about your child').count()) {
+    await page.locator('input[type=checkbox]').check()
+    await page.locator('input[placeholder*="Samira"]').fill('Test Parent')
+    await page.waitForTimeout(200)
+    await page.getByRole('button', { name: /I agree/ }).click()
+    await page.waitForTimeout(1500)
+  }
   await page.locator('input[placeholder="e.g. Ava"]').fill(kidName)
   await page.getByRole('button', { name: 'Continue' }).click()
   await page.waitForTimeout(200)
