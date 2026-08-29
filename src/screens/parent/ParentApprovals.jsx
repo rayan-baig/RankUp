@@ -36,7 +36,10 @@ export default function ParentApprovals() {
   return (
     <Screen>
       <h1 className="font-display text-2xl font-extrabold mb-1">Review</h1>
-      <p className="text-sm text-muted mb-3">{pending.length} waiting. You decide — the AI only advises.</p>
+      <p className="text-sm text-muted mb-1">{pending.length} waiting. You decide — the AI only advises.</p>
+      <p className="text-xs text-muted mb-3">
+        📸 Photos are deleted the moment you approve or send back. Look properly first.
+      </p>
 
       {pending.map((sub) => {
         const quest = state.quests.find((q) => q.id === sub.questId)

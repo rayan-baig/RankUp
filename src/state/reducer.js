@@ -430,7 +430,18 @@ export function reducer(state, action) {
         ...state,
         submissions: state.submissions.map((s) =>
           s.id === action.submissionId
-            ? { ...s, status: 'approved', decidedAt: Date.now(), parentNote: action.note || '', awarded: { xp, coins, lines } }
+            ? {
+                ...s,
+                status: 'approved',
+                decidedAt: Date.now(),
+                parentNote: action.note || '',
+                awarded: { xp, coins, lines },
+                // Dropping photoId is what actually deletes the image: the
+                // provider's purge sweeps any photo no submission points at.
+                photoId: null,
+                photoData: null,
+                photoDeletedAt: Date.now(),
+              }
             : s,
         ),
         quests: state.quests.map((q) => (q.id === quest.id ? { ...q, status: 'approved', completedAt: Date.now() } : q)),
@@ -484,7 +495,15 @@ export function reducer(state, action) {
         ...state,
         submissions: state.submissions.map((s) =>
           s.id === action.submissionId
-            ? { ...s, status: 'rejected', decidedAt: Date.now(), parentNote: action.note || '' }
+            ? {
+                ...s,
+                status: 'rejected',
+                decidedAt: Date.now(),
+                parentNote: action.note || '',
+                photoId: null,
+                photoData: null,
+                photoDeletedAt: Date.now(),
+              }
             : s,
         ),
         // Rejected work goes straight back on the kid's list to redo.

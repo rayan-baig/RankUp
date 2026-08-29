@@ -137,6 +137,7 @@ grant execute on function family_snapshot(bigint) to authenticated;
 -- carries one. Before real users, move these into Supabase Storage and keep
 -- only the path — see docs/SYNC.md.
 alter table submissions add column if not exists photo_data text;
+alter table submissions add column if not exists photo_deleted_at timestamptz;
 
 -- ---------------------------------------------------------------------------
 -- The writes a device is NOT allowed to make directly.
@@ -219,8 +220,10 @@ begin
     raise exception 'only a parent in this family can send work back';
   end if;
 
+  -- Same as approving: the photo goes the instant it has been looked at.
   update submissions
-     set status = 'rejected', decided_at = now(), parent_note = coalesce(p_note, '')
+     set status = 'rejected', decided_at = now(), parent_note = coalesce(p_note, ''),
+         photo_data = null, photo_deleted_at = now()
    where id = p_submission_id;
 
   update quests

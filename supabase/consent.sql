@@ -207,26 +207,25 @@ begin
 end $$;
 
 /**
- * Photo retention.
+ * The photo backstop.
  *
- * Photographs of a child's home are the most sensitive thing here, and once a
- * parent has reviewed a submission the photo has done its job. Deleting it
- * removes risk that no amount of access control can: you cannot leak what you
- * do not hold.
+ * Reviewed photos are already gone — approve_submission and reject_submission
+ * destroy them at the moment of the decision. This exists for the ones nobody
+ * ever decided: a parent who never got round to it, a quest abandoned halfway.
+ * Those would otherwise sit there for ever.
  *
  * Run on a schedule (Supabase pg_cron, or any external scheduler).
  */
-create or replace function purge_reviewed_photos(p_keep_days int default 30)
+create or replace function purge_stale_photos(p_keep_days int default 14)
 returns int
 language plpgsql security definer set search_path = public as $$
 declare v_count int;
 begin
   with cleared as (
     update submissions
-       set photo_data = null
+       set photo_data = null, photo_deleted_at = now()
      where photo_data is not null
-       and status <> 'pending'
-       and decided_at < now() - make_interval(days => greatest(0, p_keep_days))
+       and submitted_at < now() - make_interval(days => greatest(1, p_keep_days))
     returning 1
   )
   select count(*) into v_count from cleared;
@@ -238,7 +237,7 @@ grant execute on function record_parental_consent(text, text, text, text) to aut
 grant execute on function revoke_parental_consent(text) to authenticated;
 grant execute on function export_family_data() to authenticated;
 grant execute on function delete_family_account(text) to authenticated;
-revoke execute on function purge_reviewed_photos(int) from public;
+revoke execute on function purge_stale_photos(int) from public;
 
 -- The wording in force. Change what you collect, publish a new version, ask again.
 insert into consent_notices (version, summary, body) values (
@@ -254,8 +253,8 @@ RankUp collects the following about each child you add:
     are usually pictures inside your home.
   * The theme they choose, and their XP, level and in-app currency.
 
-Photographs are the most sensitive part. They are stored so you can review
-them and are deleted automatically once reviewed (see Settings). If you have
+Photographs are the most sensitive part. They are deleted the moment you
+approve or send back a chore - we do not keep them at all. If you have
 turned on the AI photo check, a photograph is sent to Anthropic's API to be
 assessed and is not used to train models.
 

@@ -87,7 +87,25 @@ await page.waitForTimeout(900)
   ? pass('falls back to the first kid instead of rendering nothing')
   : fail('falls back to the first kid', 'no greeting rendered')
 
-console.log('\n=== Removing a kid removes their photos ===')
+console.log('\n=== A reviewed photo is destroyed, not retained ===')
+// This is now the stronger guarantee: the photo goes at the moment of the
+// decision, so there is never a library of them to lose in the first place.
+const afterDecision = await page.evaluate(
+  () => Object.keys(JSON.parse(localStorage.getItem('rankup.photos.v1') || '{}')).length,
+)
+afterDecision === 0
+  ? pass('approving destroys the photo on the device')
+  : fail('approving destroys the photo', `${afterDecision} still stored`)
+
+console.log('\n=== Removing a kid removes any photo still waiting ===')
+// Submit something and leave it undecided, so there is a photo to lose.
+await asKid(page)
+await page.evaluate(() => { window.location.hash = '/kid/quests' })
+await page.waitForTimeout(600)
+await page.locator('button.card').first().click()
+await page.waitForTimeout(400)
+await submitPhotoProof(page)
+await asParent(page)
 const before = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('rankup.photos.v1') || '{}')).length)
 await page.evaluate(() => {
   const s = JSON.parse(localStorage.getItem('rankup.state.v1'))

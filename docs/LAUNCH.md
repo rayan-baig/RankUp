@@ -29,8 +29,9 @@ In the Supabase SQL editor, run these **in order**:
 - [ ] `supabase/consent.sql`
 - [ ] `supabase/billing.sql`
 - [ ] Create a **private** Storage bucket called `proof-photos`.
-- [ ] Schedule `purge_reviewed_photos(30)` daily (Supabase → Database → Cron).
-      This is what actually deletes children's photos. Do not skip it.
+- [ ] Schedule `purge_stale_photos(14)` daily (Supabase → Database → Cron).
+      Reviewed photos are already destroyed the moment a parent decides; this
+      only sweeps up ones nobody ever got round to looking at.
 
 ## 3. Generate the keys
 
@@ -77,7 +78,32 @@ secret-shaped value in a public name.
       the family really becomes Elite. Then use `4000 0000 0000 0341` and check
       a failed payment really drops them to Standard.
 
-## 7. The legal conversation ⚠️
+## 7. Keeping the legal side small
+
+The app is now built so there is very little to be responsible for:
+
+- **Photos are never retained.** A chore photo is destroyed the instant a parent
+  approves or sends it back. There is no library of photographs of children's
+  homes to lose, which removes most of the real-world risk in one stroke.
+- **Guilds are off by default.** Kid-to-kid contact across families is the
+  heaviest obligation in the product and nobody subscribes for it. Leave
+  `VITE_GUILDS_ENABLED` unset for launch.
+
+That leaves: a first name, chore history, and XP. Still children's data, still
+covered by COPPA — but a far smaller thing to defend.
+
+**The cheap way to cover it:** an FTC-approved COPPA Safe Harbor programme such
+as **kidSAFE** or **PRIVO**. They exist precisely so small operators do not have
+to hire counsel — they review the app, certify it, and you get a trust badge
+that is genuinely useful marketing to parents. Check their current pricing; it
+is an annual fee rather than an hourly one.
+
+Free things worth doing first, either way:
+
+- [ ] The **ICO Children's Code self-assessment** (UK) — free, online
+- [ ] The **FTC's COPPA Six-Step Compliance Plan** — short and readable
+
+## 8. Or the lawyer route ⚠️
 
 **Do this before one real child's data exists.** Not after a pilot, not after
 launch.
@@ -92,7 +118,7 @@ launch.
 - [ ] Have them check the privacy policy and terms. They are an honest draft
       written from what the code does, not a lawyer's document.
 
-## 8. Before you take money
+## 9. Before you take money
 
 - [ ] The purchaser must be the parent. A subscription bought by a child is
       chargeable-back and, in the US, specifically actionable.
@@ -101,7 +127,7 @@ launch.
 - [ ] Stripe Tax switched on.
 - [ ] Cancel a real subscription yourself and confirm it works end to end.
 
-## 9. Then, and this is the important one
+## 10. Then, and this is the important one
 
 **Use it with one real family for a week before telling anyone else about it.**
 
@@ -121,7 +147,7 @@ Be honest about these when you launch.
 | **The 20% Discount Tournament** | The leaderboard is sample data. Awarding the prize means applying Stripe coupons to ten subscriptions from a monthly job. |
 | **Reminders with the app closed** | They fire while RankUp is open. Background ones need a scheduled server job. |
 | **Background push, proven** | The code is written and its logic is sound, but no real push message has ever been delivered — no push service was reachable during development. Test it on two phones. |
-| **Human moderation of guild chat** | Contact details are blocked and any child can report a message, but nobody is reading them at scale. |
+| **Guilds** | Built and tested, but switched OFF by default. Turn them on with `VITE_GUILDS_ENABLED=true` once you are ready for kid-to-kid contact and the moderation it implies. |
 
 ## Running the tests
 

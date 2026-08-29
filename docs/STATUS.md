@@ -38,7 +38,7 @@ Legend: ✅ genuinely works · 🟡 works but only on this device · ❌ looks r
 | Elite cosmetics (frames, drop selectors) | ✅ | |
 | Kid-device pairing by 6-digit code | ✅ | Expiry, 5-attempt limit, one-time use — [docs/SYNC.md](SYNC.md). Between two phones it needs Supabase; without it, two tabs of one browser |
 | Cross-device sync | ✅ *with a backend* | Quests, submissions, approvals and XP travel between paired devices. Offline-first with an outbox. Needs Supabase — [docs/SYNC.md](SYNC.md) |
-| Real cross-family guilds | ✅ *with a backend* | Invite codes, real rosters, real chat. **A child joins only once a parent on each side approves.** Needs Supabase |
+| Real cross-family guilds | ✅ *built, off by default* | Invite codes, real rosters, real chat. **A child joins only once a parent on each side approves.** Needs Supabase |
 | Parental consent | ✅ | Required before any child exists — enforced by the database, not the app. Export, deletion and withdrawal all work — [docs/LEGAL.md](LEGAL.md) |
 | Subscriptions | ✅ *with Stripe connected* | Checkout, webhook, customer portal. Tier is server-owned and fails closed — [docs/PAYMENTS.md](PAYMENTS.md) |
 | Notifications | ✅ | Submissions, approvals, send-backs and daily reminders. Works with no server while the app is open; background delivery needs VAPID keys — [docs/NOTIFICATIONS.md](NOTIFICATIONS.md) |

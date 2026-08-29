@@ -185,6 +185,12 @@ export default function QuestDetail({ questId }) {
           <TextInput value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Also did the windowsill" />
         </Field>
 
+        {photo && (
+          <p className="text-xs text-muted mb-2 text-center">
+            Your parent sees this once, then it's deleted. It isn't saved anywhere.
+          </p>
+        )}
+
         <div className="flex gap-2 mt-2">
           {quest.requiresPhoto ? (
             <Button variant="soft" className="flex-1" onClick={() => { setPhoto(null); setReport(null); setMode('camera') }}>

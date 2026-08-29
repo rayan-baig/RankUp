@@ -534,13 +534,19 @@ begin
    where user_id = auth.uid() and family_id = v_sub.family_id;
   if v_parent is null then raise exception 'only a parent in this family can approve'; end if;
 
+  -- The photo is destroyed at the moment of the decision, not kept and tidied
+  -- up later. A parent has just looked at it; that was its whole job. Holding a
+  -- library of photographs of children's bedrooms is the one thing here that
+  -- turns a breach into a catastrophe, so we simply do not hold one.
   update submissions
      set status = 'approved',
          decided_at = now(),
          decided_by = v_parent,
          parent_note = p_note,
          awarded_xp = p_xp,
-         awarded_coins = p_coins
+         awarded_coins = p_coins,
+         photo_data = null,
+         photo_deleted_at = now()
    where id = p_submission_id;
 
   update quests set status = 'approved', completed_at = now() where id = v_sub.quest_id;

@@ -4,6 +4,7 @@ import { PARENT_THEMES } from '../../data/parentThemes.js'
 import { clearState, storageUsageBytes } from '../../lib/storage.js'
 import { relativeTime } from '../../lib/dates.js'
 import { canSyncAcrossDevices } from '../../lib/sync/index.js'
+import { guildsEnabled } from '../../lib/guilds.js'
 import { Screen, Card, Button, SectionTitle, Field, TextInput, TextArea, Toggle, Banner, Modal, Select, Chip } from '../../components/ui.jsx'
 import NotificationSettings from '../../components/NotificationSettings.jsx'
 import DataRights from '../../components/DataRights.jsx'
@@ -204,6 +205,7 @@ export default function ParentSettings() {
           <span aria-hidden="true" className="text-muted">›</span>
         </button>
 
+        {guildsEnabled() && (
         <button
           type="button"
           onClick={() => navigate('/parent/guilds')}
@@ -219,6 +221,7 @@ export default function ParentSettings() {
           </span>
           <span aria-hidden="true" className="text-muted">›</span>
         </button>
+        )}
 
         <div className="mt-3">
           {canSyncAcrossDevices ? (

@@ -29,6 +29,7 @@ import ParentKids from './screens/parent/ParentKids.jsx'
 import ParentBlueprint from './screens/parent/ParentBlueprint.jsx'
 import ParentOverride from './screens/parent/ParentOverride.jsx'
 import ParentAlliance from './screens/parent/ParentAlliance.jsx'
+import { guildsEnabled } from './lib/guilds.js'
 import LegalDoc from './screens/LegalDoc.jsx'
 import ParentGuilds from './screens/parent/ParentGuilds.jsx'
 import ParentPairKid from './screens/parent/ParentPairKid.jsx'
@@ -38,7 +39,9 @@ import ParentSettings from './screens/parent/ParentSettings.jsx'
 const KID_NAV = [
   { to: '/kid', icon: '🏠', label: 'Home', exact: true },
   { to: '/kid/quests', icon: '⚔️', label: 'Quests', alsoMatches: ['/kid/quest/'] },
-  { to: '/kid/guild', icon: '🛡️', label: 'Guild' },
+  // Only shown when guilds are switched on — a tab leading to "this is off" is
+  // worse than no tab.
+  ...(guildsEnabled() ? [{ to: '/kid/guild', icon: '🛡️', label: 'Guild' }] : []),
   { to: '/kid/shop', icon: '🎁', label: 'Rewards' },
   { to: '/kid/profile', icon: '🙂', label: 'You' },
 ]
@@ -208,7 +211,7 @@ function renderRoute(route, fullPath, activeKid) {
   if (route === '/kid') return <KidHome />
   if (route === '/kid/quests') return <KidQuests />
   if (route.startsWith('/kid/quest/')) return <QuestDetail questId={route.replace('/kid/quest/', '')} />
-  if (route === '/kid/guild') return <KidGuild />
+  if (route === '/kid/guild') return guildsEnabled() ? <KidGuild /> : <KidHome />
   if (route === '/kid/shop') return <KidShop />
   if (route === '/kid/profile') return <KidProfile />
 
@@ -219,7 +222,7 @@ function renderRoute(route, fullPath, activeKid) {
   if (route === '/parent/blueprint') return <ParentBlueprint initialKidId={queryParam(fullPath, 'kid') || activeKid?.id} />
   if (route === '/parent/override') return <ParentOverride />
   if (route === '/parent/alliance') return <ParentAlliance />
-  if (route === '/parent/guilds') return <ParentGuilds />
+  if (route === '/parent/guilds') return guildsEnabled() ? <ParentGuilds /> : <ParentDashboard />
   if (route === '/parent/pair') return <ParentPairKid />
   if (route === '/parent/plan') return <ParentPlan />
   if (route === '/parent/settings') return <ParentSettings />

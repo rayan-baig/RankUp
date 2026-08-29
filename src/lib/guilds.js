@@ -41,8 +41,22 @@ const call = async (fn, args) => {
   }
 }
 
+/**
+ * Guilds are off unless explicitly switched on.
+ *
+ * They are the one feature that puts a child in contact with children in other
+ * families, which makes them by far the heaviest thing here to be responsible
+ * for. Launching without them is a smaller product and a much smaller
+ * obligation; set VITE_GUILDS_ENABLED=true when you are ready to carry it.
+ */
+const GUILDS_ENABLED = String(import.meta.env?.VITE_GUILDS_ENABLED || '') === 'true'
+
+export function guildsEnabled() {
+  return GUILDS_ENABLED
+}
+
 export const guilds = {
-  available: () => transport.isConfigured(),
+  available: () => GUILDS_ENABLED && transport.isConfigured(),
 
   /** Parent only — a child cannot open a space for other people's children. */
   create: (kidId, name, crest = '🛡️') =>

@@ -129,33 +129,67 @@ begin
   set local role app_user;
 end $$;
 
--- Photo retention.
+-- Photos.
+--
+-- The rule is now blunt: a reviewed photo is destroyed at the moment of the
+-- decision. Nothing is retained, so there is no library of photographs of
+-- children's bedrooms to lose.
 do $$
-declare v_cleared int; v_sub uuid := gen_random_uuid();
+declare v_sub uuid := gen_random_uuid(); v_stale uuid := gen_random_uuid();
 begin
   set local role postgres;
   perform seed_consent('d2222222-0000-0000-0000-000000000001', 'd1111111-1111-1111-1111-111111111111');
-  insert into kids (id, family_id, name) values
-    ('d4444444-0000-0000-0000-000000000001', 'd2222222-0000-0000-0000-000000000001', 'Ret');
+  insert into kids (id, family_id, user_id, name) values
+    ('d4444444-0000-0000-0000-000000000001', 'd2222222-0000-0000-0000-000000000001',
+     null, 'Ret');
   insert into quests (id, family_id, kid_id, title, xp) values
     ('d6666666-0000-0000-0000-000000000001', 'd2222222-0000-0000-0000-000000000001',
      'd4444444-0000-0000-0000-000000000001', 'Old chore', 10);
-  insert into submissions (id, family_id, quest_id, kid_id, status, decided_at, photo_data)
-  values (v_sub, 'd2222222-0000-0000-0000-000000000001', 'd6666666-0000-0000-0000-000000000001',
-          'd4444444-0000-0000-0000-000000000001', 'approved', now() - interval '40 days', 'base64...');
-
-  v_cleared := purge_reviewed_photos(30);
-  perform ok('reviewed photos older than the retention window are purged', v_cleared = 1);
-  perform ok('and the photo really is gone',
-    (select photo_data from submissions where id = v_sub) is null);
-
-  -- A pending submission must keep its photo: the parent has not looked yet.
   insert into submissions (id, family_id, quest_id, kid_id, status, photo_data)
-  values (gen_random_uuid(), 'd2222222-0000-0000-0000-000000000001',
+  values (v_sub, 'd2222222-0000-0000-0000-000000000001', 'd6666666-0000-0000-0000-000000000001',
+          'd4444444-0000-0000-0000-000000000001', 'pending', 'base64photo');
+
+  perform ok('a photo waiting for review is still there',
+    (select photo_data from submissions where id = v_sub) is not null);
+  set local role app_user;
+
+  -- Approving destroys it immediately.
+  perform become('d1111111-1111-1111-1111-111111111111');
+  perform approve_submission(v_sub, 10, 2, 'nice');
+  perform ok('APPROVING destroys the photo on the spot',
+    (select photo_data from submissions where id = v_sub) is null);
+  perform ok('and records when it went',
+    (select photo_deleted_at from submissions where id = v_sub) is not null);
+
+  -- So does sending it back.
+  set local role postgres;
+  insert into quests (id, family_id, kid_id, title, xp) values
+    ('d6666666-0000-0000-0000-000000000002', 'd2222222-0000-0000-0000-000000000001',
+     'd4444444-0000-0000-0000-000000000001', 'Another chore', 10);
+  insert into submissions (id, family_id, quest_id, kid_id, status, photo_data)
+  values (v_stale, 'd2222222-0000-0000-0000-000000000001', 'd6666666-0000-0000-0000-000000000002',
+          'd4444444-0000-0000-0000-000000000001', 'pending', 'base64photo');
+  set local role app_user;
+
+  perform reject_submission(v_stale, 'not quite');
+  perform ok('SENDING BACK destroys the photo too',
+    (select photo_data from submissions where id = v_stale) is null);
+end $$;
+
+-- The backstop, for photos nobody ever got round to reviewing.
+do $$
+declare v_forgotten uuid := gen_random_uuid();
+begin
+  set local role postgres;
+  insert into submissions (id, family_id, quest_id, kid_id, status, photo_data, submitted_at)
+  values (v_forgotten, 'd2222222-0000-0000-0000-000000000001',
           'd6666666-0000-0000-0000-000000000001', 'd4444444-0000-0000-0000-000000000001',
-          'pending', 'still needed');
-  perform ok('a photo still waiting for review is never purged',
-    purge_reviewed_photos(30) = 0);
+          'pending', 'forgotten photo', now() - interval '30 days');
+
+  perform ok('a photo nobody ever reviewed is swept up eventually',
+    purge_stale_photos(14) = 1);
+  perform ok('and a recent one waiting for review is left alone',
+    purge_stale_photos(14) = 0);
   set local role app_user;
 end $$;
 

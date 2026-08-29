@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useApp } from '../state/AppContext.jsx'
 import { transport } from '../lib/sync/transport.js'
 import { clearState } from '../lib/storage.js'
-import { Card, Button, Banner, SectionTitle, Modal, TextInput, Select, Field } from './ui.jsx'
+import { Card, Button, Banner, SectionTitle, Modal, TextInput, Field } from './ui.jsx'
 import { navigate } from '../lib/router.js'
 
 /**
@@ -18,7 +18,6 @@ export default function DataRights() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmWithdraw, setConfirmWithdraw] = useState(false)
   const [typed, setTyped] = useState('')
-  const retention = state.settings.photoRetentionDays ?? 30
 
   /** Everything held about this family, as a file they can keep. */
   const download = async () => {
@@ -84,22 +83,10 @@ export default function DataRights() {
           email, no waiting.
         </p>
 
-        <Field
-          label="Keep chore photos for"
-          hint="Photos are deleted this long after you review them. Shorter is safer — you cannot leak what you no longer hold."
-        >
-          <Select
-            value={retention}
-            onChange={(e) =>
-              dispatch({ type: 'UPDATE_SETTINGS', patch: { photoRetentionDays: Number(e.target.value) } })
-            }
-          >
-            <option value={1}>1 day</option>
-            <option value={7}>7 days</option>
-            <option value={30}>30 days</option>
-            <option value={90}>90 days</option>
-          </Select>
-        </Field>
+        <Banner tone="good" icon="📸" title="Photos are not kept">
+          A chore photo is deleted the instant you approve or send it back. We do not store a
+          history of them. Anything you never get round to reviewing is deleted after two weeks.
+        </Banner>
 
         <Button variant="soft" className="w-full mb-2" disabled={busy} onClick={download}>
           ⬇ Download my data
