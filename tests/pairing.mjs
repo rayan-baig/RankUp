@@ -44,6 +44,15 @@ await parent.locator('input').nth(0).fill('Sam')
 await parent.locator('input').nth(1).fill('The Rivera family')
 await parent.locator('input').nth(2).fill('1234')
 await parent.getByRole('button', { name: 'Continue' }).click()
+await parent.waitForTimeout(1200)
+// Consent stands between the family details and the first child.
+if (await parent.getByText('What RankUp collects about your child').count()) {
+  await parent.locator('input[type=checkbox]').check()
+  await parent.locator('input[placeholder*="Samira"]').fill('Test Parent')
+  await parent.waitForTimeout(200)
+  await parent.getByRole('button', { name: /I agree/ }).click()
+  await parent.waitForTimeout(1200)
+}
 await parent.locator('input[placeholder="e.g. Ava"]').fill('Jonah')
 await parent.getByRole('button', { name: 'Continue' }).click()
 await parent.waitForTimeout(200)
