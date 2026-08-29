@@ -1,73 +1,138 @@
-# Subscriptions: what it would actually take
+# Payments
 
-Today, switching between Standard ($9.99) and Elite Pass ($15.99) in the app flips
-feature flags so you can test both. **No card is taken. Nothing is charged. There is no
-receipt, no renewal, and no way to cancel, because there is nothing to cancel.**
+Billing is built and wired. It is **off until you connect your own Stripe
+account**, because only you can do that — it needs your business details and
+your bank account.
 
-Do not build this before there is something worth paying for. It is deliberately last on
-the roadmap.
-
----
-
-## Two routes, and the choice is not really yours
-
-### Stripe — for the web app
-
-Roughly 2.9% + 30¢ per transaction. On $9.99 that is about 59¢, so you keep ~$9.40.
-
-You need: a Stripe account, Stripe Checkout for the payment page, and a **webhook** — a
-URL Stripe calls to tell your server "this family paid" or "this family's card failed".
-Without the webhook the app cannot know whether someone is actually subscribed, because
-the browser cannot be trusted to report it.
-
-This also means subscriptions cannot work until there is a real backend, since the
-subscription state has to live somewhere the app cannot fake. → [BACKEND.md](BACKEND.md)
-
-### Apple / Google in-app purchase — if you ever ship native apps
-
-Apple and Google take **15–30%** and, critically, **require** you to use their billing
-for digital subscriptions inside an app. On $9.99 that is $1.50–$3.00 per family per
-month.
-
-This is a real argument for staying a web app longer than feels comfortable: on the web
-you keep about 94% of the price; in an app store you keep 70–85%.
+With it off, the plan screen flips tiers locally so both can be tried, and says
+plainly that nothing is being charged.
 
 ---
 
-## The Elite features that assume billing exists
+## The rule everything else follows from
 
-Two of them cannot be finished without it, and it is worth being clear about that now:
+**A family's tier is written by Stripe's webhook and by nothing else.**
 
-- **The 20% Discount Tournament.** The prize is 20% off the winning alliance's bill.
-  There is no bill. Applying a real discount means Stripe coupons or price overrides
-  applied to nine other families' subscriptions, driven by a monthly job. This is
-  genuinely one of the more complicated things in the whole product, and it is currently
-  a screen with sample data on it.
-- **Complete Ad Removal.** Elite removes ads. There are no ads to remove, because no ad
-  network is integrated. If ads are ever added to the Standard tier, note that
-  **children's advertising is heavily regulated** — behavioural advertising to under-13s
-  is restricted under COPPA and effectively banned by Apple's Kids Category and Google
-  Play Families. → [LEGAL.md](LEGAL.md)
+Not by the app, not by a device, not by a request. The database enforces it:
+`UPDATE` on `families` is granted only for `name` and `parent_theme_id`, so a
+parent writing `tier = 'elite'` is refused outright rather than silently
+ignored. `supabase/test/08-billing.sql` proves it.
 
----
+It also **fails closed**. Anything other than an active or trialing
+subscription resolves to Standard — past due, cancelled, unpaid, unknown. The
+failure direction matters: if the webhook is misconfigured nobody gets Elite,
+rather than everybody getting it free.
 
-## Before charging a single real family
-
-- A refund policy, and a way to cancel that is not an email to you.
-- Clear disclosure of the price, the renewal date and the cancellation route, *before*
-  payment. Legally required in most places, and required by both app stores.
-- **The purchaser must be the parent.** A subscription bought by a child is
-  chargeable-back and, in the US, specifically actionable under COPPA and FTC rules
-  about children and payments.
-- Sales tax / VAT. Stripe Tax handles most of this; ignoring it is not an option once
-  there is real revenue.
+And a downgrade never takes anything away from a child. XP, level, currency and
+streaks are untouched by any billing change. Elite features lock; earned
+progress does not.
 
 ---
 
-## A suggested sequence
+## Setting it up
 
-1. Real accounts and a database (nothing works without it).
-2. Ship free to a handful of real families. Find out whether the loop actually reduces
-   nagging.
-3. Only then: Stripe Checkout for Standard, one plan, no tournament discount.
-4. Elite once the parent-side tools have proved they are worth $6 more.
+### 1. Create the products
+
+In the Stripe dashboard, two recurring monthly prices:
+
+| Product | Price | Note the price id |
+|---|---|---|
+| RankUp Standard | $9.99 / month | `price_...` → `STRIPE_PRICE_STANDARD` |
+| RankUp Elite Pass | $15.99 / month | `price_...` → `STRIPE_PRICE_ELITE` |
+
+### 2. Run the SQL
+
+`supabase/billing.sql` in the Supabase SQL editor, after `schema.sql`.
+
+### 3. Set the environment variables
+
+```bash
+VITE_STRIPE_ENABLED=true          # turns on real checkout in the app
+
+# SERVER ONLY — never a VITE_ name
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_STANDARD=price_...
+STRIPE_PRICE_ELITE=price_...
+SUPABASE_SERVICE_ROLE_KEY=...
+```
+
+### 4. Point the webhook at your deployment
+
+Stripe dashboard → Developers → Webhooks → add an endpoint:
+
+```
+https://your-domain.com/api/stripe-webhook
+```
+
+Subscribe it to:
+
+- `checkout.session.completed`
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+- `invoice.payment_failed`
+
+Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
+
+**The signature check is not optional.** Without it, anyone who finds that URL
+can post "subscription active" and give themselves Elite for ever. The handler
+reads the raw request body specifically so the signature verifies — a JSON
+parser re-serialises, the bytes change, and the check fails, which people then
+"fix" by removing the check. Do not.
+
+### 5. Test before going live
+
+Use Stripe's test mode and the CLI:
+
+```bash
+stripe listen --forward-to localhost:5173/api/stripe-webhook
+stripe trigger checkout.session.completed
+```
+
+Card `4242 4242 4242 4242` succeeds; `4000 0000 0000 0341` fails after
+attaching — use it to check that a failed payment really does drop the family
+to Standard.
+
+---
+
+## Cancelling and card changes
+
+These go to Stripe's own customer portal (`/api/billing-portal`), not to
+screens rebuilt here. That is deliberate: how cancellation is presented carries
+legal obligations in several places, and Stripe keeps theirs current.
+
+Enable the portal once in Stripe: Settings → Billing → Customer portal.
+
+---
+
+## What this costs you
+
+Stripe takes about 2.9% + 30¢ per transaction. On $9.99 that is roughly 59¢, so
+you keep about $9.40.
+
+If you ever ship native iOS or Android apps, Apple and Google **require** their
+own billing for digital subscriptions and take 15–30%. On $9.99 that is
+$1.50–$3.00 per family per month. It is a real argument for staying a web app
+longer than feels comfortable.
+
+---
+
+## Still to do
+
+**The 20% Discount Tournament** is the one feature that needs billing and does
+not have it. Awarding it means applying a Stripe coupon to ten separate
+subscriptions from a monthly job. The leaderboard exists; the discount does not
+reach a bill.
+
+**Before charging a single real family**, confirm all of:
+
+- The purchaser is the parent. A subscription bought by a child is
+  chargeable-back and, in the US, specifically actionable.
+- Price, renewal date and cancellation route are disclosed before payment.
+- Sales tax / VAT is handled — Stripe Tax does most of it.
+- Your refund policy is written down and reachable from the app.
+
+The parental consent this app records is tied to the card payment, which is one
+of COPPA's accepted verification methods. That is a genuine reason to have
+billing live before you take real families — see [LEGAL.md](LEGAL.md).

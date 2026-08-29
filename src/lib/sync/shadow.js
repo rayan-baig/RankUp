@@ -53,6 +53,9 @@ export function clearShadow() {
  * nothing — a kid could edit the number in their browser and upload it.
  */
 const SERVER_OWNED = {
+  // A family's tier is decided by Stripe's webhook. The database refuses a
+  // direct write anyway, but pushing it would fill the outbox with rejections.
+  families: ['tier', 'subscription_status', 'stripe_customer_id', 'stripe_subscription_id'],
   kids: ['xp', 'coins', 'streak_count', 'streak_last_day', 'streak_freezes'],
   // A quest's status and a submission's verdict are decided by submit_quest,
   // approve_submission and reject_submission. If a device could push these

@@ -39,6 +39,8 @@ Legend: ✅ genuinely works · 🟡 works but only on this device · ❌ looks r
 | Kid-device pairing by 6-digit code | ✅ | Expiry, 5-attempt limit, one-time use — [docs/SYNC.md](SYNC.md). Between two phones it needs Supabase; without it, two tabs of one browser |
 | Cross-device sync | ✅ *with a backend* | Quests, submissions, approvals and XP travel between paired devices. Offline-first with an outbox. Needs Supabase — [docs/SYNC.md](SYNC.md) |
 | Real cross-family guilds | ✅ *with a backend* | Invite codes, real rosters, real chat. **A child joins only once a parent on each side approves.** Needs Supabase |
+| Parental consent | ✅ | Required before any child exists — enforced by the database, not the app. Export, deletion and withdrawal all work — [docs/LEGAL.md](LEGAL.md) |
+| Subscriptions | ✅ *with Stripe connected* | Checkout, webhook, customer portal. Tier is server-owned and fails closed — [docs/PAYMENTS.md](PAYMENTS.md) |
 | Notifications | ✅ | Submissions, approvals, send-backs and daily reminders. Works with no server while the app is open; background delivery needs VAPID keys — [docs/NOTIFICATIONS.md](NOTIFICATIONS.md) |
 | A kid's device has no Parent Mode | ✅ | Not behind a PIN — not present at all |
 
@@ -92,8 +94,8 @@ none was ever taken.
 | **Sync after pairing** | Pairing is real (below); sharing quests and XP across the link is not | See SYNC.md |
 | **Reminders while the app is closed** | Reminders fire only while RankUp is open | A scheduled server job — [docs/NOTIFICATIONS.md](NOTIFICATIONS.md) |
 | **Background push delivery** | Written and wired, but never actually delivered a message — no push service is reachable from the sandbox | Test on two real phones |
-| **Subscriptions** | Switching plans flips feature flags. No card, no charge, no receipt | Stripe, or Apple/Google in-app purchase — [docs/PAYMENTS.md](PAYMENTS.md) |
-| **Accounts** | The parent PIN keeps a kid out of Parent Mode on this device. It is not a login. | Real auth — [docs/BACKEND.md](BACKEND.md) |
+| **Subscriptions** | ✅ built — off until you connect your own Stripe account | [docs/PAYMENTS.md](PAYMENTS.md) |
+| **The 20% Discount Tournament** | The leaderboard is sample data and no discount reaches a real bill | A monthly job applying Stripe coupons — [docs/PAYMENTS.md](PAYMENTS.md) |
 
 Every one of these is labelled in the interface itself with a dashed **SAMPLE** tag or a
 warning banner. If you build a new mockup, label it the same way.

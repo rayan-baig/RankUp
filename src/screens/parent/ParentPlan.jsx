@@ -1,23 +1,85 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { TIERS, ELITE_KID_PERKS, ELITE_PARENT_PERKS } from '../../state/initialState.js'
+import { billingLive, startCheckout, openBillingPortal, fetchBillingStatus, billingError } from '../../lib/billing.js'
 import { Screen, Card, Button, SectionTitle, Banner, Chip, Modal } from '../../components/ui.jsx'
 
 export default function ParentPlan() {
   const { state, dispatch } = useApp()
   const current = state.family.tier
   const [confirm, setConfirm] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [status, setStatus] = useState(null)
+  const live = billingLive()
+
+  useEffect(() => {
+    fetchBillingStatus().then(setStatus)
+    // Coming back from Stripe's checkout, the webhook may still be in flight.
+    if (window.location.hash.includes('checkout=success')) {
+      const t = setTimeout(() => fetchBillingStatus().then(setStatus), 4000)
+      return () => clearTimeout(t)
+    }
+    return undefined
+  }, [])
+
+  /**
+   * With Stripe live, the only route to Elite is a real payment — the database
+   * refuses to let a device set its own tier. Without Stripe, the switch below
+   * flips a local flag so both tiers can be tried in development, and says so.
+   */
+  const choosePlan = async (tier) => {
+    if (!live) {
+      dispatch({ type: 'SET_TIER', tier: tier.id })
+      setConfirm(null)
+      return
+    }
+    setBusy(true)
+    setError('')
+    const result = await startCheckout(tier.id)
+    if (!result.ok) {
+      setError(billingError(result.reason))
+      setBusy(false)
+      setConfirm(null)
+    }
+  }
 
   return (
     <Screen>
       <h1 className="font-display text-2xl font-extrabold mb-1">Plans</h1>
       <p className="text-sm text-muted mb-3">You are on {TIERS[current].name}.</p>
 
-      <Banner tone="warn" icon="💳" title="No real payments in this build">
-        Switching here flips feature flags so you can test both tiers. No card is taken and nothing
-        is charged. Connecting Stripe (or Apple/Google in-app purchase) is a separate job — see
-        docs/PAYMENTS.md.
-      </Banner>
+      {live ? (
+        <>
+          {window.location.hash.includes('checkout=success') && (
+            <Banner tone="good" icon="🎉" title="Payment received">
+              Stripe is confirming it now. Your plan updates within a few seconds.
+            </Banner>
+          )}
+          {status?.status === 'past_due' && (
+            <Banner tone="bad" icon="⚠️" title="A payment failed">
+              Your card was declined, so Elite features are paused. Update your card to restore
+              them — nothing your kids have earned has been touched.
+            </Banner>
+          )}
+          {status?.has_customer && (
+            <Button variant="soft" className="w-full" disabled={busy} onClick={async () => {
+              setBusy(true)
+              const r = await openBillingPortal()
+              if (!r.ok) { setError(billingError(r.reason)); setBusy(false) }
+            }}>
+              Manage billing, cancel, or update card
+            </Button>
+          )}
+        </>
+      ) : (
+        <Banner tone="warn" icon="💳" title="Payments are not switched on here">
+          Switching plans flips feature flags so you can try both. No card is taken and nothing is
+          charged. See docs/PAYMENTS.md to connect Stripe.
+        </Banner>
+      )}
+
+      {error && <p className="text-sm mt-3" style={{ color: 'var(--bad)' }} role="alert">{error}</p>}
 
       <div className="mt-3 space-y-3">
         {Object.values(TIERS).map((tier) => {
@@ -49,9 +111,14 @@ export default function ParentPlan() {
                 <Button
                   variant={tier.id === 'elite' ? 'primary' : 'soft'}
                   className="w-full mt-3"
-                  onClick={() => setConfirm(tier)}
+                  disabled={busy}
+                  onClick={() => (live ? choosePlan(tier) : setConfirm(tier))}
                 >
-                  {tier.id === 'elite' ? 'Upgrade to Elite Pass' : 'Switch to Standard'}
+                  {busy
+                    ? 'Opening Stripe…'
+                    : tier.id === 'elite'
+                      ? live ? 'Subscribe to Elite Pass' : 'Upgrade to Elite Pass'
+                      : live ? 'Subscribe to Standard' : 'Switch to Standard'}
                 </Button>
               )}
             </Card>
@@ -88,15 +155,7 @@ export default function ParentPlan() {
         footer={
           <>
             <Button variant="ghost" className="flex-1" onClick={() => setConfirm(null)}>Cancel</Button>
-            <Button
-              className="flex-1"
-              onClick={() => {
-                dispatch({ type: 'SET_TIER', tier: confirm.id })
-                setConfirm(null)
-              }}
-            >
-              Switch
-            </Button>
+            <Button className="flex-1" onClick={() => choosePlan(confirm)}>Switch</Button>
           </>
         }
       >
@@ -105,7 +164,9 @@ export default function ParentPlan() {
             ? 'Elite tools unlock immediately and kids get the permanent 1.5× XP boost and 10-slot guilds.'
             : 'Elite tools lock again. Guilds go back to 5 slots and the XP boost stops. Nothing already earned is removed.'}
         </p>
-        <p className="text-xs text-muted">No payment is taken — this build has no billing connected.</p>
+        <p className="text-xs text-muted">
+          No payment is taken — billing is not connected on this deployment.
+        </p>
       </Modal>
     </Screen>
   )

@@ -59,6 +59,8 @@ insert into submissions (id, family_id, quest_id, kid_id, status) values
 grant usage on schema public to anon, authenticated;
 grant all on all tables in schema public to anon, authenticated;
 grant all on all sequences in schema public to anon, authenticated;
+-- The blanket grant above re-opens the billing columns; lock them again.
+select lock_billing_columns();
 
 set role app_user;
 
