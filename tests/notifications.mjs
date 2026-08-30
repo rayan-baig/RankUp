@@ -48,6 +48,10 @@ console.log('\n=== Turning notifications on ===')
 await setUpFamily(page)
 await page.evaluate(() => { window.location.hash = '/parent/settings' })
 await page.waitForTimeout(1200)
+// Settings is an index of collapsed sections now, so open the one we want —
+// which also proves the disclosure actually opens.
+await page.getByRole('button', { name: /Notifications/ }).first().click()
+await page.waitForTimeout(500)
 ;(await page.getByText('Tell me when something happens').count()) > 0
   ? pass('the settings screen offers notifications')
   : fail('settings offers notifications', 'toggle missing')

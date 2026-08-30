@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 200" role="img" aria-label="RankUp">
+  <!-- Horizontal lockup for a landing page, a store listing or a header. -->
+  <rect x="0" y="12" width="176" height="176" rx="40" fill="#141a33"/>
+  <g fill="none" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"
+     transform="translate(88 100) scale(0.344) translate(-256 -256)">
+    <path d="M156 380 L256 324 L356 380" stroke="#37477a"/>
+    <path d="M156 306 L256 250 L356 306" stroke="#5b7ce0"/>
+    <path d="M156 232 L256 176 L356 232" stroke="#f2b03d"/>
+  </g>
+  <text x="212" y="130" font-family="Verdana, DejaVu Sans, sans-serif" font-size="96"
+        font-weight="700" letter-spacing="-3" fill="#141a33">Rank<tspan fill="#c0871f">Up</tspan></text>
+</svg>

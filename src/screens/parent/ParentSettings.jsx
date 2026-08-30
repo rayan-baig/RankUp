@@ -5,7 +5,7 @@ import { clearState, storageUsageBytes } from '../../lib/storage.js'
 import { relativeTime } from '../../lib/dates.js'
 import { canSyncAcrossDevices } from '../../lib/sync/index.js'
 import { guildsEnabled } from '../../lib/guilds.js'
-import { Screen, Card, Button, SectionTitle, Field, TextInput, TextArea, Toggle, Banner, Modal, Select, Chip } from '../../components/ui.jsx'
+import { Screen, Card, Button, Section, SectionTitle, Field, TextInput, TextArea, Toggle, Banner, Modal, Select, Chip } from '../../components/ui.jsx'
 import NotificationSettings from '../../components/NotificationSettings.jsx'
 import DataRights from '../../components/DataRights.jsx'
 import { navigate } from '../../lib/router.js'
@@ -24,10 +24,12 @@ export default function ParentSettings() {
 
   return (
     <Screen>
-      <h1 className="font-display text-2xl font-extrabold mb-3">Settings</h1>
+      <h1 className="font-display text-2xl font-extrabold mb-1">Settings</h1>
+      <p className="text-sm text-muted mb-4">Tap a section to open it.</p>
 
-      <SectionTitle>Dashboard theme</SectionTitle>
-      <div className="grid grid-cols-2 gap-2.5 mb-4">
+      <Section title="Dashboard theme" icon="🎨"
+        summary={PARENT_THEMES.find((t) => t.id === state.family.parentThemeId)?.name || 'Choose a look'}>
+      <div className="grid grid-cols-2 gap-2.5">
         {PARENT_THEMES.map((t) => {
           const active = state.family.parentThemeId === t.id
           return (
@@ -53,10 +55,14 @@ export default function ParentSettings() {
           )
         })}
       </div>
-      <p className="text-xs text-muted -mt-2 mb-4">Visual only — parent themes never change how anything works.</p>
+      <p className="text-xs text-muted mt-2">Visual only — parent themes never change how anything works.</p>
+      </Section>
 
-      <SectionTitle>Rewards catalogue</SectionTitle>
-      <Card className="mb-4">
+      <Section title="Rewards catalogue" icon="🎁"
+        summary={`${state.rewards.length} reward${state.rewards.length === 1 ? '' : 's'}${
+          state.redemptions.filter((r) => r.status === 'requested').length
+            ? ` · ${state.redemptions.filter((r) => r.status === 'requested').length} waiting to be given` : ''}`}>
+      <Card flat>
         <p className="text-sm text-muted mb-3">
           What kids can spend their currency on. Real-world things work best.
         </p>
@@ -108,9 +114,11 @@ export default function ParentSettings() {
           </div>
         )}
       </Card>
+      </Section>
 
-      <SectionTitle>Family goal</SectionTitle>
-      <Card className="mb-4">
+      <Section title="Family goal" icon="🎯"
+        summary={state.familyGoal ? state.familyGoal.name : 'Not set'}>
+      <Card flat>
         <p className="text-sm text-muted mb-3">Everyone's XP adds to one shared bar.</p>
         <Field label="Reward for hitting it">
           <TextInput value={goal.name} onChange={(e) => setGoal({ ...goal, name: e.target.value })} placeholder="e.g. Trip to the aquarium" />
@@ -133,9 +141,11 @@ export default function ParentSettings() {
           )}
         </div>
       </Card>
+      </Section>
 
-      <SectionTitle>Notes to your kid</SectionTitle>
-      <Card className="mb-4">
+      <Section title="Notes to your kid" icon="✉️"
+        summary={`${state.notes.length} sent`}>
+      <Card flat>
         <Field label="Kid">
           <Select value={noteKid} onChange={(e) => setNoteKid(e.target.value)}>
             {state.kids.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
@@ -167,10 +177,15 @@ export default function ParentSettings() {
         </Button>
       </Card>
 
-      <NotificationSettings />
+      </Section>
 
-      <SectionTitle>Daily reminders</SectionTitle>
-      <Card className="mb-4">
+      <Section title="Notifications" icon="🔔" summary="When this phone buzzes you">
+        <NotificationSettings />
+      </Section>
+
+      <Section title="Daily reminders" icon="⏰"
+        summary={`${state.settings.reminders.filter((r) => r.on).length} of ${state.settings.reminders.length} on`}>
+      <Card flat>
         <Banner tone="info" icon="⏰" title="Fires while RankUp is open">
           These check the time once a minute and notify this device. Reminders that arrive with
           the app closed need scheduled server-side push — see docs/NOTIFICATIONS.md.
@@ -187,8 +202,11 @@ export default function ParentSettings() {
         </div>
       </Card>
 
-      <SectionTitle>Family sync</SectionTitle>
-      <Card className="mb-4">
+      </Section>
+
+      <Section title="Family sync" icon="🔗"
+        summary={linkedCount ? `${linkedCount} device${linkedCount === 1 ? '' : 's'} linked` : 'No devices linked yet'}>
+      <Card flat>
         <button
           type="button"
           onClick={() => navigate('/parent/pair')}
@@ -239,8 +257,11 @@ export default function ParentSettings() {
         <p className="text-xs text-muted mt-2">Local data in use: about {usageKb} KB.</p>
       </Card>
 
-      <SectionTitle>Accessibility & motion</SectionTitle>
-      <Card className="mb-4">
+      </Section>
+
+      <Section title="Accessibility & motion" icon="♿"
+        summary={state.settings.reduceMotion ? 'Reduced motion on' : 'Full animation'}>
+      <Card flat>
         <Toggle
           checked={state.settings.reduceMotion}
           onChange={(v) => dispatch({ type: 'UPDATE_SETTINGS', patch: { reduceMotion: v } })}
@@ -249,8 +270,11 @@ export default function ParentSettings() {
         />
       </Card>
 
-      <SectionTitle>Parent account</SectionTitle>
-      <Card className="mb-4">
+      </Section>
+
+      <Section title="Parent account" icon="👤"
+        summary={`${state.family.name || 'Your family'} · ${state.family.tier === 'elite' ? 'Elite Pass' : 'Standard'}`}>
+      <Card flat>
         <Field label="Family name">
           <TextInput
             value={state.family.name}
@@ -267,9 +291,13 @@ export default function ParentSettings() {
         <Chip>Plan: {state.family.tier === 'elite' ? 'Elite Pass' : 'Standard'}</Chip>
       </Card>
 
-      <DataRights />
+      </Section>
 
-      <Button variant="ghost" className="w-full" onClick={() => setReset(true)}>
+      <Section title="Your data" icon="🗂️" summary="Download it, or delete the account">
+        <DataRights />
+      </Section>
+
+      <Button variant="ghost" className="w-full mt-4" onClick={() => setReset(true)}>
         Erase local data on this device only
       </Button>
       <p className="text-xs text-muted text-center mt-2 mb-4">

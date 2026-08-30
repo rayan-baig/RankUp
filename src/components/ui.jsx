@@ -42,6 +42,44 @@ export function SectionTitle({ children, action }) {
   )
 }
 
+/**
+ * A settings section that opens only when someone wants it.
+ *
+ * Settings had grown to nearly five phone-screens of scrolling, which on a
+ * phone means the last section may as well not exist. Collapsed, the whole page
+ * is an index you can see at once; open one and it is the only thing in the way.
+ *
+ * `summary` is the one-line answer to "what is in here", so the index still
+ * tells you the current state without opening anything.
+ */
+export function Section({ title, summary, icon, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="card-flat mb-2.5 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center gap-3 p-3 text-left"
+      >
+        {icon && <span className="text-lg leading-none" aria-hidden="true">{icon}</span>}
+        <span className="min-w-0 flex-1">
+          <span className="block font-display font-bold text-sm leading-tight">{title}</span>
+          {summary && <span className="block text-xs text-muted leading-tight mt-0.5">{summary}</span>}
+        </span>
+        <span
+          className="text-muted text-xs shrink-0 transition-transform"
+          style={{ transform: open ? 'rotate(90deg)' : 'none' }}
+          aria-hidden="true"
+        >
+          ▶
+        </span>
+      </button>
+      {open && <div className="px-3 pb-3">{children}</div>}
+    </div>
+  )
+}
+
 export function Field({ label, hint, children }) {
   return (
     <label className="block mb-3">
