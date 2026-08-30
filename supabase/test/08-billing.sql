@@ -31,8 +31,8 @@ do $$
 begin
   perform become('f1111111-1111-1111-1111-111111111111');
 
-  perform ok('a new family starts on Standard',
-    (billing_status()->>'tier') = 'standard');
+  perform ok('a new family starts on Starter, the cheapest plan',
+    (billing_status()->>'tier') = 'starter');
 
   -- A device must not be able to buy itself Elite.
   begin
@@ -42,8 +42,8 @@ begin
     if sqlerrm like 'FAIL%' then raise; end if;
     raise notice '  PASS a parent CANNOT set their own tier (%)', left(sqlerrm, 34);
   end;
-  perform ok('and the family is still on Standard',
-    (billing_status()->>'tier') = 'standard');
+  perform ok('and the family is still on Starter',
+    (billing_status()->>'tier') = 'starter');
 
   -- The columns a parent legitimately owns still work.
   update families set name = 'Renamed Family' where id = 'f2222222-0000-0000-0000-000000000001';
@@ -79,7 +79,8 @@ begin
   -- Fail closed.
   res := apply_subscription_change('f2222222-0000-0000-0000-000000000001', 'past_due', 'elite',
                                    null, null, null, 'evt_2');
-  perform ok('a past-due subscription drops to Standard', res->>'tier' = 'standard');
+  perform ok('a past-due subscription drops to Starter, not to a plan it did not pay for',
+    res->>'tier' = 'starter');
 
   res := apply_subscription_change('f2222222-0000-0000-0000-000000000001', 'active', 'elite',
                                    null, null, now() + interval '30 days', 'evt_3');
@@ -87,7 +88,7 @@ begin
 
   res := apply_subscription_change('f2222222-0000-0000-0000-000000000001', 'canceled', 'elite',
                                    null, null, now(), 'evt_4');
-  perform ok('cancelling drops to Standard', res->>'tier' = 'standard');
+  perform ok('cancelling drops to Starter', res->>'tier' = 'starter');
 
   res := apply_subscription_change('f2222222-0000-0000-0000-000000000001', 'active', 'standard',
                                    null, null, now() + interval '30 days', 'evt_5');
@@ -114,6 +115,140 @@ begin
   perform become('f1111111-1111-1111-1111-111111111111');
   perform ok('billing events are hidden from the browser',
     (select count(*) from billing_events) = 0);
+end $$;
+
+-- ---------- the three-plan ladder ----------
+do $$
+declare res jsonb;
+begin
+  set local role postgres;
+
+  res := apply_subscription_change('f2222222-0000-0000-0000-000000000001', 'active', 'starter',
+                                   null, null, now() + interval '30 days', 'evt_10');
+  perform ok('an active Starter subscription is Starter', res->>'tier' = 'starter');
+
+  -- A tier name nobody recognises must not buy anything.
+  res := apply_subscription_change('f2222222-0000-0000-0000-000000000001', 'active', 'platinum',
+                                   null, null, now() + interval '30 days', 'evt_11');
+  perform ok('an unrecognised plan name falls back to Starter', res->>'tier' = 'starter');
+  set local role app_user;
+end $$;
+
+-- ---------- Starter is a one-child plan ----------
+do $$
+declare v_second uuid := gen_random_uuid();
+begin
+  set local role postgres;
+  update families set tier = 'starter' where id = 'f2222222-0000-0000-0000-000000000001';
+
+  begin
+    insert into kids (id, family_id, name)
+    values (v_second, 'f2222222-0000-0000-0000-000000000001', 'Second Child');
+    raise exception 'FAIL Starter allowed a second child';
+  exception when others then
+    if sqlerrm like 'FAIL%' then raise; end if;
+    raise notice '  PASS Starter refuses a second child (%)', left(sqlerrm, 30);
+  end;
+
+  -- Paying lifts the limit.
+  perform apply_subscription_change('f2222222-0000-0000-0000-000000000001', 'active', 'standard',
+                                    null, null, now() + interval '30 days', 'evt_12');
+  insert into kids (id, family_id, name)
+  values (v_second, 'f2222222-0000-0000-0000-000000000001', 'Second Child');
+  perform ok('Standard allows the second child',
+    (select count(*) from kids where family_id = 'f2222222-0000-0000-0000-000000000001') = 2);
+
+  -- Lapsing back must never delete a child they already have.
+  perform apply_subscription_change('f2222222-0000-0000-0000-000000000001', 'canceled', 'standard',
+                                    null, null, now(), 'evt_13');
+  perform ok('dropping back to Starter keeps the children already there',
+    (select count(*) from kids where family_id = 'f2222222-0000-0000-0000-000000000001') = 2);
+  set local role app_user;
+end $$;
+
+-- ---------- Flash Tickets ----------
+do $$
+declare res jsonb;
+begin
+  set local role postgres;
+  update families set flash_tickets = 0, tier = 'standard'
+   where id = 'f2222222-0000-0000-0000-000000000001';
+
+  res := credit_flash_tickets('f2222222-0000-0000-0000-000000000001', 3, 'evt_20');
+  perform ok('a paid pack credits three tickets', (res->>'flash_tickets')::int = 3);
+
+  -- Stripe retries; a family must not get two packs for one payment.
+  res := credit_flash_tickets('f2222222-0000-0000-0000-000000000001', 3, 'evt_20');
+  perform ok('a repeated ticket payment is ignored', (res->>'duplicate')::boolean = true);
+  perform ok('and they still have exactly three',
+    (select flash_tickets from families where id = 'f2222222-0000-0000-0000-000000000001') = 3);
+  set local role app_user;
+
+  perform become('f1111111-1111-1111-1111-111111111111');
+  begin
+    perform credit_flash_tickets('f2222222-0000-0000-0000-000000000001', 99, 'evt_21');
+    raise exception 'FAIL a browser granted itself tickets';
+  exception when others then
+    if sqlerrm like 'FAIL%' then raise; end if;
+    raise notice '  PASS a browser caller CANNOT credit tickets (%)', left(sqlerrm, 30);
+  end;
+end $$;
+
+-- ---------- buying a Sunday Market skin ----------
+do $$
+declare res jsonb;
+begin
+  set local role postgres;
+  update kids set coins = 130 where id = 'f4444444-0000-0000-0000-000000000001';
+  set local role app_user;
+
+  perform become('f1111111-1111-1111-1111-111111111111');
+  res := buy_market_skin('f4444444-0000-0000-0000-000000000001', 'ember', 120, false);
+  perform ok('a skin can be bought with the child''s own currency',
+    (res->>'ok')::boolean = true);
+  perform ok('and the currency really left the account',
+    (select coins from kids where id = 'f4444444-0000-0000-0000-000000000001') = 10);
+
+  res := buy_market_skin('f4444444-0000-0000-0000-000000000001', 'gilded', 260, false);
+  perform ok('a skin they cannot afford is refused',
+    (res->>'ok')::boolean = false and res->>'reason' = 'too_expensive');
+
+  res := buy_market_skin('f4444444-0000-0000-0000-000000000001', 'gilded', 260, true);
+  perform ok('a Flash Ticket takes it instead', (res->>'ok')::boolean = true);
+  perform ok('the ticket was spent, and the currency was not',
+    (select flash_tickets from families where id = 'f2222222-0000-0000-0000-000000000001') = 2
+    and (select coins from kids where id = 'f4444444-0000-0000-0000-000000000001') = 10);
+
+end $$;
+
+-- Another family's child is not yours to spend on.
+do $$
+declare
+  v_other_family uuid := gen_random_uuid();
+  v_other_kid    uuid := gen_random_uuid();
+  v_other_parent uuid := gen_random_uuid();
+begin
+  set local role postgres;
+  insert into auth.users (id, email) values (v_other_parent, 'stranger@example.com');
+  insert into families (id, name, tier) values (v_other_family, 'Someone Else', 'standard');
+  insert into parents (user_id, family_id, name) values (v_other_parent, v_other_family, 'Stranger');
+  perform seed_consent(v_other_family, v_other_parent);
+  insert into kids (id, family_id, name, coins) values (v_other_kid, v_other_family, 'Not Yours', 500);
+  set local role app_user;
+
+  perform become('f1111111-1111-1111-1111-111111111111');
+  begin
+    perform buy_market_skin(v_other_kid, 'ember', 120, false);
+    raise exception 'FAIL bought a skin for another family';
+  exception when others then
+    if sqlerrm like 'FAIL%' then raise; end if;
+    raise notice '  PASS one family CANNOT spend on another''s child (%)', left(sqlerrm, 30);
+  end;
+
+  set local role postgres;
+  perform ok('and that child''s currency is untouched',
+    (select coins from kids where id = v_other_kid) = 500);
+  set local role app_user;
 end $$;
 
 reset role;

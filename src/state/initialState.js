@@ -3,31 +3,58 @@ import { dayKey } from '../lib/dates.js'
 import { DEFAULT_KID_THEME } from '../data/kidThemes.js'
 import { DEFAULT_PARENT_THEME } from '../data/parentThemes.js'
 
+/**
+ * The three plans, cheapest first.
+ *
+ * `limits` is the machine-readable half — what the app actually enforces — and
+ * `features` is the human half shown on the plan screen. They must agree: a
+ * feature line that nothing enforces is a promise the app does not keep.
+ *
+ * All three are billed monthly. There is no annual option and no trial charge.
+ */
 export const TIERS = {
+  starter: {
+    id: 'starter',
+    name: 'Starter',
+    price: 4.99,
+    order: 0,
+    guildSize: 0,
+    xpMultiplier: 1,
+    limits: { maxKids: 1, aiPhotoCheck: false, guilds: false },
+    features: [
+      'One child',
+      'Unlimited quests and rewards',
+      'Photo proof, reviewed by you',
+      'All 15 kid themes and 10 parent themes',
+    ],
+  },
   standard: {
     id: 'standard',
     name: 'Standard',
     price: 9.99,
+    order: 1,
     guildSize: 5,
     xpMultiplier: 1,
+    limits: { maxKids: Infinity, aiPhotoCheck: true, guilds: true },
     features: [
-      'Unlimited quests and kid profiles',
-      'AI photo verification',
-      'All 15 kid themes and 10 parent themes',
+      'Unlimited children',
+      'AI photo verification on every proof',
       '5-player guilds',
+      'Everything in Starter',
     ],
   },
   elite: {
     id: 'elite',
     name: 'Elite Pass',
     price: 15.99,
+    order: 2,
     guildSize: 10,
     xpMultiplier: 1.5,
+    limits: { maxKids: Infinity, aiPhotoCheck: true, guilds: true },
     features: [
       'Everything in Standard',
-      '10-Player Megacluster Guilds',
       'Permanent 1.5× XP boost',
-      'Complete ad removal',
+      '10-player Megacluster guilds',
       'Exclusive profile customisation',
       'The Parental Consequence Engine',
       'Advanced AI Behaviour Blueprints',
@@ -36,10 +63,33 @@ export const TIERS = {
   },
 }
 
+/** Cheapest first, for the plan screen. */
+export const TIER_LADDER = Object.values(TIERS).sort((a, b) => a.order - b.order)
+
+/**
+ * The comparison table on the plan screen.
+ *
+ * One row per thing a parent might pay more for. `value` returns what that tier
+ * actually gives, so the table can never drift away from what the app enforces.
+ */
+export const PLAN_COMPARISON = [
+  { label: 'Children', value: (t) => (t.limits.maxKids === Infinity ? 'Unlimited' : String(t.limits.maxKids)) },
+  { label: 'Quests & rewards', value: () => 'Unlimited' },
+  { label: 'Photo proof', value: () => true },
+  { label: 'AI photo check', value: (t) => t.limits.aiPhotoCheck },
+  { label: 'All 25 themes', value: () => true },
+  { label: 'Guilds', value: (t) => (t.guildSize ? `${t.guildSize}-player` : false) },
+  { label: 'XP rate', value: (t) => (t.xpMultiplier > 1 ? `${t.xpMultiplier}×` : 'Normal') },
+  { label: 'Sunday Market', value: () => true },
+  { label: 'Profile frames', value: (t) => t.id === 'elite' },
+  { label: 'Consequence Engine', value: (t) => t.id === 'elite' },
+  { label: 'Behaviour Blueprints', value: (t) => t.id === 'elite' },
+  { label: 'Discount Tournament', value: (t) => t.id === 'elite' },
+]
+
 export const ELITE_KID_PERKS = [
   { icon: '👥', title: '10-Player Megacluster Guilds', body: 'Doubles the standard clan from 5 slots to 10, so a squad leader can invite more real-world classmates.' },
   { icon: '⚡', title: 'Permanent 1.5× XP Boost', body: 'A constant multiplier on every daily checklist and habit, so Elite kids level faster than Standard kids.' },
-  { icon: '🚫', title: 'Complete Ad Removal', body: 'Removes all menu pop-ups and full-screen video ads from the interface.' },
   { icon: '🔮', title: 'Exclusive Profile Customisation', body: 'Unlocks animated profile card frames and rare item drop selectors Standard users cannot access.' },
 ]
 
@@ -115,6 +165,8 @@ export function makeKid({ name, themeId = DEFAULT_KID_THEME, accessibility = nul
     lockout: null,
     profileFrame: 'none',
     dropSelector: 'standard',
+    skins: [],
+    skinId: null,
     lastLoginBonus: null,
     bestTimes: {},
     createdAt: Date.now(),
@@ -152,8 +204,10 @@ export function createInitialState() {
       parentEmail: '',
       parentThemeId: DEFAULT_PARENT_THEME,
       pin: '',
-      tier: 'standard',
-      subscription: { tier: 'standard', status: 'trial', startedAt: Date.now(), renewsAt: null },
+      tier: 'starter',
+      subscription: { tier: 'starter', status: 'trial', startedAt: Date.now(), renewsAt: null },
+      /* Flash Tickets the family has left. Only a parent can buy more. */
+      flashTickets: 0,
     },
     kids: [],
     quests: [],

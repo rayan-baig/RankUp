@@ -12,6 +12,7 @@
  *   npm run dev                            # with .env.local pointing at it
  */
 import { chromium } from 'playwright'
+import { setPlanInDatabase } from './helpers.mjs'
 const SHOT = process.env.SHOT_DIR || 'tests/screenshots'
 const fails = []
 const pass = n => console.log('  PASS', n)
@@ -67,6 +68,12 @@ let ps = await pState()
 ;/^[0-9a-f-]{36}$/.test(ps.family.id)
   ? pass(`the family id came from the server (${ps.family.id.slice(0,8)}…)`)
   : fail('server assigned the family id', ps.family.id)
+
+// Jonah is added during setup and Ava arrives on the paired phone, so this
+// family needs a plan that covers two children.
+await setPlanInDatabase('The Riveras')
+await parent.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+await parent.waitForTimeout(2500)
 
 console.log('\n=== Kid device pairs ===')
 await kid.goto('http://localhost:5173/?device=kid', { waitUntil:'networkidle' })

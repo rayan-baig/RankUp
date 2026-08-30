@@ -6,7 +6,7 @@
  * than one tab talking to itself.
  */
 import { chromium } from 'playwright'
-import { reporter, finish, BASE, SHOT_DIR } from './helpers.mjs'
+import { reporter, finish, BASE, SHOT_DIR, setPlanInDatabase } from './helpers.mjs'
 
 const { fails, pass, fail } = reporter()
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined })
@@ -64,6 +64,12 @@ await parent.getByRole('button', { name: 'Continue' }).click()
 await parent.waitForTimeout(200)
 await parent.getByRole('button', { name: 'Start playing' }).click()
 await parent.waitForTimeout(1200)
+
+// This family ends up with two children — Jonah, then Ava on the paired phone —
+// and Starter covers one. Put it on Standard the way Stripe's webhook would.
+await setPlanInDatabase('The Rivera family')
+await parent.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+await parent.waitForTimeout(2500)
 
 await kid.goto(`${BASE}?device=kid`, { waitUntil: 'networkidle' })
 await kid.waitForTimeout(500)

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
+import { canAddKid, planOf } from '../../state/reducer.js'
 import { makeKid } from '../../state/initialState.js'
 import { ADAPTIVE_SUPPORTS } from '../../data/questTemplates.js'
 import { KID_THEMES, resolveKidTheme } from '../../data/kidThemes.js'
@@ -32,17 +33,36 @@ export default function ParentKids() {
   }
 
   const toggleSupport = (list, s) => (list.includes(s) ? list.filter((x) => x !== s) : [...list, s])
+  const room = canAddKid(state)
 
   return (
     <Screen>
       <div className="flex items-center justify-between mb-3">
         <h1 className="font-display text-2xl font-extrabold">Kids</h1>
-        <Button className="px-3 py-2 min-h-0 text-sm" onClick={() => setAdding(true)}>+ Add</Button>
+        <Button
+          className="px-3 py-2 min-h-0 text-sm"
+          disabled={!room}
+          onClick={() => setAdding(true)}
+        >
+          + Add
+        </Button>
       </div>
 
-      <Banner tone="info" icon="∞" title="Unlimited kid profiles">
-        Both plans allow as many kid profiles as you need.
-      </Banner>
+      {room ? (
+        <Banner tone="info" icon="∞" title="Unlimited kid profiles">
+          {planOf(state).name} allows as many kid profiles as you need.
+        </Banner>
+      ) : (
+        <Banner
+          tone="warn"
+          icon="👧"
+          title={`${planOf(state).name} covers one child`}
+          action={<Button className="px-3 py-2 min-h-0 text-sm" onClick={() => navigate('/parent/plan')}>See plans</Button>}
+        >
+          Standard is $5 more a month and adds unlimited children, plus the AI check on every
+          photo. Nothing this child has earned is affected either way.
+        </Banner>
+      )}
 
       <div className="mt-3">
         {state.kids.map((kid) => {

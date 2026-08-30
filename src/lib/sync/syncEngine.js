@@ -119,8 +119,11 @@ export function createSyncEngine({ dispatch, onStatus }) {
     const snapshot = await transport.rpc('family_snapshot', { p_since: since })
     if (!snapshot) return { changed: 0 }
 
+    // `families` belongs in this list: when a subscription changes, the family
+    // row is the ONLY thing that moves. Leaving it out meant an upgrade landed
+    // in the browser only when some unrelated row happened to change too.
     const changed =
-      ['kids', 'quests', 'submissions', 'rewards', 'redemptions', 'notes', 'overrides', 'deletions']
+      ['families', 'kids', 'quests', 'submissions', 'rewards', 'redemptions', 'notes', 'overrides', 'deletions']
         .reduce((n, key) => n + (snapshot[key]?.length || 0), 0)
 
     if (changed > 0) dispatch({ type: 'MERGE_SNAPSHOT', snapshot })

@@ -23,7 +23,10 @@ create table families (
   id              uuid primary key default gen_random_uuid(),
   name            text not null,
   parent_theme_id text not null default 'executive',
-  tier            text not null default 'standard' check (tier in ('standard','elite')),
+  tier            text not null default 'starter' check (tier in ('starter','standard','elite')),
+  -- Flash Tickets the family has left. Written only by the Stripe webhook and
+  -- by buy_market_skin spending one; never by a device.
+  flash_tickets   int not null default 0 check (flash_tickets >= 0),
   -- Subscription state is written by the Stripe webhook, never by the browser.
   stripe_customer_id      text,
   stripe_subscription_id  text,
@@ -69,6 +72,11 @@ create table kids (
 
   profile_frame  text not null default 'none',
   drop_selector  text not null default 'standard',
+  -- Sunday Market cosmetics. Paint only: nothing here touches xp or coins.
+  -- jsonb rather than text[] because a device sends this as a JSON array, and
+  -- Postgres will not read "[]" as an array literal.
+  skins          jsonb not null default '[]'::jsonb,
+  skin_id        text,
   last_login_bonus date,
 
   -- The active lockout, if any (System Override Protocol).
@@ -232,7 +240,8 @@ create table guilds (
   motto          text not null default '',
   crest          text not null default '🛡️',
   weekly_goal_xp int not null default 1500,
-  -- Capacity is 5 on Standard and 10 on Elite; enforced against the leader's tier.
+  -- Capacity is 0 on Starter, 5 on Standard and 10 on Elite; enforced against
+  -- the leader's tier.
   capacity       int not null default 5 check (capacity in (5, 10)),
   leader_kid_id  uuid references kids(id) on delete set null,
   created_at     timestamptz not null default now()

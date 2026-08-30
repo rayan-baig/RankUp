@@ -13,6 +13,24 @@ export function reporter() {
   }
 }
 
+/**
+ * Stands in for the Stripe webhook, which is the only thing allowed to write a
+ * family's tier. Tests that need more than one child, or guilds, have to be on
+ * a plan that includes them — Starter covers one child and no guilds.
+ */
+export async function setPlanInDatabase(familyName, tier = 'standard') {
+  const { default: pg } = await import('pg')
+  const client = new pg.Client({
+    host: process.env.PGHOST || '/tmp',
+    port: Number(process.env.PGPORT || 55432),
+    user: process.env.PGUSER || 'postgres',
+    database: process.env.PGDATABASE || 'rankup_test',
+  })
+  await client.connect()
+  await client.query('update families set tier = $1 where name = $2', [tier, familyName])
+  await client.end()
+}
+
 export async function launch() {
   const browser = await chromium.launch({
     executablePath: process.env.CHROMIUM_PATH || undefined,

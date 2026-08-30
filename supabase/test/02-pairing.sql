@@ -12,8 +12,10 @@ insert into auth.users (id, email) values
   ('a5555555-5555-5555-5555-555555555555', null),
   ('a7777777-7777-7777-7777-777777777777', null),
   ('a6666666-6666-6666-6666-666666666666', null);
-insert into families (id, name) values
-  ('a2222222-0000-0000-0000-000000000001', 'Pairing Family');
+-- Standard, because this fixture holds several children and Starter is a
+-- one-child plan.
+insert into families (id, name, tier) values
+  ('a2222222-0000-0000-0000-000000000001', 'Pairing Family', 'standard');
 insert into parents (user_id, family_id, name) values
   ('a1111111-1111-1111-1111-111111111111', 'a2222222-0000-0000-0000-000000000001', 'Pair Parent');
 

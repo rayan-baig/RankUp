@@ -9,6 +9,7 @@
  * Needs the local backend running; see supabase/test/README.md.
  */
 import { chromium } from 'playwright'
+import pg from 'pg'
 import { reporter, finish, BASE } from './helpers.mjs'
 
 const { fails, pass, fail } = reporter()
@@ -54,6 +55,28 @@ async function makeFamily(page, device, familyName, kidName) {
   await page.waitForTimeout(200)
   await page.getByRole('button', { name: 'Start playing' }).click()
   await page.waitForTimeout(2500)
+
+  // Guilds start at Standard; Starter is a one-child plan with none. Only
+  // Stripe's webhook may write the tier column, so put the family on Standard
+  // the same way the webhook does rather than flipping a flag in the browser.
+  await upgradeInDatabase(familyName)
+  await page.evaluate(() => { window.location.hash = '/parent' })
+  await page.waitForTimeout(3000)
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+  await page.waitForTimeout(2500)
+}
+
+/** Stands in for the Stripe webhook: the only thing allowed to set a tier. */
+async function upgradeInDatabase(familyName, tier = 'standard') {
+  const client = new pg.Client({
+    host: process.env.PGHOST || '/tmp',
+    port: Number(process.env.PGPORT || 55432),
+    user: process.env.PGUSER || 'postgres',
+    database: process.env.PGDATABASE || 'rankup_test',
+  })
+  await client.connect()
+  await client.query('update families set tier = $1 where name = $2', [tier, familyName])
+  await client.end()
 }
 
 const famA = await ctx.newPage(); track(famA, 'famA')
@@ -69,7 +92,10 @@ await famA.evaluate(() => { window.location.hash = '/parent/guilds' })
 await famA.waitForTimeout(1200)
 await famA.locator('input[placeholder="e.g. The Bookworms"]').fill('The Bookworms')
 await famA.getByRole('button', { name: 'Create guild' }).click()
-await famA.waitForTimeout(2000)
+await famA.waitForTimeout(3000)
+// The roster arrives on the next pull, so nudge it rather than racing it.
+await famA.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+await famA.waitForTimeout(3000)
 const code = (await famA.locator('.font-mono').first().innerText().catch(() => '')).trim()
 ;/^[A-Z2-9]{6}$/.test(code) ? pass(`the guild has an invite code (${code})`)
                            : fail('guild invite code', `got "${code}"`)

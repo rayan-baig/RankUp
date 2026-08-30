@@ -2,6 +2,8 @@ import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import { formatXp } from '../../lib/xp.js'
 import { relativeTime } from '../../lib/dates.js'
 import { Screen, Card, Button, SectionTitle, EmptyState, Stat, Chip } from '../../components/ui.jsx'
+import { isMarketOpen, nextOpeningLabel } from '../../data/marketSkins.js'
+import { navigate } from '../../lib/router.js'
 
 export default function KidShop() {
   const { state, dispatch } = useApp()
@@ -19,6 +21,22 @@ export default function KidShop() {
       <div className="flex gap-2 mb-4">
         <Stat icon={theme.currency.icon} value={formatXp(kid.coins)} label={`${theme.currency.name} in the bank`} tone="var(--accent)" />
       </div>
+
+      <button
+        type="button"
+        onClick={() => navigate('/kid/market')}
+        className="card w-full flex items-center gap-3 text-left mb-4 p-4"
+      >
+        <span className="text-2xl" aria-hidden="true">🎪</span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold text-sm">Sunday Market</span>
+          <span className="block text-xs text-muted">
+            {isMarketOpen() ? 'Open now — skins you cannot get anywhere else.' : nextOpeningLabel()}
+          </span>
+        </span>
+        {isMarketOpen() && <Chip tone="var(--good)">Open</Chip>}
+        <span aria-hidden="true" className="text-muted">›</span>
+      </button>
 
       <SectionTitle>Catalogue</SectionTitle>
       {state.rewards.length === 0 ? (

@@ -2,6 +2,7 @@ import { uid } from '../lib/id.js'
 import { dayKey, daysBetween } from '../lib/dates.js'
 import { calcReward, levelFromXp, testScoreBonus } from '../lib/xp.js'
 import { createInitialState, TIERS, monthKey, makeKid } from './initialState.js'
+import { findSkin, isMarketOpen } from '../data/marketSkins.js'
 import { ENTITIES } from '../lib/sync/mappers.js'
 
 /* ------------------------------------------------------------------ */
@@ -53,8 +54,34 @@ export function isElite(state) {
   return state.family.tier === 'elite'
 }
 
+/** The plan a family is on, falling back to the cheapest rather than the best. */
+export function planOf(state) {
+  return TIERS[state.family.tier] || TIERS.starter
+}
+
+/**
+ * How many children this plan allows. Starter is one child; the point of
+ * Standard is the second one.
+ */
+export function kidLimit(state) {
+  return planOf(state).limits.maxKids
+}
+
+export function canAddKid(state) {
+  return state.kids.length < kidLimit(state)
+}
+
+/** Starter reviews photos by eye. The AI second opinion is what Standard adds. */
+export function aiCheckAllowed(state) {
+  return planOf(state).limits.aiPhotoCheck === true
+}
+
+export function guildsAllowedByPlan(state) {
+  return planOf(state).limits.guilds === true
+}
+
 export function guildCapacity(state) {
-  return TIERS[state.family.tier]?.guildSize ?? 5
+  return TIERS[state.family.tier]?.guildSize ?? 0
 }
 
 /** A lockout that has run out of time is treated as lifted. */
@@ -127,6 +154,7 @@ export function reducer(state, action) {
             name: family.name,
             parentThemeId: next.family.parentThemeId,
             tier: family.tier,
+            flashTickets: family.flash_tickets ?? next.family.flashTickets ?? 0,
           },
         }
       }
@@ -276,6 +304,9 @@ export function reducer(state, action) {
     /* ---------- kids ---------- */
 
     case 'ADD_KID':
+      // Starter is a one-child plan. Refusing here rather than in the screen
+      // means no other route into the app can quietly get round it.
+      if (!canAddKid(state)) return state
       return logEvent({ ...state, kids: [...state.kids, action.kid] }, { type: 'kid_added', kidId: action.kid.id })
 
     case 'UPDATE_KID':
@@ -316,6 +347,81 @@ export function reducer(state, action) {
 
     case 'UPDATE_FAMILY':
       return { ...state, family: { ...state.family, ...action.patch } }
+
+    /**
+     * Buy a Sunday Market skin with the child's own currency.
+     *
+     * Refused unless the market is actually open, so a tampered clock in the
+     * browser is the only way round it — and that only cheats them out of the
+     * occasion, never out of XP, because skins are paint.
+     */
+    case 'BUY_SKIN': {
+      const kid = state.kids.find((k) => k.id === action.kidId)
+      const skin = findSkin(action.skinId)
+      if (!kid || !skin || !isMarketOpen()) return state
+      if ((kid.skins || []).includes(skin.id)) return state
+      if (kid.coins < skin.cost) return state
+      const next = mapKid(state, kid.id, (k) => ({
+        ...k,
+        coins: k.coins - skin.cost,
+        skins: [...(k.skins || []), skin.id],
+        skinId: skin.id,
+      }))
+      return logEvent(queueRpc(next, 'buy_market_skin', {
+        p_kid_id: kid.id, p_skin_id: skin.id, p_cost: skin.cost, p_use_ticket: false,
+      }), { type: 'skin_bought', kidId: kid.id, meta: { skin: skin.id, ticket: false } })
+    }
+
+    /**
+     * Spend one of the family's Flash Tickets instead of currency.
+     *
+     * The ticket was bought by a parent; a child spends it. That split is the
+     * whole point — see the note on buyFlashTickets in lib/billing.js.
+     */
+    case 'CLAIM_SKIN_WITH_TICKET': {
+      const kid = state.kids.find((k) => k.id === action.kidId)
+      const skin = findSkin(action.skinId)
+      if (!kid || !skin || !isMarketOpen()) return state
+      if ((kid.skins || []).includes(skin.id)) return state
+      if ((state.family.flashTickets || 0) < 1) return state
+      const withKid = mapKid(state, kid.id, (k) => ({
+        ...k,
+        skins: [...(k.skins || []), skin.id],
+        skinId: skin.id,
+      }))
+      const next = {
+        ...withKid,
+        family: { ...withKid.family, flashTickets: withKid.family.flashTickets - 1 },
+      }
+      return logEvent(queueRpc(next, 'buy_market_skin', {
+        p_kid_id: kid.id, p_skin_id: skin.id, p_cost: 0, p_use_ticket: true,
+      }), { type: 'skin_bought', kidId: kid.id, meta: { skin: skin.id, ticket: true } })
+    }
+
+    /** Wear a skin already owned. Free, and reversible. */
+    case 'WEAR_SKIN': {
+      const kid = state.kids.find((k) => k.id === action.kidId)
+      if (!kid) return state
+      if (action.skinId && !(kid.skins || []).includes(action.skinId)) return state
+      return mapKid(state, kid.id, (k) => ({ ...k, skinId: action.skinId || null }))
+    }
+
+    /**
+     * Credit Flash Tickets.
+     *
+     * In production this only ever runs from what the server sends back after
+     * Stripe's webhook has confirmed a payment. With Stripe unconfigured the
+     * settings screen dispatches it directly so the market can be exercised in
+     * development, and says on screen that nothing was charged.
+     */
+    case 'GRANT_FLASH_TICKETS':
+      return {
+        ...state,
+        family: {
+          ...state.family,
+          flashTickets: (state.family.flashTickets || 0) + (action.count || 0),
+        },
+      }
 
     case 'SET_TIER': {
       const next = {

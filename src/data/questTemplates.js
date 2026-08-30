@@ -20,19 +20,6 @@ export const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map((c) => [c.id, c]))
 
 export const QUEST_PACKS = [
   {
-    id: 'toddler',
-    label: 'Toddler pack',
-    ages: '3–5',
-    blurb: 'Short, physical, one-step tasks.',
-    quests: [
-      { title: 'Put toys in the toy box', category: 'bedroom', difficulty: 'easy', requiresPhoto: true, doneMeans: 'Floor is clear of toys and the box lid closes.', why: 'Tidying up teaches that play has a beginning and an end.' },
-      { title: 'Put dirty clothes in the basket', category: 'laundry', difficulty: 'easy', requiresPhoto: true, doneMeans: 'No clothes on the bedroom floor.', why: 'Small habits now save arguments later.' },
-      { title: 'Brush teeth (with help)', category: 'selfcare', difficulty: 'easy', requiresPhoto: false, doneMeans: 'A grown-up saw the teeth get brushed.', why: 'Twice a day protects adult teeth that are still growing.' },
-      { title: 'Feed the pet', category: 'pets', difficulty: 'easy', requiresPhoto: true, doneMeans: 'Bowl has food in it and the bag is closed.', why: 'Something depends on you — that is real responsibility.' },
-      { title: 'Wipe the table', category: 'kitchen', difficulty: 'easy', requiresPhoto: true, doneMeans: 'No crumbs left on the table top.', why: 'A clean table is a shared space everyone can use.' },
-    ],
-  },
-  {
     id: 'kid',
     label: 'Kid pack',
     ages: '6–11',

@@ -4,6 +4,7 @@ import { DIFFICULTY, calcReward } from '../../lib/xp.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
 import { formatDuration } from '../../lib/dates.js'
 import { verifyPhoto, VERDICT, VERDICT_META } from '../../lib/aiVerify.js'
+import { aiCheckAllowed } from '../../state/reducer.js'
 import { putPhoto } from '../../lib/storage.js'
 import { uid } from '../../lib/id.js'
 import CameraCapture from '../../components/CameraCapture.jsx'
@@ -60,11 +61,20 @@ export default function QuestDetail({ questId }) {
   const isOpen = quest.status === 'assigned' || quest.status === 'redo'
   const onTime = quest.timerSeconds ? elapsed > 0 && elapsed <= quest.timerSeconds * 1000 : true
   const preview = calcReward(quest, { elite, streak: kid.streak.count, onTime })
+  const aiCheck = aiCheckAllowed(state)
 
   const runCheck = async (captured) => {
     setPhoto(captured)
-    setMode('checking')
     setError('')
+    // The AI second opinion is what Standard buys. On Starter the photo still
+    // goes to the parent — they just look at it themselves, which is what the
+    // plan screen says they are getting.
+    if (!aiCheck) {
+      setReport(null)
+      setMode('review')
+      return
+    }
+    setMode('checking')
     try {
       const result = await verifyPhoto(captured.dataUrl, {
         quest,

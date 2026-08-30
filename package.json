@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext .js,.jsx",
-    "test:smoke": "node tests/integrity.mjs && node tests/flows.mjs && node tests/pairing.mjs && node tests/notifications.mjs",
+    "test:smoke": "node tests/integrity.mjs && node tests/flows.mjs && node tests/pairing.mjs && node tests/notifications.mjs && node tests/plans.mjs",
     "test:sync": "node tests/sync.mjs && node tests/guilds.mjs && node tests/consent.mjs",
     "test:db": "./supabase/test/run.sh"
   },

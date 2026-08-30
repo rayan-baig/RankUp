@@ -41,6 +41,8 @@ export const kids = {
       : null,
     profileFrame: row.profile_frame || 'none',
     dropSelector: row.drop_selector || 'standard',
+    skins: Array.isArray(row.skins) ? row.skins : [],
+    skinId: row.skin_id || null,
     lastLoginBonus: row.last_login_bonus || null,
     // Local-only, never sent: keep whatever this device already had.
     bestTimes: existing.bestTimes || {},
@@ -65,6 +67,8 @@ export const kids = {
     streak_freezes: kid.streak?.freezeTokens ?? 0,
     profile_frame: kid.profileFrame || 'none',
     drop_selector: kid.dropSelector || 'standard',
+    skins: kid.skins || [],
+    skin_id: kid.skinId || null,
     last_login_bonus: kid.lastLoginBonus || null,
     lockout_kind: kid.lockout?.type || null,
     lockout_until: iso(kid.lockout?.until),

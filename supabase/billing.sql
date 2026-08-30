@@ -61,10 +61,13 @@ begin
     end;
   end if;
 
-  -- Fail closed: only an active or trialing subscription buys anything.
+  -- Fail closed: an unpaid subscription drops to the cheapest plan, never to a
+  -- plan it did not pay for. An unrecognised tier name is treated the same way.
   v_tier := case
-    when p_status in ('active', 'trialing') and p_tier = 'elite' then 'elite'
-    else 'standard'
+    when p_status not in ('active', 'trialing') then 'starter'
+    when p_tier = 'elite' then 'elite'
+    when p_tier = 'standard' then 'standard'
+    else 'starter'
   end;
 
   update families
@@ -78,6 +81,122 @@ begin
 
   return jsonb_build_object('ok', true, 'tier', v_tier);
 end $$;
+
+/**
+ * Starter is a one-child plan.
+ *
+ * Enforced in the database rather than the screen because the tier column is
+ * written by Stripe's webhook and read by everything. It fires only on INSERT,
+ * so a family that lapses to Starter keeps the children it already has — it
+ * simply cannot add another until it pays for one.
+ */
+create or replace function enforce_kid_limit() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v_tier text; v_count int;
+begin
+  select tier into v_tier from families where id = new.family_id;
+  if v_tier is distinct from 'starter' then return new; end if;
+  select count(*) into v_count from kids where family_id = new.family_id;
+  if v_count >= 1 then
+    raise exception 'the Starter plan covers one child — upgrade to add another';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists kids_enforce_limit on kids;
+create trigger kids_enforce_limit before insert on kids
+  for each row execute function enforce_kid_limit();
+
+/**
+ * Credit a pack of Flash Tickets after a one-off payment.
+ *
+ * Same rule as a subscription change: idempotent on Stripe's event id, because
+ * Stripe retries a webhook it did not hear back from and a family must not get
+ * two packs for one payment. No grant to anon or authenticated — a browser
+ * saying "the payment worked" is not evidence that it did.
+ */
+create or replace function credit_flash_tickets(
+  p_family_id uuid,
+  p_count int,
+  p_stripe_event text default null,
+  p_payload jsonb default '{}'::jsonb
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_left int;
+begin
+  if p_count is null or p_count <= 0 then
+    return jsonb_build_object('ok', false, 'reason', 'bad_count');
+  end if;
+
+  if p_stripe_event is not null then
+    begin
+      insert into billing_events (family_id, stripe_event, type, payload)
+      values (p_family_id, p_stripe_event, 'flash_tickets', p_payload);
+    exception when unique_violation then
+      return jsonb_build_object('ok', true, 'duplicate', true);
+    end;
+  end if;
+
+  update families set flash_tickets = flash_tickets + p_count
+   where id = p_family_id
+  returning flash_tickets into v_left;
+
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no_family');
+  end if;
+  return jsonb_build_object('ok', true, 'flash_tickets', v_left);
+end $$;
+
+revoke execute on function credit_flash_tickets(uuid, int, text, jsonb) from public;
+
+/**
+ * Buy a Sunday Market skin.
+ *
+ * Cosmetics only, so nothing here can change XP or levelling — but the currency
+ * and the ticket count are still real balances, and a device must not be able
+ * to set either. The kid's own client calls this; the function decides whether
+ * they could afford it.
+ */
+create or replace function buy_market_skin(
+  p_kid_id uuid,
+  p_skin_id text,
+  p_cost int,
+  p_use_ticket boolean default false
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_kid kids; v_family families;
+begin
+  select * into v_kid from kids where id = p_kid_id for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
+
+  -- The caller must be this child, or a parent in their family.
+  if not exists (select 1 from kids where id = p_kid_id and user_id = auth.uid())
+     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id) then
+    raise exception 'not allowed to buy for this child';
+  end if;
+
+  select * into v_family from families where id = v_kid.family_id for update;
+
+  if p_use_ticket then
+    if v_family.flash_tickets < 1 then
+      return jsonb_build_object('ok', false, 'reason', 'no_tickets');
+    end if;
+    update families set flash_tickets = flash_tickets - 1 where id = v_family.id;
+  else
+    if v_kid.coins < coalesce(p_cost, 0) then
+      return jsonb_build_object('ok', false, 'reason', 'too_expensive');
+    end if;
+    update kids set coins = coins - coalesce(p_cost, 0) where id = p_kid_id;
+  end if;
+
+  insert into events (family_id, kid_id, type, meta)
+  values (v_kid.family_id, p_kid_id, 'skin_bought',
+          jsonb_build_object('skin', p_skin_id, 'ticket', p_use_ticket));
+
+  return jsonb_build_object('ok', true, 'skin_id', p_skin_id);
+end $$;
+
+grant execute on function buy_market_skin(uuid, text, int, boolean) to authenticated;
 
 /**
  * The Stripe customer for a family. Server-side only — it is not secret, but

@@ -88,8 +88,13 @@ begin
     raise exception 'a parent has to create the guild';
   end if;
 
-  select case when tier = 'elite' then 10 else 5 end into v_cap
+  -- Starter has no guilds at all; a zero capacity is what stops one being made.
+  select case tier when 'elite' then 10 when 'standard' then 5 else 0 end into v_cap
     from families where id = v_kid.family_id;
+
+  if v_cap = 0 then
+    return jsonb_build_object('ok', false, 'reason', 'plan_has_no_guilds');
+  end if;
 
   -- Six upper-case letters and digits, ambiguous characters left out so a code
   -- can be read aloud in a playground without confusion.

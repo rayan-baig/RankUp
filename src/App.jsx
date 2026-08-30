@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { useApp, pendingSubmissions } from './state/AppContext.jsx'
-import { activeLockout } from './state/reducer.js'
+import { activeLockout, guildsAllowedByPlan } from './state/reducer.js'
 import { useRoute, navigate } from './lib/router.js'
 import { applyTheme } from './lib/applyTheme.js'
 import { resolveKidTheme } from './data/kidThemes.js'
@@ -20,6 +20,7 @@ import KidQuests from './screens/kid/KidQuests.jsx'
 import QuestDetail from './screens/kid/QuestDetail.jsx'
 import KidGuild from './screens/kid/KidGuild.jsx'
 import KidShop from './screens/kid/KidShop.jsx'
+import KidMarket from './screens/kid/KidMarket.jsx'
 import KidProfile from './screens/kid/KidProfile.jsx'
 import KidPairing from './screens/kid/KidPairing.jsx'
 import ParentDashboard from './screens/parent/ParentDashboard.jsx'
@@ -41,8 +42,8 @@ const KID_NAV = [
   { to: '/kid/quests', icon: '⚔️', label: 'Quests', alsoMatches: ['/kid/quest/'] },
   // Only shown when guilds are switched on — a tab leading to "this is off" is
   // worse than no tab.
-  ...(guildsEnabled() ? [{ to: '/kid/guild', icon: '🛡️', label: 'Guild' }] : []),
-  { to: '/kid/shop', icon: '🎁', label: 'Rewards' },
+  ...(guildsEnabled() ? [{ to: '/kid/guild', icon: '🛡️', label: 'Guild', plan: 'guilds' }] : []),
+  { to: '/kid/shop', icon: '🎁', label: 'Rewards', alsoMatches: ['/kid/market'] },
   { to: '/kid/profile', icon: '🙂', label: 'You' },
 ]
 
@@ -183,9 +184,14 @@ export default function App() {
     <>
       {isParentArea ? <ParentBackground theme={parentTheme} /> : <ThemeBackground theme={kidTheme} glitch={glitch} />}
 
-      {renderRoute(route, path, activeKid)}
+      {renderRoute(route, path, activeKid, state)}
 
-      {isKidArea && <NavBar items={KID_NAV} path={route} />}
+      {isKidArea && (
+        <NavBar
+          items={KID_NAV.filter((i) => i.plan !== 'guilds' || guildsAllowedByPlan(state))}
+          path={route}
+        />
+      )}
       {isParentArea && <NavBar items={PARENT_NAV} path={route} badges={{ '/parent/approvals': pending }} />}
 
       {state.pendingLevelUp && activeKid && kidTheme && (
@@ -203,7 +209,7 @@ export default function App() {
   )
 }
 
-function renderRoute(route, fullPath, activeKid) {
+function renderRoute(route, fullPath, activeKid, state) {
   if (route === '/legal/terms') return <LegalDoc which="terms" />
   if (route === '/legal/privacy') return <LegalDoc which="privacy" />
   if (route === '/switch' || route === '/') return <RoleSwitch />
@@ -211,8 +217,11 @@ function renderRoute(route, fullPath, activeKid) {
   if (route === '/kid') return <KidHome />
   if (route === '/kid/quests') return <KidQuests />
   if (route.startsWith('/kid/quest/')) return <QuestDetail questId={route.replace('/kid/quest/', '')} />
-  if (route === '/kid/guild') return guildsEnabled() ? <KidGuild /> : <KidHome />
+  if (route === '/kid/guild') {
+    return guildsEnabled() && guildsAllowedByPlan(state) ? <KidGuild /> : <KidHome />
+  }
   if (route === '/kid/shop') return <KidShop />
+  if (route === '/kid/market') return <KidMarket />
   if (route === '/kid/profile') return <KidProfile />
 
   if (route === '/parent') return <ParentDashboard />

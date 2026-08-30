@@ -4,6 +4,7 @@ import { PARENT_THEMES } from '../../data/parentThemes.js'
 import { clearState, storageUsageBytes } from '../../lib/storage.js'
 import { relativeTime } from '../../lib/dates.js'
 import { canSyncAcrossDevices } from '../../lib/sync/index.js'
+import { billingLive, buyFlashTickets, FLASH_TICKET_PRICE, FLASH_TICKET_PACK_SIZE } from '../../lib/billing.js'
 import { guildsEnabled } from '../../lib/guilds.js'
 import { Screen, Card, Button, Section, SectionTitle, Field, TextInput, TextArea, Toggle, Banner, Modal, Select, Chip } from '../../components/ui.jsx'
 import NotificationSettings from '../../components/NotificationSettings.jsx'
@@ -291,6 +292,47 @@ export default function ParentSettings() {
         <Chip>Plan: {state.family.tier === 'elite' ? 'Elite Pass' : 'Standard'}</Chip>
       </Card>
 
+      </Section>
+
+      <Section title="Flash Tickets" icon="🎟️"
+        summary={`${state.family.flashTickets || 0} left · $${FLASH_TICKET_PRICE} for ${FLASH_TICKET_PACK_SIZE}`}>
+      <Card flat>
+        <p className="text-sm text-muted mb-3">
+          The Sunday Market opens for four hours a week and sells cosmetic skins for the currency
+          your child earns. A Flash Ticket takes one skin without spending any — for the week they
+          did not save quite enough.
+        </p>
+        <Banner tone="info" icon="🧒" title="Skins are paint">
+          Nothing sold in the market affects XP, levelling or how much a chore pays. A child who
+          never opens it is never behind one who buys every week.
+        </Banner>
+        <div className="flex items-center justify-between gap-3 mt-3">
+          <div>
+            <div className="font-display font-extrabold text-lg leading-none">
+              {state.family.flashTickets || 0}
+            </div>
+            <div className="text-xs text-muted mt-0.5">tickets left</div>
+          </div>
+          <Button
+            onClick={() => (billingLive()
+              ? buyFlashTickets()
+              : dispatch({ type: 'GRANT_FLASH_TICKETS', count: FLASH_TICKET_PACK_SIZE }))}
+          >
+            {billingLive()
+              ? `Buy ${FLASH_TICKET_PACK_SIZE} · $${FLASH_TICKET_PRICE}`
+              : `Add ${FLASH_TICKET_PACK_SIZE} (test)`}
+          </Button>
+        </div>
+        {!billingLive() && (
+          <p className="text-xs text-muted mt-2">
+            Stripe is not configured, so this adds tickets locally without charging anything.
+          </p>
+        )}
+        <p className="text-xs text-muted mt-2">
+          Only you can buy these. Your child's phone can spend a ticket and can see how many are
+          left, but has no way to reach a payment screen.
+        </p>
+      </Card>
       </Section>
 
       <Section title="Your data" icon="🗂️" summary="Download it, or delete the account">

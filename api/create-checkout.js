@@ -15,10 +15,18 @@ import Stripe from 'stripe'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
+/** All three plans are billed monthly. There is no annual price. */
 const PRICES = {
+  starter: process.env.STRIPE_PRICE_STARTER || '',
   standard: process.env.STRIPE_PRICE_STANDARD || '',
   elite: process.env.STRIPE_PRICE_ELITE || '',
 }
+
+/** One-off purchases. A pack of Flash Tickets is the only one. */
+const PRODUCTS = {
+  flash_tickets: process.env.STRIPE_PRICE_FLASH_TICKETS || '',
+}
+const FLASH_TICKET_PACK_SIZE = 3
 
 async function callerFamilyId(token) {
   try {
@@ -44,8 +52,13 @@ export default async function handler(req, res) {
   if (typeof body === 'string') {
     try { body = JSON.parse(body) } catch { body = null }
   }
+  // Either a subscription (a plan) or a one-off (a ticket pack), never both.
+  const product = body?.product
   const tier = body?.tier
-  if (!PRICES[tier]) return res.status(400).json({ error: 'Unknown plan.' })
+  const oneOff = Boolean(product)
+  if (oneOff ? !PRODUCTS[product] : !PRICES[tier]) {
+    return res.status(400).json({ error: oneOff ? 'Unknown product.' : 'Unknown plan.' })
+  }
 
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
   if (!token) return res.status(401).json({ error: 'Sign in first.' })
@@ -60,15 +73,21 @@ export default async function handler(req, res) {
 
   try {
     const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      line_items: [{ price: PRICES[tier], quantity: 1 }],
+      mode: oneOff ? 'payment' : 'subscription',
+      line_items: [{ price: oneOff ? PRODUCTS[product] : PRICES[tier], quantity: 1 }],
       client_reference_id: familyId,
       // Both, because different webhook events surface different ones.
-      metadata: { family_id: familyId, tier },
-      subscription_data: { metadata: { family_id: familyId, tier } },
-      success_url: `${origin}/#/parent/plan?checkout=success`,
-      cancel_url: `${origin}/#/parent/plan?checkout=cancelled`,
-      allow_promotion_codes: true,
+      metadata: oneOff
+        ? { family_id: familyId, product, ticket_count: String(FLASH_TICKET_PACK_SIZE) }
+        : { family_id: familyId, tier },
+      ...(oneOff ? {} : { subscription_data: { metadata: { family_id: familyId, tier } } }),
+      success_url: oneOff
+        ? `${origin}/#/parent/settings?tickets=success`
+        : `${origin}/#/parent/plan?checkout=success`,
+      cancel_url: oneOff
+        ? `${origin}/#/parent/settings?tickets=cancelled`
+        : `${origin}/#/parent/plan?checkout=cancelled`,
+      allow_promotion_codes: !oneOff,
     })
     return res.status(200).json({ url: session.url })
   } catch (err) {

@@ -45,6 +45,29 @@ export async function startCheckout(tier) {
   return result
 }
 
+/**
+ * Flash Tickets: a one-off purchase, not a subscription.
+ *
+ * A ticket claims one skin from the Sunday Market without spending the child's
+ * currency, so a child who did not save enough that week is not shut out of it.
+ *
+ * Bought by a PARENT, in Parent Mode, behind the PIN. A child can spend a
+ * ticket and can see how many are left; a child can never buy one. That is not
+ * a nicety — an in-app purchase a child can complete on their own is both an
+ * app-store rejection and, in the US, specifically actionable.
+ *
+ * Tickets are credited by Stripe's webhook, never by this browser claiming the
+ * payment worked. See supabase/billing.sql.
+ */
+export const FLASH_TICKET_PRICE = 2.99
+export const FLASH_TICKET_PACK_SIZE = 3
+
+export async function buyFlashTickets() {
+  const result = await post(CHECKOUT_URL, { product: 'flash_tickets' })
+  if (result.ok && result.url) window.location.href = result.url
+  return result
+}
+
 /** Send them to Stripe's portal to cancel, change card or get invoices. */
 export async function openBillingPortal() {
   const result = await post(PORTAL_URL, {})

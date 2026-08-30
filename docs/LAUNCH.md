@@ -39,7 +39,10 @@ In the Supabase SQL editor, run these **in order**:
 - [ ] `npx web-push generate-vapid-keys` → the two VAPID values
 - [ ] Supabase → Settings → API → the project URL, the **anon** key, and the
       **service role** key
-- [ ] Stripe → two monthly prices ($9.99 Standard, $15.99 Elite) → the price ids
+- [ ] Stripe → three **monthly** prices ($4.99 Starter, $9.99 Standard, $15.99
+      Elite) plus one **one-off** price ($2.99, a pack of 3 Flash Tickets) → the
+      four price ids. There is no annual plan; do not create one without also
+      changing `api/create-checkout.js`.
 - [ ] Stripe → Developers → Webhooks → add `https://YOURDOMAIN/api/stripe-webhook`
       → the signing secret
 
@@ -122,7 +125,15 @@ launch.
 ## 9. Before you take money
 
 - [ ] The purchaser must be the parent. A subscription bought by a child is
-      chargeable-back and, in the US, specifically actionable.
+      chargeable-back and, in the US, specifically actionable. Flash Tickets are
+      already built this way — the purchase lives behind the parent PIN and a
+      kid's device has no route to a payment screen — but check it yourself on a
+      real kid device before launch.
+- [ ] The Sunday Market is a timed-scarcity mechanic aimed at children, and a
+      Flash Ticket is a paid way out of missing one. Regulators look hard at
+      that pattern. What keeps it defensible is that the market sells nothing
+      but cosmetics, shows no countdown, and every skin comes back — keep all
+      three true if you change it.
 - [ ] Price, renewal date and cancellation route disclosed before payment.
 - [ ] Refund policy written down and reachable from the app.
 - [ ] Stripe Tax switched on.

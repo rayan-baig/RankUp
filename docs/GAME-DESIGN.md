@@ -125,7 +125,6 @@ regardless of theme — a chart has to stay readable and colour-blind safe in al
 | All 15 kid + 10 parent themes | ✓ | ✓ |
 | Guild size | 5 | **10** (Megacluster) |
 | XP multiplier | ×1 | **×1.5** permanent |
-| Ads | Present *(none built yet)* | **Removed** |
 | Profile frames & drop selectors | — | **✓** |
 | System Override Protocol | — | **✓** |
 | AI Behaviour Blueprints | — | **✓** |

@@ -27,6 +27,8 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || ''
 const ELITE_PRICE = process.env.STRIPE_PRICE_ELITE || ''
+const STANDARD_PRICE = process.env.STRIPE_PRICE_STANDARD || ''
+const STARTER_PRICE = process.env.STRIPE_PRICE_STARTER || ''
 
 /** Vercel must not parse the body, or the signature cannot be verified. */
 export const config = { api: { bodyParser: false } }
@@ -55,11 +57,20 @@ async function serviceRpc(fn, args) {
   return text ? JSON.parse(text) : null
 }
 
-/** Which tier does this subscription actually buy? */
+/**
+ * Which tier does this subscription actually buy?
+ *
+ * The price id is the authority — it is what Stripe actually charged. Metadata
+ * is only a fallback, and anything unrecognised falls to the cheapest plan
+ * rather than to a plan nobody paid for.
+ */
 function tierFor(subscription) {
   const priceId = subscription?.items?.data?.[0]?.price?.id
   if (ELITE_PRICE && priceId === ELITE_PRICE) return 'elite'
-  return subscription?.metadata?.tier === 'elite' ? 'elite' : 'standard'
+  if (STANDARD_PRICE && priceId === STANDARD_PRICE) return 'standard'
+  if (STARTER_PRICE && priceId === STARTER_PRICE) return 'starter'
+  const claimed = subscription?.metadata?.tier
+  return claimed === 'elite' || claimed === 'standard' ? claimed : 'starter'
 }
 
 async function familyIdFor(object, stripe) {
@@ -106,8 +117,21 @@ export default async function handler(req, res) {
       if (familyId && customerId) {
         await serviceRpc('attach_stripe_customer', { p_family_id: familyId, p_customer_id: customerId })
       }
-      // The subscription events that follow carry the authoritative status, so
-      // nothing is granted here.
+      /**
+       * A Flash Ticket pack is a one-off payment, so there is no subscription
+       * event coming after this one — this is where it gets credited. Guarded
+       * on payment_status because a session can complete unpaid.
+       */
+      if (object.metadata?.product === 'flash_tickets' && object.payment_status === 'paid' && familyId) {
+        await serviceRpc('credit_flash_tickets', {
+          p_family_id: familyId,
+          p_count: Number(object.metadata?.ticket_count) || 3,
+          p_stripe_event: event.id,
+          p_payload: { type: event.type },
+        })
+      }
+      // For a subscription, the events that follow carry the authoritative
+      // status, so nothing is granted here.
       return res.status(200).json({ received: true })
     }
 
