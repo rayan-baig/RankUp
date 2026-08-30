@@ -1,17 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="RankUp">
   <!--
-    Three rank chevrons, stacked. Chevrons are what "rank up" actually looks
-    like — an arrow means upload. The top one is gold because it is the one just
-    earned; the two beneath it are the ranks already behind you.
+    A guild shield carrying two rank chevrons, the upper one gold because it is
+    the rank just earned. Chevrons are what ranking up looks like — an arrow
+    means upload — and the shield is the object the game already trades in.
 
-    Every stroke sits inside a circle of radius 205 around the centre, which is
-    the safe zone Android masks icons to. The old icon did not, so it was being
-    cropped on the one platform that crops.
+    Two chevrons, not three: the third turned to mush at 16px, which is the size
+    a browser tab actually draws this at. Everything sits inside a circle of
+    radius 205 about the centre, the safe zone Android crops icons to.
   -->
   <rect width="512" height="512" rx="114" fill="#141a33"/>
-  <g fill="none" stroke-width="44" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M156 380 L256 324 L356 380" stroke="#37477a"/>
-    <path d="M156 306 L256 250 L356 306" stroke="#5b7ce0"/>
-    <path d="M156 232 L256 176 L356 232" stroke="#f2b03d"/>
+  <path d="M256 92 L396 146 V274 Q396 378 256 432 Q116 378 116 274 V146 Z"
+        fill="#1d2750" stroke="#4d8dff" stroke-width="18" stroke-linejoin="round"/>
+  <g fill="none" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M180 336 L256 282 L332 336" stroke="#4d8dff"/>
+    <path d="M180 258 L256 204 L332 258" stroke="#ffc23d"/>
   </g>
 </svg>

@@ -1,14 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="RankUp">
   <!--
-    The maskable cut. Same mark, drawn smaller and edge to edge: the platform
-    supplies the shape (circle, squircle, rounded square) and crops to it, so
-    this must not carry corners of its own and must keep everything well inside
-    the central 80% circle.
+    The maskable cut: same mark, drawn smaller and edge to edge. The platform
+    supplies the shape and crops to it, so this carries no corners of its own.
   -->
   <rect width="512" height="512" fill="#141a33"/>
-  <g fill="none" stroke-width="36" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M176 362 L256 317 L336 362" stroke="#37477a"/>
-    <path d="M176 302 L256 257 L336 302" stroke="#5b7ce0"/>
-    <path d="M176 242 L256 197 L336 242" stroke="#f2b03d"/>
+  <g transform="translate(256 256) scale(0.84) translate(-256 -256)">
+    <path d="M256 92 L396 146 V274 Q396 378 256 432 Q116 378 116 274 V146 Z"
+          fill="#1d2750" stroke="#4d8dff" stroke-width="18" stroke-linejoin="round"/>
+    <g fill="none" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M180 336 L256 282 L332 336" stroke="#4d8dff"/>
+      <path d="M180 258 L256 204 L332 258" stroke="#ffc23d"/>
+    </g>
   </g>
 </svg>
