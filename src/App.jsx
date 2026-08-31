@@ -21,6 +21,7 @@ import QuestDetail from './screens/kid/QuestDetail.jsx'
 import KidGuild from './screens/kid/KidGuild.jsx'
 import KidShop from './screens/kid/KidShop.jsx'
 import KidMarket from './screens/kid/KidMarket.jsx'
+import KidArcade from './screens/kid/KidArcade.jsx'
 import KidProfile from './screens/kid/KidProfile.jsx'
 import KidPairing from './screens/kid/KidPairing.jsx'
 import ParentDashboard from './screens/parent/ParentDashboard.jsx'
@@ -43,6 +44,7 @@ const KID_NAV = [
   // Only shown when guilds are switched on — a tab leading to "this is off" is
   // worse than no tab.
   ...(guildsEnabled() ? [{ to: '/kid/guild', icon: '🛡️', label: 'Guild', plan: 'guilds' }] : []),
+  { to: '/kid/arcade', icon: '🎮', label: 'Arcade' },
   { to: '/kid/shop', icon: '🎁', label: 'Rewards', alsoMatches: ['/kid/market'] },
   { to: '/kid/profile', icon: '🙂', label: 'You' },
 ]
@@ -222,6 +224,7 @@ function renderRoute(route, fullPath, activeKid, state) {
   }
   if (route === '/kid/shop') return <KidShop />
   if (route === '/kid/market') return <KidMarket />
+  if (route === '/kid/arcade') return <KidArcade />
   if (route === '/kid/profile') return <KidProfile />
 
   if (route === '/parent') return <ParentDashboard />

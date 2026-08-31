@@ -213,6 +213,82 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 
+/**
+ * Finish a minigame and collect what it is worth.
+ *
+ * The client computes the same number so a child sees it immediately, but this
+ * is the authority — currency is the one thing a tampered phone must never be
+ * able to set. Three separate limits apply, and the daily cap is the important
+ * one: it sits well below a single chore's payout, so grinding the arcade can
+ * never compete with tidying a room.
+ *
+ * The payout rule is mirrored in coinsForScore() in src/data/minigames.js.
+ * supabase/test/09-minigames.sql checks the two agree.
+ */
+create or replace function play_minigame(
+  p_kid_id uuid,
+  p_game   text,
+  p_score  int
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_kid    kids;
+  v_score  int;
+  v_wanted int;
+  v_paid   int;
+  v_today  int;
+  v_best   int;
+begin
+  select * into v_kid from kids where id = p_kid_id for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
+
+  -- This child, or a parent in their family. Nobody else.
+  if not exists (select 1 from kids where id = p_kid_id and user_id = auth.uid())
+     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id) then
+    raise exception 'not allowed to play for this child';
+  end if;
+
+  if p_game not in ('tap', 'stack', 'memory') then
+    return jsonb_build_object('ok', false, 'reason', 'no_game');
+  end if;
+  if v_kid.play_tokens < 1 then
+    return jsonb_build_object('ok', false, 'reason', 'no_tokens');
+  end if;
+
+  -- A score arriving from a phone is a claim, not a fact. Clamping it is what
+  -- stops "I scored 4 billion" from being worth anything.
+  v_score := greatest(0, least(100, coalesce(p_score, 0)));
+
+  -- Reset the day's tally when the date rolls over.
+  v_today := case when v_kid.game_day = current_date then v_kid.game_coins_today else 0 end;
+
+  v_wanted := greatest(1, least(5, round(v_score / 20.0)::int));
+  v_paid   := greatest(0, least(v_wanted, 15 - v_today));
+
+  v_best := greatest(coalesce((v_kid.best_scores->>p_game)::int, 0), v_score);
+
+  update kids
+     set play_tokens      = play_tokens - 1,
+         coins            = coins + v_paid,
+         game_day         = current_date,
+         game_coins_today = v_today + v_paid,
+         best_scores      = coalesce(best_scores, '{}'::jsonb) || jsonb_build_object(p_game, v_best)
+   where id = p_kid_id;
+
+  insert into events (family_id, kid_id, type, meta)
+  values (v_kid.family_id, p_kid_id, 'minigame_played',
+          jsonb_build_object('game', p_game, 'score', v_score, 'coins', v_paid));
+
+  return jsonb_build_object(
+    'ok', true, 'coins', v_paid, 'score', v_score, 'best', v_best,
+    'capped', v_paid < v_wanted,
+    'tokens_left', v_kid.play_tokens - 1,
+    'earned_today', v_today + v_paid
+  );
+end $$;
+
+grant execute on function play_minigame(uuid, text, int) to authenticated;
+
 /** The parent sends work back to be redone. */
 create or replace function reject_submission(
   p_submission_id uuid,

@@ -167,6 +167,11 @@ export function makeKid({ name, themeId = DEFAULT_KID_THEME, accessibility = nul
     dropSelector: 'standard',
     skins: [],
     skinId: null,
+    /* Arcade. A token is minted when a parent approves a chore. */
+    playTokens: 0,
+    gameDay: null,
+    gameCoinsToday: 0,
+    bestScores: {},
     lastLoginBonus: null,
     bestTimes: {},
     createdAt: Date.now(),

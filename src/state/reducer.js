@@ -3,6 +3,7 @@ import { dayKey, daysBetween } from '../lib/dates.js'
 import { calcReward, levelFromXp, testScoreBonus } from '../lib/xp.js'
 import { createInitialState, TIERS, monthKey, makeKid } from './initialState.js'
 import { findSkin, isMarketOpen } from '../data/marketSkins.js'
+import { DAILY_COIN_CAP, MAX_TOKENS } from '../data/minigames.js'
 import { ENTITIES } from '../lib/sync/mappers.js'
 
 /* ------------------------------------------------------------------ */
@@ -414,6 +415,33 @@ export function reducer(state, action) {
      * settings screen dispatches it directly so the market can be exercised in
      * development, and says on screen that nothing was charged.
      */
+    /**
+     * A minigame finished. Spends the token, pays the (already capped) coins
+     * and records a best score.
+     *
+     * The server recomputes all of this in play_minigame — this is the local
+     * copy so the app still works offline and the child sees the number at once.
+     */
+    case 'FINISH_MINIGAME': {
+      const kid = state.kids.find((k) => k.id === action.kidId)
+      if (!kid || (kid.playTokens || 0) < 1) return state
+      const today = dayKey()
+      const earned = kid.gameDay === today ? kid.gameCoinsToday || 0 : 0
+      const coins = Math.max(0, Math.min(action.coins || 0, DAILY_COIN_CAP - earned))
+      const score = Math.max(0, Math.min(100, Math.round(action.score || 0)))
+      const next = mapKid(state, kid.id, (k) => ({
+        ...k,
+        playTokens: k.playTokens - 1,
+        coins: k.coins + coins,
+        gameDay: today,
+        gameCoinsToday: earned + coins,
+        bestScores: { ...(k.bestScores || {}), [action.game]: Math.max((k.bestScores || {})[action.game] || 0, score) },
+      }))
+      return logEvent(queueRpc(next, 'play_minigame', {
+        p_kid_id: kid.id, p_game: action.game, p_score: score,
+      }), { type: 'minigame_played', kidId: kid.id, meta: { game: action.game, score, coins } })
+    }
+
     case 'GRANT_FLASH_TICKETS':
       return {
         ...state,
@@ -589,6 +617,8 @@ export function reducer(state, action) {
         ...k,
         xp: k.xp + xp,
         coins: k.coins + coins,
+        // One arcade token per approved chore — mirrored in approve_submission.
+        playTokens: Math.min((k.playTokens || 0) + 1, MAX_TOKENS),
         streak: bumpStreak(k.streak),
         bestTimes:
           quest.timerSeconds && submission.elapsedMs

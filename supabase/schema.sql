@@ -72,6 +72,13 @@ create table kids (
 
   profile_frame  text not null default 'none',
   drop_selector  text not null default 'standard',
+  -- The arcade. A token is minted when a parent approves a chore and spent to
+  -- play once, so the games can never be an alternative to doing them.
+  play_tokens    int not null default 0 check (play_tokens >= 0),
+  game_day       date,
+  game_coins_today int not null default 0,
+  best_scores    jsonb not null default '{}'::jsonb,
+
   -- Sunday Market cosmetics. Paint only: nothing here touches xp or coins.
   -- jsonb rather than text[] because a device sends this as a JSON array, and
   -- Postgres will not read "[]" as an array literal.
@@ -563,6 +570,8 @@ begin
   update kids
      set xp = xp + p_xp,
          coins = coins + p_coins,
+         -- One arcade token per approved chore, capped so they cannot be hoarded.
+         play_tokens = least(play_tokens + 1, 5),
          streak_count = case
            when streak_last_day = current_date then streak_count
            when streak_last_day = current_date - 1 then streak_count + 1

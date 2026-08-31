@@ -164,9 +164,9 @@ Be honest about these when you launch.
 ## Running the tests
 
 ```bash
-npm run test:db      # 141 database checks — no browser needed
-npm run test:smoke   # 40 browser checks, no backend required
-npm run test:sync    # 23 browser checks against a real backend
+npm run test:db      # 175 database checks — no browser needed
+npm run test:smoke   # browser checks, no backend required
+npm run test:sync    # browser checks against a real backend
 ```
 
 `supabase/test/README.md` explains how to stand the local backend up.

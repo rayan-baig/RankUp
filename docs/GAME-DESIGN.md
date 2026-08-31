@@ -164,3 +164,25 @@ Two rules built into the design:
 letting sample guild-mates fill it would make a fake number look like progress.
 
 Real guilds between families are not built. → [STATUS.md](STATUS.md)
+
+
+## The arcade
+
+Three minigames — Quick Tap, Stacker, Memory Match — reached from the kid's
+Arcade tab.
+
+**A play token is minted only when a parent approves a chore**, capped at five
+so they cannot be hoarded. That single rule is what keeps the arcade from
+competing with the thing the app exists to encourage: you cannot play without
+first having done something.
+
+Payouts are deliberately small. Every game reports one 0-100 score, five
+currency is the most any single game can pay, and the whole arcade tops out at
+fifteen a day — less than one medium chore. `play_minigame()` in
+`supabase/sync.sql` is the authority: it clamps the score, spends the token,
+applies the daily cap and records the best score, so a tampered phone claiming
+a billion points earns exactly the same five as a good round.
+
+The payout rule is written twice — `coinsForScore()` in `src/data/minigames.js`
+for the offline case, and again in SQL. `supabase/test/09-minigames.sql` checks
+the two agree.

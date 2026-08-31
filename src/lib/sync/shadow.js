@@ -56,7 +56,10 @@ const SERVER_OWNED = {
   // A family's tier is decided by Stripe's webhook. The database refuses a
   // direct write anyway, but pushing it would fill the outbox with rejections.
   families: ['tier', 'subscription_status', 'stripe_customer_id', 'stripe_subscription_id'],
-  kids: ['xp', 'coins', 'streak_count', 'streak_last_day', 'streak_freezes'],
+  kids: ['xp', 'coins', 'streak_count', 'streak_last_day', 'streak_freezes',
+         // Arcade tokens and the day's winnings are balances too: play_minigame
+         // and approve_submission are the only things allowed to move them.
+         'play_tokens', 'game_day', 'game_coins_today'],
   // A quest's status and a submission's verdict are decided by submit_quest,
   // approve_submission and reject_submission. If a device could push these
   // directly it could mark its own work approved.

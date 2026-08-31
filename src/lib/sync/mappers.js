@@ -43,6 +43,10 @@ export const kids = {
     dropSelector: row.drop_selector || 'standard',
     skins: Array.isArray(row.skins) ? row.skins : [],
     skinId: row.skin_id || null,
+    playTokens: row.play_tokens ?? 0,
+    gameDay: row.game_day || null,
+    gameCoinsToday: row.game_coins_today ?? 0,
+    bestScores: row.best_scores || {},
     lastLoginBonus: row.last_login_bonus || null,
     // Local-only, never sent: keep whatever this device already had.
     bestTimes: existing.bestTimes || {},
