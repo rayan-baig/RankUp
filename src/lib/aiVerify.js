@@ -18,7 +18,7 @@
  *      This is the layer that answers "does this photo actually show a made bed?"
  */
 
-import { toCanvas, greyscale, resizeGrey, dHash, hammingDistance, loadImage } from './imaging.js'
+import { toCanvas, canvasToJpeg, greyscale, resizeGrey, dHash, hammingDistance, loadImage } from './imaging.js'
 
 export const VERDICT = {
   LOOKS_GOOD: 'looks_good',
@@ -261,6 +261,18 @@ export function isCloudCheckConfigured() {
   return Boolean(AI_ENDPOINT)
 }
 
+/** Shrink to CLOUD_MAX_WIDTH before paying for it. Falls back to the original. */
+async function shrinkForCloud(dataUrl) {
+  try {
+    const img = await loadImage(dataUrl)
+    const longest = Math.max(img.naturalWidth || img.width || 0, img.naturalHeight || img.height || 0)
+    if (!longest || longest <= CLOUD_MAX_WIDTH) return dataUrl
+    return canvasToJpeg(toCanvas(img, CLOUD_MAX_WIDTH), 0.7)
+  } catch {
+    return dataUrl
+  }
+}
+
 async function askClaude(dataUrl, quest, signal) {
   const res = await fetch(AI_ENDPOINT, {
     method: 'POST',
@@ -287,17 +299,47 @@ async function askClaude(dataUrl, quest, signal) {
  * Never throws: if the network layer fails we still return the on-device result
  * and say plainly that the cloud check did not run.
  */
+/**
+ * The width the photo is shrunk to before it is sent to Claude.
+ *
+ * Vision input is billed by pixel area — roughly (w x h) / 750 tokens — so a
+ * 1280px capture costs about 2,200 input tokens and a 768px one about 790.
+ * Nothing the cloud layer is asked to judge ("is this a real photograph of this
+ * chore, or a screenshot") needs more resolution than this, so the extra
+ * two-thirds is money spent on nothing. The full-size image is still what the
+ * parent reviews and what the on-device checks run against.
+ */
+const CLOUD_MAX_WIDTH = 768
+
+/**
+ * Is the on-device layer already sure enough that paying for a cloud opinion
+ * would change nothing?
+ *
+ * The local checks are free and already catch the two common cheats: a photo
+ * of a screen (flat colour, low colour diversity) and last week's photo sent
+ * again (perceptual hash). When they have fired, the parent is going to look
+ * hard at the photo whatever Claude says — and when the picture is a sharp,
+ * live-camera capture with no flags at all, Claude has nothing to add either.
+ * The call is worth paying for in the ambiguous middle, which is where it goes.
+ */
+function localCheckIsDecisive(local, context) {
+  const hasHigh = local.flags.some((f) => f.severity === 'high')
+  if (hasHigh) return true
+  const fromLiveCamera = context.captureSource === 'live-camera'
+  return fromLiveCamera && local.flags.length === 0 && local.score >= 88
+}
+
 export async function verifyPhoto(dataUrl, { quest, context = {}, timeoutMs = 20000 } = {}) {
   const local = await analyseLocally(dataUrl, context)
 
   let cloud = null
   let cloudError = null
 
-  if (isCloudCheckConfigured()) {
+  if (isCloudCheckConfigured() && !localCheckIsDecisive(local, context)) {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
-      const raw = await askClaude(dataUrl, quest, controller.signal)
+      const raw = await askClaude(await shrinkForCloud(dataUrl), quest, controller.signal)
       cloud = normaliseCloudResult(raw)
     } catch (err) {
       cloudError = err.name === 'AbortError' ? 'The photo check timed out.' : err.message

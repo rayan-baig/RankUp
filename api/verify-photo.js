@@ -15,7 +15,16 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 
-const MODEL = 'claude-opus-5'
+/**
+ * Which model judges the photos.
+ *
+ * Opus 5 is the default because it is the most capable. For this particular
+ * job — "is this a real photograph of this chore, or a screenshot" — Claude
+ * Haiku 4.5 is a fifth of the price ($1/$5 per million tokens against $5/$25)
+ * and comfortably able. Set AI_VERIFY_MODEL=claude-haiku-4-5 to switch; see
+ * docs/AI-CHECK.md for what it costs either way.
+ */
+const MODEL = process.env.AI_VERIFY_MODEL || 'claude-opus-5'
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 const SYSTEM_PROMPT = `You help a parent check photo proof that their child submitted for a household chore in a kids' app called RankUp.
@@ -111,7 +120,9 @@ export default async function handler(req, res) {
   const client = new Anthropic({ apiKey })
   const request = {
     model: MODEL,
-    max_tokens: 1200,
+    // The reply is a small JSON verdict. 1200 was room for an essay nobody
+    // reads, and output tokens are the expensive half.
+    max_tokens: 400,
     system: SYSTEM_PROMPT,
     output_config: { effort: 'medium' },
     messages: [{ role: 'user', content: buildUserContent(image, body) }],

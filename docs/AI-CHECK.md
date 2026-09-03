@@ -121,3 +121,52 @@ Be honest about this with anyone you demo to:
 
 None of these are solvable by looking at one image, which is exactly why a parent stays
 in the loop.
+
+## What it costs, and how that was cut
+
+Vision input is billed roughly by pixel area — about `(width × height) / 750`
+tokens. A 1280px capture is ~2,185 tokens; a 768px one is ~786. For the only
+question this layer is asked — *is this a real photograph of this chore, or a
+screenshot* — the extra two-thirds bought nothing.
+
+Three changes, none of which cost quality:
+
+| | effect |
+|---|---|
+| Shrink to 768px before sending | −64% image tokens |
+| Cap the reply at 400 tokens (was 1200) | the reply is a small JSON verdict; output is the expensive half |
+| Skip the call when the on-device layer is already sure | ~60% fewer calls |
+
+That last one is the structural win. The free on-device checks already catch
+the two common cheats — a photo of a screen (flat colour, low colour
+diversity) and last week's photo sent again (perceptual hash). When one of
+those has fired, the parent will look hard at the photo whatever Claude says.
+When the picture is a sharp live-camera capture with no flags and a high score,
+Claude has nothing to add either. The call is only worth paying for in the
+ambiguous middle, and that is now the only place it is made.
+
+**Roughly, per family doing five chores a day (150 photos a month):**
+
+| | per photo | per family per month |
+|---|---|---|
+| Before | $0.019 | **$2.91** |
+| Now, on Claude Opus 5 | $0.012 | **$0.75** |
+| Now, on Claude Haiku 4.5 | $0.0025 | **$0.15** |
+
+### Switching model
+
+`AI_VERIFY_MODEL` picks the model; it defaults to `claude-opus-5`. Haiku 4.5 is
+a fifth of the price ($1/$5 per million tokens against $5/$25) and is
+comfortably able at this task, which is a photograph-authenticity judgement
+rather than hard reasoning:
+
+```
+AI_VERIFY_MODEL=claude-haiku-4-5
+```
+
+That is the single biggest remaining lever — it takes the AI cost from about 8%
+of a $9.99 subscription to under 2%. Try it against a handful of real photos,
+including a deliberately faked one, before switching for good.
+
+The AI check is off entirely on the Starter plan, which is the other reason
+this stays affordable: the cheapest tier never makes a call at all.
