@@ -90,6 +90,32 @@ function buildUserContent({ mediaType, data }, quest) {
   ]
 }
 
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
+
+/**
+ * Claim one check against the caller's monthly allowance.
+ *
+ * This is the whole reason the endpoint requires a token. Every call spends the
+ * operator's money on Anthropic, so an unauthenticated endpoint is a public
+ * licence to run up somebody else's bill — and a bug in a client loop does the
+ * same thing without anyone meaning to. The database decides, using the
+ * caller's own token, whether this family is on a plan that includes the check
+ * and has any allowance left.
+ */
+async function claimCheck(token) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/claim_photo_check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: token, Authorization: `Bearer ${token}` },
+      body: '{}',
+    })
+    if (!res.ok) return { ok: false, reason: 'unauthorised' }
+    return await res.json()
+  } catch {
+    return { ok: false, reason: 'unavailable' }
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     res.setHeader('Allow', 'POST, OPTIONS')
@@ -111,6 +137,17 @@ export default async function handler(req, res) {
     try { body = JSON.parse(body) } catch { body = null }
   }
   if (!body) return res.status(400).json({ error: 'Invalid JSON body.' })
+
+  // Check who is asking BEFORE looking at the image, let alone paying for it.
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  if (!token) return res.status(401).json({ error: 'Sign in first.' })
+  if (!SUPABASE_URL) return res.status(503).json({ error: 'not_configured' })
+
+  const claim = await claimCheck(token)
+  if (!claim?.ok) {
+    const status = claim?.reason === 'monthly_cap' ? 429 : 403
+    return res.status(status).json({ error: claim?.reason || 'refused' })
+  }
 
   const image = parseDataUrl(body.imageDataUrl)
   if (!image) {

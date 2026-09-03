@@ -251,4 +251,74 @@ begin
   set local role app_user;
 end $$;
 
+-- ---------- the AI photo check costs real money, so it is rationed ----------
+do $$
+declare res jsonb; i int;
+begin
+  set local role postgres;
+  update families set tier = 'standard', ai_checks_used = 0, ai_checks_month = null
+   where id = 'f2222222-0000-0000-0000-000000000001';
+  set local role app_user;
+
+  -- Nobody at all: an unauthenticated caller must never spend the operator's
+  -- Anthropic balance. This is the case that makes the endpoint require a token.
+  perform become(null);
+  res := claim_photo_check();
+  perform ok('a signed-out caller cannot claim a photo check',
+    (res->>'ok')::boolean = false and res->>'reason' = 'no_family');
+
+  perform become('f1111111-1111-1111-1111-111111111111');
+  res := claim_photo_check();
+  perform ok('a real family can', (res->>'ok')::boolean = true and (res->>'used')::int = 1);
+
+  -- Starter does not include the check, so it must not be able to spend on one.
+  set local role postgres;
+  update families set tier = 'starter' where id = 'f2222222-0000-0000-0000-000000000001';
+  set local role app_user;
+  perform become('f1111111-1111-1111-1111-111111111111');
+  res := claim_photo_check();
+  perform ok('the Starter plan cannot claim one at all',
+    (res->>'ok')::boolean = false and res->>'reason' = 'not_on_this_plan');
+
+  -- A runaway loop must hit a ceiling rather than an unbounded bill.
+  set local role postgres;
+  update families set tier = 'standard', ai_checks_used = 199,
+                      ai_checks_month = date_trunc('month', current_date)::date
+   where id = 'f2222222-0000-0000-0000-000000000001';
+  set local role app_user;
+  perform become('f1111111-1111-1111-1111-111111111111');
+  perform ok('the last of the allowance is granted',
+    (claim_photo_check()->>'ok')::boolean = true);
+  res := claim_photo_check();
+  perform ok('and then it stops, rather than billing forever',
+    (res->>'ok')::boolean = false and res->>'reason' = 'monthly_cap');
+
+  -- A new month starts the allowance again.
+  set local role postgres;
+  update families set ai_checks_month = (date_trunc('month', current_date) - interval '1 month')::date
+   where id = 'f2222222-0000-0000-0000-000000000001';
+  set local role app_user;
+  perform become('f1111111-1111-1111-1111-111111111111');
+  perform ok('next month the allowance resets',
+    (claim_photo_check()->>'used')::int = 1);
+end $$;
+
+-- A device must not be able to wind its own counter back.
+do $$
+begin
+  perform become('f1111111-1111-1111-1111-111111111111');
+  begin
+    update families set ai_checks_used = 0
+     where id = 'f2222222-0000-0000-0000-000000000001';
+    if (select ai_checks_used from families
+         where id = 'f2222222-0000-0000-0000-000000000001') = 0 then
+      raise exception 'FAIL a device reset its own allowance';
+    end if;
+    raise notice '  PASS a device CANNOT reset its own allowance';
+  exception when others then
+    if sqlerrm like 'FAIL%' then raise; end if;
+    raise notice '  PASS a device CANNOT reset its own allowance (%)', left(sqlerrm, 28);
+  end;
+end $$;
+
 reset role;

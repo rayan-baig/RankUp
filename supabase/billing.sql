@@ -108,6 +108,54 @@ create trigger kids_enforce_limit before insert on kids
   for each row execute function enforce_kid_limit();
 
 /**
+ * Claim one AI photo check against this family's monthly allowance.
+ *
+ * The vision endpoint spends real money on every call, so two things have to be
+ * true before it runs: a real signed-in family asked for it, and that family
+ * has not already had more than a household could plausibly need this month.
+ * Without a ceiling a single loop — a bug, or somebody being deliberate — can
+ * run up an unbounded bill on an API key that belongs to the operator, not the
+ * caller.
+ *
+ * The allowance is deliberately far above ordinary use: with the on-device
+ * checks settling most photos before a call is made, a family doing five chores
+ * a day lands near sixty. Anyone hitting two hundred is not doing chores.
+ */
+create or replace function claim_photo_check()
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_family families;
+  v_month  date := date_trunc('month', current_date)::date;
+  v_used   int;
+  v_cap    int := 200;
+begin
+  select f.* into v_family from families f where f.id = current_family_id() for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no_family');
+  end if;
+
+  -- The cheapest plan does not include the AI check at all.
+  if v_family.tier = 'starter' then
+    return jsonb_build_object('ok', false, 'reason', 'not_on_this_plan');
+  end if;
+
+  v_used := case when v_family.ai_checks_month = v_month then v_family.ai_checks_used else 0 end;
+  if v_used >= v_cap then
+    return jsonb_build_object('ok', false, 'reason', 'monthly_cap', 'used', v_used, 'cap', v_cap);
+  end if;
+
+  update families
+     set ai_checks_month = v_month,
+         ai_checks_used  = v_used + 1
+   where id = v_family.id;
+
+  return jsonb_build_object('ok', true, 'used', v_used + 1, 'cap', v_cap);
+end $$;
+
+grant execute on function claim_photo_check() to authenticated;
+
+/**
  * Credit a pack of Flash Tickets after a one-off payment.
  *
  * Same rule as a subscription change: idempotent on Stripe's event id, because

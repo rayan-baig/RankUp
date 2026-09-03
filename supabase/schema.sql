@@ -27,6 +27,9 @@ create table families (
   -- Flash Tickets the family has left. Written only by the Stripe webhook and
   -- by buy_market_skin spending one; never by a device.
   flash_tickets   int not null default 0 check (flash_tickets >= 0),
+  -- AI photo checks used this month. Only claim_photo_check() moves these.
+  ai_checks_month date,
+  ai_checks_used  int not null default 0,
   -- Subscription state is written by the Stripe webhook, never by the browser.
   stripe_customer_id      text,
   stripe_subscription_id  text,

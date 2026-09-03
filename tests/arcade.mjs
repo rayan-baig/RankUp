@@ -74,8 +74,15 @@ const settle = () => page.waitForFunction(() => {
 
 // Learn the layout: reveal one card at a time, letting the board settle after
 // each so a chance match during this pass cannot desynchronise us.
+//
+// The reveal pass can finish the game on its own — two halves of a pair landing
+// next to each other are matched as they are turned over — so every step checks
+// the board is still there rather than assuming it.
+const boardGone = async () => (await page.locator('.grid button').count()) === 0
+
 const faces = []
 for (let i = 0; i < 16; i += 1) {
+  if (await boardGone()) break // eslint-disable-line no-await-in-loop
   const card = page.locator('.grid button').nth(i)
   await card.click() // eslint-disable-line no-await-in-loop
   await page.waitForTimeout(80) // eslint-disable-line no-await-in-loop
@@ -87,6 +94,7 @@ const pairs = new Map()
 faces.forEach((f, i) => pairs.set(f, [...(pairs.get(f) || []), i]))
 for (const [, idx] of pairs) {
   if (idx.length !== 2) continue
+  if (await boardGone()) break // eslint-disable-line no-await-in-loop
   await page.locator('.grid button').nth(idx[0]).click() // eslint-disable-line no-await-in-loop
   await page.waitForTimeout(120) // eslint-disable-line no-await-in-loop
   await page.locator('.grid button').nth(idx[1]).click() // eslint-disable-line no-await-in-loop

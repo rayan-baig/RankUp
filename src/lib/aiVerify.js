@@ -19,6 +19,7 @@
  */
 
 import { toCanvas, canvasToJpeg, greyscale, resizeGrey, dHash, hammingDistance, loadImage } from './imaging.js'
+import { getSession } from './sync/transport.js'
 
 export const VERDICT = {
   LOOKS_GOOD: 'looks_good',
@@ -274,9 +275,15 @@ async function shrinkForCloud(dataUrl) {
 }
 
 async function askClaude(dataUrl, quest, signal) {
+  // The endpoint spends real money, so it refuses anonymous callers. Sending
+  // the session token is what ties a check to a family and its allowance.
+  const token = getSession()?.access_token
   const res = await fetch(AI_ENDPOINT, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     signal,
     body: JSON.stringify({
       imageDataUrl: dataUrl,

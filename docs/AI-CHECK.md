@@ -170,3 +170,40 @@ including a deliberately faked one, before switching for good.
 
 The AI check is off entirely on the Starter plan, which is the other reason
 this stays affordable: the cheapest tier never makes a call at all.
+
+
+## Getting the cost to exactly zero
+
+The cloud layer is optional and always was. Leave `VITE_AI_VERIFY_URL` unset and
+the app never makes a call, costs nothing, and still ships nine checks that run
+free on the child's own phone:
+
+| | catches |
+|---|---|
+| Capture source | a picture chosen from the gallery rather than taken now |
+| Blur, darkness, blown highlights | a photo of nothing in particular |
+| Flat colour + colour diversity | a screenshot, or a photo of a screen |
+| UI edge detection | app chrome and status bars in frame |
+| Perceptual hash | last week's photo sent again, and near-duplicates |
+| Time-to-submit | a "chore" finished suspiciously instantly |
+
+Those are the two cheats children actually try. The Claude layer adds one thing
+they cannot: whether the photograph shows *the chore that was asked for*. That
+is worth paying for once there is revenue — it is not worth paying for on day
+one, and the review screen says plainly when it did not run.
+
+**Ship with it off. Turn it on when families are paying.**
+
+## Who is allowed to spend it
+
+`/api/verify-photo` requires a signed-in caller's token and claims one check
+against that family's monthly allowance before any image is sent to Anthropic.
+Without that, a deployed endpoint is a public licence to spend the operator's
+balance — and a looping client does the same damage without anyone intending it.
+
+- Signed-out callers are refused outright.
+- Starter families are refused: the plan does not include the check.
+- Every family has 200 checks a month. With the on-device layer settling most
+  photos first, ordinary use lands near sixty, so the ceiling is a runaway
+  guard rather than a limit anyone meets.
+- Only `claim_photo_check()` moves the counter; a device cannot reset its own.
