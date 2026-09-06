@@ -59,11 +59,35 @@ export async function startCheckout(tier) {
  * Tickets are credited by Stripe's webhook, never by this browser claiming the
  * payment worked. See supabase/billing.sql.
  */
-export const FLASH_TICKET_PRICE = 2.99
-export const FLASH_TICKET_PACK_SIZE = 3
+/**
+ * The packs, and why there is more than one.
+ *
+ * Stripe takes a percentage plus a flat thirty cents. On a $2.99 sale that flat
+ * part alone is ten percent of the price; on a $14.99 one it is two. Selling
+ * the same tickets in bigger packs therefore keeps materially more of the same
+ * money — and the per-ticket price falls at the same time, so the bundle is
+ * genuinely better for the family too rather than just for the operator.
+ */
+export const FLASH_TICKET_PACKS = [
+  { id: 'flash_3', tickets: 3, price: 2.99 },
+  { id: 'flash_10', tickets: 10, price: 6.99, best: true },
+  { id: 'flash_25', tickets: 25, price: 14.99 },
+]
 
-export async function buyFlashTickets() {
-  const result = await post(CHECKOUT_URL, { product: 'flash_tickets' })
+export const DEFAULT_FLASH_PACK = FLASH_TICKET_PACKS[1]
+
+/** What one ticket costs in this pack, for the "save 30%" line. */
+export function perTicket(pack) {
+  return pack.price / pack.tickets
+}
+
+export function packSaving(pack) {
+  const base = perTicket(FLASH_TICKET_PACKS[0])
+  return Math.round((1 - perTicket(pack) / base) * 100)
+}
+
+export async function buyFlashTickets(packId = DEFAULT_FLASH_PACK.id) {
+  const result = await post(CHECKOUT_URL, { product: packId })
   if (result.ok && result.url) window.location.href = result.url
   return result
 }

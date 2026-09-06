@@ -122,7 +122,7 @@ export default async function handler(req, res) {
        * event coming after this one — this is where it gets credited. Guarded
        * on payment_status because a session can complete unpaid.
        */
-      if (object.metadata?.product === 'flash_tickets' && object.payment_status === 'paid' && familyId) {
+      if (String(object.metadata?.product || '').startsWith('flash_') && object.payment_status === 'paid' && familyId) {
         await serviceRpc('credit_flash_tickets', {
           p_family_id: familyId,
           p_count: Number(object.metadata?.ticket_count) || 3,

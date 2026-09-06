@@ -54,6 +54,7 @@ export const TIERS = {
     features: [
       'Everything in Standard',
       'Permanent 1.5× XP boost',
+      'Overdrive — the richer look, on every theme',
       '10-player Megacluster guilds',
       'Exclusive profile customisation',
       'The Parental Consequence Engine',
@@ -81,6 +82,7 @@ export const PLAN_COMPARISON = [
   { label: 'Guilds', value: (t) => (t.guildSize ? `${t.guildSize}-player` : false) },
   { label: 'XP rate', value: (t) => (t.xpMultiplier > 1 ? `${t.xpMultiplier}×` : 'Normal') },
   { label: 'Sunday Market', value: () => true },
+  { label: 'Overdrive visuals', value: (t) => t.id === 'elite' },
   { label: 'Profile frames', value: (t) => t.id === 'elite' },
   { label: 'Consequence Engine', value: (t) => t.id === 'elite' },
   { label: 'Behaviour Blueprints', value: (t) => t.id === 'elite' },
@@ -88,6 +90,7 @@ export const PLAN_COMPARISON = [
 ]
 
 export const ELITE_KID_PERKS = [
+  { icon: '✨', title: 'Overdrive', body: 'A slow aurora behind every screen in your own theme\u2019s colours, light coming off the buttons, a highlight running along the XP bar, a turning ring around your avatar, and a proper burst when you level up.' },
   { icon: '👥', title: '10-Player Megacluster Guilds', body: 'Doubles the standard clan from 5 slots to 10, so a squad leader can invite more real-world classmates.' },
   { icon: '⚡', title: 'Permanent 1.5× XP Boost', body: 'A constant multiplier on every daily checklist and habit, so Elite kids level faster than Standard kids.' },
   { icon: '🔮', title: 'Exclusive Profile Customisation', body: 'Unlocks animated profile card frames and rare item drop selectors Standard users cannot access.' },
@@ -248,6 +251,9 @@ export function createInitialState() {
         { id: uid('rem'), label: 'Bedtime check', time: '19:30', on: false },
       ],
       reduceMotion: false,
+      /* Overdrive: the Elite visual tier. On by default for anyone paying for
+         it, but always theirs to switch off. */
+      overdrive: true,
       soundOn: true,
       today: dayKey(),
     },

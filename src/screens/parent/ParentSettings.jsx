@@ -4,7 +4,8 @@ import { PARENT_THEMES } from '../../data/parentThemes.js'
 import { clearState, storageUsageBytes } from '../../lib/storage.js'
 import { relativeTime } from '../../lib/dates.js'
 import { canSyncAcrossDevices } from '../../lib/sync/index.js'
-import { billingLive, buyFlashTickets, FLASH_TICKET_PRICE, FLASH_TICKET_PACK_SIZE } from '../../lib/billing.js'
+import { isElite } from '../../state/reducer.js'
+import { billingLive, buyFlashTickets, FLASH_TICKET_PACKS, perTicket, packSaving } from '../../lib/billing.js'
 import { guildsEnabled } from '../../lib/guilds.js'
 import { Screen, Card, Button, Section, SectionTitle, Field, TextInput, TextArea, Toggle, Banner, Modal, Select, Chip } from '../../components/ui.jsx'
 import NotificationSettings from '../../components/NotificationSettings.jsx'
@@ -260,6 +261,45 @@ export default function ParentSettings() {
 
       </Section>
 
+      <Section title="Overdrive" icon="✨"
+        summary={
+          !isElite(state) ? 'Elite Pass'
+            : state.settings.reduceMotion ? 'Paused by reduced motion'
+              : state.settings.overdrive !== false ? 'On' : 'Off'
+        }>
+      <Card flat>
+        <p className="text-sm text-muted mb-3">
+          The richer look: a slow aurora behind every screen tinted by your child&apos;s own theme,
+          light coming off the buttons, a highlight travelling along the XP bar, a turning ring
+          around their avatar, and a proper burst when they level up.
+        </p>
+        {isElite(state) ? (
+          <>
+            <Toggle
+              checked={state.settings.overdrive !== false}
+              onChange={(v) => dispatch({ type: 'UPDATE_SETTINGS', patch: { overdrive: v } })}
+              label="Overdrive"
+              hint="Nothing about it changes XP, currency or how a chore is judged."
+            />
+            {state.settings.reduceMotion && (
+              <Banner tone="info" icon="♿" title="Off while reduced motion is on">
+                Reduced motion wins, always. Turn that off below to see Overdrive.
+              </Banner>
+            )}
+          </>
+        ) : (
+          <Banner
+            tone="info"
+            icon="⚡"
+            title="Part of Elite Pass"
+            action={<Button className="px-3 py-2 min-h-0 text-sm" onClick={() => navigate('/parent/plan')}>See plans</Button>}
+          >
+            Every screen keeps working exactly the same without it — it is paint, not power.
+          </Banner>
+        )}
+      </Card>
+      </Section>
+
       <Section title="Accessibility & motion" icon="♿"
         summary={state.settings.reduceMotion ? 'Reduced motion on' : 'Full animation'}>
       <Card flat>
@@ -295,7 +335,7 @@ export default function ParentSettings() {
       </Section>
 
       <Section title="Flash Tickets" icon="🎟️"
-        summary={`${state.family.flashTickets || 0} left · $${FLASH_TICKET_PRICE} for ${FLASH_TICKET_PACK_SIZE}`}>
+        summary={`${state.family.flashTickets || 0} left · from $${FLASH_TICKET_PACKS[0].price}`}>
       <Card flat>
         <p className="text-sm text-muted mb-3">
           The Sunday Market opens for four hours a week and sells cosmetic skins for the currency
@@ -306,26 +346,46 @@ export default function ParentSettings() {
           Nothing sold in the market affects XP, levelling or how much a chore pays. A child who
           never opens it is never behind one who buys every week.
         </Banner>
-        <div className="flex items-center justify-between gap-3 mt-3">
-          <div>
-            <div className="font-display font-extrabold text-lg leading-none">
-              {state.family.flashTickets || 0}
-            </div>
-            <div className="text-xs text-muted mt-0.5">tickets left</div>
-          </div>
-          <Button
-            onClick={() => (billingLive()
-              ? buyFlashTickets()
-              : dispatch({ type: 'GRANT_FLASH_TICKETS', count: FLASH_TICKET_PACK_SIZE }))}
-          >
-            {billingLive()
-              ? `Buy ${FLASH_TICKET_PACK_SIZE} · $${FLASH_TICKET_PRICE}`
-              : `Add ${FLASH_TICKET_PACK_SIZE} (test)`}
-          </Button>
+        <div className="flex items-baseline gap-2 mt-3 mb-2">
+          <span className="font-display font-extrabold text-lg leading-none">
+            {state.family.flashTickets || 0}
+          </span>
+          <span className="text-xs text-muted">left</span>
         </div>
+
+        {FLASH_TICKET_PACKS.map((pack) => {
+          const saving = packSaving(pack)
+          return (
+            <button
+              key={pack.id}
+              type="button"
+              onClick={() => (billingLive()
+                ? buyFlashTickets(pack.id)
+                : dispatch({ type: 'GRANT_FLASH_TICKETS', count: pack.tickets }))}
+              className="card-flat w-full flex items-center gap-3 p-3 mb-2 text-left"
+              style={pack.best ? { borderColor: 'var(--accent)' } : undefined}
+            >
+              <span className="text-xl" aria-hidden="true">🎟️</span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold text-sm">
+                  {pack.tickets} tickets
+                  {pack.best && <Chip tone="var(--accent)" className="ml-2">Best value</Chip>}
+                </span>
+                <span className="block text-xs text-muted">
+                  ${perTicket(pack).toFixed(2)} each
+                  {saving > 0 && ` · saves ${saving}%`}
+                </span>
+              </span>
+              <span className="font-display font-extrabold text-sm shrink-0">
+                {billingLive() ? `$${pack.price}` : 'Add (test)'}
+              </span>
+            </button>
+          )
+        })}
+
         {!billingLive() && (
-          <p className="text-xs text-muted mt-2">
-            Stripe is not configured, so this adds tickets locally without charging anything.
+          <p className="text-xs text-muted mt-1">
+            Stripe is not configured, so these add tickets locally without charging anything.
           </p>
         )}
         <p className="text-xs text-muted mt-2">

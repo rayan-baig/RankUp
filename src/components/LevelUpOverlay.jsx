@@ -21,7 +21,7 @@ export default function LevelUpOverlay({ levelUp, kid, theme, onClose }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center px-6" role="dialog" aria-modal="true">
       <div className="absolute inset-0" style={{ background: `${theme.colors.bg}f2` }} onClick={onClose} />
-      <div className="relative text-center anim-pop">
+      <div className="relative text-center anim-pop fx-burst">
         <div className="relative inline-block mb-3">
           <Avatar theme={theme} level={levelUp.to} size={160} companion={Boolean(theme.evolution?.companion)} interactive={false} />
           <SparkleBurst trigger={1} count={20} colors={theme.avatar?.hues || ['#fff']} />

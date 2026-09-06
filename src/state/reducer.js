@@ -56,6 +56,18 @@ export function isElite(state) {
 }
 
 /** The plan a family is on, falling back to the cheapest rather than the best. */
+/**
+ * Is the richer visual tier actually on right now?
+ *
+ * Three things have to agree: the family pays for Elite, they have not turned
+ * it off, and the device is not asking for reduced motion. That last one is not
+ * a preference to weigh against the others — a child who gets motion sick, or a
+ * parent who turned it on for them, outranks a paid feature every time.
+ */
+export function overdriveActive(state) {
+  return isElite(state) && state.settings.overdrive !== false && !state.settings.reduceMotion
+}
+
 export function planOf(state) {
   return TIERS[state.family.tier] || TIERS.starter
 }

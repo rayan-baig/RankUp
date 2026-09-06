@@ -22,11 +22,19 @@ const PRICES = {
   elite: process.env.STRIPE_PRICE_ELITE || '',
 }
 
-/** One-off purchases. A pack of Flash Tickets is the only one. */
+/**
+ * One-off purchases: the three Flash Ticket packs.
+ *
+ * The ticket count lives here rather than in the request body, so a caller
+ * cannot ask for the cheap pack and be credited the big one. Stripe's flat
+ * per-transaction fee is why the bigger packs exist at all — on a $2.99 sale
+ * that thirty cents is ten percent of the price.
+ */
 const PRODUCTS = {
-  flash_tickets: process.env.STRIPE_PRICE_FLASH_TICKETS || '',
+  flash_3: { price: process.env.STRIPE_PRICE_FLASH_3 || '', tickets: 3 },
+  flash_10: { price: process.env.STRIPE_PRICE_FLASH_10 || '', tickets: 10 },
+  flash_25: { price: process.env.STRIPE_PRICE_FLASH_25 || '', tickets: 25 },
 }
-const FLASH_TICKET_PACK_SIZE = 3
 
 async function callerFamilyId(token) {
   try {
@@ -56,7 +64,7 @@ export default async function handler(req, res) {
   const product = body?.product
   const tier = body?.tier
   const oneOff = Boolean(product)
-  if (oneOff ? !PRODUCTS[product] : !PRICES[tier]) {
+  if (oneOff ? !PRODUCTS[product]?.price : !PRICES[tier]) {
     return res.status(400).json({ error: oneOff ? 'Unknown product.' : 'Unknown plan.' })
   }
 
@@ -74,11 +82,11 @@ export default async function handler(req, res) {
   try {
     const session = await stripe.checkout.sessions.create({
       mode: oneOff ? 'payment' : 'subscription',
-      line_items: [{ price: oneOff ? PRODUCTS[product] : PRICES[tier], quantity: 1 }],
+      line_items: [{ price: oneOff ? PRODUCTS[product].price : PRICES[tier], quantity: 1 }],
       client_reference_id: familyId,
       // Both, because different webhook events surface different ones.
       metadata: oneOff
-        ? { family_id: familyId, product, ticket_count: String(FLASH_TICKET_PACK_SIZE) }
+        ? { family_id: familyId, product, ticket_count: String(PRODUCTS[product].tickets) }
         : { family_id: familyId, tier },
       ...(oneOff ? {} : { subscription_data: { metadata: { family_id: familyId, tier } } }),
       success_url: oneOff

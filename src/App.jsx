@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { useApp, pendingSubmissions } from './state/AppContext.jsx'
-import { activeLockout, guildsAllowedByPlan } from './state/reducer.js'
+import { activeLockout, guildsAllowedByPlan, overdriveActive } from './state/reducer.js'
 import { useRoute, navigate } from './lib/router.js'
 import { applyTheme } from './lib/applyTheme.js'
 import { resolveKidTheme } from './data/kidThemes.js'
@@ -91,6 +91,12 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.reduceMotion = state.settings.reduceMotion ? 'true' : 'false'
   }, [state.settings.reduceMotion])
+
+  // One attribute switches the whole Elite visual tier on. Every effect lives
+  // in the stylesheet under [data-overdrive='true'], so no screen has to know.
+  useEffect(() => {
+    document.documentElement.dataset.overdrive = overdriveActive(state) ? 'true' : 'false'
+  }, [state])
 
   // Dimension Lockouts end on a timer. Sweep them on load and every 30s so a kid
   // is let back in promptly and the override history stops saying "Active".

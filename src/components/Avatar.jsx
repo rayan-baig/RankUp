@@ -124,7 +124,7 @@ export default function Avatar({ theme, level = 1, size = 120, companion = false
   const Wrapper = interactive ? 'button' : 'div'
 
   return (
-    <div className="relative inline-block" style={{ width: size, height: size }}>
+    <div className="relative inline-block fx-avatar" style={{ width: size, height: size }}>
       {frame !== 'none' && <ProfileFrame frame={frame} size={size} colors={c} />}
       <Wrapper
         type={interactive ? 'button' : undefined}

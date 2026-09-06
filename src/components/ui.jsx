@@ -137,7 +137,7 @@ export function ProgressBar({ value, max = 1, height = 10, tone, label }) {
   return (
     <div>
       <div
-        className="w-full overflow-hidden"
+        className="w-full overflow-hidden fx-bar"
         style={{ height, background: 'var(--surface-2)', borderRadius: height, border: '1px solid var(--line)' }}
         role="progressbar"
         aria-valuenow={Math.round(pct)}

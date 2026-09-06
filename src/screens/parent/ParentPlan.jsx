@@ -10,7 +10,7 @@ import { Screen, Card, Button, SectionTitle, Banner, Chip, Modal } from '../../c
  */
 const UPGRADE_REASON = {
   standard: 'a second child, and the AI checks every photo before you see it.',
-  elite: 'every chore pays 1.5× for the rest of your subscription, plus the parent tools.',
+  elite: 'every chore pays 1.5×, the whole app switches to Overdrive, plus the parent tools.',
 }
 
 export default function ParentPlan() {
