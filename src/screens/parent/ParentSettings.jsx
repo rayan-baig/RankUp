@@ -339,8 +339,8 @@ export default function ParentSettings() {
       <Card flat>
         <p className="text-sm text-muted mb-3">
           The Sunday Market opens for four hours a week and sells cosmetic skins for the currency
-          your child earns. A Flash Ticket takes one skin without spending any — for the week they
-          did not save quite enough.
+          your child earns. Flash Tickets claim one without spending any — for the week they did not
+          save quite enough. Rarer skins cost more tickets; the whole shop is eleven.
         </p>
         <Banner tone="info" icon="🧒" title="Skins are paint">
           Nothing sold in the market affects XP, levelling or how much a chore pays. A child who
@@ -375,6 +375,7 @@ export default function ParentSettings() {
                   ${perTicket(pack).toFixed(2)} each
                   {saving > 0 && ` · saves ${saving}%`}
                 </span>
+                <span className="block text-xs text-muted mt-0.5">{pack.note}</span>
               </span>
               <span className="font-display font-extrabold text-sm shrink-0">
                 {billingLive() ? `$${pack.price}` : 'Add (test)'}

@@ -2,7 +2,7 @@ import { uid } from '../lib/id.js'
 import { dayKey, daysBetween } from '../lib/dates.js'
 import { calcReward, levelFromXp, testScoreBonus } from '../lib/xp.js'
 import { createInitialState, TIERS, monthKey, makeKid } from './initialState.js'
-import { findSkin, isMarketOpen } from '../data/marketSkins.js'
+import { findSkin, isMarketOpen, ticketCost } from '../data/marketSkins.js'
 import { DAILY_COIN_CAP, MAX_TOKENS } from '../data/minigames.js'
 import { ENTITIES } from '../lib/sync/mappers.js'
 
@@ -396,7 +396,10 @@ export function reducer(state, action) {
       const skin = findSkin(action.skinId)
       if (!kid || !skin || !isMarketOpen()) return state
       if ((kid.skins || []).includes(skin.id)) return state
-      if ((state.family.flashTickets || 0) < 1) return state
+      // Rarer skins cost more tickets. buy_market_skin decides the real price;
+      // this is the local copy so the button can be disabled honestly.
+      const cost = ticketCost(skin)
+      if ((state.family.flashTickets || 0) < cost) return state
       const withKid = mapKid(state, kid.id, (k) => ({
         ...k,
         skins: [...(k.skins || []), skin.id],
@@ -404,11 +407,11 @@ export function reducer(state, action) {
       }))
       const next = {
         ...withKid,
-        family: { ...withKid.family, flashTickets: withKid.family.flashTickets - 1 },
+        family: { ...withKid.family, flashTickets: withKid.family.flashTickets - cost },
       }
       return logEvent(queueRpc(next, 'buy_market_skin', {
         p_kid_id: kid.id, p_skin_id: skin.id, p_cost: 0, p_use_ticket: true,
-      }), { type: 'skin_bought', kidId: kid.id, meta: { skin: skin.id, ticket: true } })
+      }), { type: 'skin_bought', kidId: kid.id, meta: { skin: skin.id, ticket: true, cost } })
     }
 
     /** Wear a skin already owned. Free, and reversible. */

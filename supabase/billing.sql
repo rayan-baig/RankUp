@@ -212,7 +212,7 @@ create or replace function buy_market_skin(
   p_use_ticket boolean default false
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_kid kids; v_family families;
+declare v_kid kids; v_family families; v_cost int := 0;
 begin
   select * into v_kid from kids where id = p_kid_id for update;
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
@@ -226,10 +226,30 @@ begin
   select * into v_family from families where id = v_kid.family_id for update;
 
   if p_use_ticket then
-    if v_family.flash_tickets < 1 then
-      return jsonb_build_object('ok', false, 'reason', 'no_tickets');
+    /*
+     * What a claim costs is decided here, not by the caller.
+     *
+     * Rarity is mirrored from RARITY in src/data/marketSkins.js, and
+     * supabase/test/08-billing.sql checks the two agree. If the client could
+     * name its own price the legendary would be free — cosmetic, but the same
+     * class of mistake as letting a phone set its own XP.
+     */
+    v_cost := case p_skin_id
+      when 'ember'   then 1
+      when 'tide'    then 1
+      when 'orchard' then 2
+      when 'circuit' then 2
+      when 'dusk'    then 2
+      when 'gilded'  then 3
+      else 0
+    end;
+    if v_cost = 0 then
+      return jsonb_build_object('ok', false, 'reason', 'no_skin');
     end if;
-    update families set flash_tickets = flash_tickets - 1 where id = v_family.id;
+    if v_family.flash_tickets < v_cost then
+      return jsonb_build_object('ok', false, 'reason', 'no_tickets', 'needed', v_cost);
+    end if;
+    update families set flash_tickets = flash_tickets - v_cost where id = v_family.id;
   else
     if v_kid.coins < coalesce(p_cost, 0) then
       return jsonb_build_object('ok', false, 'reason', 'too_expensive');
@@ -241,7 +261,7 @@ begin
   values (v_kid.family_id, p_kid_id, 'skin_bought',
           jsonb_build_object('skin', p_skin_id, 'ticket', p_use_ticket));
 
-  return jsonb_build_object('ok', true, 'skin_id', p_skin_id);
+  return jsonb_build_object('ok', true, 'skin_id', p_skin_id, 'tickets_spent', v_cost);
 end $$;
 
 grant execute on function buy_market_skin(uuid, text, int, boolean) to authenticated;

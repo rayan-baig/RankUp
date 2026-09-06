@@ -25,20 +25,47 @@ export const MARKET_CLOSES_HOUR = 24
  * Cosmetics only, on purpose. Each is a CSS treatment applied to the child's
  * avatar ring, so a skin costs the app nothing and gives no advantage.
  */
+/**
+ * Rarity, and what a ticket is worth.
+ *
+ * A ticket used to buy any skin at all, which made the big packs absurd: there
+ * are six skins, so twenty-five tickets bought the shop four times over. Tying
+ * the price to rarity gives a ticket a size — the whole set costs eleven — and
+ * lets the packs be small enough to make sense.
+ *
+ * Mirrored in buy_market_skin() in supabase/billing.sql, which is the authority
+ * on what a claim actually costs. supabase/test/08-billing.sql checks the two
+ * agree, because a client that could name its own price would make the
+ * legendary free.
+ */
+export const RARITY = {
+  common: { label: 'Common', tickets: 1, tone: '#8b93a7' },
+  rare: { label: 'Rare', tickets: 2, tone: '#4d8dff' },
+  legendary: { label: 'Legendary', tickets: 3, tone: '#ffc23d' },
+}
+
 export const MARKET_SKINS = [
-  { id: 'ember', name: 'Ember Halo', cost: 120, icon: '🔥',
+  { id: 'ember', name: 'Ember Halo', cost: 120, rarity: 'common', icon: '🔥',
     ring: 'conic-gradient(from 0deg, #ff8a3d, #ffd76f, #ff5f3d, #ff8a3d)' },
-  { id: 'tide', name: 'Tide Glass', cost: 120, icon: '🌊',
+  { id: 'tide', name: 'Tide Glass', cost: 120, rarity: 'common', icon: '🌊',
     ring: 'conic-gradient(from 0deg, #4fd1e8, #2f7ff0, #7ef0d6, #4fd1e8)' },
-  { id: 'orchard', name: 'Orchard Bloom', cost: 150, icon: '🌸',
+  { id: 'orchard', name: 'Orchard Bloom', cost: 150, rarity: 'rare', icon: '🌸',
     ring: 'conic-gradient(from 0deg, #ff9ec7, #ffd4e6, #b98cff, #ff9ec7)' },
-  { id: 'circuit', name: 'Live Circuit', cost: 150, icon: '🔌',
+  { id: 'circuit', name: 'Live Circuit', cost: 150, rarity: 'rare', icon: '🔌',
     ring: 'conic-gradient(from 0deg, #7cf5a0, #22c1a4, #d7ff8a, #7cf5a0)' },
-  { id: 'dusk', name: 'Dusk Prism', cost: 200, icon: '🌆',
+  { id: 'dusk', name: 'Dusk Prism', cost: 200, rarity: 'rare', icon: '🌆',
     ring: 'conic-gradient(from 0deg, #8b6bff, #ff7ad9, #4fa8ff, #8b6bff)' },
-  { id: 'gilded', name: 'Gilded Crown', cost: 260, icon: '👑',
+  { id: 'gilded', name: 'Gilded Crown', cost: 260, rarity: 'legendary', icon: '👑',
     ring: 'conic-gradient(from 0deg, #ffd76f, #b8860b, #fff2c4, #ffd76f)' },
 ]
+
+/** What claiming this skin with tickets costs. */
+export function ticketCost(skin) {
+  return RARITY[skin?.rarity]?.tickets ?? 1
+}
+
+/** Tickets needed to own every skin in the shop — what the biggest pack targets. */
+export const FULL_SET_TICKETS = MARKET_SKINS.reduce((n, s) => n + ticketCost(s), 0)
 
 export function findSkin(id) {
   return MARKET_SKINS.find((s) => s.id === id) || null

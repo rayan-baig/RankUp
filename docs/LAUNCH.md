@@ -40,16 +40,20 @@ In the Supabase SQL editor, run these **in order**:
 - [ ] Supabase → Settings → API → the project URL, the **anon** key, and the
       **service role** key
 - [ ] Stripe → three **monthly** prices ($4.99 Starter, $9.99 Standard, $15.99
-      Elite) plus three **one-off** Flash Ticket prices ($2.99 / 3, $6.99 / 10,
-      $14.99 / 25) → six price ids, as `STRIPE_PRICE_STARTER`,
-      `_STANDARD`, `_ELITE`, `_FLASH_3`, `_FLASH_10`, `_FLASH_25`. There is no
+      Elite) plus three **one-off** Flash Ticket prices ($2.99 / 2, $5.99 / 5,
+      $11.99 / 12) → six price ids, as `STRIPE_PRICE_STARTER`,
+      `_STANDARD`, `_ELITE`, `_FLASH_2`, `_FLASH_5`, `_FLASH_12`. There is no
       annual plan; do not create one without also changing
       `api/create-checkout.js`.
 
       The three ticket packs exist because Stripe's flat 30c is 10% of a $2.99
-      sale and 2% of a $14.99 one. The ticket count for each pack is fixed
-      server-side, so a caller cannot buy the small pack and be credited the
-      large one.
+      sale and 2.5% of an $11.99 one. They are sized against the shop, not
+      against round numbers: skins cost 1-3 tickets by rarity and the whole set
+      is eleven, so twelve is "everything" and anything larger would be selling
+      a family something they cannot spend. The ticket count for each pack, and
+      the price of each rarity, are both fixed server-side — a caller can
+      neither buy the small pack and be credited the large one, nor claim the
+      legendary for the price of a common.
 - [ ] Stripe → Developers → Webhooks → add `https://YOURDOMAIN/api/stripe-webhook`
       → the signing secret
 

@@ -31,9 +31,9 @@ const PRICES = {
  * that thirty cents is ten percent of the price.
  */
 const PRODUCTS = {
-  flash_3: { price: process.env.STRIPE_PRICE_FLASH_3 || '', tickets: 3 },
-  flash_10: { price: process.env.STRIPE_PRICE_FLASH_10 || '', tickets: 10 },
-  flash_25: { price: process.env.STRIPE_PRICE_FLASH_25 || '', tickets: 25 },
+  flash_2: { price: process.env.STRIPE_PRICE_FLASH_2 || '', tickets: 2 },
+  flash_5: { price: process.env.STRIPE_PRICE_FLASH_5 || '', tickets: 5 },
+  flash_12: { price: process.env.STRIPE_PRICE_FLASH_12 || '', tickets: 12 },
 }
 
 async function callerFamilyId(token) {

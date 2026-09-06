@@ -1,6 +1,6 @@
 import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import { formatXp } from '../../lib/xp.js'
-import { MARKET_SKINS, isMarketOpen, nextOpeningLabel } from '../../data/marketSkins.js'
+import { MARKET_SKINS, RARITY, ticketCost, isMarketOpen, nextOpeningLabel } from '../../data/marketSkins.js'
 import { Screen, Card, Button, SectionTitle, Banner, Chip, Stat } from '../../components/ui.jsx'
 
 /**
@@ -45,7 +45,7 @@ export default function KidMarket() {
 
       {tickets > 0 && open && (
         <Banner tone="info" icon="🎟️" title={`You have ${tickets} Flash Ticket${tickets === 1 ? '' : 's'}`}>
-          A ticket takes any skin without spending your {theme.currency.name}.
+Rarer skins cost more tickets — one for a common, three for the legendary.
         </Banner>
       )}
 
@@ -68,8 +68,11 @@ export default function KidMarket() {
               </span>
               <div className="min-w-0 flex-1">
                 <div className="font-semibold text-sm truncate">{skin.name}</div>
-                <div className="text-xs text-muted">
-                  {have ? 'Yours' : `${theme.currency.icon} ${skin.cost}`}
+                <div className="text-xs text-muted flex items-center gap-1.5 flex-wrap">
+                  <span style={{ color: RARITY[skin.rarity].tone }}>{RARITY[skin.rarity].label}</span>
+                  {!have && <span>· {theme.currency.icon} {skin.cost}</span>}
+                  {!have && <span>· 🎟️ {ticketCost(skin)}</span>}
+                  {have && <span>· Yours</span>}
                 </div>
               </div>
               {wearing && <Chip tone="var(--good)">Wearing</Chip>}
@@ -98,10 +101,12 @@ export default function KidMarket() {
                     <Button
                       variant="soft"
                       className="flex-1"
-                      disabled={!open}
+                      disabled={!open || tickets < ticketCost(skin)}
                       onClick={() => dispatch({ type: 'CLAIM_SKIN_WITH_TICKET', kidId: kid.id, skinId: skin.id })}
                     >
-                      🎟️ Use a ticket
+                      {tickets < ticketCost(skin)
+                        ? `Needs 🎟️ ${ticketCost(skin)}`
+                        : `🎟️ Use ${ticketCost(skin)}`}
                     </Button>
                   )}
                 </>

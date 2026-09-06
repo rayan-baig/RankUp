@@ -213,12 +213,57 @@ begin
   perform ok('a skin they cannot afford is refused',
     (res->>'ok')::boolean = false and res->>'reason' = 'too_expensive');
 
+  -- Rarity decides the price, and the server decides the rarity. A legendary
+  -- costs three; the client asking nicely for one does not change that.
   res := buy_market_skin('f4444444-0000-0000-0000-000000000001', 'gilded', 260, true);
   perform ok('a Flash Ticket takes it instead', (res->>'ok')::boolean = true);
-  perform ok('the ticket was spent, and the currency was not',
-    (select flash_tickets from families where id = 'f2222222-0000-0000-0000-000000000001') = 2
+  perform ok('and a legendary costs three of them, not one',
+    (res->>'tickets_spent')::int = 3);
+  perform ok('the tickets were spent, and the currency was not',
+    (select flash_tickets from families where id = 'f2222222-0000-0000-0000-000000000001') = 0
     and (select coins from kids where id = 'f4444444-0000-0000-0000-000000000001') = 10);
 
+end $$;
+
+-- ---------- rarity pricing, which the client must not be able to set ----------
+do $$
+declare res jsonb;
+begin
+  set local role postgres;
+  update families set flash_tickets = 10 where id = 'f2222222-0000-0000-0000-000000000001';
+  update kids set skins = '[]'::jsonb, coins = 0
+   where id = 'f4444444-0000-0000-0000-000000000001';
+  set local role app_user;
+  perform become('f1111111-1111-1111-1111-111111111111');
+
+  -- The table here must match RARITY in src/data/marketSkins.js.
+  res := buy_market_skin('f4444444-0000-0000-0000-000000000001', 'ember', 0, true);
+  perform ok('a common skin costs one ticket', (res->>'tickets_spent')::int = 1);
+
+  res := buy_market_skin('f4444444-0000-0000-0000-000000000001', 'dusk', 0, true);
+  perform ok('a rare one costs two', (res->>'tickets_spent')::int = 2);
+
+  perform ok('so ten tickets minus three leaves seven',
+    (select flash_tickets from families
+      where id = 'f2222222-0000-0000-0000-000000000001') = 7);
+
+  -- A skin nobody has heard of has no price, so it cannot be claimed for free.
+  res := buy_market_skin('f4444444-0000-0000-0000-000000000001', 'unicorn', 0, true);
+  perform ok('an unknown skin is refused rather than given away',
+    (res->>'ok')::boolean = false and res->>'reason' = 'no_skin');
+
+  -- Not enough for a legendary, and it says how many are needed.
+  set local role postgres;
+  update families set flash_tickets = 2 where id = 'f2222222-0000-0000-0000-000000000001';
+  set local role app_user;
+  perform become('f1111111-1111-1111-1111-111111111111');
+  res := buy_market_skin('f4444444-0000-0000-0000-000000000001', 'gilded', 0, true);
+  perform ok('two tickets will not buy a three-ticket skin',
+    (res->>'ok')::boolean = false and res->>'reason' = 'no_tickets'
+    and (res->>'needed')::int = 3);
+  perform ok('and nothing was taken',
+    (select flash_tickets from families
+      where id = 'f2222222-0000-0000-0000-000000000001') = 2);
 end $$;
 
 -- Another family's child is not yours to spend on.

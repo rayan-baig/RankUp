@@ -69,12 +69,18 @@ export async function startCheckout(tier) {
  * genuinely better for the family too rather than just for the operator.
  */
 export const FLASH_TICKET_PACKS = [
-  { id: 'flash_3', tickets: 3, price: 2.99 },
-  { id: 'flash_10', tickets: 10, price: 6.99, best: true },
-  { id: 'flash_25', tickets: 25, price: 14.99 },
+  { id: 'flash_2', tickets: 2, price: 2.99, note: 'A common skin, or half of a legendary' },
+  { id: 'flash_5', tickets: 5, price: 5.99, best: true, note: 'A legendary and a common, with one over' },
+  { id: 'flash_12', tickets: 12, price: 11.99, note: 'Every skin in the shop, with one spare' },
 ]
 
 export const DEFAULT_FLASH_PACK = FLASH_TICKET_PACKS[1]
+
+/*
+ * Sized against the shop, not against a round number. The whole set costs
+ * eleven tickets, so twelve is "everything" and anything larger would be
+ * selling a family something they cannot spend.
+ */
 
 /** What one ticket costs in this pack, for the "save 30%" line. */
 export function perTicket(pack) {
