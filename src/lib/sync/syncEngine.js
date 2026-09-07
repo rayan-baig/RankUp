@@ -19,7 +19,28 @@ import { transport } from './transport.js'
 import { readOutbox, removeOps, recordFailure } from './outbox.js'
 
 const CURSOR_KEY = 'rankup.sync.cursor.v1'
-const PULL_INTERVAL_MS = 8000
+/**
+ * How often to ask the server what changed.
+ *
+ * A fixed eight-second poll is the single most expensive thing this app can do.
+ * Two devices per family, polling around the clock, is 450 requests each an
+ * hour — about 648 million a month at a thousand families, for a product where
+ * almost nothing changes between one poll and the next. That is a hosting bill
+ * with no feature attached to it.
+ *
+ * So the interval breathes. It starts fast, because a parent approving a chore
+ * should land on the child's phone quickly. Each poll that finds nothing slows
+ * the next one down, up to a minute. Anything actually happening — a change
+ * arriving, something queued to send, the tab coming back to the foreground —
+ * snaps it straight back to fast.
+ *
+ * A hidden tab does not poll at all. Nobody is looking, and onVisible already
+ * syncs the moment they look again, so the only thing background polling buys
+ * is somebody else's bandwidth bill and the child's battery.
+ */
+const PULL_MIN_MS = 8000
+const PULL_MAX_MS = 60000
+const BACKOFF = 1.5
 
 function cursorKey() {
   try {
@@ -155,31 +176,68 @@ export function createSyncEngine({ dispatch, onStatus }) {
     }
   }
 
+  /** Grows while nothing is happening, resets the moment something does. */
+  let quietRounds = 0
+
+  function nextDelay() {
+    return Math.min(PULL_MAX_MS, Math.round(PULL_MIN_MS * BACKOFF ** quietRounds))
+  }
+
+  function schedule(delay = nextDelay()) {
+    clearTimeout(timer)
+    if (!running) return
+    timer = setTimeout(tick, delay)
+  }
+
+  const isHidden = () => typeof document !== 'undefined' && document.hidden
+
+  async function tick() {
+    if (!running) return
+    // Nothing queued and nobody looking: skip the round trip entirely. Work
+    // waiting in the outbox still goes out, because the person who created it
+    // may have pocketed the phone a second later.
+    if (isHidden() && readOutbox().length === 0) {
+      schedule(PULL_MAX_MS)
+      return
+    }
+    const result = await sync({ silent: true })
+    const moved = (result?.changed || 0) > 0 || readOutbox().length > 0
+    quietRounds = moved ? 0 : Math.min(quietRounds + 1, 8)
+    schedule()
+  }
+
   function start() {
     if (running || !transport.isConfigured()) return
     running = true
-    timer = setInterval(() => sync({ silent: true }), PULL_INTERVAL_MS)
+    quietRounds = 0
     window.addEventListener('online', onOnline)
     document.addEventListener('visibilitychange', onVisible)
-    sync()
+    sync().finally(() => schedule())
   }
 
   function stop() {
     running = false
-    clearInterval(timer)
+    clearTimeout(timer)
     window.removeEventListener('online', onOnline)
     document.removeEventListener('visibilitychange', onVisible)
   }
 
+  /** Back to the fast cadence, and go now. */
+  function wake() {
+    quietRounds = 0
+    schedule(0)
+  }
+
   // Coming back from a tunnel, or switching back to the tab, are the two moments
-  // a person most expects to see fresh data.
-  const onOnline = () => sync()
-  const onVisible = () => { if (document.visibilityState === 'visible') sync() }
+  // a person most expects to see fresh data — and the two worth paying for.
+  const onOnline = () => wake()
+  const onVisible = () => { if (document.visibilityState === 'visible') wake() }
 
   return {
     start,
     stop,
     sync,
+    wake,
     push,
     pull,
     get status() { return status },

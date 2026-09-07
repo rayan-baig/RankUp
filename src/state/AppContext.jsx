@@ -83,6 +83,7 @@ export function AppProvider({ children }) {
     if (!state.syncQueue?.length) return
     if (transport.isConfigured()) {
       state.syncQueue.forEach(({ fn, args }) => enqueueOp({ type: 'rpc', fn, args }))
+      engineRef.current?.wake()
     }
     dispatch({ type: 'DRAIN_SYNC_QUEUE' })
   }, [state.syncQueue])
@@ -182,7 +183,12 @@ export function AppProvider({ children }) {
           recordServerState(state, { photoFor })
           mergingRef.current = false
         } else {
-          queueChanges(state, { photoFor, role: state.device?.role })
+          // Anything queued should go now rather than wait out the idle
+          // backoff — the poll slows down precisely because nothing is
+          // happening, and this is something happening.
+          if (queueChanges(state, { photoFor, role: state.device?.role }) > 0) {
+            engineRef.current?.wake()
+          }
         }
       }
     }, 250)
