@@ -12,8 +12,28 @@ this.
 ## 1. Create the accounts (about an hour)
 
 - [ ] **Supabase** — [supabase.com](https://supabase.com), new project, pick a
-      region near your users.
-- [ ] **Vercel** — [vercel.com](https://vercel.com), connect the GitHub repo.
+      region near your users. **Stay on the free tier.** It covers 500MB of
+      database and 50,000 monthly users; you will not outgrow it for a long
+      time, and upgrading before something actually breaks is $25/month spent on
+      nothing.
+- [ ] **A host.** Two are configured and the same `/api` handlers run on either:
+      - **Cloudflare Pages** — free, and its free tier permits commercial use.
+        Config is `wrangler.toml`; the Node handlers run through
+        `functions/api/[[route]].js`. This is the cheaper option, by about
+        $240/year.
+      - **Vercel** — [vercel.com](https://vercel.com), config in `vercel.json`.
+        The Hobby tier is free but non-commercial, so taking payments means Pro
+        at about $20/month.
+
+      Whichever you pick, deploy the other as a fallback before you need one:
+      switching hosts under pressure with a live Stripe webhook is the worst
+      possible time to find out something does not port.
+
+      **Not yet verified on Cloudflare:** `web-push` reaches for Node crypto.
+      `nodejs_compat` is enabled for it, but send one real push from a Cloudflare
+      deploy before trusting it. Everything else — Stripe checkout, the billing
+      portal, webhook signature verification and the photo check — was exercised
+      against the adapter and behaves identically on both.
 - [ ] **Anthropic** *(optional)* — [console.anthropic.com](https://console.anthropic.com)
       for the AI photo check. The app works without it.
 - [ ] **Stripe** — [stripe.com](https://stripe.com). Needs business details and

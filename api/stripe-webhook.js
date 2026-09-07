@@ -20,7 +20,7 @@
  *    repeats.
  */
 
-import Stripe from 'stripe'
+import { makeStripe, verifyWebhook } from './_shared/stripe.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -33,13 +33,22 @@ const STARTER_PRICE = process.env.STRIPE_PRICE_STARTER || ''
 /** Vercel must not parse the body, or the signature cannot be verified. */
 export const config = { api: { bodyParser: false } }
 
-function rawBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = []
-    req.on('data', (c) => chunks.push(c))
-    req.on('end', () => resolve(Buffer.concat(chunks)))
-    req.on('error', reject)
-  })
+/**
+ * The exact bytes Stripe signed.
+ *
+ * Signature verification is over the raw payload, so this must never go near a
+ * JSON parse and back. On a Node host the body arrives as a stream; on
+ * Cloudflare the adapter has already read it as text and hands it over
+ * directly. Both end up as one string, which is what constructEventAsync wants.
+ */
+async function rawBody(req) {
+  if (typeof req.rawBodyText === 'string') return req.rawBodyText
+  let out = ''
+  const decoder = new TextDecoder()
+  for await (const chunk of req) {
+    out += typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true })
+  }
+  return out + decoder.decode()
 }
 
 async function serviceRpc(fn, args) {
@@ -96,12 +105,14 @@ export default async function handler(req, res) {
     return res.status(503).json({ error: 'not_configured' })
   }
 
-  const stripe = new Stripe(STRIPE_SECRET)
+  const stripe = makeStripe(STRIPE_SECRET)
   const body = await rawBody(req)
 
   let event
   try {
-    event = stripe.webhooks.constructEvent(body, req.headers['stripe-signature'], WEBHOOK_SECRET)
+    // Async form: WebCrypto's digest is async, so this is the only shape that
+    // verifies on Cloudflare. It works on Node too, so there is no branch.
+    event = await verifyWebhook(stripe, body, req.headers['stripe-signature'], WEBHOOK_SECRET)
   } catch (err) {
     // An unverified event is an attacker or a misconfiguration. Never act on it.
     console.error('[stripe-webhook] bad signature:', err.message)

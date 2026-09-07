@@ -18,13 +18,16 @@ import Anthropic from '@anthropic-ai/sdk'
 /**
  * Which model judges the photos.
  *
- * Opus 5 is the default because it is the most capable. For this particular
- * job — "is this a real photograph of this chore, or a screenshot" — Claude
- * Haiku 4.5 is a fifth of the price ($1/$5 per million tokens against $5/$25)
- * and comfortably able. Set AI_VERIFY_MODEL=claude-haiku-4-5 to switch; see
- * docs/AI-CHECK.md for what it costs either way.
+ * Haiku 4.5 is the default, chosen for cost. The job here is a photograph
+ * authenticity judgement — "is this a real photo of this chore, or a
+ * screenshot" — rather than hard reasoning, and Haiku is a fifth of the price
+ * ($1/$5 per million tokens against Opus 5's $5/$25).
+ *
+ * Set AI_VERIFY_MODEL=claude-opus-5 to trade the money back for the more
+ * capable model. Check a handful of real photos, including a deliberately faked
+ * one, before deciding either way — docs/AI-CHECK.md has the arithmetic.
  */
-const MODEL = process.env.AI_VERIFY_MODEL || 'claude-opus-5'
+const MODEL = process.env.AI_VERIFY_MODEL || 'claude-haiku-4-5'
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 const SYSTEM_PROMPT = `You help a parent check photo proof that their child submitted for a household chore in a kids' app called RankUp.
@@ -56,7 +59,10 @@ function parseDataUrl(dataUrl) {
   const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl || '')
   if (!match) return null
   const [, mediaType, data] = match
-  if (Buffer.byteLength(data, 'base64') > MAX_IMAGE_BYTES) return null
+  // Base64 is 4 characters per 3 bytes, minus any padding. Computed rather than
+  // measured with Buffer, which does not exist on Cloudflare Workers.
+  const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0
+  if ((data.length * 3) / 4 - padding > MAX_IMAGE_BYTES) return null
   return { mediaType, data }
 }
 

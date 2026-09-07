@@ -1,0 +1,9 @@
+# Cloudflare Pages. Vercel is still configured in vercel.json — both work, and
+# the same /api handlers run on either, via functions/api/[[route]].js.
+name = "rankup"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-09-01"
+
+# The /api handlers are written for Node. nodejs_compat provides the pieces they
+# reach for (crypto, streams, buffer) on the Workers runtime.
+compatibility_flags = ["nodejs_compat"]

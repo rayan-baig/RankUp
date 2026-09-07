@@ -155,18 +155,19 @@ ambiguous middle, and that is now the only place it is made.
 
 ### Switching model
 
-`AI_VERIFY_MODEL` picks the model; it defaults to `claude-opus-5`. Haiku 4.5 is
-a fifth of the price ($1/$5 per million tokens against $5/$25) and is
-comfortably able at this task, which is a photograph-authenticity judgement
-rather than hard reasoning:
+`AI_VERIFY_MODEL` picks the model. It now **defaults to `claude-haiku-4-5`**,
+chosen for cost: a fifth of the price ($1/$5 per million tokens against Opus 5's
+$5/$25) at a task that is a photograph-authenticity judgement rather than hard
+reasoning. That is about $0.15 per family per month instead of $0.75.
+
+To trade the money back for the more capable model:
 
 ```
-AI_VERIFY_MODEL=claude-haiku-4-5
+AI_VERIFY_MODEL=claude-opus-5
 ```
 
-That is the single biggest remaining lever — it takes the AI cost from about 8%
-of a $9.99 subscription to under 2%. Try it against a handful of real photos,
-including a deliberately faked one, before switching for good.
+Check a handful of real photos, including a deliberately faked one, before
+settling on either.
 
 The AI check is off entirely on the Starter plan, which is the other reason
 this stays affordable: the cheapest tier never makes a call at all.

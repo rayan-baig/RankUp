@@ -11,7 +11,7 @@
  * anyone could start a checkout that upgrades somebody else's account.
  */
 
-import Stripe from 'stripe'
+import { makeStripe } from './_shared/stripe.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -77,7 +77,7 @@ export default async function handler(req, res) {
   if (!familyId) return res.status(403).json({ error: 'No family for this account.' })
 
   const origin = body?.origin || req.headers.origin || ''
-  const stripe = new Stripe(STRIPE_SECRET)
+  const stripe = makeStripe(STRIPE_SECRET)
 
   try {
     const session = await stripe.checkout.sessions.create({

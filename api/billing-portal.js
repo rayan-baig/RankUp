@@ -7,7 +7,7 @@
  * current.
  */
 
-import Stripe from 'stripe'
+import { makeStripe } from './_shared/stripe.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -53,7 +53,7 @@ export default async function handler(req, res) {
     const customerId = await customerRes.json()
     if (!customerId) return res.status(400).json({ error: 'no_customer' })
 
-    const stripe = new Stripe(STRIPE_SECRET)
+    const stripe = makeStripe(STRIPE_SECRET)
 
     const portal = await stripe.billingPortal.sessions.create({
       customer: customerId,

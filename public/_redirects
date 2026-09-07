@@ -1,0 +1,4 @@
+# Hash routing means every path must serve index.html. Cloudflare Pages needs
+# this told to it; Vercel infers it from the Vite framework preset.
+/api/*  /api/:splat  200
+/*      /index.html  200
