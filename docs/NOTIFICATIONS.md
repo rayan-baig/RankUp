@@ -169,3 +169,36 @@ Worth deciding deliberately:
 - **The UK's Age Appropriate Design Code** asks you to justify engagement
   mechanics aimed at children — streaks, daily bonuses and notifications all
   count. See [LEGAL.md](LEGAL.md).
+
+---
+
+## Reminders while the app is closed
+
+Reminder times used to live in one device's settings, so they could only fire
+while RankUp was open — the one moment a reminder is no use. They are now saved
+to the account, with the family's own IANA time zone, and delivered by a job.
+
+**Nothing is delivered until you schedule it.** Set `CRON_SECRET` to a long
+random string and call this every ten or fifteen minutes:
+
+```
+POST https://your-site/api/send-reminders
+Authorization: Bearer <CRON_SECRET>
+```
+
+Running it that often is safe by design, and `supabase/test/11-reminders.sql`
+holds the proof:
+
+- **Once a day, not once a run.** A reminder is only due if it has not already
+  fired on that family's own local date, so a job on a ten-minute timer still
+  sends one reminder.
+- **Their clock, not the server's.** "07:30" is stored as a local wall-clock
+  time plus a zone, converted at read time — so a family that moves, or a
+  clock change, does not turn breakfast into midnight.
+- **Late, or not at all.** A missed run delivers up to `REMINDER_GRACE_MINUTES`
+  late (default 120) and then gives up, rather than arriving at the wrong time
+  of day. Set it lower if you would rather skip than be late.
+
+`due_reminders` is revoked from `public`, because a function that lists which
+families are due is a function that enumerates every family. It is reachable
+only by the service role this endpoint holds.

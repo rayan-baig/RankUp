@@ -119,24 +119,6 @@ export const DROP_SELECTORS = [
   { id: 'celestial', name: 'Celestial drops', elite: true },
 ]
 
-/**
- * Demo guild-mates.
- *
- * These are NOT real users. Real guilds need a shared server so two phones can
- * see the same roster — see docs/BACKEND.md. Everything seeded here carries
- * `demo: true` and the UI labels it as sample data so it never quietly reads
- * as a working multiplayer feature.
- */
-const DEMO_GUILD_MATES = [
-  { id: 'demo_g1', name: 'Priya', avatarHue: 280, weeklyXp: 410, level: 12, demo: true },
-  { id: 'demo_g2', name: 'Marcus', avatarHue: 30, weeklyXp: 365, level: 11, demo: true },
-  { id: 'demo_g3', name: 'Sofia', avatarHue: 160, weeklyXp: 290, level: 9, demo: true },
-  { id: 'demo_g4', name: 'Ade', avatarHue: 200, weeklyXp: 240, level: 8, demo: true },
-  { id: 'demo_g5', name: 'Lena', avatarHue: 340, weeklyXp: 180, level: 7, demo: true },
-  { id: 'demo_g6', name: 'Yusuf', avatarHue: 100, weeklyXp: 150, level: 6, demo: true },
-  { id: 'demo_g7', name: 'Nora', avatarHue: 15, weeklyXp: 120, level: 6, demo: true },
-  { id: 'demo_g8', name: 'Kai', avatarHue: 220, weeklyXp: 95, level: 5, demo: true },
-]
 
 
 export function monthKey(date = new Date()) {
@@ -216,7 +198,6 @@ export function createInitialState() {
       crest: '🛡️',
       weeklyGoalXp: 1500,
       leaderKidId: null,
-      demoMates: DEMO_GUILD_MATES,
       invitedMates: [],
       chat: [],
     },

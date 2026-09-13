@@ -227,3 +227,33 @@ export const NOTICES = {
     url: '/#/kid/quests',
   }),
 }
+
+/**
+ * Push this device's reminder times up to the server.
+ *
+ * Until this runs, a reminder only exists in one browser's settings and can
+ * only fire while RankUp is open. The server copy is what api/send-reminders.js
+ * reads, so this is the difference between a reminder that works and a toggle
+ * that looks like it does.
+ *
+ * The device's own IANA zone goes with it: "07:30" means half past seven where
+ * the family lives, and the job converts per family rather than assuming UTC.
+ */
+export async function saveReminderSchedule(reminders, { role = 'parent', kidId = null } = {}) {
+  if (!transport.isConfigured()) return { ok: false, reason: 'unavailable' }
+  let timezone = 'UTC'
+  try {
+    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  } catch { /* a browser without Intl gets UTC, which the server also defaults to */ }
+  try {
+    return (await transport.rpc('save_reminder_schedule', {
+      p_role: role,
+      p_kid_id: kidId,
+      p_timezone: timezone,
+      p_reminders: (reminders || []).map((r) => ({ label: r.label, time: r.time, on: r.on })),
+    })) || { ok: false, reason: 'unavailable' }
+  } catch (err) {
+    console.warn('[RankUp] save_reminder_schedule:', err.message)
+    return { ok: false, reason: 'unavailable' }
+  }
+}

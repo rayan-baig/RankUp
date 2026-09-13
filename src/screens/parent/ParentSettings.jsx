@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { PARENT_THEMES } from '../../data/parentThemes.js'
 import { clearState, storageUsageBytes } from '../../lib/storage.js'
@@ -7,6 +7,8 @@ import { canSyncAcrossDevices } from '../../lib/sync/index.js'
 import { isElite } from '../../state/reducer.js'
 import { billingLive, buyFlashTickets, FLASH_TICKET_PACKS, perTicket, packSaving } from '../../lib/billing.js'
 import { guildsEnabled } from '../../lib/guilds.js'
+import { saveReminderSchedule } from '../../lib/notifications.js'
+import { transport } from '../../lib/sync/transport.js'
 import { Screen, Card, Button, Section, SectionTitle, Field, TextInput, TextArea, Toggle, Banner, Modal, Select, Chip } from '../../components/ui.jsx'
 import NotificationSettings from '../../components/NotificationSettings.jsx'
 import DataRights from '../../components/DataRights.jsx'
@@ -188,20 +190,7 @@ export default function ParentSettings() {
       <Section title="Daily reminders" icon="⏰"
         summary={`${state.settings.reminders.filter((r) => r.on).length} of ${state.settings.reminders.length} on`}>
       <Card flat>
-        <Banner tone="info" icon="⏰" title="Fires while RankUp is open">
-          These check the time once a minute and notify this device. Reminders that arrive with
-          the app closed need scheduled server-side push — see docs/NOTIFICATIONS.md.
-        </Banner>
-        <div className="mt-2">
-          {state.settings.reminders.map((r) => (
-            <Toggle
-              key={r.id}
-              checked={r.on}
-              onChange={() => dispatch({ type: 'TOGGLE_REMINDER', reminderId: r.id })}
-              label={`${r.label} · ${r.time}`}
-            />
-          ))}
-        </div>
+        <ReminderList reminders={state.settings.reminders} dispatch={dispatch} />
       </Card>
 
       </Section>
@@ -435,5 +424,59 @@ export default function ParentSettings() {
         </p>
       </Modal>
     </Screen>
+  )
+}
+
+/**
+ * The reminder toggles, and the thing that makes them mean something.
+ *
+ * Toggling used to change one device's settings and nothing else, so a reminder
+ * could only ever arrive while RankUp was already open. Every change is now
+ * also pushed to the server, which is what the scheduled job reads — see
+ * api/send-reminders.js. The local minute-by-minute check stays as the fallback
+ * for a device with no backend configured.
+ */
+function ReminderList({ reminders, dispatch }) {
+  const [synced, setSynced] = useState(null)
+  const connected = transport.isConfigured()
+
+  // Push the current list on open too: a family who set these up before the
+  // backend existed would otherwise have a schedule the server never saw.
+  useEffect(() => {
+    if (!connected) return
+    let cancelled = false
+    saveReminderSchedule(reminders).then((r) => { if (!cancelled) setSynced(r.ok) })
+    return () => { cancelled = true }
+  }, [connected, reminders])
+
+  return (
+    <>
+      {connected ? (
+        <Banner
+          tone={synced === false ? 'warn' : 'info'}
+          icon="⏰"
+          title={synced === false ? 'Saved on this phone only' : 'Arrives even with RankUp closed'}
+        >
+          {synced === false
+            ? 'These are set on this device, but could not be saved to your account, so they will only fire while the app is open.'
+            : 'Reminder times are saved to your account and sent from the server, at your own local time.'}
+        </Banner>
+      ) : (
+        <Banner tone="info" icon="⏰" title="Fires while RankUp is open">
+          These check the time once a minute and notify this device. To get them with the app
+          closed, connect the sync service — see docs/NOTIFICATIONS.md.
+        </Banner>
+      )}
+      <div className="mt-2">
+        {reminders.map((r) => (
+          <Toggle
+            key={r.id}
+            checked={r.on}
+            onChange={() => dispatch({ type: 'TOGGLE_REMINDER', reminderId: r.id })}
+            label={`${r.label} · ${r.time}`}
+          />
+        ))}
+      </div>
+    </>
   )
 }

@@ -25,6 +25,7 @@ const ROUTES = {
   'billing-portal': () => import('../../api/billing-portal.js'),
   'create-checkout': () => import('../../api/create-checkout.js'),
   'send-push': () => import('../../api/send-push.js'),
+  'send-reminders': () => import('../../api/send-reminders.js'),
   'settle-alliances': () => import('../../api/settle-alliances.js'),
   'stripe-webhook': () => import('../../api/stripe-webhook.js'),
   'verify-photo': () => import('../../api/verify-photo.js'),
