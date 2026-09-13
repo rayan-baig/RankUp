@@ -11,7 +11,7 @@ psql -q -tAc "drop database if exists $DB;" postgres >/dev/null 2>&1
 psql -q -tAc "create database $DB;" postgres >/dev/null 2>&1
 psql -q -v ON_ERROR_STOP=1 -f "$HERE/00-shim.sql" "$DB" >/dev/null 2>&1 || { echo "shim failed"; exit 1; }
 
-for f in "$HERE/../schema.sql" "$HERE/../sync.sql" "$HERE/../guilds.sql" "$HERE/../notifications.sql" "$HERE/../consent.sql" "$HERE/../billing.sql" "$HERE/00b-helpers.sql"; do
+for f in "$HERE/../schema.sql" "$HERE/../sync.sql" "$HERE/../guilds.sql" "$HERE/../notifications.sql" "$HERE/../consent.sql" "$HERE/../billing.sql" "$HERE/../alliances.sql" "$HERE/00b-helpers.sql"; do
   if ! psql -q -v ON_ERROR_STOP=1 -f "$f" "$DB" >"$OUT" 2>&1; then
     echo "$(basename "$f") FAILED TO APPLY:"; cat "$OUT"; exit 1
   fi
@@ -19,7 +19,7 @@ done
 echo "schema applied cleanly"
 
 status=0
-for f in "$HERE"/0[1-9]-*.sql; do
+for f in "$HERE"/0[1-9]-*.sql "$HERE"/1[0-9]-*.sql; do
   echo ""
   echo "=== $(basename "$f") ==="
   PGOPTIONS='-c client_min_messages=notice' psql -q -v ON_ERROR_STOP=1 -f "$f" "$DB" >"$OUT" 2>&1

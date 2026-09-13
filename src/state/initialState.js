@@ -120,7 +120,7 @@ export const DROP_SELECTORS = [
 ]
 
 /**
- * Demo guild-mates and alliance parents.
+ * Demo guild-mates.
  *
  * These are NOT real users. Real guilds need a shared server so two phones can
  * see the same roster — see docs/BACKEND.md. Everything seeded here carries
@@ -138,17 +138,6 @@ const DEMO_GUILD_MATES = [
   { id: 'demo_g8', name: 'Kai', avatarHue: 220, weeklyXp: 95, level: 5, demo: true },
 ]
 
-const DEMO_ALLIANCE_PARENTS = [
-  { id: 'demo_p1', name: 'The Okafors', approvalRate: 96, questsApproved: 61, streakDays: 21, demo: true },
-  { id: 'demo_p2', name: 'The Hasans', approvalRate: 92, questsApproved: 54, streakDays: 18, demo: true },
-  { id: 'demo_p3', name: 'The Bergs', approvalRate: 90, questsApproved: 49, streakDays: 15, demo: true },
-  { id: 'demo_p4', name: 'The Silvas', approvalRate: 88, questsApproved: 44, streakDays: 12, demo: true },
-  { id: 'demo_p5', name: 'The Chens', approvalRate: 85, questsApproved: 38, streakDays: 10, demo: true },
-  { id: 'demo_p6', name: 'The Novaks', approvalRate: 81, questsApproved: 31, streakDays: 8, demo: true },
-  { id: 'demo_p7', name: 'The Duponts', approvalRate: 77, questsApproved: 27, streakDays: 6, demo: true },
-  { id: 'demo_p8', name: 'The Marshes', approvalRate: 74, questsApproved: 22, streakDays: 4, demo: true },
-  { id: 'demo_p9', name: 'The Ibrahims', approvalRate: 70, questsApproved: 18, streakDays: 3, demo: true },
-]
 
 export function monthKey(date = new Date()) {
   return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}`
@@ -230,13 +219,6 @@ export function createInitialState() {
       demoMates: DEMO_GUILD_MATES,
       invitedMates: [],
       chat: [],
-    },
-    alliance: {
-      id: uid('all'),
-      name: '',
-      joined: false,
-      monthKey: monthKey(),
-      demoMembers: DEMO_ALLIANCE_PARENTS,
     },
     overrides: [],
     rewards: [],

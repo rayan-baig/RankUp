@@ -118,12 +118,42 @@ longer than feels comfortable.
 
 ---
 
-## Still to do
+## The 20% Discount Tournament — one thing you must schedule
 
-**The 20% Discount Tournament** is the one feature that needs billing and does
-not have it. Awarding it means applying a Stripe coupon to ten separate
-subscriptions from a monthly job. The leaderboard exists; the discount does not
-reach a bill.
+Parent Alliances are real: `supabase/alliances.sql` counts each member family's
+approved quests for the month, and `api/settle-alliances.js` gives the winner a
+20% Stripe coupon. **Nothing pays out until you schedule that endpoint**, so
+until you do, families will see a leaderboard and never see a discount.
+
+Set `CRON_SECRET` to a long random string, then call it once a month:
+
+```
+POST https://your-site/api/settle-alliances
+Authorization: Bearer <CRON_SECRET>
+```
+
+On Cloudflare, a Worker Cron Trigger; on Vercel, a `vercel.json` cron; anywhere
+else, whatever runs a monthly job. Run it a day or two into the month so the
+previous month is definitely closed — with no body it settles the month just
+gone, and it accepts `{"month":"YYYY-MM-01"}` to catch up a missed one.
+
+Three properties make it safe to retry, and they are covered by
+`supabase/test/10-alliances.sql`:
+
+- **It cannot pay twice.** The award row's key is (alliance, month), and the
+  function returns only rows it actually inserted. A second run issues nothing.
+- **It cannot be called by a customer.** `settle_alliances` is revoked from
+  `public`, so even a leaked user token cannot reach it, and the endpoint needs
+  the shared secret on top.
+- **It cannot be steered.** The winner is computed from approved submissions in
+  the database. The request body names a month and nothing else.
+
+If Stripe rejects a coupon, that award stays `applied_at = null` rather than
+being marked paid, so an unpaid winner is visible instead of silently lost.
+
+---
+
+## Still to do
 
 **Before charging a single real family**, confirm all of:
 

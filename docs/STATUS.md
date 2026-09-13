@@ -63,13 +63,12 @@ Everything is saved in this browser's `localStorage`. It survives a refresh and 
 restart. It does **not** survive clearing browser data, and it is completely invisible
 to any other device or browser.
 
-Practically: **a parent's phone and a kid's phone are two separate, unconnected copies
-of the app.** For a single-device family demo this is fine. For real use it is the one
-thing that has to change first. → [docs/BACKEND.md](BACKEND.md)
+Practically: **with no Supabase configured, a parent's phone and a kid's phone are two
+separate, unconnected copies of the app.** For a single-device family demo this is fine.
 
-The two devices can now *find* each other — the six-digit pairing flow is built and
-tested — but nothing flows across the link yet. Pairing establishes who belongs to whom;
-sharing the actual quests and XP is the next job. → [docs/SYNC.md](SYNC.md)
+With Supabase configured this no longer applies: pairing links the two devices and
+quests, submissions, approvals and XP all travel across, offline-first, through an
+outbox. → [docs/SYNC.md](SYNC.md)
 
 Photos are also stored locally, downsized to about 40–80 KB each. Browsers cap
 `localStorage` at roughly 5 MB, so after a few dozen photos the oldest ones are dropped
@@ -89,16 +88,16 @@ none was ever taken.
 |---|---|---|
 | **Guild roster** | ✅ real now — see the working list below | — |
 | **Guild chat** | ✅ real now, with a contact-detail guard and reporting | Human moderation at scale is still an open question |
-| **Weekend Challenge** | The countdown is real; the event is not | Server-run events |
-| **Parent Alliance leaderboard** | The nine other families are sample data, and no discount reaches any bill | Shared database **and** a billing system that can apply a discount |
-| **Sync after pairing** | Pairing is real (below); sharing quests and XP across the link is not | See SYNC.md |
+| **Weekend Challenge** | ✅ gone — the fake event was removed; the kid's home screen now shows the real Sunday Market, and only while it is open | — |
+| **Parent Alliance leaderboard** | ✅ real now — real families, real invite codes, scores counted server-side from approved submissions | — |
+| **Sync after pairing** | ✅ real now — quests, submissions, approvals and XP all travel the link | — |
 | **Reminders while the app is closed** | Reminders fire only while RankUp is open | A scheduled server job — [docs/NOTIFICATIONS.md](NOTIFICATIONS.md) |
 | **Background push delivery** | Written and wired, but never actually delivered a message — no push service is reachable from the sandbox | Test on two real phones |
 | **Subscriptions** | ✅ built — off until you connect your own Stripe account | [docs/PAYMENTS.md](PAYMENTS.md) |
-| **The 20% Discount Tournament** | The leaderboard is sample data and no discount reaches a real bill | A monthly job applying Stripe coupons — [docs/PAYMENTS.md](PAYMENTS.md) |
+| **The 20% Discount Tournament** | ✅ built — `api/settle-alliances.js` decides each month's winner and applies a real Stripe coupon. **You have to schedule it**; nothing pays out until you do — [docs/PAYMENTS.md](PAYMENTS.md) | — |
 
-Every one of these is labelled in the interface itself with a dashed **SAMPLE** tag or a
-warning banner. If you build a new mockup, label it the same way.
+What is left in this table is labelled in the interface itself with a dashed **SAMPLE**
+tag or a warning banner. If you build a new mockup, label it the same way.
 
 ---
 

@@ -1,7 +1,7 @@
 import { uid } from '../lib/id.js'
 import { dayKey, daysBetween } from '../lib/dates.js'
 import { calcReward, levelFromXp, testScoreBonus } from '../lib/xp.js'
-import { createInitialState, TIERS, monthKey, makeKid } from './initialState.js'
+import { createInitialState, TIERS, makeKid } from './initialState.js'
 import { findSkin, isMarketOpen, ticketCost } from '../data/marketSkins.js'
 import { DAILY_COIN_CAP, MAX_TOKENS } from '../data/minigames.js'
 import { ENTITIES } from '../lib/sync/mappers.js'
@@ -875,17 +875,6 @@ export function reducer(state, action) {
           chat: [...state.guild.chat, { id: uid('msg'), at: Date.now(), ...action.message }].slice(-200),
         },
       }
-
-    /* ---------- parent alliance (Elite) ---------- */
-
-    case 'JOIN_ALLIANCE':
-      return logEvent(
-        { ...state, alliance: { ...state.alliance, joined: true, name: action.name || 'My Alliance', joinedAt: Date.now(), monthKey: monthKey() } },
-        { type: 'alliance_joined' },
-      )
-
-    case 'LEAVE_ALLIANCE':
-      return { ...state, alliance: { ...state.alliance, joined: false } }
 
     /* ---------- misc ---------- */
 
