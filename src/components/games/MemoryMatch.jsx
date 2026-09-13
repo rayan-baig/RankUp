@@ -71,11 +71,29 @@ export default function MemoryMatch({ onDone }) {
                 transition: 'background .18s ease, opacity .18s ease',
               }}
             >
-              {shown ? card.face : ''}
+              {shown ? card.face : <CardBack />}
             </button>
           )
         })}
       </div>
     </div>
+  )
+}
+
+/**
+ * The back of a face-down card: the RankUp chevron, at low contrast.
+ *
+ * Sixteen flat rectangles read as a loading state rather than a deck. This
+ * costs nothing — it is two strokes — and makes the board look like part of
+ * the app instead of a placeholder waiting to be designed.
+ */
+function CardBack() {
+  return (
+    <svg viewBox="0 0 512 512" width="46%" height="46%" aria-hidden="true">
+      <g fill="none" strokeWidth="58" strokeLinecap="round" strokeLinejoin="round" stroke="#FFFFFF">
+        <path d="M158 358 L256 300 L354 358" strokeOpacity="0.28" />
+        <path d="M158 212 L256 154 L354 212" strokeOpacity="0.5" />
+      </g>
+    </svg>
   )
 }

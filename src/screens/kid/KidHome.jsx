@@ -1,34 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
 import { levelFromXp, formatXp, xpToNext } from '../../lib/xp.js'
 import { nextEvolution } from '../../data/kidThemes.js'
-import { dayKey, lastSevenDays, formatDuration } from '../../lib/dates.js'
+import { isMarketOpen } from '../../data/marketSkins.js'
+import { dayKey, lastSevenDays } from '../../lib/dates.js'
 import Avatar, { avatarTier, nextTierLevel } from '../../components/Avatar.jsx'
 import QuestCard from '../../components/QuestCard.jsx'
-import { Screen, Card, Button, ProgressBar, Stat, SectionTitle, EmptyState, Banner, DemoTag, Chip } from '../../components/ui.jsx'
+import { Screen, Card, Button, ProgressBar, Stat, SectionTitle, EmptyState, Banner, Chip } from '../../components/ui.jsx'
 import SyncBadge from '../../components/SyncBadge.jsx'
 import { navigate } from '../../lib/router.js'
-
-/** Countdown to the end of Sunday — the weekend challenge window. */
-function useWeekendCountdown() {
-  // Re-render once a minute, otherwise the "ends in" figure freezes at whatever
-  // it was when the screen first opened.
-  const [, tick] = useState(0)
-  useEffect(() => {
-    const t = setInterval(() => tick((n) => n + 1), 60000)
-    return () => clearInterval(t)
-  }, [])
-
-  const end = useMemo(() => {
-    const now = new Date()
-    const d = new Date(now)
-    const daysToSunday = (7 - now.getDay()) % 7
-    d.setDate(now.getDate() + daysToSunday)
-    d.setHours(23, 59, 59, 999)
-    return d
-  }, [])
-  return formatDuration(Math.max(0, end - Date.now()))
-}
 
 export default function KidHome() {
   const { state, dispatch } = useApp()
@@ -36,7 +16,6 @@ export default function KidHome() {
   const theme = useKidTheme()
   const elite = useElite()
   const [levelPop, setLevelPop] = useState(false)
-  const countdown = useWeekendCountdown()
 
   if (!kid) return null
 
@@ -141,16 +120,26 @@ export default function KidHome() {
         </Card>
       )}
 
-      <Card className="mb-3 flex items-center gap-3" style={{ borderColor: 'var(--warn)' }}>
-        <span className="text-2xl" aria-hidden="true">🏁</span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm">Weekend Challenge</span>
-            <DemoTag>Sample event</DemoTag>
-          </div>
-          <div className="text-xs text-muted">Ends in {countdown}. Real timed events need a shared server.</div>
-        </div>
-      </Card>
+      {/*
+        Only while the market is actually open. A card counting down to it would
+        be the exact pressure the market is written to avoid putting on a child
+        — see the note at the top of data/marketSkins.js.
+      */}
+      {isMarketOpen() && (
+        <button
+          type="button"
+          onClick={() => navigate('/kid/market')}
+          className="card w-full mb-3 flex items-center gap-3 text-left transition-transform active:scale-[0.98]"
+          style={{ borderColor: 'var(--accent)' }}
+        >
+          <span className="text-2xl" aria-hidden="true">🛍️</span>
+          <span className="flex-1 min-w-0">
+            <span className="block font-semibold text-sm">The Sunday Market is open</span>
+            <span className="block text-xs text-muted">Skins you cannot get any other day.</span>
+          </span>
+          <span aria-hidden="true" className="text-muted">›</span>
+        </button>
+      )}
 
       <SectionTitle action={<button type="button" className="text-xs text-muted underline" onClick={() => navigate('/kid/quests')}>See all</button>}>
         Today's quests

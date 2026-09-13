@@ -5,6 +5,7 @@ import { levelFromXp } from '../lib/xp.js'
 import Avatar from '../components/Avatar.jsx'
 import { Card, Button, TextInput, Modal } from '../components/ui.jsx'
 import { navigate } from '../lib/router.js'
+import Logo from '../components/Logo.jsx'
 
 /**
  * Who is holding the phone?
@@ -44,7 +45,7 @@ export default function RoleSwitch() {
   return (
     <div className="shell px-4 py-8 min-h-screen flex flex-col justify-center">
       <div className="text-center mb-6">
-        <div className="text-4xl mb-2" aria-hidden="true">🏆</div>
+        <div className="flex justify-center mb-3"><Logo size={56} /></div>
         <h1 className="font-display text-2xl font-extrabold">Who's playing?</h1>
         <p className="text-sm text-muted">{state.family.name}</p>
       </div>

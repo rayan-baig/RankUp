@@ -3,6 +3,8 @@ import { useApp, useElite, pendingSubmissions } from '../../state/AppContext.jsx
 import { levelFromXp, formatXp } from '../../lib/xp.js'
 import { lastSevenDays, relativeTime } from '../../lib/dates.js'
 import { resolveKidTheme } from '../../data/kidThemes.js'
+import { findGame } from '../../data/minigames.js'
+import { MARKET_SKINS } from '../../data/marketSkins.js'
 import { activeLockout } from '../../state/reducer.js'
 import Avatar from '../../components/Avatar.jsx'
 import { Screen, Card, Button, SectionTitle, Stat, ProgressBar, EmptyState, Banner, Chip } from '../../components/ui.jsx'
@@ -189,6 +191,15 @@ function describeEvent(e, kid) {
     case 'kid_added': return `👶 ${who} was added`
     case 'alliance_joined': return '🏆 Joined a Parent Alliance'
     case 'streak_freeze': return `🧊 ${who} used a streak freeze`
-    default: return e.type
+    case 'family_created': return '🏠 Your family was created'
+    case 'device_paired': return `📱 ${who}'s phone was linked`
+    case 'device_linked': return `📱 ${who}'s phone joined the family`
+    case 'device_unlinked': return `📵 ${who}'s phone was unlinked`
+    case 'minigame_played': return `🎮 ${who} played ${findGame(e.meta?.game)?.name || 'a game'}`
+    case 'skin_bought':
+      return `✨ ${who} unlocked ${MARKET_SKINS.find((s) => s.id === e.meta?.skin)?.name || 'a skin'}`
+    // Never show the raw event key. It is a database word, and a parent reading
+    // "family_created" in their activity feed is reading a bug.
+    default: return '• Something happened'
   }
 }

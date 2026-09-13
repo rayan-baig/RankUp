@@ -5,6 +5,7 @@ import { KID_THEMES } from '../data/kidThemes.js'
 import { ADAPTIVE_SUPPORTS } from '../data/questTemplates.js'
 import { Button, Card, Field, TextInput, TextArea, Banner, ProgressBar } from '../components/ui.jsx'
 import ThemePicker from '../components/ThemePicker.jsx'
+import Logo, { SLOGAN, Wordmark } from '../components/Logo.jsx'
 import KidDeviceSetup from './kid/KidDeviceSetup.jsx'
 import SignIn from './SignIn.jsx'
 import ParentalConsent from './ParentalConsent.jsx'
@@ -99,10 +100,15 @@ export default function Onboarding() {
     return (
       <div className="shell px-5 py-8 min-h-screen flex flex-col justify-center">
         <div className="text-center mb-7 anim-slide-up">
-          <div className="text-5xl mb-3" aria-hidden="true">🏆</div>
-          <h1 className="font-display text-3xl font-extrabold leading-tight">RankUp</h1>
-          <p className="text-muted mt-2">
-            Chores become quests. Kids earn XP for finishing them — and you approve every one.
+          <div className="flex justify-center mb-4">
+            <Logo size={92} glow />
+          </div>
+          <h1 className="font-display text-4xl font-extrabold leading-tight tracking-tight">
+            Rank<span style={{ color: '#FFC93D' }}>Up</span>
+          </h1>
+          <p className="font-display font-bold mt-1" style={{ color: 'var(--accent)' }}>{SLOGAN}</p>
+          <p className="text-muted text-sm mt-3">
+            Your kid does the chore and photographs the proof. You approve it. They earn XP.
           </p>
         </div>
 
@@ -156,8 +162,8 @@ export default function Onboarding() {
 
       {step === 0 && (
         <div className="flex-1 flex flex-col justify-center text-center gap-4 anim-slide-up">
-          <div className="text-5xl" aria-hidden="true">🏆</div>
-          <h1 className="font-display text-3xl font-extrabold leading-tight">RankUp</h1>
+          <Wordmark size={58} />
+          <p className="font-display font-bold -mt-2" style={{ color: 'var(--accent)' }}>{SLOGAN}</p>
           <p className="text-muted">
             Chores become quests. Kids earn XP and a currency that matches the world they picked.
             You approve every completed quest before anything is awarded.
