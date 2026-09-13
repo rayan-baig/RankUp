@@ -164,7 +164,12 @@ await parent.bringToFront()
 await parent.evaluate(() => { window.location.hash = '/parent/approvals' })
 await parent.waitForTimeout(1000)
 await parent.evaluate(() => window.dispatchEvent(new Event('focus')))
-await parent.waitForTimeout(6000)
+// Marked only once the proof is actually on screen. Marking on arrival meant the
+// clip opened on "Nothing to review" under a caption promising the opposite.
+await parent.getByRole('button', { name: 'Approve' }).first()
+  .waitFor({ state: 'visible', timeout: 30000 })
+  .catch(() => console.log('  (no submission reached the parent)'))
+await parent.waitForTimeout(600)
 mark(parent, 'review.in')
 await parent.waitForTimeout(1800)
 await glide(parent, 260)
