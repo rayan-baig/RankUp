@@ -1,6 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 200" role="img" aria-label="RankUp">
-  <!-- Horizontal lockup: a header, a landing page, a store listing. The mark is
-       the icon at 176px; the clear space either side of it is half its width. -->
+  <!-- The same lockup for a dark background: the word goes white, the mark does not change. -->
   <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C5CFF"/><stop offset="0.55" stop-color="#4A22C9"/><stop offset="1" stop-color="#1B0B48"/></linearGradient><radialGradient id="gl" cx="0.32" cy="0.12" r="0.85"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.30"/><stop offset="0.6" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient></defs>
   <g transform="translate(4 12)">
     <rect width="176" height="176" rx="40" fill="url(#g)"/>
@@ -12,5 +11,5 @@
     </g>
   </g>
   <text x="216" y="134" font-family="Outfit, Inter, DejaVu Sans, Verdana, sans-serif"
-        font-size="104" font-weight="800" letter-spacing="-4" fill="#1B0B48">Rank<tspan fill="#7C5CFF">Up</tspan></text>
+        font-size="104" font-weight="800" letter-spacing="-4" fill="#FFFFFF">Rank<tspan fill="#FFC93D">Up</tspan></text>
 </svg>

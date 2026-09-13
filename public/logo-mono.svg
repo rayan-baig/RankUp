@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="RankUp">
+  <!-- One colour, no background: for a stamp, a favicon mask, or anywhere the
+       gradient cannot be reproduced. Recolour by setting `fill` on the <svg>. -->
+  <g fill="none" stroke="currentColor" stroke-width="50" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M158 358 L256 300 L354 358" stroke-opacity="0.55"/>
+    <path d="M158 212 L256 154 L354 212"/>
+  </g>
+</svg>

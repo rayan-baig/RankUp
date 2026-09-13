@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 380" role="img" aria-label="RankUp">
+  <!-- Vertical lockup for a hero or a splash screen, on a dark background. -->
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C5CFF"/><stop offset="0.55" stop-color="#4A22C9"/><stop offset="1" stop-color="#1B0B48"/></linearGradient><radialGradient id="gl" cx="0.32" cy="0.12" r="0.85"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.30"/><stop offset="0.6" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient></defs>
+  <g transform="translate(148 8)">
+    <rect width="184" height="184" rx="42" fill="url(#g)"/>
+    <rect width="184" height="184" rx="42" fill="url(#gl)"/>
+    <g transform="translate(92 92) scale(0.3594) translate(-256 -256)"
+       fill="none" stroke-width="50" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M158 358 L256 300 L354 358" stroke="#FFFFFF" stroke-opacity="0.92"/>
+      <path d="M158 212 L256 154 L354 212" stroke="#FFC93D"/>
+    </g>
+  </g>
+  <text x="240" y="290" text-anchor="middle" font-family="Outfit, Inter, DejaVu Sans, Verdana, sans-serif"
+        font-size="86" font-weight="800" letter-spacing="-3" fill="#FFFFFF">Rank<tspan fill="#FFC93D">Up</tspan></text>
+  <text x="240" y="340" text-anchor="middle" font-family="Inter, DejaVu Sans, Verdana, sans-serif"
+        font-size="27" font-weight="600" letter-spacing="4" fill="#B8AEE8">CHORES, BUT A GAME</text>
+</svg>

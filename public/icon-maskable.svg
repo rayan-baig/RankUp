@@ -1,15 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="RankUp">
   <!--
-    The maskable cut: same mark, drawn smaller and edge to edge. The platform
-    supplies the shape and crops to it, so this carries no corners of its own.
+    The maskable cut: same mark, edge to edge and drawn a little smaller. The
+    platform supplies the shape and crops to it, so this carries no corners of
+    its own and nothing important goes outside the safe circle.
   -->
-  <rect width="512" height="512" fill="#141a33"/>
-  <g transform="translate(256 256) scale(0.84) translate(-256 -256)">
-    <path d="M256 92 L396 146 V274 Q396 378 256 432 Q116 378 116 274 V146 Z"
-          fill="#1d2750" stroke="#4d8dff" stroke-width="18" stroke-linejoin="round"/>
-    <g fill="none" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M180 336 L256 282 L332 336" stroke="#4d8dff"/>
-      <path d="M180 258 L256 204 L332 258" stroke="#ffc23d"/>
-    </g>
+  <defs>
+    <linearGradient id="rum-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7C5CFF"/>
+      <stop offset="0.55" stop-color="#4A22C9"/>
+      <stop offset="1" stop-color="#1B0B48"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#rum-bg)"/>
+  <g transform="translate(256 256) scale(0.8) translate(-256 -256)"
+     fill="none" stroke-width="50" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M158 358 L256 300 L354 358" stroke="#FFFFFF" stroke-opacity="0.92"/>
+    <path d="M158 212 L256 154 L354 212" stroke="#FFC93D"/>
   </g>
 </svg>

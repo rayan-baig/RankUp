@@ -30,16 +30,26 @@ const CURSOR_KEY = 'rankup.sync.cursor.v1'
  *
  * So the interval breathes. It starts fast, because a parent approving a chore
  * should land on the child's phone quickly. Each poll that finds nothing slows
- * the next one down, up to a minute. Anything actually happening — a change
- * arriving, something queued to send, the tab coming back to the foreground —
- * snaps it straight back to fast.
+ * the next one down. Anything actually happening — a change arriving, something
+ * queued to send, the tab coming back to the foreground, or the person simply
+ * touching the screen — snaps it straight back to fast.
  *
  * A hidden tab does not poll at all. Nobody is looking, and onVisible already
  * syncs the moment they look again, so the only thing background polling buys
- * is somebody else's bandwidth bill and the child's battery.
+ * is somebody else's bandwidth bill and the child's battery. That is where
+ * nearly all of the saving comes from, because a phone in a pocket is the
+ * normal case.
+ *
+ * While somebody IS looking, the backoff is capped hard and deliberately low.
+ * The parent staring at the review screen waiting for their kid's photo to
+ * arrive is the whole product; making them wait a minute for it to appear
+ * would be saving pennies by breaking the thing the pennies pay for.
  */
 const PULL_MIN_MS = 8000
-const PULL_MAX_MS = 60000
+/** Longest a visible screen may go without checking. Bounds how stale it looks. */
+const PULL_VISIBLE_MAX_MS = 20000
+/** A hidden tab does no network at all; this is just how often it re-checks that. */
+const PULL_HIDDEN_MS = 60000
 const BACKOFF = 1.5
 
 function cursorKey() {
@@ -180,7 +190,7 @@ export function createSyncEngine({ dispatch, onStatus }) {
   let quietRounds = 0
 
   function nextDelay() {
-    return Math.min(PULL_MAX_MS, Math.round(PULL_MIN_MS * BACKOFF ** quietRounds))
+    return Math.min(PULL_VISIBLE_MAX_MS, Math.round(PULL_MIN_MS * BACKOFF ** quietRounds))
   }
 
   function schedule(delay = nextDelay()) {
@@ -197,10 +207,19 @@ export function createSyncEngine({ dispatch, onStatus }) {
     // waiting in the outbox still goes out, because the person who created it
     // may have pocketed the phone a second later.
     if (isHidden() && readOutbox().length === 0) {
-      schedule(PULL_MAX_MS)
+      schedule(PULL_HIDDEN_MS)
       return
     }
     const result = await sync({ silent: true })
+    // A round that never ran learned nothing, so it must not count as a quiet
+    // one. Getting this wrong swallowed wakes: a tap arriving while a slow sync
+    // was still in flight would come back "skipped", bump the backoff, and push
+    // the next check further away — exactly the opposite of what a tap means.
+    if (result?.skipped) {
+      schedule(result.skipped === 'in-flight' ? 1000 : PULL_MIN_MS)
+      return
+    }
+    lastSyncAt = Date.now()
     const moved = (result?.changed || 0) > 0 || readOutbox().length > 0
     quietRounds = moved ? 0 : Math.min(quietRounds + 1, 8)
     schedule()
@@ -212,7 +231,9 @@ export function createSyncEngine({ dispatch, onStatus }) {
     quietRounds = 0
     window.addEventListener('online', onOnline)
     document.addEventListener('visibilitychange', onVisible)
-    sync().finally(() => schedule())
+    window.addEventListener('pointerdown', onInteract, { capture: true, passive: true })
+    window.addEventListener('hashchange', onInteract)
+    sync().finally(() => { lastSyncAt = Date.now(); schedule() })
   }
 
   function stop() {
@@ -220,6 +241,8 @@ export function createSyncEngine({ dispatch, onStatus }) {
     clearTimeout(timer)
     window.removeEventListener('online', onOnline)
     document.removeEventListener('visibilitychange', onVisible)
+    window.removeEventListener('pointerdown', onInteract, { capture: true })
+    window.removeEventListener('hashchange', onInteract)
   }
 
   /** Back to the fast cadence, and go now. */
@@ -228,10 +251,14 @@ export function createSyncEngine({ dispatch, onStatus }) {
     schedule(0)
   }
 
-  // Coming back from a tunnel, or switching back to the tab, are the two moments
-  // a person most expects to see fresh data — and the two worth paying for.
+  // Coming back from a tunnel, switching back to the tab, or just touching the
+  // screen are the moments a person most expects to see fresh data — and the
+  // ones worth paying for. Touch is rate-limited to the fast interval so that
+  // scrolling a list does not turn into a request per tap.
+  let lastSyncAt = 0
   const onOnline = () => wake()
   const onVisible = () => { if (document.visibilityState === 'visible') wake() }
+  const onInteract = () => { if (Date.now() - lastSyncAt >= PULL_MIN_MS) wake() }
 
   return {
     start,

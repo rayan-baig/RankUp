@@ -1,18 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="RankUp">
   <!--
-    A guild shield carrying two rank chevrons, the upper one gold because it is
-    the rank just earned. Chevrons are what ranking up looks like — an arrow
-    means upload — and the shield is the object the game already trades in.
+    Two rank chevrons climbing, the upper one gold because it is the rank just
+    earned. Chevrons ARE ranking up — every game a kid has already played uses
+    them — and two of them read cleanly at 16px, which is the size a browser tab
+    actually draws this at. Three turned to mush, so there are two.
 
-    Two chevrons, not three: the third turned to mush at 16px, which is the size
-    a browser tab actually draws this at. Everything sits inside a circle of
-    radius 205 about the centre, the safe zone Android crops icons to.
+    Everything sits inside a circle of radius 205 about the centre: the safe
+    zone Android crops a maskable icon to, so the same drawing survives both
+    cuts without being redrawn.
   -->
-  <rect width="512" height="512" rx="114" fill="#141a33"/>
-  <path d="M256 92 L396 146 V274 Q396 378 256 432 Q116 378 116 274 V146 Z"
-        fill="#1d2750" stroke="#4d8dff" stroke-width="18" stroke-linejoin="round"/>
-  <g fill="none" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M180 336 L256 282 L332 336" stroke="#4d8dff"/>
-    <path d="M180 258 L256 204 L332 258" stroke="#ffc23d"/>
+  <defs>
+    <linearGradient id="ru-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7C5CFF"/>
+      <stop offset="0.55" stop-color="#4A22C9"/>
+      <stop offset="1" stop-color="#1B0B48"/>
+    </linearGradient>
+    <radialGradient id="ru-gloss" cx="0.32" cy="0.12" r="0.85">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.30"/>
+      <stop offset="0.6" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="114" fill="url(#ru-bg)"/>
+  <rect width="512" height="512" rx="114" fill="url(#ru-gloss)"/>
+  <g fill="none" stroke-width="50" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M158 358 L256 300 L354 358" stroke="#FFFFFF" stroke-opacity="0.92"/>
+    <path d="M158 212 L256 154 L354 212" stroke="#FFC93D"/>
   </g>
 </svg>
