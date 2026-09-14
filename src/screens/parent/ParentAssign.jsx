@@ -180,7 +180,7 @@ export default function ParentAssign({ initialKidId }) {
           </Field>
 
           <Field label="Why this matters (optional)" hint="Shown to your kid as a tooltip on the quest.">
-            <TextInput value={quest.why} onChange={(e) => set({ why: e.target.value })} placeholder="e.g. Starting the day with one finished thing makes the rest easier." />
+            <TextInput value={quest.why} onChange={(e) => set({ why: e.target.value })} placeholder="e.g. One finished thing makes the day easier" />
           </Field>
 
           <div className="card-flat p-3 mb-3">

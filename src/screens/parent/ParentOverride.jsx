@@ -176,7 +176,7 @@ export default function ParentOverride() {
 
             <div className="mt-3">
               <Field label="Reason" hint="Shown to your kid on the lockout screen. Required.">
-                <TextInput value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Submitted a photo of someone else's tidy room" />
+                <TextInput value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Sent someone else's tidy room" />
               </Field>
 
               <Field label="Real-world consequence (optional)" hint="The part that actually happens away from the app.">

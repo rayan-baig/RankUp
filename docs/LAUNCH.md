@@ -49,10 +49,30 @@ In the Supabase SQL editor, run these **in order**:
 - [ ] `supabase/notifications.sql`
 - [ ] `supabase/consent.sql`
 - [ ] `supabase/billing.sql`
+- [ ] `supabase/alliances.sql`
+- [ ] `supabase/reminders.sql`
+- [ ] `supabase/retention.sql`
 - [ ] Create a **private** Storage bucket called `proof-photos`.
-- [ ] Schedule `purge_stale_photos(14)` daily (Supabase → Database → Cron).
-      Reviewed photos are already destroyed the moment a parent decides; this
-      only sweeps up ones nobody ever got round to looking at.
+
+## 2b. Schedule the three jobs — none of them are optional
+
+Set `CRON_SECRET` to a long random string, then point a scheduler (a Cloudflare
+Cron Trigger, a `vercel.json` cron, anything) at each of these with
+`Authorization: Bearer <CRON_SECRET>`:
+
+| When | POST | What breaks without it |
+|---|---|---|
+| every 10–15 min | `/api/send-reminders` | reminder times are saved and never delivered |
+| daily | `/api/run-retention` | see below |
+| monthly | `/api/settle-alliances` | families see a leaderboard and never get the discount |
+
+**Retention is the one that costs money.** Four tables grow forever and are only
+ever read over a short recent window — undecided submissions keep their photo,
+the activity log keeps every row, spent pairing codes never leave. Undecided
+photos alone are roughly **1.1 GB per 100 families per year**, against a 0.5 GB
+free-tier database; at 1,000 families it is about 12 GB a year. It is also the
+job that stops you holding photographs of the inside of children's homes for
+longer than you need them, which matters more than the bill.
 
 ## 3. Generate the keys
 

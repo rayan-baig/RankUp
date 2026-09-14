@@ -146,7 +146,7 @@ export default function ParentApprovals() {
         <TextInput
           value={rejectNote}
           onChange={(e) => setRejectNote(e.target.value)}
-          placeholder="e.g. The duvet is still bunched up at the end"
+          placeholder="e.g. The duvet is still bunched up"
           autoFocus
         />
       </Modal>
