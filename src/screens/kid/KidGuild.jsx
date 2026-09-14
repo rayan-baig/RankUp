@@ -82,7 +82,7 @@ export default function KidGuild() {
         <h1 className="font-display text-2xl font-extrabold mb-3">Guild</h1>
         <Banner tone="warn" icon="🔌" title="Guilds need the sync service">
           A guild connects you to kids in other families, so it cannot work on one device alone.
-          Ask a grown-up to set up the backend — see docs/SYNC.md.
+          Ask a grown-up to connect this phone.
         </Banner>
       </Screen>
     )

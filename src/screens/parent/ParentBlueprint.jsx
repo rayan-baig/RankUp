@@ -94,6 +94,7 @@ export default function ParentBlueprint({ initialKidId }) {
   if (!elite) {
     return (
       <EliteGate
+        perk="blueprint"
         icon="📊"
         title="Advanced AI Behaviour Blueprints"
         body="Weekly chart breakdowns tracking your child's focus patterns and chore-completion history, built from what actually happened in the app."
@@ -115,7 +116,7 @@ export default function ParentBlueprint({ initialKidId }) {
   return (
     <Screen>
       <header className="mb-3">
-        <p className="text-xs uppercase tracking-widest text-muted">Elite · Critique AI</p>
+        <p className="text-xs uppercase tracking-widest text-muted">Elite · Behaviour Blueprints</p>
         <h1 className="font-display text-2xl font-extrabold">Behaviour Blueprint</h1>
         <p className="text-sm text-muted">Last 7 days</p>
       </header>

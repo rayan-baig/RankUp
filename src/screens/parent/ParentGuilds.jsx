@@ -49,8 +49,8 @@ export default function ParentGuilds() {
       <Screen>
         <h1 className="font-display text-2xl font-extrabold mb-3">Guilds</h1>
         <Banner tone="warn" icon="🔌" title="Guilds need the sync service">
-          A guild spans families, so it cannot work on one device. Connect a backend first —
-          see docs/SYNC.md.
+          A guild spans families, so it cannot work on one device. Connect the sync service
+          first.
         </Banner>
         <Button variant="ghost" className="w-full mt-3" onClick={() => navigate('/parent/settings')}>
           Back to settings

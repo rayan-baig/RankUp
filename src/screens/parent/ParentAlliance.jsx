@@ -54,6 +54,7 @@ export default function ParentAlliance() {
   if (!elite) {
     return (
       <EliteGate
+        perk="alliance"
         icon="🏆"
         title="The 20% Discount Tournament"
         body="Form a ten-family Parent Alliance and compete on a monthly leaderboard. The family with the most approved quests wins 20% off the following month — earned, not bought."

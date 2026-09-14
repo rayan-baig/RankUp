@@ -53,6 +53,7 @@ export default function ParentOverride() {
   if (!elite) {
     return (
       <EliteGate
+        perk="override"
         icon="🛡️"
         title="The Parental Consequence Engine"
         body="Unlocks the System Override Protocol panel: write custom real-world consequences and trigger three lockout tiers — Currency Tax, Dimension Lockout and Red Security Lockdown."

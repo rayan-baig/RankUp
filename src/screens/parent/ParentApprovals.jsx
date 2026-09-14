@@ -205,8 +205,8 @@ function AiReport({ report, adaptive }) {
 
       {!report.cloudConfigured && (
         <p className="text-[11px] text-muted mt-2">
-          Only the on-device checks ran. Add an ANTHROPIC_API_KEY on the server to also have Claude
-          look at whether the photo matches the chore — see docs/AI-CHECK.md.
+          Only the on-device checks ran. The AI opinion on whether the photo matches the chore
+          is switched off for this family.
         </p>
       )}
       {report.cloudError && (

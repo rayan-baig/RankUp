@@ -82,9 +82,8 @@ export default function ParentPlan() {
           )}
         </>
       ) : (
-        <Banner tone="warn" icon="💳" title="Payments are not switched on here">
-          Switching plans flips feature flags so you can try both. No card is taken and nothing is
-          charged. See docs/PAYMENTS.md to connect Stripe.
+        <Banner tone="info" icon="💳" title="Payments are switched off">
+          Switch between the plans and try any of them. No card is asked for and nothing is charged.
         </Banner>
       )}
 

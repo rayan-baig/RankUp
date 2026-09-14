@@ -177,16 +177,17 @@ export default function Onboarding() {
               <li>You approve or send it back. Approving awards XP and currency.</li>
             </ol>
           </Card>
-          <Banner tone="warn" icon="⚠️" title="Before you invite real users">
-            Data currently lives only on this device and there are no real payments. Read
-            docs/LEGAL.md — a kids' app needs verified parental consent (COPPA) before you
-            collect a real child's data.
-          </Banner>
+          {!transport.isConfigured() && (
+            <Banner tone="info" icon="📱" title="This device only">
+              No account is connected, so everything stays in this browser and nothing is
+              charged. Connect the sync service to use RankUp on two phones.
+            </Banner>
+          )}
         </div>
       )}
 
       {step === 1 && (
-        <div className="flex-1 anim-slide-up">
+        <div className="anim-slide-up">
           <h1 className="font-display text-2xl font-extrabold mb-1">Your family</h1>
           <p className="text-muted text-sm mb-4">You are the parent account. Kids get their own profiles inside it.</p>
           <Field label="Your name">
@@ -207,7 +208,7 @@ export default function Onboarding() {
       )}
 
       {step === 2 && (
-        <div className="flex-1 anim-slide-up">
+        <div className="anim-slide-up">
           <h1 className="font-display text-2xl font-extrabold mb-1">Add your first kid</h1>
           <p className="text-muted text-sm mb-4">You can add more later — there is no limit.</p>
           <Field label="Kid's name">
@@ -261,7 +262,7 @@ export default function Onboarding() {
       )}
 
       {step === 3 && (
-        <div className="flex-1 anim-slide-up">
+        <div className="anim-slide-up">
           <h1 className="font-display text-2xl font-extrabold mb-1">{kid.name || 'Your kid'} picks a world</h1>
           <p className="text-muted text-sm mb-4">
             The theme changes the background, the avatar and what the currency is called. Once chosen it is
@@ -271,7 +272,21 @@ export default function Onboarding() {
         </div>
       )}
 
-      <div className="flex gap-2 mt-6 sticky bottom-3">
+      {/*
+        The bar sticks once a step is long enough to scroll, so it needs a
+        ground of its own: without one the theme cards scrolled underneath it
+        and showed through the gap between the two buttons.
+      */}
+      <div
+        className="flex gap-2 mt-6 sticky bottom-0 py-3"
+        style={{
+          background: 'linear-gradient(to top, var(--bg) 62%, transparent)',
+          marginLeft: '-1rem',
+          marginRight: '-1rem',
+          paddingLeft: '1rem',
+          paddingRight: '1rem',
+        }}
+      >
         <Button variant="ghost" onClick={() => (step === 0 ? setMode(null) : setStep((s) => s - 1))}>
           Back
         </Button>

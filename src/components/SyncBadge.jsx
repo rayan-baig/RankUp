@@ -17,7 +17,7 @@ export default function SyncBadge({ className = '' }) {
       <span
         className={`inline-flex items-center gap-1.5 text-[11px] ${className}`}
         style={{ color: 'var(--ink-muted)' }}
-        title="No sync service is configured, so this device keeps its own data. See docs/SYNC.md"
+        title="No sync service is configured, so this device keeps its own data."
       >
         <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--ink-muted)' }} aria-hidden="true" />
         This device only

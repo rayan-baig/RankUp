@@ -90,16 +90,16 @@ export const PLAN_COMPARISON = [
 ]
 
 export const ELITE_KID_PERKS = [
-  { icon: '✨', title: 'Overdrive', body: 'A slow aurora behind every screen in your own theme\u2019s colours, light coming off the buttons, a highlight running along the XP bar, a turning ring around your avatar, and a proper burst when you level up.' },
-  { icon: '👥', title: '10-Player Megacluster Guilds', body: 'Doubles the standard clan from 5 slots to 10, so a squad leader can invite more real-world classmates.' },
-  { icon: '⚡', title: 'Permanent 1.5× XP Boost', body: 'A constant multiplier on every daily checklist and habit, so Elite kids level faster than Standard kids.' },
-  { icon: '🔮', title: 'Exclusive Profile Customisation', body: 'Unlocks animated profile card frames and rare item drop selectors Standard users cannot access.' },
+  { id: 'overdrive', icon: '✨', title: 'Overdrive', body: 'A slow aurora behind every screen in your own theme\u2019s colours, light coming off the buttons, a highlight running along the XP bar, a turning ring around your avatar, and a proper burst when you level up.' },
+  { id: 'guilds', icon: '👥', title: '10-Player Megacluster Guilds', body: 'Doubles the standard clan from 5 slots to 10, so a squad leader can invite more real-world classmates.' },
+  { id: 'xp', icon: '⚡', title: 'Permanent 1.5× XP Boost', body: 'A constant multiplier on every daily checklist and habit, so Elite kids level faster than Standard kids.' },
+  { id: 'frames', icon: '🔮', title: 'Exclusive Profile Customisation', body: 'Unlocks animated profile card frames and rare item drop selectors Standard users cannot access.' },
 ]
 
 export const ELITE_PARENT_PERKS = [
-  { icon: '🛡️', title: 'The Parental Consequence Engine', body: 'Unlocks the System Override Protocol: custom real-world consequences plus Currency Tax, Dimension Lockout and Red Security Lockdown.' },
-  { icon: '📊', title: 'Advanced AI Behaviour Blueprints', body: 'Weekly chart breakdowns of focus patterns and chore-completion history, built by the Critique AI.' },
-  { icon: '🏆', title: 'The 20% Discount Tournament', body: 'Form 10-player Parent Alliances and compete on a local leaderboard for an unpurchasable 20% group billing discount each month.' },
+  { id: 'override', icon: '🛡️', title: 'The Parental Consequence Engine', body: 'Unlocks the System Override Protocol: custom real-world consequences plus Currency Tax, Dimension Lockout and Red Security Lockdown.' },
+  { id: 'blueprint', icon: '📊', title: 'Advanced AI Behaviour Blueprints', body: 'Weekly chart breakdowns of focus patterns and chore-completion history, built from what actually happened in the app.' },
+  { id: 'alliance', icon: '🏆', title: 'The 20% Discount Tournament', body: 'Join a ten-family alliance and compete each month on quests approved. The winning family gets 20% off their next bill — earned, not bought.' },
 ]
 
 /** Profile card frames — Elite only. */

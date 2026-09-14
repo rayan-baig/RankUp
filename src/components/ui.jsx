@@ -212,7 +212,7 @@ export function EmptyState({ icon = '✨', title, body, action }) {
   )
 }
 
-export function Banner({ tone = 'info', icon, title, children, action }) {
+export function Banner({ tone = 'info', icon, title, children, action, className = '' }) {
   const colors = {
     info: 'var(--accent)',
     good: 'var(--good)',
@@ -221,7 +221,7 @@ export function Banner({ tone = 'info', icon, title, children, action }) {
   }
   const color = colors[tone] || colors.info
   return (
-    <div className="card-flat p-3 flex gap-3 items-start" style={{ borderColor: color }}>
+    <div className={`card-flat p-3 flex gap-3 items-start ${className}`} style={{ borderColor: color }}>
       {icon && <span className="text-lg leading-none mt-0.5" aria-hidden="true">{icon}</span>}
       <div className="min-w-0 flex-1">
         {title && <div className="font-semibold text-sm" style={{ color }}>{title}</div>}
@@ -242,7 +242,7 @@ export function DemoTag({ children = 'Sample data', className = '' }) {
     <span
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${className}`}
       style={{ background: 'var(--surface-2)', color: 'var(--warn)', border: '1px dashed var(--warn)' }}
-      title="Not real data — this needs a shared server to work for real. See docs/BACKEND.md"
+      title="Sample data, not a real result"
     >
       {children}
     </span>

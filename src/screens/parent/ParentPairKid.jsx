@@ -115,7 +115,7 @@ export default function ParentPairKid() {
           <Banner tone="warn" icon="⚠️" title="Testing on one computer?">
             Real device-to-device pairing needs the backend. For now, open{' '}
             <code className="font-mono text-xs">?device=kid</code> in another tab — that tab gets its
-            own separate storage and can act as the kid's phone. See docs/SYNC.md.
+            own separate storage and can act as the kid's phone.
           </Banner>
         </div>
       )}

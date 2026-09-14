@@ -89,8 +89,8 @@ export default function NotificationSettings() {
             </Banner>
           ) : (
             <Banner tone="info" icon="🔔" title="On while RankUp is open">
-              Background delivery needs push keys on the server. Until then you will only see
-              these while the app is running — see docs/NOTIFICATIONS.md.
+              Background delivery is not switched on yet, so you will only see these while the
+              app is open.
             </Banner>
           )}
 

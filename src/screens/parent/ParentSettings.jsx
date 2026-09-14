@@ -241,7 +241,6 @@ export default function ParentSettings() {
             <Banner tone="warn" icon="⚠️" title="Pairing works, syncing does not">
               The pairing flow above is real, but there is no server behind it yet, so it only
               connects two tabs of this browser. Quests and XP still live on this device alone.
-              See docs/SYNC.md.
             </Banner>
           )}
         </div>
@@ -464,7 +463,7 @@ function ReminderList({ reminders, dispatch }) {
       ) : (
         <Banner tone="info" icon="⏰" title="Fires while RankUp is open">
           These check the time once a minute and notify this device. To get them with the app
-          closed, connect the sync service — see docs/NOTIFICATIONS.md.
+          closed, connect the sync service.
         </Banner>
       )}
       <div className="mt-2">

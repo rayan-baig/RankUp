@@ -174,8 +174,8 @@ export default function KidPairing({ name, themeId, onCancel }) {
 
       {!canSyncAcrossDevices && (
         <Banner tone="warn" icon="⚠️" title="Not connected to a real server yet">
-          Pairing currently works only between two tabs of this same browser. Linking a real phone
-          to a real phone needs the backend — see docs/SYNC.md.
+          Pairing currently works only between two tabs of this same browser. Linking one real
+          phone to another needs the sync service.
         </Banner>
       )}
 
