@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CONSENT_NOTICE, CONSENT_VERSION } from '../data/legalText.js'
 import { transport } from '../lib/sync/transport.js'
 import { Button, Card, Field, TextInput, Banner, SectionTitle } from '../components/ui.jsx'
+import { humanError } from '../lib/errors.js'
 
 /**
  * Verifiable parental consent.
@@ -50,7 +51,7 @@ export default function ParentalConsent({ onDone, onBack }) {
       }
       onDone({ version: CONSENT_VERSION, signedName: signature.trim() })
     } catch (err) {
-      setError(err.message || 'That did not save. Please try again.')
+      setError(humanError(err, 'That did not save. Please try again.'))
       setBusy(false)
     }
   }

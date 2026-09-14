@@ -88,5 +88,9 @@ export function nextOpeningLabel(now = new Date()) {
   if (isSundayBefore) return 'Opens tonight at 8pm'
   const daysUntilSunday = (7 - now.getDay()) % 7 || 7
   if (daysUntilSunday === 1) return 'Opens tomorrow at 8pm'
-  return `Opens Sunday at 8pm · ${daysUntilSunday} days`
+  // No "· 5 days" tail. The rule at the top of this file is that a child is
+  // never shown a countdown to the market, and a number ticking down to a shop
+  // full of things they cannot buy yet is the countdown, whether or not it has
+  // a clock on it. "Opens Sunday at 8pm" already says when.
+  return 'Opens Sunday at 8pm'
 }

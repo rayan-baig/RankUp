@@ -163,7 +163,14 @@ export function Stat({ icon, value, label, tone }) {
           {value}
         </span>
       </div>
-      <div className="text-[11px] uppercase tracking-wider text-muted mt-1 truncate">{label}</div>
+      {/*
+        Wraps rather than truncates. Three of these in a row is the normal
+        layout, and at that width "Quests approved" was being clipped to
+        "QUESTS APP…" — a label nobody can read is not a label. The row stretches
+        to the tallest card, so a two-line label does not knock the others out of
+        alignment.
+      */}
+      <div className="text-[11px] uppercase tracking-wider text-muted mt-1 leading-tight">{label}</div>
     </div>
   )
 }

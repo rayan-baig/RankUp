@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toCanvas, canvasToJpeg } from '../lib/imaging.js'
 import { Button, Banner } from './ui.jsx'
+import { cameraError } from '../lib/errors.js'
 
 /**
  * The in-app camera.
@@ -53,14 +54,15 @@ export default function CameraCapture({ onCapture, onCancel }) {
     } catch (err) {
       if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
         setStatus('denied')
-        setError('Camera access was blocked. Allow the camera for this site in your browser settings, then try again.')
       } else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') {
         setStatus('unsupported')
-        setError('No camera was found on this device.')
       } else {
         setStatus('error')
-        setError(err.message || 'The camera could not be started.')
       }
+      // One place decides the wording, by the error's name rather than its
+      // message — "you blocked the camera" and "this device has no camera" need
+      // different things from the person reading it.
+      setError(cameraError(err))
     }
   }, [stop])
 

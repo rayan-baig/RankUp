@@ -4,6 +4,7 @@ import { transport } from '../lib/sync/transport.js'
 import { clearState } from '../lib/storage.js'
 import { Card, Button, Banner, SectionTitle, Modal, TextInput, Field } from './ui.jsx'
 import { navigate } from '../lib/router.js'
+import { humanError } from '../lib/errors.js'
 
 /**
  * The rights a parent actually has, as buttons rather than as paragraphs.
@@ -28,7 +29,7 @@ export default function DataRights() {
       try {
         payload = await transport.rpc('export_family_data', {})
       } catch (err) {
-        setNote(`Could not reach the server: ${err.message}`)
+        setNote(humanError(err, 'Could not reach the server. Try again in a moment.'))
         setBusy(false)
         return
       }

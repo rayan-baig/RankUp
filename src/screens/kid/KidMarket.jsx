@@ -95,7 +95,16 @@ Rarer skins cost more tickets — one for a common, three for the legendary.
                     disabled={!open || !affordable}
                     onClick={() => dispatch({ type: 'BUY_SKIN', kidId: kid.id, skinId: skin.id })}
                   >
-                    {affordable ? `Buy for ${skin.cost}` : 'Not enough yet'}
+                    {/*
+                      Six identical "Not enough yet" buttons tell a child
+                      nothing they did not already know. The shortfall does: it
+                      is the number of chores between them and the thing, which
+                      is the only honest way this shop should create any pull at
+                      all.
+                    */}
+                    {affordable
+                      ? `Buy for ${skin.cost}`
+                      : `${skin.cost - kid.coins} more ${theme.currency.name}`}
                   </Button>
                   {tickets > 0 && (
                     <Button

@@ -10,6 +10,7 @@ import { uid } from '../../lib/id.js'
 import CameraCapture from '../../components/CameraCapture.jsx'
 import { Screen, Card, Button, Banner, Chip, TextInput, Field, SectionTitle } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
+import { humanError } from '../../lib/errors.js'
 
 export default function QuestDetail({ questId }) {
   const { state, dispatch } = useApp()
@@ -87,7 +88,7 @@ export default function QuestDetail({ questId }) {
       })
       setReport(result)
     } catch (err) {
-      setError(err.message || 'The photo check could not run. You can still submit.')
+      setError(humanError(err, 'The photo check could not run. You can still submit.'))
       setReport(null)
     }
     setMode('review')

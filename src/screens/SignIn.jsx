@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { transport } from '../lib/sync/transport.js'
 import { Button, Card, Field, TextInput, Banner } from '../components/ui.jsx'
+import { humanError } from '../lib/errors.js'
 
 /**
  * The parent account.
@@ -34,7 +35,7 @@ export default function SignIn({ onDone, onBack }) {
       }
       onDone(session)
     } catch (err) {
-      setError(err.message || 'That did not work. Please try again.')
+      setError(humanError(err, 'That did not work. Please try again.'))
       setBusy(false)
     }
   }
