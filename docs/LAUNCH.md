@@ -56,11 +56,19 @@ In the Supabase SQL editor, run these **in order**:
 
 ## 2b. Schedule the three jobs — none of them are optional
 
-Set `CRON_SECRET` to a long random string, then point a scheduler (a Cloudflare
-Cron Trigger, a `vercel.json` cron, anything) at each of these with
-`Authorization: Bearer <CRON_SECRET>`:
+Set `CRON_SECRET` to a long random string. Each job is one HTTP request with
+`Authorization: Bearer <CRON_SECRET>`; they accept GET or POST, because
+schedulers differ on which they send.
 
-| When | POST | What breaks without it |
+**On Vercel** the schedule ships in `vercel.json` and Vercel sends the header
+itself once `CRON_SECRET` is set in the project — there is nothing else to do.
+
+**On Cloudflare Pages there is no scheduler.** Pages Functions have no
+`scheduled` handler, so these will never fire on their own. Either deploy a
+small Worker with a Cron Trigger that `fetch`es the three URLs with the header,
+or point any external scheduler at them. Do not assume Pages will run them.
+
+| When | Request | What breaks without it |
 |---|---|---|
 | every 10–15 min | `/api/send-reminders` | reminder times are saved and never delivered |
 | daily | `/api/run-retention` | see below |

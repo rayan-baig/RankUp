@@ -178,13 +178,17 @@ begin
    where m.family_id = v_family;
   if not found then return jsonb_build_object('ok', true, 'alliance', null); end if;
 
-  select jsonb_agg(r order by r->>'score' desc) into v_rows
+  -- Ordered on the number, not on the rendered object. `order by r->>'score'`
+  -- sorts the score as TEXT, which puts 9 above 10 — so the family actually
+  -- winning was shown at the bottom of their own leaderboard while
+  -- settle_alliances, which orders numerically, paid them anyway. Name is the
+  -- tiebreak so equal scores come back in a stable order.
+  select jsonb_agg(
+           jsonb_build_object('name', s.name, 'score', s.score, 'you', s.you)
+           order by s.score desc, s.name
+         ) into v_rows
     from (
-      select jsonb_build_object(
-               'name', f.name,
-               'score', alliance_score(f.id, v_month),
-               'you', f.id = v_family
-             ) as r
+      select f.name, alliance_score(f.id, v_month) as score, (f.id = v_family) as you
         from alliance_members m
         join families f on f.id = m.family_id
        where m.alliance_id = v_all.id

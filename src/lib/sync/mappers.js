@@ -148,6 +148,10 @@ export const submissions = {
     kidId: row.kid_id,
     photoId: existing.photoId || null,
     photoData: row.photo_data || null,
+    // When the photo was destroyed, and why it is gone. Without this the review
+    // screen cannot tell a purged photo from a quest that never wanted one, and
+    // tells the parent their child submitted no proof.
+    photoDeletedAt: ms(row.photo_deleted_at),
     photoUnavailable: existing.photoUnavailable ?? false,
     hash: row.photo_hash || null,
     captureSource: row.capture_source || 'none',

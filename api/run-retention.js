@@ -26,10 +26,23 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL |
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const CRON_SECRET = process.env.CRON_SECRET || ''
 
-/** Days to keep. Generous by default: the job exists to bound growth, not to be clever. */
-const PHOTO_DAYS = Number(process.env.RETENTION_PHOTO_DAYS || 14)
-const EVENT_DAYS = Number(process.env.RETENTION_EVENT_DAYS || 90)
-const PAIRING_DAYS = Number(process.env.RETENTION_PAIRING_DAYS || 2)
+/**
+ * Days to keep. Generous by default: the job exists to bound growth, not to be
+ * clever about how little can be kept.
+ *
+ * Validated rather than coerced, because Number('90d') is NaN, NaN serialises
+ * to JSON null, and the SQL floors then take over: greatest(1, null) is 1, so a
+ * single typo in an environment variable would quietly cut photo retention from
+ * fourteen days to one and start deleting proof a parent had not looked at yet.
+ */
+function days(value, fallback) {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback
+}
+
+const PHOTO_DAYS = days(process.env.RETENTION_PHOTO_DAYS, 14)
+const EVENT_DAYS = days(process.env.RETENTION_EVENT_DAYS, 90)
+const PAIRING_DAYS = days(process.env.RETENTION_PAIRING_DAYS, 2)
 
 async function serviceRpc(fn, args) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
@@ -56,7 +69,12 @@ function secretMatches(given) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' })
+  // GET as well as POST: Vercel's scheduler issues GET, and a POST-only handler
+  // would 405 on every run while still looking scheduled. The shared secret,
+  // not the verb, is what protects this.
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    return res.status(405).json({ error: 'Use POST or GET.' })
+  }
   if (!SUPABASE_URL || !SERVICE_KEY || !CRON_SECRET) {
     return res.status(503).json({ error: 'not_configured' })
   }

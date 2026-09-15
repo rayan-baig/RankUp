@@ -116,6 +116,34 @@ begin
     (select bool_and(key in ('name','score','you')) from jsonb_object_keys(v_rows->0) key));
 end $$;
 
+-- ---------- the leaderboard is ordered by the number, not the text ----------
+-- Ten approvals for Ben, so his 10 must outrank Ana's 3. Sorted as text,
+-- "3" > "10" and the leader lands at the bottom of their own leaderboard.
+reset role;
+insert into submissions (family_id, quest_id, kid_id, status, decided_at)
+select '1a222222-0000-0000-0000-000000000002', '1a555555-0000-0000-0000-000000000002',
+       '1a444444-0000-0000-0000-000000000002', 'approved',
+       date_trunc('month', now()) + interval '6 days'
+from generate_series(1, 9);
+
+set role app_user;
+do $$
+declare v_rows jsonb;
+begin
+  perform become('1a111111-0000-0000-0000-000000000002');
+  v_rows := alliance_standings()->'standings';
+  perform ok('ten approvals outrank three (not sorted as text)',
+    (v_rows->0->>'score')::int = 10 and (v_rows->0->>'name') = 'The Bravos');
+  perform ok('and the smaller score is second', (v_rows->1->>'score')::int = 3);
+end $$;
+
+-- Put it back, so the settlement block below still sees Ana winning.
+reset role;
+delete from submissions
+ where family_id = '1a222222-0000-0000-0000-000000000002'
+   and decided_at = date_trunc('month', now()) + interval '6 days';
+set role app_user;
+
 -- ---------- a family cannot inflate its own score ----------
 do $$
 begin

@@ -65,9 +65,11 @@ begin
     returning 1
   ) select count(*) into v_codes from gone;
 
+  -- Uses the parameter like everything else here. It was hardcoded to a day,
+  -- which meant RETENTION_PAIRING_DAYS was a knob that did nothing.
   with gone as (
     delete from pairing_claim_attempts
-     where tried_at < now() - interval '1 day'
+     where tried_at < now() - make_interval(days => greatest(1, p_pairing_days))
     returning 1
   ) select count(*) into v_tries from gone;
 

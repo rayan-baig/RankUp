@@ -73,6 +73,12 @@ export default function ParentApprovals() {
                 That is a fault in the app, not a sign of anything — ask them to show you, or send
                 the quest back for a fresh photo.
               </Banner>
+            ) : sub.photoDeletedAt ? (
+              <Banner tone="warn" icon="🗑️" title="The photo has been deleted">
+                {kid.name} did send a photo. RankUp deletes proof automatically after a while, and
+                this one has been sitting here long enough to go. Send the quest back if you want a
+                fresh one — this is not a sign they skipped it.
+              </Banner>
             ) : (
               <Banner tone="info" icon="📝" title="No photo required">
                 This quest was marked done without photo proof.

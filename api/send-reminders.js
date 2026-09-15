@@ -58,7 +58,12 @@ function secretMatches(given) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' })
+  // GET as well as POST: Vercel's scheduler issues GET, and a POST-only handler
+  // would 405 on every run while still looking scheduled. The shared secret,
+  // not the verb, is what protects this.
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    return res.status(405).json({ error: 'Use POST or GET.' })
+  }
   if (!SUPABASE_URL || !SERVICE_KEY || !VAPID_PUBLIC || !VAPID_PRIVATE || !CRON_SECRET) {
     return res.status(503).json({ error: 'not_configured' })
   }

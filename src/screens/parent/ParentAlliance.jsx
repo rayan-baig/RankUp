@@ -156,19 +156,46 @@ export default function ParentAlliance() {
       {loading && <Card className="mb-3"><p className="text-sm text-muted">Loading the standings…</p></Card>}
       {error && <Banner tone="warn" icon="⚠️" title="Not right now">{error}</Banner>}
 
+      {/*
+        Three different situations, and only one of them is a race.
+        Alone in the alliance there is nobody to race; with every score still
+        zero there is nothing to hold on to — and settle_alliances awards a
+        month with no approved quests to nobody, so telling a parent at 0 that
+        they are "leading, hold it to win" promises a prize that will not come.
+      */}
       {me && leader && (
         <Card className="mb-3">
-          <div className="flex justify-between text-sm mb-2">
-            <span className="font-semibold">Race to first place</span>
-            <span className="text-muted">{me.score} / {leader.score || 1} approved quests</span>
-          </div>
-          <ProgressBar value={me.score} max={Math.max(1, leader.score)} height={12}
-                       label="Tournament progress" />
-          <p className="text-xs text-muted mt-2">
-            {myIndex === 0
-              ? `You are leading. Hold it to the end of ${monthName} to win.`
-              : `${leader.score - me.score} more approved quests would take the lead.`}
-          </p>
+          {standings.length === 1 ? (
+            <>
+              <p className="font-semibold text-sm mb-1">Nobody to race yet</p>
+              <p className="text-xs text-muted">
+                Yours is the only family here. Send the code below to another parent and the
+                tournament starts.
+              </p>
+            </>
+          ) : leader.score === 0 ? (
+            <>
+              <p className="font-semibold text-sm mb-1">No quests approved yet this month</p>
+              <p className="text-xs text-muted">
+                First approval takes the lead. A month where nobody finishes anything has no
+                winner at all.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="flex justify-between text-sm mb-2">
+                <span className="font-semibold">Race to first place</span>
+                <span className="text-muted">{me.score} / {leader.score} approved quests</span>
+              </div>
+              <ProgressBar value={me.score} max={leader.score} height={12}
+                           label="Tournament progress" />
+              <p className="text-xs text-muted mt-2">
+                {myIndex === 0
+                  ? `You are leading. Hold it to the end of ${monthName} to win.`
+                  : `${leader.score - me.score} more approved quests would take the lead.`}
+              </p>
+            </>
+          )}
         </Card>
       )}
 
