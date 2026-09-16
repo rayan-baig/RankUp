@@ -52,6 +52,7 @@ In the Supabase SQL editor, run these **in order**:
 - [ ] `supabase/alliances.sql`
 - [ ] `supabase/reminders.sql`
 - [ ] `supabase/retention.sql`
+- [ ] `supabase/crashes.sql`
 - [ ] Create a **private** Storage bucket called `proof-photos`.
 
 ## 2b. Schedule the three jobs — none of them are optional

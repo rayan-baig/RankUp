@@ -48,6 +48,7 @@ declare
   v_events  int;
   v_codes   int;
   v_tries   int;
+  v_crashes int;
 begin
   v_photos := purge_stale_photos(p_photo_days);
 
@@ -73,8 +74,17 @@ begin
     returning 1
   ) select count(*) into v_tries from gone;
 
+  -- crash_reports only exists once crashes.sql has been applied; retention
+  -- must not fail on a deployment that has not.
+  if to_regclass('public.crash_reports') is not null then
+    execute format(
+      'with gone as (delete from crash_reports where created_at < now() - make_interval(days => %s) returning 1) select count(*) from gone',
+      greatest(7, p_event_days)) into v_crashes;
+  end if;
+
   return jsonb_build_object(
     'ok', true,
+    'crashes_deleted', coalesce(v_crashes, 0),
     'photos_cleared', v_photos,
     'events_deleted', v_events,
     'pairing_codes_deleted', v_codes,

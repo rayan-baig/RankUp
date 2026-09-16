@@ -3,13 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "RankUp — chores turned into a game. Mobile-first React web app.",
+  "description": "RankUp \u2014 chores turned into a game. Mobile-first React web app.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext .js,.jsx",
-    "test:smoke": "node tests/integrity.mjs && node tests/flows.mjs && node tests/pairing.mjs && node tests/notifications.mjs && node tests/plans.mjs && node tests/arcade.mjs",
+    "test:smoke": "node tests/integrity.mjs && node tests/flows.mjs && node tests/pairing.mjs && node tests/notifications.mjs && node tests/plans.mjs && node tests/arcade.mjs && node tests/crash.mjs",
     "test:sync": "node tests/sync.mjs && node tests/guilds.mjs && node tests/consent.mjs",
     "test:db": "./supabase/test/run.sh"
   },

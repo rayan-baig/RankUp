@@ -37,6 +37,7 @@ import ParentGuilds from './screens/parent/ParentGuilds.jsx'
 import ParentPairKid from './screens/parent/ParentPairKid.jsx'
 import ParentPlan from './screens/parent/ParentPlan.jsx'
 import ParentSettings from './screens/parent/ParentSettings.jsx'
+import ScreenBoundary from './components/ScreenBoundary.jsx'
 
 const KID_NAV = [
   { to: '/kid', icon: '🏠', label: 'Home', exact: true },
@@ -192,7 +193,15 @@ export default function App() {
     <>
       {isParentArea ? <ParentBackground theme={parentTheme} /> : <ThemeBackground theme={kidTheme} glitch={glitch} />}
 
-      {renderRoute(route, path, activeKid, state)}
+      {/*
+        Keyed on the route, so a screen that crashed gets a clean mount when you
+        come back to it — which is usually the actual fix. The boundary is
+        INSIDE the chrome on purpose: the nav bar below survives, so one broken
+        screen leaves the rest of the app usable instead of taking it all down.
+      */}
+      <ScreenBoundary key={route} route={route}>
+        {renderRoute(route, path, activeKid, state)}
+      </ScreenBoundary>
 
       {isKidArea && (
         <NavBar
