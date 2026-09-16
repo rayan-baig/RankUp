@@ -39,6 +39,20 @@ const send = (res, code, body) => {
   res.end(JSON.stringify(body))
 }
 
+/**
+ * The token a scheduled job presents. Real Supabase gives the service role key
+ * a connection that bypasses row level security entirely, which is how the
+ * cron endpoints reach functions revoked from `public`. Without an equivalent
+ * here they get "permission denied" and none of the three scheduled jobs can be
+ * tested outside production.
+ */
+const SERVICE_KEY = process.env.MOCK_SERVICE_ROLE_KEY || 'service-role-key'
+
+function isServiceRole(req) {
+  const auth = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  return Boolean(auth) && auth === SERVICE_KEY
+}
+
 /** The bearer token here is just a user id — enough to exercise auth.uid(). */
 function userIdFrom(req) {
   const auth = req.headers.authorization || ''
@@ -52,11 +66,15 @@ function userIdFrom(req) {
  * genuinely in force. A superuser connection would silently bypass every policy
  * and make these tests worthless.
  */
-async function withUser(userId, fn) {
+async function withUser(userId, fn, { service = false } = {}) {
   const client = await pool.connect()
   try {
     await client.query('begin')
-    await client.query('set local role app_user')
+    // The service role keeps the owner connection, exactly as it does on real
+    // Supabase. Everything else drops to app_user so row level security is
+    // genuinely in force — a superuser connection for ordinary requests would
+    // bypass every policy and make these tests worthless.
+    if (!service) await client.query('set local role app_user')
     await client.query(`select set_config('request.jwt.claim.sub', $1, true)`, [userId || ''])
     const result = await fn(client)
     await client.query('commit')
@@ -84,6 +102,7 @@ const server = http.createServer(async (req, res) => {
 
   const url = new URL(req.url, 'http://localhost')
   const userId = userIdFrom(req)
+  const service = isServiceRole(req)
   if (process.env.MOCK_LOG) console.log(req.method, url.pathname, 'as', userId || '(anon)')
 
   try {
@@ -104,11 +123,11 @@ const server = http.createServer(async (req, res) => {
       // to_jsonb() makes this harness behave the way the real thing does.
       let out
       try {
-        out = await withUser(userId, (c) => c.query(`select to_jsonb(${fn}(${args})) as result`, values))
+        out = await withUser(userId, (c) => c.query(`select to_jsonb(${fn}(${args})) as result`, values), { service })
       } catch (err) {
         // Functions returning void have no jsonb form; call them plainly.
         if (err.code === '42883' || /function to_jsonb/.test(err.message || '')) {
-          out = await withUser(userId, (c) => c.query(`select ${fn}(${args}) as result`, values))
+          out = await withUser(userId, (c) => c.query(`select ${fn}(${args}) as result`, values), { service })
         } else {
           throw err
         }
@@ -133,7 +152,7 @@ const server = http.createServer(async (req, res) => {
       const where = filters.length ? ` where ${filters.join(' and ')}` : ''
       const limit = url.searchParams.get('limit')
       const sql = `select * from ${table}${where}${limit ? ` limit ${Number(limit) || 100}` : ''}`
-      const out = await withUser(userId, (c) => c.query(sql, values))
+      const out = await withUser(userId, (c) => c.query(sql, values), { service })
       return send(res, 200, out.rows)
     }
 
@@ -156,7 +175,7 @@ const server = http.createServer(async (req, res) => {
         // Postgres wants JSON for jsonb columns and arrays for text[].
         return v !== null && typeof v === 'object' && !Array.isArray(v) ? JSON.stringify(v) : v
       })
-      await withUser(userId, (c) => c.query(sql, values))
+      await withUser(userId, (c) => c.query(sql, values), { service })
       return send(res, 201, {})
     }
 
@@ -167,7 +186,7 @@ const server = http.createServer(async (req, res) => {
       const idFilter = url.searchParams.get('id') || ''
       const id = idFilter.replace(/^eq\./, '')
       if (!id) return send(res, 400, { message: 'id filter required' })
-      await withUser(userId, (c) => c.query(`delete from ${table} where id = $1`, [id]))
+      await withUser(userId, (c) => c.query(`delete from ${table} where id = $1`, [id]), { service })
       return send(res, 204, {})
     }
 

@@ -18,6 +18,7 @@
  * is what you want when a screen comes out empty.
  */
 import { chromium } from 'playwright'
+const BASE = process.env.BASE_URL || 'http://localhost:5173'
 const SHOT = process.env.SHOT_DIR || process.env.SP + '/preview'
 const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined,
   args: ['--use-fake-ui-for-media-stream','--use-fake-device-for-media-stream'] })
@@ -47,7 +48,7 @@ const shot = async (page, name) => {
 }
 
 const stamp = Date.now()
-await parent.goto('http://localhost:5173/', { waitUntil:'networkidle' })
+await parent.goto(`${BASE}/`, { waitUntil:'networkidle' })
 await parent.waitForTimeout(700)
 await shot(parent, 'whose-phone')
 
@@ -96,7 +97,7 @@ await parent.getByRole('button', { name:/Add all 7 to Ava/ }).click()
 await parent.waitForTimeout(2500)
 
 // Kid device pairs
-await kid.goto('http://localhost:5173/?device=kid', { waitUntil:'networkidle' })
+await kid.goto(`${BASE}/?device=kid`, { waitUntil:'networkidle' })
 await kid.waitForTimeout(700)
 await kid.getByRole('button', { name:/I'm a kid/ }).click()
 await kid.waitForTimeout(500)
