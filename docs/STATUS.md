@@ -96,8 +96,26 @@ none was ever taken.
 | **Subscriptions** | ✅ built — off until you connect your own Stripe account | [docs/PAYMENTS.md](PAYMENTS.md) |
 | **The 20% Discount Tournament** | ✅ built — `api/settle-alliances.js` decides each month's winner and applies a real Stripe coupon. **You have to schedule it**; nothing pays out until you do — [docs/PAYMENTS.md](PAYMENTS.md) | — |
 
-What is left in this table is labelled in the interface itself with a dashed **SAMPLE**
-tag or a warning banner. If you build a new mockup, label it the same way.
+One row is left, and it is the honest one: background push has been written,
+wired and reviewed, but has never delivered a single message, because no push
+service is reachable from the sandbox this was built in. It needs two real
+phones. Everything else in this table is real.
+
+---
+
+## Knowing it is working, without watching it
+
+| Thing | Where |
+|---|---|
+| A broken change cannot be pushed | `.github/workflows/ci.yml` — lint, build, SQL against a real Postgres, both browser suites |
+| One screen crashing does not take the app down | `src/components/ScreenBoundary.jsx` |
+| You hear about crashes on other people's phones | `supabase/crashes.sql` — route and message only, never a name or a photo |
+| A scheduled job that stops being called | `/api/health` — silence is the failure mode for all three |
+| One URL to point a monitor at | `GET /api/health` → `{"ok":true}`, or 503 |
+
+What none of this does is fix a bug for you. It means you find out from a
+dashboard rather than from a parent, and that one broken screen is not a broken
+app.
 
 ---
 
