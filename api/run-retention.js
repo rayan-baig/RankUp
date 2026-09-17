@@ -22,6 +22,8 @@
  * every family at once, which no signed-in account should be able to ask for.
  */
 
+import { recordRun } from './_shared/job.js'
+
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const CRON_SECRET = process.env.CRON_SECRET || ''
@@ -88,8 +90,10 @@ export default async function handler(req, res) {
       p_event_days: EVENT_DAYS,
       p_pairing_days: PAIRING_DAYS,
     })
+    await recordRun(serviceRpc, 'run-retention', true)
     return res.status(200).json(result || { ok: true })
   } catch (err) {
+    await recordRun(serviceRpc, 'run-retention', false, err.message)
     return res.status(502).json({ error: 'retention_failed', detail: err.message })
   }
 }

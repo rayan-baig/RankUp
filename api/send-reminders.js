@@ -22,6 +22,7 @@
  * because it would otherwise let any signed-in account enumerate every family.
  */
 
+import { recordRun } from './_shared/job.js'
 import webpush from 'web-push'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -75,11 +76,17 @@ export default async function handler(req, res) {
   try {
     due = await serviceRpc('due_reminders', { p_grace_minutes: GRACE_MINUTES })
   } catch (err) {
+    await recordRun(serviceRpc, 'send-reminders', false, err.message)
     return res.status(502).json({ error: 'lookup_failed', detail: err.message })
   }
 
   const reminders = due?.reminders || []
-  if (!reminders.length) return res.status(200).json({ ok: true, due: 0, sent: 0 })
+  // Nothing due is a successful run, not a skipped one — most runs find nothing
+  // and a health check that only counted busy runs would call a working job dead.
+  if (!reminders.length) {
+    await recordRun(serviceRpc, 'send-reminders', true)
+    return res.status(200).json({ ok: true, due: 0, sent: 0 })
+  }
 
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
   let sent = 0
@@ -125,5 +132,6 @@ export default async function handler(req, res) {
     failed += results.filter((x) => x.status === 'rejected').length
   }
 
+  await recordRun(serviceRpc, 'send-reminders', true)
   return res.status(200).json({ ok: true, due: reminders.length, sent, failed })
 }

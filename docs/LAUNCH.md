@@ -53,6 +53,7 @@ In the Supabase SQL editor, run these **in order**:
 - [ ] `supabase/reminders.sql`
 - [ ] `supabase/retention.sql`
 - [ ] `supabase/crashes.sql`
+- [ ] `supabase/health.sql`
 - [ ] Create a **private** Storage bucket called `proof-photos`.
 
 ## 2b. Schedule the three jobs — none of them are optional
@@ -68,6 +69,28 @@ itself once `CRON_SECRET` is set in the project — there is nothing else to do.
 `scheduled` handler, so these will never fire on their own. Either deploy a
 small Worker with a Cron Trigger that `fetch`es the three URLs with the header,
 or point any external scheduler at them. Do not assume Pages will run them.
+
+### Knowing it is all still running
+
+Every job records that it ran, and `/api/health` reports how long each has been
+quiet. This is the failure mode that matters: all three fail by going SILENT —
+no error, no alert, just reminders that stop arriving. A scheduler that never
+fires looks identical to one that works, which is how the POST-only bug in this
+repo survived as long as it did.
+
+```
+GET  https://your-site/api/health                        -> {"ok":true}
+GET  https://your-site/api/health   (with CRON_SECRET)   -> the detail
+```
+
+Point any free uptime monitor at the shallow one. It is public on purpose and
+says nothing useful to a stranger; the detail — which job is stale, the
+undeleted-photo backlog, crashes in the last 24 hours — needs the secret, and
+returns **503** when something is wrong so a monitor treats it as down.
+
+Worth knowing: a job that has **never** run reports `never_run`, not `stale`.
+Before launch that is every job and it is fine. A month in, it means the
+schedule was never set up at all.
 
 | When | Request | What breaks without it |
 |---|---|---|

@@ -22,6 +22,7 @@
  *    after a half-finished run.
  */
 
+import { recordRun } from './_shared/job.js'
 import { makeStripe } from './_shared/stripe.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -91,6 +92,7 @@ export default async function handler(req, res) {
   try {
     settled = await serviceRpc('settle_alliances', { p_month: month })
   } catch (err) {
+    await recordRun(serviceRpc, 'settle-alliances', false, err.message)
     return res.status(502).json({ error: 'settle_failed', detail: err.message })
   }
 
@@ -130,5 +132,9 @@ export default async function handler(req, res) {
     }
   }
 
+  // A coupon Stripe refused is a failed run: the award is decided and unpaid,
+  // which is exactly the state somebody has to go and look at.
+  await recordRun(serviceRpc, 'settle-alliances', failed.length === 0,
+    failed.length ? `${failed.length} award(s) not applied` : null)
   return res.status(200).json({ ok: true, month, decided: awards.length, applied, failed })
 }

@@ -1,0 +1,86 @@
+# Every push runs what a person would run before shipping.
+#
+# The point is not ceremony. Four of the bugs found late in this project would
+# have been caught here, and the two most expensive ones — a leaderboard sorted
+# as text, and cron endpoints that 405 on the verb their scheduler uses — fail
+# nothing visibly. They just do the wrong thing quietly. That is exactly what a
+# suite is for, and running it by hand is how it stops happening.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # The SQL suite needs a real Postgres. Row level security, the security
+    # definer functions and the money-handling rules cannot be checked against
+    # anything less, which is the whole reason they are tested this way.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['55432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+      - name: Database rules
+        env:
+          PGHOST: localhost
+          PGPORT: '55432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          ./supabase/test/run.sh
+
+      - name: Install the browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Start the stack
+        env:
+          PGHOST: localhost
+          PGPORT: '55432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          printf 'VITE_SUPABASE_URL=http://localhost:54321\nVITE_SUPABASE_ANON_KEY=local-anon-key\nVITE_GUILDS_ENABLED=true\n' > .env.local
+          node supabase/test/mock-server.mjs &
+          npm run dev -- --port 5173 &
+          npx wait-on http://localhost:5173 http://localhost:54321/rest/v1/ --timeout 60000 || sleep 15
+
+      - name: The app, end to end
+        env:
+          PGHOST: localhost
+          PGPORT: '55432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          npm run test:smoke
+          npm run test:sync
+
+      - name: Screenshots from the failure, if there was one
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: tests/screenshots/
+          if-no-files-found: ignore
