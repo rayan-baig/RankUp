@@ -9,6 +9,7 @@ import QuestCard from '../../components/QuestCard.jsx'
 import { Screen, Card, Button, ProgressBar, Stat, SectionTitle, EmptyState, Banner, Chip } from '../../components/ui.jsx'
 import SyncBadge from '../../components/SyncBadge.jsx'
 import { navigate } from '../../lib/router.js'
+import InstallPrompt from '../../components/InstallPrompt.jsx'
 
 export default function KidHome() {
   const { state, dispatch } = useApp()
@@ -140,6 +141,8 @@ export default function KidHome() {
           <span aria-hidden="true" className="text-muted">›</span>
         </button>
       )}
+
+      <InstallPrompt />
 
       <SectionTitle action={<button type="button" className="text-xs text-muted underline" onClick={() => navigate('/kid/quests')}>See all</button>}>
         Today's quests

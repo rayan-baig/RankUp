@@ -10,6 +10,7 @@ import Avatar from '../../components/Avatar.jsx'
 import { Screen, Card, Button, SectionTitle, Stat, ProgressBar, EmptyState, Banner, Chip } from '../../components/ui.jsx'
 import SyncBadge from '../../components/SyncBadge.jsx'
 import { navigate } from '../../lib/router.js'
+import InstallPrompt from '../../components/InstallPrompt.jsx'
 
 export default function ParentDashboard() {
   const { state } = useApp()
@@ -151,6 +152,8 @@ export default function ParentDashboard() {
           Adds the Consequence Engine, Behaviour Blueprints, Parent Alliances, 10-player guilds and a permanent 1.5× XP boost for kids.
         </Banner>
       )}
+
+      <InstallPrompt />
 
       <SectionTitle>Recent activity</SectionTitle>
       <Card>
