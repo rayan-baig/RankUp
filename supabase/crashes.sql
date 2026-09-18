@@ -53,9 +53,25 @@ declare
   v_family uuid := current_family_id();
   v_recent int;
 begin
+  -- Signed-out reports share one row-space, so counting them together made a
+  -- single global bucket: ten an hour for every signed-out user on earth, which
+  -- anyone could exhaust on purpose to blind pre-signin crash reporting. Those
+  -- get a much larger ceiling of their own; a family keeps its tight one.
+  if v_family is null then
+    select count(*) into v_recent from crash_reports
+     where created_at > now() - interval '1 hour' and family_id is null;
+    if v_recent >= 200 then
+      return jsonb_build_object('ok', true, 'recorded', false, 'reason', 'rate_limited');
+    end if;
+    insert into crash_reports (family_id, where_at, message, stack, agent)
+    values (null, left(coalesce(p_where, 'unknown'), 80), left(coalesce(p_message, ''), 300),
+            left(coalesce(p_stack, ''), 600), left(coalesce(p_agent, ''), 200));
+    return jsonb_build_object('ok', true, 'recorded', true);
+  end if;
+
   select count(*) into v_recent from crash_reports
    where created_at > now() - interval '1 hour'
-     and family_id is not distinct from v_family;
+     and family_id = v_family;
   if v_recent >= 10 then
     return jsonb_build_object('ok', true, 'recorded', false, 'reason', 'rate_limited');
   end if;

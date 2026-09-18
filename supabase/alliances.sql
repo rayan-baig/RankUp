@@ -19,6 +19,8 @@
 -- here rather than redefined, the same way guilds.sql extends the guild tables.
 alter table alliances add column if not exists invite_code text unique;
 alter table alliances add column if not exists owner_family_id uuid references families(id) on delete cascade;
+-- Set when the last member leaves. The row stays so its payment history stays.
+alter table alliances add column if not exists retired_at timestamptz;
 
 -- The award row IS the payment record: written once, inside the transaction
 -- that decides the winner, and the primary key (alliance, month) is what makes
@@ -126,7 +128,8 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'already_in_one');
   end if;
 
-  select * into v_all from alliances where invite_code = upper(trim(p_invite_code));
+  select * into v_all from alliances
+   where invite_code = upper(trim(p_invite_code)) and retired_at is null;
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_such_code'); end if;
 
   -- Counted and inserted under a lock on the alliance row, so two families
@@ -149,10 +152,17 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'not_a_parent');
   end if;
   delete from alliance_members where family_id = v_family;
-  -- An alliance nobody is left in is deleted rather than lingering as a code
-  -- that resolves to an empty leaderboard.
-  delete from alliances a
-   where not exists (select 1 from alliance_members m where m.alliance_id = a.id);
+  -- An alliance nobody is left in is retired rather than deleted: deleting it
+  -- cascades alliance_results away, and that row IS the record that a month has
+  -- already been paid. Win, leave, re-create, and the next legitimate run of the
+  -- settlement job would have issued a second coupon for the same month.
+  --
+  -- Retiring instead keeps the payment history, frees the invite code so it can
+  -- be reissued, and leaves nothing a browser can find.
+  update alliances a
+     set invite_code = null, retired_at = now()
+   where a.retired_at is null
+     and not exists (select 1 from alliance_members m where m.alliance_id = a.id);
   return jsonb_build_object('ok', true);
 end $$;
 
@@ -226,10 +236,17 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_new jsonb;
 begin
-  with winners as (
+  with contested as (
+    -- A tournament needs opponents. Without this floor an Elite parent could
+    -- create an alliance nobody else joins and win a real 20% discount every
+    -- month for ever, which is a self-service price cut rather than a prize.
+    select alliance_id from alliance_members
+     group by alliance_id having count(*) >= 2
+  ), winners as (
     select distinct on (m.alliance_id)
            m.alliance_id, m.family_id, alliance_score(m.family_id, p_month) as score
       from alliance_members m
+      join contested c on c.alliance_id = m.alliance_id
      order by m.alliance_id, alliance_score(m.family_id, p_month) desc, m.joined_at asc
   ), inserted as (
     insert into alliance_results (alliance_id, month_key, winning_family_id, score)
@@ -264,8 +281,12 @@ grant execute on function create_alliance(text) to authenticated;
 grant execute on function join_alliance(text) to authenticated;
 grant execute on function leave_alliance() to authenticated;
 grant execute on function alliance_standings(date) to authenticated;
-grant execute on function alliance_capacity(uuid) to authenticated;
-grant execute on function alliance_score(uuid, date) to authenticated;
+-- NOT granted. Both take an arbitrary family id and are security definer, so a
+-- grant to `authenticated` let any signed-in parent read any household's
+-- approved-chore count and plan tier by guessing a uuid. They are internals of
+-- alliance_standings and settle_alliances, which do their own checks.
+revoke execute on function alliance_capacity(uuid) from public;
+revoke execute on function alliance_score(uuid, date) from public;
 
 -- settle_alliances and mark_alliance_award_applied are deliberately NOT granted
 -- to authenticated. They decide and record real money off a real bill, so they

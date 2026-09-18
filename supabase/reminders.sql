@@ -65,6 +65,13 @@ begin
   if not exists (select 1 from pg_timezone_names where name = v_tz) then
     v_tz := 'UTC';
   end if;
+  -- A kid id is accepted from the caller, so it has to belong to them. Nothing
+  -- reachable is broken by this today only because push_targets filters on
+  -- family_id as well; relying on that is one refactor from a leak.
+  if p_kid_id is not null and not exists (
+       select 1 from kids k where k.id = p_kid_id and k.family_id = v_family) then
+    return jsonb_build_object('ok', false, 'reason', 'not_your_kid');
+  end if;
 
   -- Held in a variable rather than a temp table: a temp table inside a
   -- security-definer function depends on the caller's transaction shape, and

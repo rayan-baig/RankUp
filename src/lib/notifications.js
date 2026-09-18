@@ -175,7 +175,7 @@ const SEND_URL = import.meta.env?.VITE_PUSH_SEND_URL || '/api/send-push'
  * point telling a parent their notification "failed" when the thing they cared
  * about — seeing it — already happened.
  */
-export async function notifyRemote({ familyId, role, kidId, payload }) {
+export async function notifyRemote({ familyId, role, kidId, kind, args }) {
   if (!pushConfigured() || !familyId) return { ok: false, reason: 'not_configured' }
   const session = getSession()
   const token = session?.access_token
@@ -185,7 +185,7 @@ export async function notifyRemote({ familyId, role, kidId, payload }) {
     const res = await fetch(SEND_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ familyId, role, kidId, payload }),
+      body: JSON.stringify({ familyId, role, kidId, kind, args }),
     })
     if (!res.ok) return { ok: false, reason: `http_${res.status}` }
     return { ok: true, ...(await res.json()) }

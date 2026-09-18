@@ -110,7 +110,16 @@ export function AppProvider({ children }) {
         (notice.role === 'parent' && state.device?.role !== 'kid') ||
         (notice.role === 'kid' && state.device?.role === 'kid')
       if (!forThisDevice) notifyLocally(payload)
-      notifyRemote({ familyId: state.family.id, role: notice.role, kidId: notice.kidId, payload })
+      // The words are the server's to write — see api/send-push.js. This only
+      // says which notice it is, so a device cannot put its own sentence on
+      // somebody else's lock screen.
+      notifyRemote({
+        familyId: state.family.id,
+        role: notice.role,
+        kidId: notice.kidId,
+        kind: notice.kind,
+        args: notice.args || [],
+      })
     })
   }, [state.noticeQueue, state.device?.role, state.family.id])
 

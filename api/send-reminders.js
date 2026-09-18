@@ -31,8 +31,19 @@ const VAPID_PUBLIC = process.env.VITE_VAPID_PUBLIC_KEY || process.env.VAPID_PUBL
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || ''
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:support@example.com'
 const CRON_SECRET = process.env.CRON_SECRET || ''
-/** How late a reminder may still be delivered, in minutes. */
-const GRACE_MINUTES = Number(process.env.REMINDER_GRACE_MINUTES || 120)
+/**
+ * How late a reminder may still be delivered, in minutes.
+ *
+ * Validated, not coerced: Number('2h') is NaN, NaN serialises to JSON null, and
+ * the SQL comparison against null is never true — so one typo here would mean
+ * no reminder is EVER due, while the job kept reporting success and the health
+ * check stayed green. run-retention already guarded this; this file did not.
+ */
+function minutes(value, fallback) {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback
+}
+const GRACE_MINUTES = minutes(process.env.REMINDER_GRACE_MINUTES, 120)
 
 async function serviceRpc(fn, args) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {

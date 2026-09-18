@@ -88,8 +88,14 @@ begin
    where created_at > now() - interval '24 hours';
 
   return jsonb_build_object(
+    -- never_run counts as not-ok. Only checking for 'stale' meant a deployment
+    -- whose crons were never wired up reported healthy for ever — which is
+    -- precisely the mistake this function exists to catch. Before launch the
+    -- answer is legitimately red; that is better than a green light that means
+    -- nothing.
     'ok', not exists (
-      select 1 from jsonb_each(v_jobs) e where e.value->>'state' = 'stale'
+      select 1 from jsonb_each(v_jobs) e
+       where e.value->>'state' in ('stale', 'never_run')
     ) and v_backlog = 0,
     'checked_at', now(),
     'jobs', v_jobs,

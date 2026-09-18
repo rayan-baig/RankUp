@@ -51,6 +51,24 @@ async function callerFamilyId(token) {
   }
 }
 
+/**
+ * Only our own site. PUBLIC_SITE_URL is the authority when set; otherwise the
+ * request's own Origin header is allowed, because that is the browser's word
+ * rather than the body's. Anything else is refused outright rather than
+ * silently rewritten, so a misconfiguration is visible.
+ */
+function safeOrigin(candidate) {
+  const allowed = (process.env.PUBLIC_SITE_URL || '').replace(/\/+$/, '')
+  if (allowed) return allowed
+  try {
+    const url = new URL(candidate)
+    if (url.protocol !== 'https:' && url.hostname !== 'localhost') return ''
+    return url.origin
+  } catch {
+    return ''
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' })
@@ -76,7 +94,10 @@ export default async function handler(req, res) {
   const familyId = await callerFamilyId(token)
   if (!familyId) return res.status(403).json({ error: 'No family for this account.' })
 
-  const origin = body?.origin || req.headers.origin || ''
+  // Whatever lands in success_url/cancel_url is where Stripe sends the person
+  // after paying, on a page carrying RankUp's name. An unvalidated origin from
+  // the request body makes that an attacker's site.
+  const origin = safeOrigin(body?.origin || req.headers.origin || '')
   const stripe = makeStripe(STRIPE_SECRET)
 
   try {

@@ -121,6 +121,26 @@ create trigger kids_enforce_limit before insert on kids
  * checks settling most photos before a call is made, a family doing five chores
  * a day lands near sixty. Anyone hitting two hundred is not doing chores.
  */
+/**
+ * Give a check back.
+ *
+ * claim_photo_check runs before the image is parsed, which is right — it is
+ * what stops an unauthenticated flood reaching the API at all. But it means a
+ * check is spent the moment the request starts, so an outage at Anthropic, or
+ * a malformed request, used to cost the family one of their two hundred. This
+ * hands it back, and never below zero.
+ */
+create or replace function refund_photo_check()
+returns void language plpgsql security definer set search_path = public as $$
+declare v_month date := date_trunc('month', current_date)::date;
+begin
+  update families
+     set ai_checks_used = greatest(0, ai_checks_used - 1)
+   where id = current_family_id()
+     and ai_checks_month = v_month
+     and ai_checks_used > 0;
+end $$;
+
 create or replace function claim_photo_check()
 returns jsonb
 language plpgsql security definer set search_path = public as $$
@@ -343,3 +363,4 @@ revoke execute on function apply_subscription_change(uuid, text, text, text, tex
 revoke execute on function family_for_customer(text) from public;
 revoke execute on function stripe_customer_for_family(uuid) from public;
 revoke execute on function attach_stripe_customer(uuid, text) from public;
+grant execute on function refund_photo_check() to anon, authenticated;

@@ -9,3 +9,6 @@ dist-ssr
 .vercel
 .netlify
 npm-debug.log*
+
+# Wrangler scratch output from `wrangler pages dev`.
+.wrangler/

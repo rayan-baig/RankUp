@@ -13,6 +13,24 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL |
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
+/**
+ * Only our own site. Stripe sends the customer here when they close the billing
+ * portal, on a page carrying RankUp's name, so an unvalidated origin from the
+ * request body is an open redirect wearing our branding. PUBLIC_SITE_URL wins
+ * when set; otherwise the browser's own Origin header, never the body alone.
+ */
+function safeOrigin(candidate) {
+  const allowed = (process.env.PUBLIC_SITE_URL || '').replace(/\/+$/, '')
+  if (allowed) return allowed
+  try {
+    const url = new URL(candidate)
+    if (url.protocol !== 'https:' && url.hostname !== 'localhost') return ''
+    return url.origin
+  } catch {
+    return ''
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' })
@@ -57,7 +75,7 @@ export default async function handler(req, res) {
 
     const portal = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: `${body.origin || req.headers.origin || ''}/#/parent/plan`,
+      return_url: `${safeOrigin(body?.origin || req.headers.origin || '')}/#/parent/plan`,
     })
     return res.status(200).json({ url: portal.url })
   } catch (err) {

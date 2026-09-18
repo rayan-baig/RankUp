@@ -28,6 +28,16 @@ import Anthropic from '@anthropic-ai/sdk'
  * one, before deciding either way — docs/AI-CHECK.md has the arithmetic.
  */
 const MODEL = process.env.AI_VERIFY_MODEL || 'claude-haiku-4-5'
+
+/**
+ * Which models accept output_config.effort. Haiku 4.5 and Sonnet 4.5 reject it
+ * with a 400, and Haiku is what this runs on by default — so sending it
+ * unconditionally broke the feature everywhere it was cheapest to use.
+ */
+const MODEL_SUPPORTS_EFFORT = [
+  'claude-fable-5', 'claude-mythos-5', 'claude-opus-5',
+  'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-5',
+]
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 const SYSTEM_PROMPT = `You help a parent check photo proof that their child submitted for a household chore in a kids' app called RankUp.
@@ -122,6 +132,19 @@ async function claimCheck(token) {
   }
 }
 
+/** Hands a claimed check back when it was spent on a call that never ran. */
+async function refundCheck(token) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/rpc/refund_photo_check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: token, Authorization: `Bearer ${token}` },
+      body: '{}',
+    })
+  } catch {
+    // A refund that cannot be recorded is not worth failing the response over.
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     res.setHeader('Allow', 'POST, OPTIONS')
@@ -167,8 +190,15 @@ export default async function handler(req, res) {
     // reads, and output tokens are the expensive half.
     max_tokens: 400,
     system: SYSTEM_PROMPT,
-    output_config: { effort: 'medium' },
     messages: [{ role: 'user', content: buildUserContent(image, body) }],
+  }
+  // `effort` is rejected outright by Haiku 4.5, which is the default model
+  // here — it was sent unconditionally, so every single photo check returned
+  // 400, the retry resent the identical request and 400'd again, and the
+  // family's monthly allowance had already been spent on a check that never
+  // ran. Only the models that accept it get it.
+  if (MODEL_SUPPORTS_EFFORT.some((prefix) => MODEL.startsWith(prefix))) {
+    request.output_config = { effort: 'medium' }
   }
 
   try {
@@ -210,6 +240,7 @@ export default async function handler(req, res) {
 
     const parsed = extractJson(text)
     if (!parsed) {
+      await refundCheck(token)
       return res.status(502).json({ error: 'unreadable_response', message: 'The AI reply could not be parsed.' })
     }
 
@@ -223,6 +254,9 @@ export default async function handler(req, res) {
       model: message.model || MODEL,
     })
   } catch (err) {
+    // The check was claimed before the image was even parsed, so a failure here
+    // has cost the family one of their two hundred for nothing.
+    await refundCheck(token)
     const status = err?.status && err.status >= 400 && err.status < 600 ? err.status : 502
     console.error('[verify-photo]', err?.message || err)
     return res.status(status).json({ error: 'upstream_error', message: err?.message || 'Photo check failed.' })
