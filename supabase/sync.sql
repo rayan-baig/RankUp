@@ -331,7 +331,13 @@ begin
   select * into v_kid from kids where id = p_kid_id for update;
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
 
-  if v_kid.user_id is distinct from auth.uid()
+  -- NULL-safe. `v_kid.user_id is distinct from auth.uid()` is FALSE when both
+  -- sides are null — and both are null for a child profile that was never
+  -- paired to a phone, called with no bearer token at all. So the guard passed
+  -- for an anonymous caller and this security-definer function moved the
+  -- child's balance anyway. A profile with no device must be the hardest to
+  -- touch, not the easiest.
+  if not exists (select 1 from kids k where k.id = p_kid_id and k.user_id = auth.uid())
      and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id) then
     raise exception 'not allowed';
   end if;
@@ -359,8 +365,18 @@ begin
   if v_kid is null or v_reward is null then
     return jsonb_build_object('ok', false, 'reason', 'not_found');
   end if;
+  -- A reward from another family would otherwise set the price here.
+  if v_reward.family_id is distinct from v_kid.family_id then
+    return jsonb_build_object('ok', false, 'reason', 'not_found');
+  end if;
 
-  if v_kid.user_id is distinct from auth.uid()
+  -- NULL-safe. `v_kid.user_id is distinct from auth.uid()` is FALSE when both
+  -- sides are null — and both are null for a child profile that was never
+  -- paired to a phone, called with no bearer token at all. So the guard passed
+  -- for an anonymous caller and this security-definer function moved the
+  -- child's balance anyway. A profile with no device must be the hardest to
+  -- touch, not the easiest.
+  if not exists (select 1 from kids k where k.id = p_kid_id and k.user_id = auth.uid())
      and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id) then
     raise exception 'not allowed';
   end if;

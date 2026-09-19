@@ -10,6 +10,10 @@
  * Supabase later means rewriting this file, not the rest of the app.
  */
 
+import { clearShadow } from './sync/shadow.js'
+import { clearOutbox } from './sync/outbox.js'
+import { resetCursor } from './sync/syncEngine.js'
+
 /**
  * Device namespace.
  *
@@ -55,9 +59,32 @@ export function saveState(state) {
   }
 }
 
+/**
+ * Forget everything this device holds.
+ *
+ * The sync bookkeeping has to go with the data, and this is why: the shadow is
+ * this device's record of "the server already has these rows". Wiping the
+ * state while leaving the shadow behind meant the next save compared an EMPTY
+ * state against a shadow that still remembered every kid, quest, reward, note
+ * and override — and queueChanges treats anything in the shadow but not in the
+ * state as deleted. So "Erase this device", whose own wording promises it
+ * touches nothing synced, queued a DELETE for the whole family, sent it under
+ * the parent's still-valid session, and propagated it to the other parent's
+ * phone and the child's through the deletions feed.
+ *
+ * clearShadow, clearOutbox and resetCursor were all written for this and had
+ * no callers anywhere in the project. Doing it here rather than at the three
+ * call sites is what stops the fourth one forgetting.
+ *
+ * The session is deliberately left alone: erasing a device is not signing out,
+ * and the one caller that does mean to sign out already says so itself.
+ */
 export function clearState() {
   localStorage.removeItem(KEY)
   localStorage.removeItem(PHOTO_KEY)
+  clearShadow()
+  clearOutbox()
+  resetCursor()
 }
 
 /**

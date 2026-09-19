@@ -11,7 +11,18 @@ insert into auth.users (id, email) values
   ('a1111111-1111-1111-1111-111111111111', 'pair-parent@example.com'),
   ('a5555555-5555-5555-5555-555555555555', null),
   ('a7777777-7777-7777-7777-777777777777', null),
-  ('a6666666-6666-6666-6666-666666666666', null);
+  ('a6666666-6666-6666-6666-666666666666', null),
+  -- Anonymous kid devices. A phone showing a pairing code is always signed in
+  -- as one of these, because a code may now only be published, read back and
+  -- revoked by the device that owns it.
+  ('b0000000-0000-0000-0000-000000000123', null),
+  ('b0000000-0000-0000-0000-000000000222', null),
+  ('b0000000-0000-0000-0000-000000000333', null),
+  ('b0000000-0000-0000-0000-000000000334', null),
+  ('b0000000-0000-0000-0000-000000000444', null),
+  ('b0000000-0000-0000-0000-000000000555', null),
+  ('b0000000-0000-0000-0000-000000000666', null),
+  ('b0000000-0000-0000-0000-000000000777', null);
 -- Standard, because this fixture holds several children and Starter is a
 -- one-child plan.
 insert into families (id, name, tier) values
@@ -35,8 +46,9 @@ declare
   v_res  jsonb;
   v_kid  uuid;
 begin
-  -- A kid's device is anonymous: no signed-in user at all.
-  perform become(null);
+  -- A kid's device has no account, but it does sign in anonymously first — it
+  -- needs an identity or row level security cannot recognise it after pairing.
+  perform become('a5555555-5555-5555-5555-555555555555');
 
   v_row := create_pairing_code('123456', 'Ava', 'sugarrush', 600,
                                'a5555555-5555-5555-5555-555555555555');
@@ -44,11 +56,33 @@ begin
   perform ok('the code carries the name and theme',
     v_row.kid_name = 'Ava' and v_row.theme_id = 'sugarrush');
 
-  perform ok('a code that is still live cannot be taken by another device',
-    create_pairing_code('123456', 'Someone Else', 'matrixblocks', 600) is null);
-
   perform ok('the kid device can read its own code back',
     (read_pairing_code('123456')).kid_name = 'Ava');
+
+  -- Now a DIFFERENT device, which is where the interesting rules are.
+  perform become('b0000000-0000-0000-0000-000000000123');
+
+  perform ok('a code that is still live cannot be taken by another device',
+    create_pairing_code('123456', 'Someone Else', 'matrixblocks', 600,
+                        'b0000000-0000-0000-0000-000000000123') is null);
+
+  perform ok('another device CANNOT read somebody else''s code',
+    read_pairing_code('123456') is null);
+
+  perform revoke_pairing_code('123456');
+  perform ok('and CANNOT revoke it either, which is what stops a takeover',
+    (select revoked_at from pairing_codes where code = '123456') is null);
+
+  begin
+    perform create_pairing_code('888888', 'Nope', 'apex', 600,
+                                'a5555555-5555-5555-5555-555555555555');
+    raise exception 'FAIL a device published a code in another device''s name';
+  exception when others then
+    if sqlerrm like 'FAIL%' then raise; end if;
+    raise notice '  PASS a device CANNOT publish a code in another''s name (%)', left(sqlerrm, 34);
+  end;
+
+  perform become('a5555555-5555-5555-5555-555555555555');
 
   -- Claiming needs a signed-in parent.
   perform become(null);
@@ -88,8 +122,8 @@ end $$;
 do $$
 declare v_res jsonb;
 begin
-  perform become(null);
-  perform create_pairing_code('222222', 'Ben', 'blockcraft', 600);
+  perform become('b0000000-0000-0000-0000-000000000222');
+  perform create_pairing_code('222222', 'Ben', 'blockcraft', 600, 'b0000000-0000-0000-0000-000000000222');
   perform become('a1111111-1111-1111-1111-111111111111');
 
   -- Five wrong guesses against this specific code.
@@ -105,8 +139,8 @@ end $$;
 do $$
 declare v_res jsonb;
 begin
-  perform become(null);
-  perform create_pairing_code('333333', 'Cal', 'apex', 600);
+  perform become('b0000000-0000-0000-0000-000000000333');
+  perform create_pairing_code('333333', 'Cal', 'apex', 600, 'b0000000-0000-0000-0000-000000000333');
   set local role postgres;
   update pairing_codes set expires_at = now() - interval '1 minute' where code = '333333';
   set local role app_user;
@@ -116,16 +150,16 @@ begin
   perform ok('an expired code is refused',
     (v_res->>'ok')::boolean = false and v_res->>'reason' = 'expired');
 
-  perform become(null);
+  perform become('b0000000-0000-0000-0000-000000000334');
   perform ok('a dead code CAN be recycled by a new device',
-    (create_pairing_code('333333', 'Dee', 'glam', 600)).kid_name = 'Dee');
+    (create_pairing_code('333333', 'Dee', 'glam', 600, 'b0000000-0000-0000-0000-000000000334')).kid_name = 'Dee');
 end $$;
 
 do $$
 declare v_res jsonb;
 begin
-  perform become(null);
-  perform create_pairing_code('444444', 'Eve', 'zen', 600);
+  perform become('b0000000-0000-0000-0000-000000000444');
+  perform create_pairing_code('444444', 'Eve', 'zen', 600, 'b0000000-0000-0000-0000-000000000444');
   perform revoke_pairing_code('444444');
   perform become('a1111111-1111-1111-1111-111111111111');
   v_res := claim_pairing_code('444444', 'a2222222-0000-0000-0000-000000000001', 'Pairing Family');
@@ -149,7 +183,7 @@ begin
   values ('a2222222-0000-0000-0000-000000000001', v_existing, 'Already assigned', 20);
   set local role app_user;
 
-  perform become(null);
+  perform become('a7777777-7777-7777-7777-777777777777');
   perform create_pairing_code('555555', 'Robin', 'apex', 600,
                               'a7777777-7777-7777-7777-777777777777');
   perform become('a1111111-1111-1111-1111-111111111111');
@@ -181,8 +215,8 @@ begin
   returning id into v_taken;
   set local role app_user;
 
-  perform become(null);
-  perform create_pairing_code('666666', 'Sam', 'apex', 600, null);
+  perform become('b0000000-0000-0000-0000-000000000666');
+  perform create_pairing_code('666666', 'Sam', 'apex', 600, 'b0000000-0000-0000-0000-000000000666');
   perform become('a1111111-1111-1111-1111-111111111111');
   res := claim_pairing_code('666666', 'a2222222-0000-0000-0000-000000000001', 'Pairing Family');
 
@@ -201,8 +235,8 @@ begin
   delete from pairing_claim_attempts;
   set local role app_user;
 
-  perform become(null);
-  perform create_pairing_code('777777', 'Wren', 'apex', 600, null);
+  perform become('b0000000-0000-0000-0000-000000000777');
+  perform create_pairing_code('777777', 'Wren', 'apex', 600, 'b0000000-0000-0000-0000-000000000777');
   perform become('a1111111-1111-1111-1111-111111111111');
 
   -- Ten misses at codes that do not exist. The real code is never touched.

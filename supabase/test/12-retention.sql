@@ -89,7 +89,8 @@ begin
 
   perform ok('the stale rate-limit mark is gone', (v->>'claim_attempts_deleted')::int = 1);
   perform ok('and the one inside the window is kept',
-    (select count(*) from pairing_claim_attempts) = 1);
+    (select count(*) from pairing_claim_attempts
+      where user_id = '3c111111-0000-0000-0000-000000000001') = 1);
 end $$;
 
 -- ---------- running it twice reclaims nothing more ----------

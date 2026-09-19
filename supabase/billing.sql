@@ -245,16 +245,22 @@ begin
 
   select * into v_family from families where id = v_kid.family_id for update;
 
-  if p_use_ticket then
-    /*
-     * What a claim costs is decided here, not by the caller.
-     *
-     * Rarity is mirrored from RARITY in src/data/marketSkins.js, and
-     * supabase/test/08-billing.sql checks the two agree. If the client could
-     * name its own price the legendary would be free — cosmetic, but the same
-     * class of mistake as letting a phone set its own XP.
-     */
-    v_cost := case p_skin_id
+  /*
+   * What anything costs is decided here, not by the caller.
+   *
+   * Mirrored from MARKET_SKINS and RARITY in src/data/marketSkins.js, and
+   * supabase/test/08-billing.sql checks the two agree.
+   *
+   * The ticket price was computed here from the start and the comment said
+   * why — and then the coins branch below spent `p_cost` straight from the
+   * request. A paired child's own device is an authorised caller here, so a
+   * negative cost passed `coins < p_cost` and then SUBTRACTED a negative:
+   * one HTTP request from a phone minted unlimited currency, permanently,
+   * server-side. p_cost is now ignored entirely; the parameter stays only so
+   * that older clients still calling with it do not break.
+   */
+  v_cost := case when p_use_ticket then
+    case p_skin_id
       when 'ember'   then 1
       when 'tide'    then 1
       when 'orchard' then 2
@@ -262,19 +268,32 @@ begin
       when 'dusk'    then 2
       when 'gilded'  then 3
       else 0
-    end;
-    if v_cost = 0 then
-      return jsonb_build_object('ok', false, 'reason', 'no_skin');
-    end if;
+    end
+  else
+    case p_skin_id
+      when 'ember'   then 120
+      when 'tide'    then 120
+      when 'orchard' then 150
+      when 'circuit' then 150
+      when 'dusk'    then 200
+      when 'gilded'  then 260
+      else 0
+    end
+  end;
+  if v_cost = 0 then
+    return jsonb_build_object('ok', false, 'reason', 'no_skin');
+  end if;
+
+  if p_use_ticket then
     if v_family.flash_tickets < v_cost then
       return jsonb_build_object('ok', false, 'reason', 'no_tickets', 'needed', v_cost);
     end if;
     update families set flash_tickets = flash_tickets - v_cost where id = v_family.id;
   else
-    if v_kid.coins < coalesce(p_cost, 0) then
-      return jsonb_build_object('ok', false, 'reason', 'too_expensive');
+    if v_kid.coins < v_cost then
+      return jsonb_build_object('ok', false, 'reason', 'too_expensive', 'needed', v_cost);
     end if;
-    update kids set coins = coins - coalesce(p_cost, 0) where id = p_kid_id;
+    update kids set coins = coins - v_cost where id = p_kid_id;
   end if;
 
   insert into events (family_id, kid_id, type, meta)

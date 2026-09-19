@@ -665,6 +665,12 @@ declare
 begin
   if p_code !~ '^[0-9]{6}$' then raise exception 'malformed code'; end if;
   if length(trim(p_kid_name)) = 0 then raise exception 'name required'; end if;
+  -- A device may only publish a code in its own name. Otherwise a caller could
+  -- attribute one to somebody else's identity and read it back through the
+  -- ownership checks below as if it were theirs.
+  if p_kid_user_id is null or p_kid_user_id is distinct from auth.uid() then
+    raise exception 'a device must publish its own code';
+  end if;
   -- Keep the table small and stop dead codes blocking new ones.
   delete from pairing_codes where expires_at < now() - interval '1 hour';
 
@@ -691,21 +697,46 @@ $$;
 
 /**
  * The kid's device polls this to find out whether a parent has claimed it.
- * Only ever called with a code the caller is already displaying, so returning
- * the row is not a disclosure — and it deliberately does not accept a partial
- * or wildcard code.
+ *
+ * It only ever returns a code THIS CALLER created. The old version returned any
+ * row for any six digits, to anon, without counting the attempt — and the anon
+ * key ships inside the JavaScript bundle. That made the code space a free
+ * oracle: walk all 10^6 codes at no cost, harvest live ones along with the
+ * children's first names, and the "five tries out of a million" argument this
+ * design rests on is gone, because finding a live code no longer costs a try.
+ *
+ * Binding it to the caller is what closes it. The kid's phone signs in
+ * anonymously before creating the code and passes that same id as
+ * kid_user_id, so the legitimate poller always matches and nobody else ever
+ * does.
  */
 create or replace function read_pairing_code(p_code text)
 returns pairing_codes
 language sql security definer set search_path = public as $$
-  select * from pairing_codes where code = p_code;
+  select * from pairing_codes
+   where code = p_code
+     and kid_user_id is not null
+     and kid_user_id = auth.uid();
 $$;
 
+/**
+ * Called by the kid's device when it gives up on a code and rolls a new one.
+ *
+ * Also bound to the creator. Without that, anyone could revoke a stranger's
+ * live code — and because create_pairing_code will recycle a code that is no
+ * longer live, revoking a victim's code was step one of taking it over:
+ * revoke, re-create the same six digits with the child's real name (harvested
+ * above) and the attacker's own user id, and the parent types the digits their
+ * child reads out and links the attacker's device into the family as that
+ * child.
+ */
 create or replace function revoke_pairing_code(p_code text)
 returns void
 language sql security definer set search_path = public as $$
   update pairing_codes set revoked_at = now()
-   where code = p_code and claimed_at is null;
+   where code = p_code and claimed_at is null
+     and kid_user_id is not null
+     and kid_user_id = auth.uid();
 $$;
 
 /**
