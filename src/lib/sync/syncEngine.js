@@ -16,7 +16,7 @@
  */
 
 import { transport } from './transport.js'
-import { readOutbox, removeOps, recordFailure, markSending } from './outbox.js'
+import { readOutbox, readySlice, removeOps, recordFailure, markSending } from './outbox.js'
 
 const CURSOR_KEY = 'rankup.sync.cursor.v1'
 /**
@@ -178,7 +178,7 @@ export function createSyncEngine({ dispatch, onStatus }) {
 
   /** Send everything queued. Stops at the first retryable failure to keep order. */
   async function push() {
-    const ops = readOutbox()
+    const ops = readySlice()
     if (!ops.length) return { sent: 0 }
     // Claim them before the first await. A newer edit arriving mid-flight must
     // start its own op rather than being folded into one whose success is about
@@ -195,9 +195,15 @@ export function createSyncEngine({ dispatch, onStatus }) {
         sent += 1
       } catch (err) {
         if (err.retryable) {
-          // Network or server trouble: leave it queued and try again later.
-          recordFailure(op.id)
-          throw err
+          // Network or server trouble. The write itself is fine, so it keeps
+          // its place in the queue and simply waits — longer each time.
+          //
+          // This returns rather than throws on purpose. Throwing meant a
+          // struggling server also stopped the device PULLING, so a phone that
+          // could not send stopped receiving too, and sat there showing stale
+          // chores until the outbox happened to clear.
+          recordFailure(op.id, { retryable: true })
+          return { sent, error: err }
         }
         // A rejected write is not going to start working. Drop it rather than
         // blocking everything behind it forever, but say so loudly.
@@ -244,9 +250,12 @@ export function createSyncEngine({ dispatch, onStatus }) {
     inFlight = true
     if (!silent) setStatus(SYNC_STATUS.SYNCING)
     try {
-      await push()
+      const pushed = await push()
       const result = await pull()
-      setStatus(SYNC_STATUS.IDLE)
+      // A send that is waiting its turn again is still an error worth showing,
+      // but the pull above ran regardless, so the screen is at least current.
+      if (pushed.error) setStatus(SYNC_STATUS.ERROR, pushed.error.message)
+      else setStatus(SYNC_STATUS.IDLE)
       return result
     } catch (err) {
       setStatus(err.status === 0 ? SYNC_STATUS.OFFLINE : SYNC_STATUS.ERROR, err.message)
@@ -276,7 +285,7 @@ export function createSyncEngine({ dispatch, onStatus }) {
     // Nothing queued and nobody looking: skip the round trip entirely. Work
     // waiting in the outbox still goes out, because the person who created it
     // may have pocketed the phone a second later.
-    if (isHidden() && readOutbox().length === 0) {
+    if (isHidden() && readySlice().length === 0) {
       schedule(PULL_HIDDEN_MS)
       return
     }
@@ -290,7 +299,11 @@ export function createSyncEngine({ dispatch, onStatus }) {
       return
     }
     lastSyncAt = Date.now()
-    const moved = (result?.changed || 0) > 0 || readOutbox().length > 0
+    // Work that is deliberately waiting out a backoff does not count as
+    // movement: treating it as movement pinned the poll at its fastest rate for
+    // as long as the server was unwell, which is the worst possible moment to
+    // be asking it the most often.
+    const moved = (result?.changed || 0) > 0 || readySlice().length > 0
     quietRounds = moved ? 0 : Math.min(quietRounds + 1, 8)
     schedule()
   }
