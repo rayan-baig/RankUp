@@ -25,7 +25,21 @@ export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, init)
   const saveTimer = useRef(null)
   const engineRef = useRef(null)
-  const mergingRef = useRef(false)
+  /**
+   * The row ids the last pull actually delivered.
+   *
+   * This used to be a single boolean, and a boolean cannot tell the difference
+   * between "this state came from the server" and "this state came from the
+   * server AND has a local edit in it". Any change made in the same 250ms
+   * debounce window as a pull was written into the shadow as already-synced and
+   * therefore never sent — and never sent again, because a matching shadow
+   * entry suppresses all future attempts. Pulls run every 8-20 seconds, so this
+   * was routine, permanent, and silent.
+   *
+   * A set of ids fixes it: only what the server actually sent is recorded as
+   * the server's, and everything else still goes through queueChanges.
+   */
+  const mergedIds = useRef(new Set())
   const [sync, setSync] = useState({
     status: transport.isConfigured() ? SYNC_STATUS.IDLE : SYNC_STATUS.DISABLED,
     error: null,
@@ -37,7 +51,16 @@ export function AppProvider({ children }) {
     engineRef.current = createSyncEngine({
       dispatch: (action) => {
         // Rows arriving FROM the server must not be queued straight back to it.
-        mergingRef.current = true
+        // Remember exactly which ones, so a local change that happens to be in
+        // flight at the same moment is not mistaken for one of them.
+        if (action?.type === 'MERGE_SNAPSHOT') {
+          for (const [table, rows] of Object.entries(action.snapshot || {})) {
+            if (!Array.isArray(rows)) continue
+            for (const row of rows) {
+              if (row?.id) mergedIds.current.add(`${table}:${row.id}`)
+            }
+          }
+        }
         dispatch(action)
       },
       onStatus: setSync,
@@ -187,17 +210,20 @@ export function AppProvider({ children }) {
 
       if (transport.isConfigured()) {
         const photoFor = (submission) => (submission.photoId ? getPhoto(submission.photoId) : null)
-        if (mergingRef.current) {
-          // This state came from a pull: record it as the server's, do not resend.
-          recordServerState(state, { photoFor })
-          mergingRef.current = false
-        } else {
-          // Anything queued should go now rather than wait out the idle
-          // backoff — the poll slows down precisely because nothing is
-          // happening, and this is something happening.
-          if (queueChanges(state, { photoFor, role: state.device?.role }) > 0) {
-            engineRef.current?.wake()
-          }
+        // Rows the server just sent are recorded as the server's...
+        if (mergedIds.current.size > 0) {
+          recordServerState(state, { photoFor, only: mergedIds.current })
+          mergedIds.current = new Set()
+        }
+        // ...and everything else still goes out. This runs on every save now,
+        // not only on saves that had no pull in them, which is what stops a
+        // local edit disappearing into a merge.
+        //
+        // Anything queued should go now rather than wait out the idle backoff —
+        // the poll slows down precisely because nothing is happening, and this
+        // is something happening.
+        if (queueChanges(state, { photoFor, role: state.device?.role }) > 0) {
+          engineRef.current?.wake()
         }
       }
     }, 250)

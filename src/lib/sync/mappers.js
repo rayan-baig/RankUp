@@ -36,8 +36,24 @@ export const kids = {
       lastDay: row.streak_last_day || null,
       freezeTokens: row.streak_freezes ?? 0,
     },
+    /*
+     * The lockout's own id is kept, because the server row has no column for it
+     * and both ways of ending a lockout match on it.
+     *
+     * Rebuilding this object from the row alone dropped overrideId, and then
+     * LIFT_OVERRIDE's `k.lockout?.overrideId === override.id` compared
+     * undefined to the id and never matched. The parent tapped Lift, the
+     * history screen said the override had ended, and the child stayed locked
+     * out — for ever, because a red lockdown has no expiry to rescue it either.
+     * Any approval bumps the kids row, so one pull was enough to trigger it.
+     */
     lockout: row.lockout_kind
-      ? { type: row.lockout_kind, until: ms(row.lockout_until), reason: row.lockout_reason || '' }
+      ? {
+          ...(existing.lockout?.type === row.lockout_kind ? existing.lockout : {}),
+          type: row.lockout_kind,
+          until: ms(row.lockout_until),
+          reason: row.lockout_reason || '',
+        }
       : null,
     profileFrame: row.profile_frame || 'none',
     dropSelector: row.drop_selector || 'standard',

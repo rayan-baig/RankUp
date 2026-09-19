@@ -129,7 +129,11 @@ export function queueChanges(state, { photoFor, role } = {}) {
       seen.add(shadowId)
       const serialised = JSON.stringify(row)
       if (shadow[shadowId] === serialised) continue
-      enqueue({ type: 'upsert', table, row })
+      // Only remember it as sent if it was actually queued. enqueue returns
+      // null when localStorage refused the write, and recording the shadow
+      // anyway meant the change was skipped from then on — silently lost to a
+      // full quota, which this app hits routinely because photos live there.
+      if (!enqueue({ type: 'upsert', table, row })) continue
       shadow[shadowId] = serialised
       queued += 1
     }
@@ -138,7 +142,7 @@ export function queueChanges(state, { photoFor, role } = {}) {
     for (const shadowId of Object.keys(shadow)) {
       if (!shadowId.startsWith(`${table}:`) || seen.has(shadowId)) continue
       const id = shadowId.slice(table.length + 1)
-      enqueue({ type: 'delete', table, id })
+      if (!enqueue({ type: 'delete', table, id })) continue
       delete shadow[shadowId]
       queued += 1
     }
@@ -150,12 +154,20 @@ export function queueChanges(state, { photoFor, role } = {}) {
 }
 
 /** After a pull, record what the server now holds so we do not echo it back. */
-export function recordServerState(state, { photoFor } = {}) {
+export function recordServerState(state, { photoFor, only } = {}) {
   if (!state.family?.id) return
   const shadow = readShadow()
   const familyId = state.family.id
   for (const [, { key: stateKey, mapper, table }] of Object.entries(ENTITIES)) {
     for (const item of state[stateKey] || []) {
+      // `only` is the set of ids the snapshot actually delivered.
+      //
+      // Without it this wrote the ENTIRE state into the shadow as "the server
+      // has this" — including a local edit made in the same 250ms debounce
+      // window as the pull, which was then never sent and, because a matching
+      // shadow entry suppresses every future attempt, never sent again either.
+      // Pulls run every 8-20 seconds, so that window was hit routinely.
+      if (only && !only.has(`${table}:${item.id}`)) continue
       const row = stripServerOwned(
         table,
         table === 'submissions'

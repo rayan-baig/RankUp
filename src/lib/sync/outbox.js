@@ -55,18 +55,35 @@ export function enqueue(op) {
 
   if (op.type === 'upsert') {
     const index = ops.findIndex(
-      (o) => o.type === 'upsert' && o.table === op.table && o.row?.id === op.row?.id,
+      (o) => o.type === 'upsert' && o.table === op.table && o.row?.id === op.row?.id
+        // Never collapse into an op that is CURRENTLY BEING SENT. push() holds
+        // the id it is awaiting and deletes exactly that id when the request
+        // succeeds — so folding a newer row into it meant the success of the
+        // OLD row discarded the new one, which had already been marked synced
+        // in the shadow and could therefore never be re-queued. A slow mobile
+        // link and a second edit were all it took to lose the edit for good.
+        && !o.sending,
     )
     if (index !== -1) {
-      ops[index] = { ...ops[index], row: op.row }
-      writeOutbox(ops)
-      return ops[index]
+      // The fresh row gets a fresh budget: inheriting a nearly-exhausted
+      // attempts count would retire a brand-new write after one or two tries.
+      ops[index] = { ...ops[index], row: op.row, attempts: 0 }
+      return writeOutbox(ops) ? ops[index] : null
     }
   }
 
   ops.push(entry)
+  // Returns null when the write failed — a full quota is an expected state in
+  // an app that keeps base64 photos in localStorage. The caller must not record
+  // this row as queued when it is not.
+  return writeOutbox(ops) ? entry : null
+}
+
+/** Marks the ops push() is about to send, so enqueue will not fold into them. */
+export function markSending(ids) {
+  const set = new Set(ids)
+  const ops = readOutbox().map((o) => (set.has(o.id) ? { ...o, sending: true } : o))
   writeOutbox(ops)
-  return entry
 }
 
 export function removeOps(ids) {

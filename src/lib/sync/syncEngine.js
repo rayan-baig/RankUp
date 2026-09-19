@@ -16,7 +16,7 @@
  */
 
 import { transport } from './transport.js'
-import { readOutbox, removeOps, recordFailure } from './outbox.js'
+import { readOutbox, removeOps, recordFailure, markSending } from './outbox.js'
 
 const CURSOR_KEY = 'rankup.sync.cursor.v1'
 /**
@@ -119,6 +119,10 @@ export function createSyncEngine({ dispatch, onStatus }) {
   async function push() {
     const ops = readOutbox()
     if (!ops.length) return { sent: 0 }
+    // Claim them before the first await. A newer edit arriving mid-flight must
+    // start its own op rather than being folded into one whose success is about
+    // to delete it — see enqueue.
+    markSending(ops.map((op) => op.id))
     let sent = 0
 
     for (const op of ops) {
