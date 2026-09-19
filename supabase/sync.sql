@@ -85,7 +85,7 @@ end $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['kids','quests','submissions','rewards','notes']
+  foreach t in array array['kids','quests','submissions','rewards','notes','redemptions','overrides']
   loop
     execute format('drop trigger if exists %I on %I', t || '_deleted', t);
     execute format(
@@ -102,9 +102,19 @@ end $$;
  * whole family. One function, and the same rules as everywhere else decide what
  * comes back.
  *
- * `server_rev` is the cursor to send back next time. It is read BEFORE the rows
- * are gathered, so a write landing mid-query is picked up by the next sync
- * rather than being stepped over.
+ * `server_rev` is the head of the revision log, and it is NOT safe for a device
+ * to bank the moment it arrives. `rev` comes from a sequence, and a sequence
+ * hands out its number when a write starts, not when it commits. So a row can
+ * be given rev 500 by a transaction that is still open while this function
+ * reads head = 501 and returns without it. If the device stored 501 straight
+ * away it would afterwards only ask for rows newer than that, and row 500 —
+ * committed a heartbeat later — would never be sent to it again.
+ *
+ * The device is what closes that hole: it holds each head it is given for a few
+ * seconds before writing it down, and keeps asking from the older one in the
+ * meantime. A transaction that commits in that window is caught by the overlap.
+ * The cost is that recent rows are sent twice, which the merge already expects.
+ * See CURSOR_LAG_MS in src/lib/sync/syncEngine.js.
  */
 create or replace function family_snapshot(p_since bigint default 0)
 returns jsonb

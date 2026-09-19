@@ -62,6 +62,65 @@ function cursorKey() {
 }
 
 /**
+ * How long a head sits in hand before it is written down.
+ *
+ * Two different races close on this one delay, and both of them end with a
+ * change that silently never arrives.
+ *
+ * The first is in the database. `rev` comes off a sequence, and a sequence
+ * gives out its number when a write STARTS. A transaction can take rev 500 and
+ * commit a moment after the server reported head 501. Banking 501 on the spot
+ * would mean only ever asking for rows past it, and 500 would be gone for good.
+ *
+ * The second is on this device. Merged rows reach localStorage through a
+ * debounced save, so for a fraction of a second the cursor would be newer than
+ * the state it is a cursor for. A reload in that gap loses the rows and never
+ * asks for them again.
+ *
+ * Holding each head for a few seconds and asking from the older one covers
+ * both: anything that commits late, or any save still in flight, falls inside
+ * the overlap and is simply sent again. Re-sending is free in correctness terms
+ * because merging a row twice is the same as merging it once — the only cost is
+ * that a burst of changes travels about twice, which at this app's traffic is
+ * measured in kilobytes.
+ */
+const CURSOR_LAG_MS = 6000
+
+/** Heads the server has given us that are not yet old enough to trust. */
+const held = []
+/** A head that is old enough, waiting for one more round trip. See ageHeads. */
+let ripe = null
+
+/**
+ * Move each head one step closer to being written down. Called at the top of a
+ * pull, before the cursor is read.
+ *
+ * There are two steps rather than one, and the second is the one that does the
+ * real work. Ageing a head past the lag is not enough on its own: what makes a
+ * late commit safe is that some pull actually WENT AND ASKED with the older
+ * cursor after that commit landed. So a head that comes of age is only marked
+ * ripe here; the pull that follows runs against the previous cursor, sweeping
+ * up anything that committed late, and only then is the ripe head banked.
+ *
+ * That second step doubles as the fix for the local race: by the time a head is
+ * banked, the merge that came with it is a full poll old, so the debounced save
+ * that writes it to storage has long since run. The cursor can never be newer
+ * than the state it belongs to.
+ *
+ * Steady state costs about two polls of overlap. Merging a row twice is the
+ * same as merging it once, so the only price is bandwidth.
+ */
+function ageHeads(now = Date.now()) {
+  if (ripe != null) {
+    if (ripe > getCursor()) setCursor(ripe)
+    ripe = null
+  }
+  let ready = null
+  while (held.length && now - held[0].at >= CURSOR_LAG_MS) ready = held.shift().rev
+  if (ready != null) ripe = ready
+}
+
+/**
  * A cursor belongs to the account that earned it.
  *
  * family_snapshot reports the server's current revision to every caller,
@@ -91,6 +150,8 @@ export function setCursor(rev) {
 }
 
 export function resetCursor() {
+  held.length = 0
+  ripe = null
   localStorage.removeItem(cursorKey())
 }
 
@@ -150,6 +211,7 @@ export function createSyncEngine({ dispatch, onStatus }) {
 
   /** Ask for everything that changed since our cursor. */
   async function pull() {
+    ageHeads()
     const since = getCursor()
     const snapshot = await transport.rpc('family_snapshot', { p_since: since })
     if (!snapshot) return { changed: 0 }
@@ -162,7 +224,11 @@ export function createSyncEngine({ dispatch, onStatus }) {
         .reduce((n, key) => n + (snapshot[key]?.length || 0), 0)
 
     if (changed > 0) dispatch({ type: 'MERGE_SNAPSHOT', snapshot })
-    if (snapshot.server_rev != null) setCursor(snapshot.server_rev)
+    // Not setCursor: take the head in hand and write it down a few seconds from
+    // now, once anything committing late has landed and the merge above is
+    // safely saved. See CURSOR_LAG_MS.
+    const head = Number(snapshot.server_rev)
+    if (Number.isFinite(head) && head > 0) held.push({ rev: head, at: Date.now() })
     return { changed }
   }
 

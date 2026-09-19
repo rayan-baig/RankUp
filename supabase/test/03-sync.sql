@@ -81,6 +81,51 @@ begin
     and (snap->'deletions'->0->>'row_id')::uuid = qid);
 end $$;
 
+-- Every table a device keeps a copy of needs its deletions reported, not just
+-- the obvious ones. An override that is deleted rather than lifted, or a
+-- redemption that goes away, has to disappear from the other phone too — and
+-- the only way the other phone ever hears about a row that is gone is the
+-- deletions log.
+do $$
+declare snap jsonb; cut bigint; oid uuid; rid uuid;
+begin
+  perform become('c1111111-1111-1111-1111-111111111111');
+
+  insert into overrides (family_id, kid_id, kind, reason)
+  values ('c2222222-0000-0000-0000-000000000001', 'c4444444-0000-0000-0000-000000000001',
+          'tax', 'Left the milk out')
+  returning id into oid;
+
+  -- Only the kid themselves may raise a redemption, and only the database owner
+  -- may remove one, so both ends of this pair are done with the role swapped.
+  set local role postgres;
+  insert into redemptions (family_id, kid_id, name, cost)
+  values ('c2222222-0000-0000-0000-000000000001', 'c4444444-0000-0000-0000-000000000001',
+          'Movie night', 50)
+  returning id into rid;
+  set local role app_user;
+  perform become('c1111111-1111-1111-1111-111111111111');
+
+  cut := (family_snapshot(0)->>'server_rev')::bigint;
+
+  delete from overrides where id = oid;
+  snap := family_snapshot(cut);
+  perform ok('a deleted override is reported as a deletion',
+    exists (
+      select 1 from jsonb_array_elements(snap->'deletions') d
+       where d->>'table_name' = 'overrides' and (d->>'row_id')::uuid = oid));
+
+  set local role postgres;
+  delete from redemptions where id = rid;
+  set local role app_user;
+  perform become('c1111111-1111-1111-1111-111111111111');
+  snap := family_snapshot(cut);
+  perform ok('a deleted redemption is reported as a deletion',
+    exists (
+      select 1 from jsonb_array_elements(snap->'deletions') d
+       where d->>'table_name' = 'redemptions' and (d->>'row_id')::uuid = rid));
+end $$;
+
 -- A kid calling the same function must see their own rows, not the family's.
 do $$
 declare snap jsonb;
