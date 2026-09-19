@@ -423,6 +423,48 @@ end $$;
 
 grant execute on function set_kid_look(uuid, text, text, text, text, int) to authenticated;
 
+/**
+ * Spending a Streak Freeze to keep a run alive.
+ *
+ * A freeze token is earned, and a streak is the thing children care most about
+ * in this app, so both live in the columns only the database may move. The
+ * reducer changed them locally anyway and queued nothing: the token came back
+ * and the streak broke on the next pull, about eight seconds after the child
+ * thought they had saved it.
+ */
+create or replace function use_streak_freeze(p_kid_id uuid)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_kid kids;
+begin
+  select * into v_kid from kids where id = p_kid_id for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
+
+  -- NULL-safe: see claim_login_bonus.
+  if not exists (select 1 from kids k where k.id = p_kid_id and k.user_id = auth.uid())
+     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id) then
+    raise exception 'not allowed';
+  end if;
+
+  if v_kid.streak_freezes < 1 then
+    return jsonb_build_object('ok', false, 'reason', 'no_tokens');
+  end if;
+  -- Already counted for today. Spending a token would buy nothing, and two
+  -- taps on a slow connection must not cost two.
+  if v_kid.streak_last_day = current_date then
+    return jsonb_build_object('ok', false, 'reason', 'already_safe');
+  end if;
+
+  update kids
+     set streak_freezes = streak_freezes - 1,
+         streak_last_day = current_date
+   where id = p_kid_id;
+
+  return jsonb_build_object('ok', true, 'freezes_left', v_kid.streak_freezes - 1);
+end $$;
+
+grant execute on function use_streak_freeze(uuid) to authenticated;
+
 /** Spending currency on a reward. Checks the balance where it cannot be faked. */
 create or replace function redeem_reward(p_redemption_id uuid, p_reward_id uuid, p_kid_id uuid)
 returns jsonb

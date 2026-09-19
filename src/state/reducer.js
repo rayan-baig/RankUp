@@ -891,14 +891,26 @@ export function reducer(state, action) {
       return logEvent(next, { type: 'login_bonus', kidId: kid.id, meta: { coins } })
     }
 
+    /**
+     * Spend a Streak Freeze to keep a run alive.
+     *
+     * Both numbers this touches — the token count and the last day counted —
+     * are the database's to move, which is why the call has to be queued. It
+     * changed them here and queued nothing, so the token reappeared and the
+     * streak broke again on the next pull, seconds after the child thought
+     * they had saved it. The local change stays for the sake of the screen
+     * responding at once; use_streak_freeze is what makes it true.
+     */
     case 'USE_STREAK_FREEZE': {
       const kid = state.kids.find((k) => k.id === action.kidId)
       if (!kid || kid.streak.freezeTokens < 1) return state
+      if (kid.streak.lastDay === dayKey()) return state
       const next = mapKid(state, kid.id, (k) => ({
         ...k,
         streak: { ...k.streak, freezeTokens: k.streak.freezeTokens - 1, lastDay: dayKey() },
       }))
-      return logEvent(next, { type: 'streak_freeze', kidId: kid.id })
+      return logEvent(queueRpc(next, 'use_streak_freeze', { p_kid_id: kid.id }),
+        { type: 'streak_freeze', kidId: kid.id })
     }
 
     case 'UPDATE_SETTINGS':

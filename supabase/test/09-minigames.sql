@@ -148,6 +148,55 @@ begin
   end;
 end $$;
 
+-- ---------- a Streak Freeze is spent where it cannot be faked ----------
+--
+-- The reducer used to decrement the token and stamp today's date locally and
+-- queue nothing at all. Both columns belong to the server, so the token came
+-- straight back and the streak broke on the next pull — about eight seconds
+-- after the child believed they had saved it.
+do $$
+declare res jsonb;
+begin
+  set local role postgres;
+  update kids set streak_freezes = 1, streak_count = 9, streak_last_day = current_date - 1
+   where id = 'e4a44444-0000-0000-0000-000000000001';
+  set local role app_user;
+
+  perform become('e3a33333-3333-3333-3333-333333333333');
+  res := use_streak_freeze('e4a44444-0000-0000-0000-000000000001');
+  perform ok('a child can spend their own freeze', (res->>'ok')::boolean = true);
+  perform ok('the token is really gone',
+    (select streak_freezes from kids where id = 'e4a44444-0000-0000-0000-000000000001') = 0);
+  perform ok('and today counts, so the run survives',
+    (select streak_last_day from kids where id = 'e4a44444-0000-0000-0000-000000000001') = current_date);
+  perform ok('the streak itself was not touched',
+    (select streak_count from kids where id = 'e4a44444-0000-0000-0000-000000000001') = 9);
+
+  res := use_streak_freeze('e4a44444-0000-0000-0000-000000000001');
+  perform ok('with none left it is refused rather than going negative',
+    (res->>'ok')::boolean = false and res->>'reason' = 'no_tokens');
+
+  -- Two taps on a slow connection must not cost two tokens.
+  set local role postgres;
+  update kids set streak_freezes = 2 where id = 'e4a44444-0000-0000-0000-000000000001';
+  set local role app_user;
+  perform become('e3a33333-3333-3333-3333-333333333333');
+  res := use_streak_freeze('e4a44444-0000-0000-0000-000000000001');
+  perform ok('a day already safe does not cost a second token',
+    (res->>'ok')::boolean = false and res->>'reason' = 'already_safe'
+    and (select streak_freezes from kids where id = 'e4a44444-0000-0000-0000-000000000001') = 2);
+
+  -- And not for somebody else's child.
+  perform become('11111111-1111-1111-1111-111111111111');
+  begin
+    perform use_streak_freeze('e4a44444-0000-0000-0000-000000000001');
+    raise exception 'FAIL spent another family''s freeze';
+  exception when others then
+    if sqlerrm like 'FAIL%' then raise; end if;
+    raise notice '  PASS one family CANNOT spend another child''s freeze (%)', left(sqlerrm, 30);
+  end;
+end $$;
+
 -- ---------- a device cannot simply write itself tokens or winnings ----------
 do $$
 begin

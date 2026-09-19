@@ -60,6 +60,9 @@ const SERVER_OWNED = {
          // Arcade tokens and the day's winnings are balances too: play_minigame
          // and approve_submission are the only things allowed to move them.
          'play_tokens', 'game_day', 'game_coins_today',
+         // play_minigame keeps the high score, so a device pushing an older
+         // copy of it would quietly take a record away.
+         'best_scores',
          // Skins are bought, so the list of them is a balance as well.
          // buy_market_skin is what adds one, and a device pushing its own copy
          // of the list could hand over a paid skin for nothing — or, pushing a
