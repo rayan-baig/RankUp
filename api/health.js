@@ -47,21 +47,30 @@ export default async function handler(req, res) {
   }
 
   const conf = configured()
+  const given = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  const deep = secretMatches(given, CRON_SECRET)
+
+  // Even the failures obey the split. Saying WHICH part of the stack is down,
+  // and quoting the database's own error text, is exactly the operational
+  // detail the secret exists to keep in. A public caller gets the fact that
+  // something is wrong, which is all an uptime monitor needs.
   if (!conf.database) {
-    return res.status(503).json({ ok: false, reason: 'database_not_configured', configured: conf })
+    return deep
+      ? res.status(503).json({ ok: false, reason: 'database_not_configured', configured: conf })
+      : res.status(503).json({ ok: false })
   }
 
   const serviceRpc = makeServiceRpc(SUPABASE_URL, SERVICE_KEY)
-  const given = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
-  const deep = secretMatches(given, CRON_SECRET)
 
   let snapshot
   try {
     snapshot = await serviceRpc('health_snapshot', {})
   } catch (err) {
     // Reaching the database at all is the shallow check, so failing here is a
-    // genuine outage rather than a detail to hide behind the secret.
-    return res.status(503).json({ ok: false, reason: 'database_unreachable', detail: err.message })
+    // genuine outage — but the reason why is still not public.
+    return deep
+      ? res.status(503).json({ ok: false, reason: 'database_unreachable', detail: err.message })
+      : res.status(503).json({ ok: false })
   }
 
   if (!deep) return res.status(200).json({ ok: true })

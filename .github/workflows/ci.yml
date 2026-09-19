@@ -77,6 +77,32 @@ jobs:
           npm run test:smoke
           npm run test:sync
 
+      # The serverless functions hold every secret in the product, and until
+      # this step nothing exercised them at all. They run under workerd here
+      # rather than Node, because workerd is what actually serves them in
+      # production and the two are not the same runtime.
+      - name: The server endpoints, under the runtime that serves them
+        env:
+          PGHOST: localhost
+          PGPORT: '55432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          # One call, one PAIR. Two calls would hand out a public key and a
+          # private key from different pairs, and web-push rejects that.
+          node -e "const k=require('web-push').generateVAPIDKeys();console.log(k.publicKey);console.log(k.privateKey)" > /tmp/vapid.txt
+          npx wrangler pages dev dist --port 8788 --compatibility-flags nodejs_compat \
+            --binding SUPABASE_URL=http://localhost:54321 \
+            --binding SUPABASE_SERVICE_ROLE_KEY=service-role-key \
+            --binding CRON_SECRET=test-cron-secret \
+            --binding STRIPE_SECRET_KEY=sk_test_routing_only \
+            --binding ANTHROPIC_API_KEY=sk-ant-test-routing-only \
+            --binding VAPID_PUBLIC_KEY=$(sed -n 1p /tmp/vapid.txt) \
+            --binding VAPID_PRIVATE_KEY=$(sed -n 2p /tmp/vapid.txt) \
+            --binding VAPID_SUBJECT=mailto:test@example.com &
+          npx wait-on http://localhost:8788/ --timeout 90000 || sleep 20
+          npm run test:api
+
       - name: Screenshots from the failure, if there was one
         if: failure()
         uses: actions/upload-artifact@v4

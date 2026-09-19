@@ -36,16 +36,28 @@ const PRODUCTS = {
   flash_12: { price: process.env.STRIPE_PRICE_FLASH_12 || '', tickets: 12 },
 }
 
+/**
+ * Which family is asking, according to their own token.
+ *
+ * This used to call family_snapshot(0), which returns EVERY row the caller can
+ * see — every quest, every submission, and every proof photo as base64 — purely
+ * to read one id off the front of it. On a family with a few pending photos
+ * that is megabytes across the wire to answer "who are you", on a button a
+ * parent taps while deciding whether to pay.
+ *
+ * billing_status returns the one field, and it joins through `parents`, so a
+ * child's device cannot start a checkout for their family either.
+ */
 async function callerFamilyId(token) {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/family_snapshot`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/billing_status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: token, Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ p_since: 0 }),
+      body: '{}',
     })
     if (!res.ok) return null
-    const snapshot = await res.json()
-    return snapshot?.families?.[0]?.id || null
+    const status = await res.json()
+    return status?.ok ? status.family_id || null : null
   } catch {
     return null
   }
@@ -74,6 +86,12 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' })
   if (!STRIPE_SECRET || !SUPABASE_URL) return res.status(503).json({ error: 'not_configured' })
 
+  // Who is asking comes first. Validating the body first meant a caller with no
+  // token at all could learn which plans and ticket packs this deployment has
+  // prices configured for, one guess at a time.
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  if (!token) return res.status(401).json({ error: 'Sign in first.' })
+
   let body = req.body
   if (typeof body === 'string') {
     try { body = JSON.parse(body) } catch { body = null }
@@ -86,9 +104,6 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: oneOff ? 'Unknown product.' : 'Unknown plan.' })
   }
 
-  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
-  if (!token) return res.status(401).json({ error: 'Sign in first.' })
-
   // The caller's own token decides which family this is. Trusting a family id
   // from the request body would let anyone upgrade anyone.
   const familyId = await callerFamilyId(token)
@@ -98,6 +113,15 @@ export default async function handler(req, res) {
   // after paying, on a page carrying RankUp's name. An unvalidated origin from
   // the request body makes that an attacker's site.
   const origin = safeOrigin(body?.origin || req.headers.origin || '')
+  // No origin means no absolute URL to send Stripe back to. Sending a relative
+  // one produced a Stripe 400 reported to the parent as "checkout_failed",
+  // which says nothing about the actual problem: PUBLIC_SITE_URL is not set.
+  if (!origin) {
+    return res.status(503).json({
+      error: 'not_configured',
+      message: 'PUBLIC_SITE_URL is not set on the server, so there is nowhere to send you back to.',
+    })
+  }
   const stripe = makeStripe(STRIPE_SECRET)
 
   try {

@@ -172,15 +172,23 @@ export default async function handler(req, res) {
   if (!token) return res.status(401).json({ error: 'Sign in first.' })
   if (!SUPABASE_URL) return res.status(503).json({ error: 'not_configured' })
 
+  // Look at the image BEFORE claiming, not after.
+  //
+  // Claiming first meant a picture that was too large, or in a format this does
+  // not take, spent one of the family's two hundred monthly checks and then
+  // returned 400 without giving it back. A phone on a bad camera, or a client
+  // bug producing an oversized frame, could burn a whole month's allowance
+  // without a single check ever running. Parsing costs nothing and needs no
+  // permission, so it goes first.
+  const image = parseDataUrl(body.imageDataUrl)
+  if (!image) {
+    return res.status(400).json({ error: 'imageDataUrl must be a base64 JPEG/PNG/WebP data URL under 5MB.' })
+  }
+
   const claim = await claimCheck(token)
   if (!claim?.ok) {
     const status = claim?.reason === 'monthly_cap' ? 429 : 403
     return res.status(status).json({ error: claim?.reason || 'refused' })
-  }
-
-  const image = parseDataUrl(body.imageDataUrl)
-  if (!image) {
-    return res.status(400).json({ error: 'imageDataUrl must be a base64 JPEG/PNG/WebP data URL under 5MB.' })
   }
 
   const client = new Anthropic({ apiKey })

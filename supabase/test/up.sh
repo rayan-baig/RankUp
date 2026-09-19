@@ -61,6 +61,7 @@ if [ "${1:-}" = "--cf" ]; then
     --binding SUPABASE_SERVICE_ROLE_KEY=service-role-key \
     --binding CRON_SECRET=test-cron-secret \
     --binding STRIPE_SECRET_KEY=sk_test_routing_only \
+    --binding ANTHROPIC_API_KEY=sk-ant-test-routing-only \
     --binding VAPID_PUBLIC_KEY="$VP" \
     --binding VAPID_PRIVATE_KEY="$VS" \
     --binding VAPID_SUBJECT=mailto:test@example.com \

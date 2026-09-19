@@ -124,11 +124,14 @@ create trigger kids_enforce_limit before insert on kids
 /**
  * Give a check back.
  *
- * claim_photo_check runs before the image is parsed, which is right — it is
- * what stops an unauthenticated flood reaching the API at all. But it means a
- * check is spent the moment the request starts, so an outage at Anthropic, or
- * a malformed request, used to cost the family one of their two hundred. This
- * hands it back, and never below zero.
+ * A check is claimed before the call to Anthropic is made, which is what stops
+ * an unauthenticated flood reaching the API at all. But that means it is spent
+ * before anyone knows whether the call will work, so an outage at Anthropic, or
+ * a reply that cannot be parsed, used to cost the family one of their two
+ * hundred. This hands it back, and never below zero.
+ *
+ * The request no longer spends one on a malformed image: the endpoint parses
+ * the picture first, which costs nothing and needs no permission.
  */
 create or replace function refund_photo_check()
 returns void language plpgsql security definer set search_path = public as $$

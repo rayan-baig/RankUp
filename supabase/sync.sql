@@ -148,6 +148,13 @@ end $$;
 
 grant execute on function family_snapshot(bigint) to authenticated;
 
+-- Asked directly by the server when it needs to know which family a caller
+-- belongs to — a push, for instance, before it will buzz anybody's phone. It
+-- returns that one id and nothing else, which is the point: the endpoints that
+-- needed it were calling family_snapshot and pulling down the whole family,
+-- photos included, to read a single field off the front.
+grant execute on function current_family_id() to authenticated;
+
 -- Photo proof.
 --
 -- The photo travels as base64 in this column for now, which keeps the loop

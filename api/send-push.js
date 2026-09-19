@@ -96,16 +96,20 @@ async function rpc(fn, args, token) {
 }
 
 /**
- * Confirm the caller is really in this family, using THEIR token — so row level
- * security answers the question rather than this function trusting the request.
+ * Confirm the caller is really in this family, using THEIR token — so the
+ * database answers the question rather than this function trusting the request.
+ *
+ * This used to ask family_snapshot(0), which hands back every row the caller
+ * can see — including every pending proof photo as base64 — just to compare one
+ * id. A push goes out on every submission and every decision, so that was
+ * megabytes of a child's photographs crossing the wire, again, to answer a
+ * yes-or-no question. current_family_id returns the id and nothing else, and
+ * answers for a child's device as well as a parent's.
  */
 async function callerBelongsToFamily(token, familyId) {
   try {
-    const snapshot = await rpc('family_snapshot', { p_since: 0 }, token)
-    const families = snapshot?.families || []
-    // An empty list means the caller has no rows in that family at all.
-    if (!families.length) return false
-    return families.some((f) => f.id === familyId)
+    const mine = await rpc('current_family_id', {}, token)
+    return Boolean(mine) && mine === familyId
   } catch {
     return false
   }

@@ -71,11 +71,22 @@ export default async function handler(req, res) {
     const customerId = await customerRes.json()
     if (!customerId) return res.status(400).json({ error: 'no_customer' })
 
+    const origin = safeOrigin(body?.origin || req.headers.origin || '')
+    // Same as create-checkout: with no origin there is no absolute URL to
+    // return to, and Stripe's rejection of a relative one told the parent
+    // nothing useful.
+    if (!origin) {
+      return res.status(503).json({
+        error: 'not_configured',
+        message: 'PUBLIC_SITE_URL is not set on the server, so there is nowhere to send you back to.',
+      })
+    }
+
     const stripe = makeStripe(STRIPE_SECRET)
 
     const portal = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: `${safeOrigin(body?.origin || req.headers.origin || '')}/#/parent/plan`,
+      return_url: `${origin}/#/parent/plan`,
     })
     return res.status(200).json({ url: portal.url })
   } catch (err) {
