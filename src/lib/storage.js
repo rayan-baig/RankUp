@@ -150,7 +150,27 @@ export function purgeOrphanPhotos(state) {
   const referenced = new Set(
     (state.submissions || []).map((s) => s.photoId).filter(Boolean),
   )
-  const orphans = ids.filter((id) => !referenced.has(id))
+
+  /*
+   * A photo that has arrived but not yet been claimed is not an orphan.
+   *
+   * A picture from the child's phone travels inside the submission row as
+   * `photoData`. The provider writes it to this store and then dispatches
+   * ATTACH_SYNCED_PHOTOS to set `photoId` — two steps, and this function runs
+   * on a timer that can land between them. It would see a photo in the store
+   * that nothing points at yet and delete it, and a moment later the submission
+   * would be pointing at a picture that no longer existed. The parent opens the
+   * review screen to approve a chore and there is no photo to look at.
+   *
+   * Only photos whose submission is still carrying its data are spared, which
+   * is why approving still deletes: approval clears photoData and photoId
+   * together, and the very next sweep takes the image with it.
+   */
+  const awaitingAttach = new Set(
+    (state.submissions || []).filter((s) => s.photoData).map((s) => `photo_${s.id}`),
+  )
+
+  const orphans = ids.filter((id) => !referenced.has(id) && !awaitingAttach.has(id))
   if (!orphans.length) return 0
 
   orphans.forEach((id) => delete photos[id])
