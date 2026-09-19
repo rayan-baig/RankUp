@@ -94,6 +94,18 @@ export function enqueue(op) {
     }
   }
 
+  // A repeated call with the same fold key replaces the one already waiting.
+  // A child flicking through themes should send one set_kid_look, not nine.
+  if (op.type === 'rpc' && op.foldKey) {
+    const index = ops.findIndex((o) => o.foldKey === op.foldKey && !o.sending)
+    if (index !== -1) {
+      ops[index] = { ...ops[index], args: op.args, attempts: 0 }
+      delete ops[index].nextAttemptAt
+      delete ops[index].firstFailedAt
+      return writeOutbox(ops) ? ops[index] : null
+    }
+  }
+
   ops.push(entry)
   // Returns null when the write failed — a full quota is an expected state in
   // an app that keeps base64 photos in localStorage. The caller must not record

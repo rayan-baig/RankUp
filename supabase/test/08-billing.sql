@@ -223,6 +223,24 @@ begin
     (select flash_tickets from families where id = 'f2222222-0000-0000-0000-000000000001') = 0
     and (select coins from kids where id = 'f4444444-0000-0000-0000-000000000001') = 10);
 
+  -- The function took the coins and never handed the skin over. `skins` lives
+  -- in the kids row, which a child's device may not write, so the skin existed
+  -- only in that browser and the next pull deleted it. Paid for, then gone.
+  perform ok('the skin they paid for is actually theirs afterwards',
+    (select skins from kids where id = 'f4444444-0000-0000-0000-000000000001') ? 'ember');
+  perform ok('and the one bought with a ticket too',
+    (select skins from kids where id = 'f4444444-0000-0000-0000-000000000001') ? 'gilded');
+  perform ok('the newest one is being worn, as the app shows it',
+    (select skin_id from kids where id = 'f4444444-0000-0000-0000-000000000001') = 'gilded');
+
+  -- Buying the same skin twice must not list it twice.
+  set local role postgres;
+  update families set flash_tickets = 5 where id = 'f2222222-0000-0000-0000-000000000001';
+  set local role app_user;
+  perform become('f1111111-1111-1111-1111-111111111111');
+  res := buy_market_skin('f4444444-0000-0000-0000-000000000001', 'ember', 0, true);
+  perform ok('owning it already does not add a duplicate',
+    jsonb_array_length((select skins from kids where id = 'f4444444-0000-0000-0000-000000000001')) = 2);
 end $$;
 
 -- ---------- rarity pricing, which the client must not be able to set ----------

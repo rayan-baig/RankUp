@@ -362,6 +362,67 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 
+/**
+ * A child changing how their own app looks.
+ *
+ * Row level security lets only a parent write the kids table, for good reason —
+ * that row holds XP, currency and streaks. But it also holds the child's theme,
+ * their equipped skin, their profile frame and their drop selector, and those
+ * are the child's to choose. With no way to write them, the phone kept the
+ * choice locally and the very next pull handed the old row straight back: the
+ * kid picked a theme and watched it snap back within seconds.
+ *
+ * Worse, `skins` lives in that row too. Buying one took the coins server-side
+ * and left the skin itself in local state only, so the next pull deleted the
+ * thing they had just paid for.
+ *
+ * So: a narrow function that writes the cosmetic columns and nothing else. It
+ * cannot touch a balance, and it refuses to equip a skin the child does not
+ * own — the one cosmetic field with a price attached.
+ */
+create or replace function set_kid_look(
+  p_kid_id        uuid,
+  p_theme_id      text default null,
+  p_profile_frame text default null,
+  p_drop_selector text default null,
+  p_skin_id       text default null,
+  p_avatar_hue    int  default null
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_kid kids;
+begin
+  select * into v_kid from kids where id = p_kid_id for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
+
+  -- NULL-safe, for the same reason as every other guard in this file: a child
+  -- profile that was never paired has user_id null, and so does an anonymous
+  -- caller, so `is distinct from` would have let a stranger dress them up.
+  if not exists (select 1 from kids k where k.id = p_kid_id and k.user_id = auth.uid())
+     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id) then
+    raise exception 'not allowed';
+  end if;
+
+  -- The only cosmetic that costs money. Everything else here is free, so there
+  -- is nothing to cheat by setting it.
+  if p_skin_id is not null and p_skin_id <> ''
+     and not (coalesce(v_kid.skins, '[]'::jsonb) ? p_skin_id) then
+    return jsonb_build_object('ok', false, 'reason', 'not_owned');
+  end if;
+
+  update kids
+     set theme_id      = coalesce(p_theme_id, theme_id),
+         profile_frame = coalesce(p_profile_frame, profile_frame),
+         drop_selector = coalesce(p_drop_selector, drop_selector),
+         -- An empty string means "take it off", which coalesce alone cannot say.
+         skin_id       = case when p_skin_id = '' then null else coalesce(p_skin_id, skin_id) end,
+         avatar_hue    = coalesce(p_avatar_hue, avatar_hue)
+   where id = p_kid_id;
+
+  return jsonb_build_object('ok', true);
+end $$;
+
+grant execute on function set_kid_look(uuid, text, text, text, text, int) to authenticated;
+
 /** Spending currency on a reward. Checks the balance where it cannot be faked. */
 create or replace function redeem_reward(p_redemption_id uuid, p_reward_id uuid, p_kid_id uuid)
 returns jsonb

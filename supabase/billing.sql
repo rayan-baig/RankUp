@@ -296,6 +296,19 @@ begin
     update kids set coins = coins - v_cost where id = p_kid_id;
   end if;
 
+  -- Hand over the thing they just paid for.
+  --
+  -- This function took the coins and stopped there. The skin existed only in
+  -- the browser's own copy of the row, and `skins` lives in the kids table,
+  -- which a child's device is not allowed to write — so the next pull, seconds
+  -- later, handed back a row without it. The child paid 120 coins and watched
+  -- the skin disappear, with no way to get either back.
+  update kids
+     set skins = case when skins ? p_skin_id then skins else skins || to_jsonb(p_skin_id) end,
+         -- Buying it puts it on. The app has always behaved this way locally.
+         skin_id = p_skin_id
+   where id = p_kid_id;
+
   insert into events (family_id, kid_id, type, meta)
   values (v_kid.family_id, p_kid_id, 'skin_bought',
           jsonb_build_object('skin', p_skin_id, 'ticket', p_use_ticket));

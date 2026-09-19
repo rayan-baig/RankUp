@@ -144,6 +144,60 @@ begin
        where k->>'family_id' <> 'c2222222-0000-0000-0000-000000000001'));
 end $$;
 
+-- A child changing how their own app looks.
+--
+-- Their theme and their equipped skin live in the kids row, which only a parent
+-- may write. So the choice never reached the server and the next pull handed
+-- the old row straight back: the kid picked a theme and watched it snap back
+-- within seconds. set_kid_look is the narrow way through.
+do $$
+declare res jsonb;
+begin
+  set local role postgres;
+  update kids set skins = '["ember"]'::jsonb, theme_id = 'default', coins = 500
+   where id = 'c4444444-0000-0000-0000-000000000001';
+  set local role app_user;
+
+  -- The child, on their own paired phone.
+  perform become('c3333333-3333-3333-3333-333333333333');
+  res := set_kid_look('c4444444-0000-0000-0000-000000000001', 'nebula', 'gold', 'confetti', 'ember', 320);
+  perform ok('a child can change their own theme', (res->>'ok')::boolean = true);
+  perform ok('and it really is stored',
+    (select theme_id from kids where id = 'c4444444-0000-0000-0000-000000000001') = 'nebula'
+    and (select skin_id from kids where id = 'c4444444-0000-0000-0000-000000000001') = 'ember'
+    and (select profile_frame from kids where id = 'c4444444-0000-0000-0000-000000000001') = 'gold');
+
+  -- The one cosmetic with a price on it.
+  res := set_kid_look('c4444444-0000-0000-0000-000000000001', null, null, null, 'gilded', null);
+  perform ok('a skin they do not own cannot be worn',
+    (res->>'ok')::boolean = false and res->>'reason' = 'not_owned');
+  perform ok('and the one they do own is still on',
+    (select skin_id from kids where id = 'c4444444-0000-0000-0000-000000000001') = 'ember');
+
+  -- Empty string takes it off; null leaves it alone. Those are not the same.
+  res := set_kid_look('c4444444-0000-0000-0000-000000000001', 'aurora', null, null, '', null);
+  perform ok('an empty skin takes it off',
+    (select skin_id from kids where id = 'c4444444-0000-0000-0000-000000000001') is null);
+  perform ok('while the fields not mentioned are left alone',
+    (select profile_frame from kids where id = 'c4444444-0000-0000-0000-000000000001') = 'gold');
+
+  -- The reason the kids table is closed to children in the first place.
+  perform ok('none of this moved a balance',
+    (select coins from kids where id = 'c4444444-0000-0000-0000-000000000001') = 500);
+end $$;
+
+-- And a stranger cannot dress somebody else's child.
+do $$
+begin
+  perform become('11111111-1111-1111-1111-111111111111'); -- a parent of another family
+  begin
+    perform set_kid_look('c4444444-0000-0000-0000-000000000001', 'clown', null, null, null, null);
+    perform ok('another family CANNOT change this child''s look', false);
+  exception when others then
+    perform ok('another family CANNOT change this child''s look', true);
+  end;
+end $$;
+
 -- An outsider gets nothing at all.
 do $$
 declare snap jsonb;

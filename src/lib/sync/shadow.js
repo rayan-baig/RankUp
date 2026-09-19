@@ -59,7 +59,15 @@ const SERVER_OWNED = {
   kids: ['xp', 'coins', 'streak_count', 'streak_last_day', 'streak_freezes',
          // Arcade tokens and the day's winnings are balances too: play_minigame
          // and approve_submission are the only things allowed to move them.
-         'play_tokens', 'game_day', 'game_coins_today'],
+         'play_tokens', 'game_day', 'game_coins_today',
+         // Skins are bought, so the list of them is a balance as well.
+         // buy_market_skin is what adds one, and a device pushing its own copy
+         // of the list could hand over a paid skin for nothing — or, pushing a
+         // stale copy, take back one the child had just paid for.
+         'skins',
+         // The mark that says the daily bonus has been claimed. Pushing a stale
+         // one moved it back to yesterday, and the bonus could be claimed again.
+         'last_login_bonus'],
   // A quest's status and a submission's verdict are decided by submit_quest,
   // approve_submission and reject_submission. If a device could push these
   // directly it could mark its own work approved.
@@ -103,6 +111,59 @@ const KID_WRITABLE = new Set(['notes'])
 const FUNCTION_OWNED = new Set(['submissions', 'redemptions'])
 
 /**
+ * The columns of their own row a child is allowed to change.
+ *
+ * Their theme, their frame, their drop selector, the skin they have equipped.
+ * These live in the kids table next to XP and currency, which is why a child's
+ * device cannot write the row — so they go through set_kid_look instead, which
+ * writes these five columns and refuses everything else.
+ *
+ * Without this the choice never left the phone, and the pull eight seconds
+ * later handed the old row back. The child picked a theme and watched it snap
+ * straight back, every time.
+ */
+const KID_LOOK = ['theme_id', 'profile_frame', 'drop_selector', 'skin_id', 'avatar_hue']
+
+function lookOf(kid, familyId) {
+  const row = ENTITIES.kids.mapper.toRow(kid, familyId)
+  const look = {}
+  KID_LOOK.forEach((column) => { look[column] = row[column] ?? null })
+  return look
+}
+
+/** Queue the child's own appearance, if this device is a child's and it moved. */
+function queueKidLook(state, shadow, familyId) {
+  const kidId = state.device?.linkedKidId
+  const kid = kidId && (state.kids || []).find((k) => k.id === kidId)
+  if (!kid) return 0
+
+  const look = lookOf(kid, familyId)
+  const shadowId = `kids-look:${kidId}`
+  const serialised = JSON.stringify(look)
+  if (shadow[shadowId] === serialised) return 0
+
+  const queued = enqueue({
+    type: 'rpc',
+    fn: 'set_kid_look',
+    // Toggling a theme twice should send one call, not two.
+    foldKey: `set_kid_look:${kidId}`,
+    args: {
+      p_kid_id: kidId,
+      p_theme_id: look.theme_id,
+      p_profile_frame: look.profile_frame,
+      p_drop_selector: look.drop_selector,
+      // Empty string is how the function is told to take a skin OFF; null
+      // means "leave whatever is there", which is not the same thing.
+      p_skin_id: look.skin_id ?? '',
+      p_avatar_hue: look.avatar_hue,
+    },
+  })
+  if (!queued) return 0
+  shadow[shadowId] = serialised
+  return 1
+}
+
+/**
  * Compare state against the shadow and queue whatever changed.
  * `photoFor` supplies a submission's image, which lives outside the state object.
  */
@@ -111,6 +172,8 @@ export function queueChanges(state, { photoFor, role } = {}) {
   const shadow = readShadow()
   const familyId = state.family.id
   let queued = 0
+
+  if (role === 'kid') queued += queueKidLook(state, shadow, familyId)
 
   for (const [snapshotKey, { key: stateKey, mapper, table }] of Object.entries(ENTITIES)) {
     if (FUNCTION_OWNED.has(table)) continue
@@ -175,6 +238,12 @@ export function recordServerState(state, { photoFor, only } = {}) {
           : mapper.toRow(item, familyId),
       )
       shadow[`${table}:${item.id}`] = JSON.stringify(row)
+      // The look is tracked separately because it is pushed separately. Without
+      // this, a theme the PARENT changed would arrive here and be pushed
+      // straight back by the child's device as if the child had chosen it.
+      if (table === 'kids' && item.id === state.device?.linkedKidId) {
+        shadow[`kids-look:${item.id}`] = JSON.stringify(lookOf(item, familyId))
+      }
     }
   }
   writeShadow(shadow)
