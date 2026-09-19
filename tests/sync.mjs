@@ -12,7 +12,7 @@
  *   npm run dev                            # with .env.local pointing at it
  */
 import { chromium } from 'playwright'
-import { BASE, setPlanInDatabase } from './helpers.mjs'
+import { BASE, setPlanInDatabase, setKidInDatabase } from './helpers.mjs'
 const SHOT = process.env.SHOT_DIR || 'tests/screenshots'
 const fails = []
 const pass = n => console.log('  PASS', n)
@@ -169,6 +169,53 @@ if (visible) {
   }
 } else {
   fail('kid could open the synced quest', 'quest not visible')
+}
+
+/*
+ * A child's own choices have to stick.
+ *
+ * Their frame and drop selector live in the kids row, which a child's device is
+ * not allowed to write. The choice used to stay in that browser and the next
+ * pull — eight seconds later — handed the old row back and undid it, every
+ * time. set_kid_look is the way through, and this is the check that it works
+ * from an actual child's phone rather than from psql.
+ */
+console.log('\n=== A choice the kid makes on their own phone survives a pull ===')
+await setPlanInDatabase('The Riveras', 'elite')
+await kid.bringToFront()
+await kid.reload({ waitUntil:'networkidle' })
+await kid.waitForTimeout(3000)
+await kid.evaluate(() => { window.location.hash = '/kid/profile' })
+await kid.waitForTimeout(1200)
+const frame = kid.getByRole('button', { name:'Aurora Sweep' }).first()
+if (await frame.count()) {
+  await frame.click()
+  await kid.waitForTimeout(2000)
+  // Now move the kids row from the server side, the way an approval does. That
+  // is what makes the row come back down — and coming back down is what used
+  // to undo the child's choice. Without it the row simply never re-arrives and
+  // a broken app looks fine.
+  await setKidInDatabase('Ava', { coins: 7 })
+  await kid.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+  await kid.waitForTimeout(12000)
+  const kidNow = (await kState()).kids.find(k => k.profileFrame === 'aurora')
+  const pulled = (await kState()).kids[0]?.coins === 7
+  pulled ? pass('the kids row really did come back down from the server')
+         : fail('the kids row came back down', `coins=${(await kState()).kids[0]?.coins}`)
+  void kidNow
+  const stillOn = (await kState()).kids.find(k => k.profileFrame === 'aurora')
+  stillOn ? pass('the frame the child picked is still on after several pulls')
+          : fail('kid choice survives a pull', `frame=${(await kState()).kids[0]?.profileFrame}`)
+
+  await parent.bringToFront()
+  await parent.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+  await parent.waitForTimeout(8000)
+  const pState = await parent.evaluate(() => JSON.parse(localStorage.getItem('rankup.state.v1')))
+  pState?.kids?.some(k => k.profileFrame === 'aurora')
+    ? pass('and it reached the parent phone, so it really went to the server')
+    : fail('kid choice reaches the server', `parent sees ${pState?.kids?.[0]?.profileFrame}`)
+} else {
+  fail('the frame picker is reachable on the kid phone', 'no Aurora Sweep chip on /kid/profile')
 }
 
 console.log('\nJS errors:', errors.length); errors.slice(0,10).forEach(e=>console.log('  ',e))

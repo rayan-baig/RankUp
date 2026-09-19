@@ -4,7 +4,7 @@
  * The rule being proved is the economic one: a token comes from a chore, and
  * grinding games can never out-earn doing them.
  */
-import { launch, reporter, setUpFamily, readState, asKid, asParent, submitPhotoProof, finish, SHOT_DIR } from './helpers.mjs'
+import { launch, reporter, setUpFamily, readState, asKid, asParent, submitPhotoProof, finish, setKidInDatabase, SHOT_DIR } from './helpers.mjs'
 
 const { browser, page, errors } = await launch()
 const { fails, pass, fail } = reporter()
@@ -119,15 +119,16 @@ after.coins - coinsBefore <= 5
   : fail('per-game cap', `paid ${after.coins - coinsBefore}`)
 
 console.log('\n=== Grinding cannot beat a chore ===')
-await page.evaluate(() => {
-  const s = JSON.parse(localStorage.getItem('rankup.state.v1'))
-  s.kids[0].playTokens = 20
-  s.kids[0].gameCoinsToday = 15
-  s.kids[0].gameDay = new Date().toISOString().slice(0, 10)
-  localStorage.setItem('rankup.state.v1', JSON.stringify(s))
+// Put the child at the cap where the cap actually lives. These three columns
+// move through play_minigame and nothing else, so writing them into
+// localStorage only ever looked like it worked.
+await setKidInDatabase('Ava', {
+  play_tokens: 20,
+  game_coins_today: 15,
+  game_day: new Date().toISOString().slice(0, 10),
 })
 await page.reload({ waitUntil: 'networkidle' })
-await page.waitForTimeout(900)
+await page.waitForTimeout(2500)
 await page.evaluate(() => { window.location.hash = '/kid/arcade' })
 await page.waitForTimeout(800)
 const cappedText = await page.evaluate(() => document.body.innerText)

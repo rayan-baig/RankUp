@@ -31,6 +31,33 @@ export async function setPlanInDatabase(familyName, tier = 'standard') {
   await client.end()
 }
 
+/**
+ * Set a child's server-owned numbers directly, the way only the database can.
+ *
+ * Tokens, the day's winnings and the day itself are moved by play_minigame and
+ * approve_submission and by nothing else, so a test that needs a child sitting
+ * at the daily cap has to put them there in the database. Writing the numbers
+ * into localStorage instead used to appear to work, purely because the sync
+ * cursor had already moved past that row and the app never asked for it again.
+ */
+export async function setKidInDatabase(kidName, patch) {
+  const { default: pg } = await import('pg')
+  const client = new pg.Client({
+    host: process.env.PGHOST || '/tmp',
+    port: Number(process.env.PGPORT || 55432),
+    user: process.env.PGUSER || 'postgres',
+    database: process.env.PGDATABASE || 'rankup_test',
+  })
+  await client.connect()
+  const columns = Object.keys(patch)
+  const sets = columns.map((c, i) => `${c} = $${i + 1}`).join(', ')
+  await client.query(
+    `update kids set ${sets} where name = $${columns.length + 1}`,
+    [...columns.map((c) => patch[c]), kidName],
+  )
+  await client.end()
+}
+
 export async function launch() {
   const browser = await chromium.launch({
     executablePath: process.env.CHROMIUM_PATH || undefined,
