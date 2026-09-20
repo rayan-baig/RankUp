@@ -38,6 +38,10 @@ function configured() {
       (process.env.VAPID_PUBLIC_KEY || process.env.VITE_VAPID_PUBLIC_KEY)),
     ai_photo_check: Boolean(process.env.ANTHROPIC_API_KEY),
     scheduled_jobs: Boolean(CRON_SECRET),
+    // Without this, Stripe has nowhere to send a parent back to and checkout
+    // refuses to start. It is the easiest one to forget because nothing breaks
+    // until somebody actually tries to pay.
+    site_url: Boolean(process.env.PUBLIC_SITE_URL),
   }
 }
 

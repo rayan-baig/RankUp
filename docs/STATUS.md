@@ -30,9 +30,9 @@ Legend: ✅ genuinely works · 🟡 works but only on this device · ❌ looks r
 | Rewards catalogue and redemption | ✅ | Parent marks a reward as given |
 | Family goal | ✅ | Combined XP toward one shared reward |
 | Daily login bonus | ✅ | |
-| Standard / Elite feature differences | ✅ | The *features* differ correctly. The *billing* does not exist |
+| Standard / Elite feature differences | ✅ | Both the features and the billing. The tier is written by Stripe's webhook and by nothing else |
 | Elite 1.5× XP boost | ✅ | Applied in the reward calculation |
-| Elite 10-slot guilds | ✅ | The slot count is real; the people in them are not |
+| Elite 10-slot guilds | ✅ | Real children in other families, once a parent on each side approves. Off unless `VITE_GUILDS_ENABLED=true` |
 | System Override Protocol | ✅ | Currency Tax, Dimension Lockout and Red Security Lockdown all genuinely work |
 | AI Behaviour Blueprints | ✅ | Charts are computed from this family's real activity log |
 | Elite cosmetics (frames, drop selectors) | ✅ | |

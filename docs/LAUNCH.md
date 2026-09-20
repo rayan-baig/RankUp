@@ -142,7 +142,23 @@ Never in `VITE_`: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`,
 `STRIPE_WEBHOOK_SECRET`, `VAPID_PRIVATE_KEY`, `ANTHROPIC_API_KEY`.
 
 The app checks for this at start-up and shouts in the console if it finds a
-secret-shaped value in a public name.
+secret-shaped value in a public name. `npm run test:smoke` checks the other
+direction — that every setting the code reads is actually in `.env.example`,
+so the file you are copying from is never missing one.
+
+**Two that are easy to miss**, because nothing breaks until somebody real hits
+them:
+
+- [ ] `PUBLIC_SITE_URL` — your public https address. Stripe sends people back
+      here after paying. Without it, checkout and the billing portal refuse to
+      start rather than sending a paying parent to a broken page.
+- [ ] `CRON_SECRET` — one long random string (`openssl rand -hex 32`) for all
+      three scheduled jobs. Without it they refuse every caller including your
+      own scheduler, and the first thing you would notice is that children's
+      photos are never deleted.
+
+`GET /api/health` with that secret lists all of these as booleans, so you can
+check the deploy rather than guess at it.
 
 ## 5. Fill in the things marked as placeholders
 
