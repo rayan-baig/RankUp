@@ -136,6 +136,14 @@ begin
   select * into v_guild from guilds where invite_code = upper(trim(p_invite_code));
   if v_guild is null then return jsonb_build_object('ok', false, 'reason', 'no_guild'); end if;
 
+  -- Guilds are part of what a family pays for, on BOTH sides. create_guild
+  -- refuses a Starter family outright, and this is the other door into the
+  -- same room: without this check a Starter family simply joined somebody
+  -- else's guild instead of making one, and had the whole feature for free.
+  if (select tier from families where id = v_kid.family_id) = 'starter' then
+    return jsonb_build_object('ok', false, 'reason', 'plan_has_no_guilds');
+  end if;
+
   if exists (select 1 from guild_members where guild_id = v_guild.id and kid_id = p_kid_id and status <> 'removed') then
     return jsonb_build_object('ok', false, 'reason', 'already_requested');
   end if;
@@ -145,8 +153,28 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'full');
   end if;
 
+  /*
+   * A child who has left, or been removed, may ask again — and the row is
+   * still there, because (guild_id, kid_id) is the primary key.
+   *
+   * A plain insert raised a duplicate key error, which surfaced in the app as
+   * an unexplained failure the second time a child tried to join anywhere they
+   * had been before. Leaving and rejoining is an ordinary thing to do.
+   *
+   * Both consents are reset to false, and that is the part that matters. If
+   * the guild owner's parent removed a child for something they said, the
+   * child asking again must put that decision back in front of both parents —
+   * not walk back in on approvals banked before they were removed.
+   */
   insert into guild_members (guild_id, kid_id, family_id, role, status)
-  values (v_guild.id, p_kid_id, v_kid.family_id, 'member', 'invited');
+  values (v_guild.id, p_kid_id, v_kid.family_id, 'member', 'invited')
+  on conflict (guild_id, kid_id) do update
+     set status = 'invited',
+         role = 'member',
+         family_id = excluded.family_id,
+         approved_by_own_parent = false,
+         approved_by_owner = false,
+         requested_at = now();
 
   return jsonb_build_object('ok', true, 'guild_id', v_guild.id, 'guild_name', v_guild.name,
                             'status', 'awaiting_approval');
@@ -378,8 +406,12 @@ begin
     join guilds g on g.id = gm.guild_id
     join kids k on k.id = gm.kid_id
     where gm.flagged = true
+      -- Deliberately NOT limited to an active membership. A parent whose first
+      -- act on seeing a report is to pull their child out of the guild would
+      -- otherwise lose sight of the very message they were reacting to — the
+      -- one thing they might need to show a school or another parent.
       and exists (select 1 from guild_members m
-                   where m.guild_id = gm.guild_id and m.family_id = v_family and m.status = 'active')), '[]'::jsonb);
+                   where m.guild_id = gm.guild_id and m.family_id = v_family)), '[]'::jsonb);
 end $$;
 
 /** Which guild is this kid in, if any? */

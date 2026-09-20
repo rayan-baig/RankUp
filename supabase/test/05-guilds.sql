@@ -224,6 +224,73 @@ begin
       select 1 from jsonb_array_elements(
         (guild_roster(guild, '9d000000-0000-0000-0000-000000000001'))->'members') m
        where m->>'name' = 'Bo'));
+
+  -- Pulling a child out must not cost their parent sight of the thing they
+  -- reported. It is the one record they might have to show a school.
+  perform become('92222222-2222-2222-2222-222222222222');
+  perform ok('a parent who withdrew their child can still see the report',
+    jsonb_array_length(reported_guild_messages()) = 1);
+end $$;
+
+-- ---------- leaving and asking again ----------
+--
+-- The membership row survives leaving, because (guild_id, kid_id) is the
+-- primary key. A plain insert therefore hit a duplicate key the second time a
+-- child asked to join anywhere they had been before, and the app showed an
+-- unexplained failure for something entirely ordinary.
+do $$
+declare guild uuid; code text; res jsonb;
+begin
+  set local role postgres;
+  select id, invite_code into guild, code from guilds where name = 'The Bookworms';
+  set local role app_user;
+
+  perform become('92222222-2222-2222-2222-222222222222');
+  res := request_guild_join('9d000000-0000-0000-0000-000000000002', code);
+  perform ok('a child who left can ask to join again',
+    (res->>'ok')::boolean and res->>'status' = 'awaiting_approval');
+
+  -- And they come back as a REQUEST, not as a member. If the guild owner's
+  -- parent removed a child for something they said, asking again has to put
+  -- that decision back in front of both parents rather than walking straight
+  -- back in on approvals banked before the removal.
+  set local role postgres;
+  perform ok('both consents start again from nothing',
+    (select not approved_by_own_parent and not approved_by_owner
+       from guild_members
+      where guild_id = guild and kid_id = '9d000000-0000-0000-0000-000000000002'));
+  perform ok('and they are not on the roster until both parents say so again',
+    (select status from guild_members
+      where guild_id = guild and kid_id = '9d000000-0000-0000-0000-000000000002') = 'invited');
+  set local role app_user;
+end $$;
+
+-- ---------- guilds are part of what a family pays for ----------
+--
+-- create_guild refuses Starter outright. Joining was the other door into the
+-- same room: a Starter family simply joined somebody else's guild instead of
+-- making one, and had the whole feature for nothing.
+do $$
+declare code text; res jsonb;
+begin
+  set local role postgres;
+  select invite_code into code from guilds where name = 'The Bookworms';
+  update families set tier = 'starter' where id = '9b000000-0000-0000-0000-000000000002';
+  delete from guild_members
+   where kid_id = '9d000000-0000-0000-0000-000000000002';
+  set local role app_user;
+
+  perform become('92222222-2222-2222-2222-222222222222');
+  res := request_guild_join('9d000000-0000-0000-0000-000000000002', code);
+  perform ok('a Starter family cannot join a guild either',
+    (res->>'ok')::boolean = false and res->>'reason' = 'plan_has_no_guilds');
+
+  set local role postgres;
+  update families set tier = 'standard' where id = '9b000000-0000-0000-0000-000000000002';
+  set local role app_user;
+  perform become('92222222-2222-2222-2222-222222222222');
+  res := request_guild_join('9d000000-0000-0000-0000-000000000002', code);
+  perform ok('and can the moment they pay for it', (res->>'ok')::boolean);
 end $$;
 
 reset role;
