@@ -113,23 +113,70 @@ export function AppProvider({ children }) {
   }, [state.device?.pairedAt])
 
   /**
-   * Bring photos that arrived from another device into this one's photo store.
+   * Fetch the proof photos this device needs, once each.
    *
    * The parent is being asked to approve a picture, so they have to be able to
-   * see it. It travels inside the submission row rather than as a separate
-   * upload, and this is where it stops being a lump of base64 in state and
-   * becomes a photo the review screen can show — and, just as importantly, one
-   * that gets destroyed with the rest when the parent decides.
+   * see it. It used to ride along inside the submission row on every sync —
+   * which meant the child's own phone was sent back the photograph it had just
+   * taken, and the parent's phone was sent it two or three times over, because
+   * the cursor deliberately lags so nothing committed late is stepped over. At
+   * 80KB of base64 that was 96% of the payload, delivered about five times to
+   * be looked at once.
+   *
+   * Now the snapshot carries a flag and this fetches the picture itself: only
+   * on a device that does not already have it, only once, and only for a
+   * submission still waiting to be decided — approving or sending back
+   * destroys the image, so there is never anything to fetch for a finished one.
    */
+  const photoAsked = useRef(new Set())
+
   useEffect(() => {
-    const arrived = (state.submissions || []).filter((s) => s.photoData && !s.photoId)
-    if (!arrived.length) return
-    const photos = arrived.map((s) => {
-      const photoId = `photo_${s.id}`
-      putPhoto(photoId, s.photoData)
-      return { submissionId: s.id, photoId }
-    })
-    dispatch({ type: 'ATTACH_SYNCED_PHOTOS', photos })
+    // A device that took the photo already holds it under its own photoId, so
+    // it matches nothing here and never asks for anything.
+    const wanted = (state.submissions || []).filter(
+      (s) => s.hasPhoto && !s.photoId && !s.photoData && s.status === 'pending' && !photoAsked.current.has(s.id),
+    )
+    // The submitting device's own row still carries the image for the moment
+    // between capture and the photo store, so that path is kept as it was.
+    const carried = (state.submissions || []).filter((s) => s.photoData && !s.photoId)
+
+    if (carried.length) {
+      dispatch({
+        type: 'ATTACH_SYNCED_PHOTOS',
+        photos: carried.map((s) => {
+          const photoId = `photo_${s.id}`
+          putPhoto(photoId, s.photoData)
+          return { submissionId: s.id, photoId }
+        }),
+      })
+    }
+
+    if (!wanted.length || !transport.isConfigured()) return
+    // Marked before the request, not after: two renders in the same tick would
+    // otherwise both fire, and a photo is the most expensive thing to ask for
+    // twice.
+    wanted.forEach((s) => photoAsked.current.add(s.id))
+
+    let cancelled = false
+    ;(async () => {
+      const photos = []
+      for (const submission of wanted) {
+        try {
+          const data = await transport.rpc('submission_photo', { p_submission_id: submission.id })
+          if (!data) continue
+          const photoId = `photo_${submission.id}`
+          if (putPhoto(photoId, data)) photos.push({ submissionId: submission.id, photoId })
+        } catch (err) {
+          // Let it be asked for again on the next pull: a photo that cannot be
+          // fetched is a parent staring at a review screen with nothing on it.
+          photoAsked.current.delete(submission.id)
+          console.warn('[RankUp] Could not fetch a proof photo:', err.message)
+        }
+      }
+      if (!cancelled && photos.length) dispatch({ type: 'ATTACH_SYNCED_PHOTOS', photos })
+    })()
+
+    return () => { cancelled = true }
   }, [state.submissions])
 
   // Move any server calls the reducer asked for into the outbox.

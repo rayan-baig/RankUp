@@ -165,6 +165,16 @@ export const submissions = {
     questId: row.quest_id,
     kidId: row.kid_id,
     photoId: existing.photoId || null,
+    /*
+     * The image itself no longer travels in the snapshot — it was 96% of the
+     * payload, delivered to every device including the one that took it. What
+     * arrives is a flag; AppContext fetches the picture once, only on a device
+     * that is going to draw it. See submission_photo in supabase/sync.sql.
+     *
+     * `photo_data` is still read because the submitting device's own row still
+     * carries it for the moment between capture and the photo store.
+     */
+    hasPhoto: row.has_photo ?? Boolean(row.photo_data),
     photoData: row.photo_data || null,
     // When the photo was destroyed, and why it is gone. Without this the review
     // screen cannot tell a purged photo from a quest that never wanted one, and

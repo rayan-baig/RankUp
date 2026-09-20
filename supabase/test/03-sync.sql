@@ -198,6 +198,71 @@ begin
   end;
 end $$;
 
+-- The proof photograph does not ride along in the snapshot.
+--
+-- It is 96% of the payload when it is in there, and it was being delivered to
+-- every device on every sync — including the child's own phone, which took it.
+-- The snapshot carries a flag; the picture is fetched once, by the device that
+-- is going to draw it.
+do $$
+declare snap jsonb; sid uuid; row jsonb;
+begin
+  set local role postgres;
+  insert into submissions (id, family_id, quest_id, kid_id, status, photo_data)
+  select '0c700000-0000-4000-8000-000000000001',
+         'c2222222-0000-0000-0000-000000000001', q.id,
+         'c4444444-0000-0000-0000-000000000001', 'pending',
+         'data:image/jpeg;base64,' || repeat('A', 80000)
+    from quests q where q.family_id = 'c2222222-0000-0000-0000-000000000001' limit 1
+  returning id into sid;
+  set local role app_user;
+
+  perform become('c1111111-1111-1111-1111-111111111111');
+  snap := family_snapshot(0);
+  select e into row from jsonb_array_elements(snap->'submissions') e
+   where (e->>'id')::uuid = '0c700000-0000-4000-8000-000000000001';
+
+  perform ok('the submission is still in the snapshot', row is not null);
+  perform ok('but the photograph is not', not (row ? 'photo_data'));
+  perform ok('a flag says there is one to fetch', (row->>'has_photo')::boolean = true);
+  perform ok('and the whole snapshot is now small',
+    length(snap::text) < 20000, 'it is ' || length(snap::text) || ' bytes');
+
+  perform ok('the parent can fetch the picture itself',
+    length(submission_photo('0c700000-0000-4000-8000-000000000001')) > 80000);
+
+  -- The child may fetch their own; row level security is what decides, and
+  -- this function adds no new way in.
+  perform become('c3333333-3333-3333-3333-333333333333');
+  perform ok('the child could fetch their own proof',
+    length(submission_photo('0c700000-0000-4000-8000-000000000001')) > 80000);
+end $$;
+
+-- And nobody else can.
+do $$
+begin
+  perform become('11111111-1111-1111-1111-111111111111'); -- another family's parent
+  perform ok('another family gets nothing for that id',
+    submission_photo('0c700000-0000-4000-8000-000000000001') is null);
+end $$;
+
+-- A decided chore has no photograph left to hand over, and says so plainly
+-- rather than erroring: that is the normal end state for every photo here.
+do $$
+begin
+  set local role postgres;
+  update submissions set photo_data = null, photo_deleted_at = now(),
+                         status = 'approved'
+   where id = '0c700000-0000-4000-8000-000000000001';
+  set local role app_user;
+  perform become('c1111111-1111-1111-1111-111111111111');
+  perform ok('a reviewed photo is simply gone',
+    submission_photo('0c700000-0000-4000-8000-000000000001') is null);
+  perform ok('and the flag says so too',
+    (select (e->>'has_photo')::boolean from jsonb_array_elements(family_snapshot(0)->'submissions') e
+      where (e->>'id')::uuid = '0c700000-0000-4000-8000-000000000001') = false);
+end $$;
+
 -- An outsider gets nothing at all.
 do $$
 declare snap jsonb;

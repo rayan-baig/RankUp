@@ -138,7 +138,24 @@ begin
     'families',    coalesce((select jsonb_agg(to_jsonb(f)) from families f    where f.rev > cutoff), '[]'::jsonb),
     'kids',        coalesce((select jsonb_agg(to_jsonb(k)) from kids k        where k.rev > cutoff), '[]'::jsonb),
     'quests',      coalesce((select jsonb_agg(to_jsonb(q)) from quests q      where q.rev > cutoff), '[]'::jsonb),
-    'submissions', coalesce((select jsonb_agg(to_jsonb(s)) from submissions s where s.rev > cutoff), '[]'::jsonb),
+    /*
+     * WITHOUT the photograph, which is 96% of this payload when one is in it.
+     *
+     * A 720px proof photo is about 60KB, and 80KB once it is base64. Carrying
+     * it here sent it to every device on every delivery: to the parent, who
+     * needs it; to the CHILD'S OWN PHONE, which took it and already has it;
+     * and two or three times over, because the cursor deliberately lags so
+     * that nothing committed late is stepped over. One photo crossed the wire
+     * roughly five times to be looked at once.
+     *
+     * The flag is all a device needs to know it should go and fetch one. See
+     * submission_photo below, which hands over exactly one, to exactly the
+     * device that is going to draw it.
+     */
+    'submissions', coalesce((
+      select jsonb_agg(to_jsonb(s) - 'photo_data'
+                       || jsonb_build_object('has_photo', s.photo_data is not null))
+        from submissions s where s.rev > cutoff), '[]'::jsonb),
     'rewards',     coalesce((select jsonb_agg(to_jsonb(r)) from rewards r     where r.rev > cutoff), '[]'::jsonb),
     'redemptions', coalesce((select jsonb_agg(to_jsonb(r)) from redemptions r where r.rev > cutoff), '[]'::jsonb),
     'notes',       coalesce((select jsonb_agg(to_jsonb(n)) from notes n       where n.rev > cutoff), '[]'::jsonb),
@@ -158,13 +175,37 @@ grant execute on function current_family_id() to authenticated;
 
 -- Photo proof.
 --
--- The photo travels as base64 in this column for now, which keeps the loop
--- working across devices without a second service to set up. It is NOT the
--- right long-term home: a 60KB string per submission bloats every snapshot that
--- carries one. Before real users, move these into Supabase Storage and keep
--- only the path — see docs/SYNC.md.
+-- The photo travels as base64 in this column, which keeps the loop working
+-- across devices without a second service to set up. It no longer bloats the
+-- snapshot: family_snapshot returns a flag and submission_photo hands the
+-- image over on its own, once, to the device that will draw it.
+--
+-- Supabase Storage is still the better long-term home — it would keep the
+-- bytes out of Postgres entirely and let a CDN serve them — but the thing that
+-- made it urgent was the bandwidth, and that is dealt with. See docs/SYNC.md.
 alter table submissions add column if not exists photo_data text;
 alter table submissions add column if not exists photo_deleted_at timestamptz;
+
+/**
+ * One proof photograph, for the device that is about to show it.
+ *
+ * Not security definer: row level security decides. A parent can read their
+ * own family's submissions and a child can read their own, and this function
+ * inherits exactly that — there is no new way in here, only a narrower way to
+ * ask for something the caller could already see.
+ *
+ * Returns null rather than raising for a photo that is gone. Approving or
+ * sending back a chore destroys the image at that moment, so "no longer there"
+ * is the normal end state for every photo in the system, not an error.
+ */
+create or replace function submission_photo(p_submission_id uuid)
+returns text
+language sql stable as $$
+  select photo_data from submissions where id = p_submission_id;
+$$;
+
+grant execute on function submission_photo(uuid) to authenticated;
+
 
 -- ---------------------------------------------------------------------------
 -- The writes a device is NOT allowed to make directly.
