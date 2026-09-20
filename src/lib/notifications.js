@@ -67,7 +67,11 @@ export async function ensureServiceWorker() {
   if (!SUPPORTED) return null
   if (registration) return registration
   try {
-    registration = await navigator.serviceWorker.register('/sw.js')
+    // Resolved against the page, not the domain root. A leading slash assumes
+    // the app is served AT the root, and it is not always: a sub-path deploy, a
+    // preview build, or a shared demo link all serve it from somewhere else,
+    // and there the registration 404s and notifications quietly never work.
+    registration = await navigator.serviceWorker.register(new URL('sw.js', document.baseURI))
     await navigator.serviceWorker.ready
     return registration
   } catch (err) {
