@@ -11,6 +11,7 @@ import ThemeBackground from './components/ThemeBackground.jsx'
 import ParentBackground from './components/ParentBackground.jsx'
 import NavBar from './components/NavBar.jsx'
 import LevelUpOverlay from './components/LevelUpOverlay.jsx'
+import BadgeToast from './components/BadgeToast.jsx'
 
 import Onboarding from './screens/Onboarding.jsx'
 import RoleSwitch from './screens/RoleSwitch.jsx'
@@ -210,6 +211,11 @@ export default function App() {
         />
       )}
       {isParentArea && <NavBar items={PARENT_NAV} path={route} badges={{ '/parent/approvals': pending }} />}
+
+      {/* Only in the child's half of the app. A parent does not need to be told
+          their child crossed a threshold by a toast in the corner of a review
+          screen — that is what the weekly digest is for. */}
+      {isKidArea && activeKid && <BadgeToast state={state} kid={activeKid} />}
 
       {state.pendingLevelUp && activeKid && kidTheme && (
         <LevelUpOverlay

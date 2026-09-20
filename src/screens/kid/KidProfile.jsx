@@ -7,6 +7,7 @@ import Avatar, { avatarTier, TIER_THRESHOLDS } from '../../components/Avatar.jsx
 import ThemePicker from '../../components/ThemePicker.jsx'
 import { Screen, Card, Button, SectionTitle, Stat, Modal, TextInput, Banner, Chip, DemoTag } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
+import BadgeShelf from '../../components/BadgeShelf.jsx'
 
 export default function KidProfile() {
   const { state, dispatch } = useApp()
@@ -72,6 +73,12 @@ export default function KidProfile() {
         <Stat icon="✅" value={stats.approved} label="Quests approved" tone="var(--good)" />
         <Stat icon="↩️" value={stats.rejected} label="Sent back" tone="var(--warn)" />
         <Stat icon="🔥" value={kid.streak.count} label="Day streak" />
+      </div>
+
+      {/* Above the avatar forms on purpose: this is the part with a next step
+          in it, and the part a child will come back to look at. */}
+      <div className="mb-3">
+        <BadgeShelf state={state} kid={kid} />
       </div>
 
       <SectionTitle>Avatar forms</SectionTitle>
