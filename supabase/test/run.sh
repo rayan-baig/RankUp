@@ -18,6 +18,20 @@ for f in "$HERE/../schema.sql" "$HERE/../sync.sql" "$HERE/../guilds.sql" "$HERE/
 done
 echo "schema applied cleanly"
 
+# Apply every file a SECOND time, over the database that now has data in it.
+#
+# This project has no migration tool: the upgrade procedure is "re-run these
+# files", so they have to be safe to run twice. A `create table` without IF NOT
+# EXISTS aborts its file and leaves everything after it unapplied — which is a
+# half-upgraded database with nothing on screen to say so. 18-upgrade.sql then
+# checks what survived.
+for f in "$HERE/../schema.sql" "$HERE/../sync.sql" "$HERE/../guilds.sql" "$HERE/../notifications.sql" "$HERE/../consent.sql" "$HERE/../billing.sql" "$HERE/../alliances.sql" "$HERE/../reminders.sql" "$HERE/../digests.sql" "$HERE/../retention.sql" "$HERE/../crashes.sql" "$HERE/../health.sql"; do
+  if ! psql -q -v ON_ERROR_STOP=1 -f "$f" "$DB" >"$OUT" 2>&1; then
+    echo "$(basename "$f") IS NOT SAFE TO RE-RUN:"; cat "$OUT"; exit 1
+  fi
+done
+echo "schema re-applies cleanly over itself"
+
 status=0
 for f in "$HERE"/0[1-9]-*.sql "$HERE"/1[0-9]-*.sql; do
   echo ""

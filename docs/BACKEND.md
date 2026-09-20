@@ -3,9 +3,29 @@
 Right now RankUp stores everything in one browser on one device. This file explains what
 to do about that, in the order it should be done.
 
-**Nothing in here is built yet.** `supabase/schema.sql` is a complete, ready-to-run
-database design, and `src/lib/storage.js` is the one file that has to change. That is
-the whole job, structurally.
+**This is all built now.** It was written while none of it was, and the plan below is
+kept because it still explains WHY the pieces are shaped the way they are. What has
+changed is that `src/lib/sync/` exists, the database is tested against a real Postgres
+on every push, and switching a deployment on is a matter of running the files and
+setting two environment variables.
+
+**To run them, or to upgrade later:** paste each file into the Supabase SQL editor in
+this order, or `psql -f` it.
+
+```
+schema.sql  sync.sql  guilds.sql  notifications.sql  consent.sql  billing.sql
+alliances.sql  reminders.sql  digests.sql  retention.sql  crashes.sql  health.sql
+```
+
+Every one of them is safe to run again over a live database, and that IS the upgrade
+procedure — there is no migration tool and no version table. A column added later
+appears as an explicit `alter table ... add column if not exists` at the end of
+`schema.sql`, so an existing database catches up without being rebuilt.
+
+`supabase/test/run.sh` applies all twelve files twice, over a database with rows in it,
+and `supabase/test/18-upgrade.sql` then checks that the data survived and that the later
+columns and constraints really arrived. So "safe to re-run" is a tested claim rather
+than an intention.
 
 ---
 

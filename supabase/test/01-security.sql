@@ -19,6 +19,16 @@ begin
   else raise exception 'FAIL %', label; end if;
 end $$;
 
+-- The same, with a line of detail to print when it fails. Worth having: "every
+-- column added since the first release is present" is not much use on its own
+-- when what you need to know is WHICH one is missing.
+create or replace function ok(label text, condition boolean, detail text) returns void
+language plpgsql as $$
+begin
+  if condition then raise notice '  PASS %', label;
+  else raise exception 'FAIL % — %', label, detail; end if;
+end $$;
+
 -- Becoming a user is just setting the claim auth.uid() reads.
 create or replace function become(u uuid) returns void
 language sql as $$ select set_config('request.jwt.claim.sub', coalesce(u::text, ''), false); $$;

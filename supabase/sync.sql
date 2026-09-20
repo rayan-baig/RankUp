@@ -71,6 +71,7 @@ create index if not exists deletions_sync_idx on deletions (family_id, rev);
 alter table deletions enable row level security;
 
 drop policy if exists deletions_read on deletions;
+drop policy if exists deletions_read on deletions;
 create policy deletions_read on deletions
   for select using (family_id = current_family_id());
 

@@ -19,7 +19,7 @@ create extension if not exists "pgcrypto";
 -- Families and people
 -- ---------------------------------------------------------------------------
 
-create table families (
+create table if not exists families (
   id              uuid primary key default gen_random_uuid(),
   name            text not null,
   parent_theme_id text not null default 'executive',
@@ -40,7 +40,7 @@ create table families (
 );
 
 -- One row per adult. `user_id` links to Supabase's built-in auth.users table.
-create table parents (
+create table if not exists parents (
   id         uuid primary key default gen_random_uuid(),
   user_id    uuid not null unique references auth.users(id) on delete cascade,
   family_id  uuid not null references families(id) on delete cascade,
@@ -52,7 +52,7 @@ create table parents (
 
 -- Kids. `user_id` is nullable: a young child may share the parent's device and
 -- never have their own login. An older kid can be given one later.
-create table kids (
+create table if not exists kids (
   id           uuid primary key default gen_random_uuid(),
   family_id    uuid not null references families(id) on delete cascade,
   user_id      uuid unique references auth.users(id) on delete set null,
@@ -97,13 +97,13 @@ create table kids (
   created_at   timestamptz not null default now()
 );
 
-create index kids_family_idx on kids(family_id);
+create index if not exists kids_family_idx on kids(family_id);
 
 -- ---------------------------------------------------------------------------
 -- Quests and submissions
 -- ---------------------------------------------------------------------------
 
-create table quests (
+create table if not exists quests (
   id             uuid primary key default gen_random_uuid(),
   family_id      uuid not null references families(id) on delete cascade,
   kid_id         uuid not null references kids(id) on delete cascade,
@@ -143,9 +143,9 @@ create table quests (
   created_at     timestamptz not null default now()
 );
 
-create index quests_kid_status_idx on quests(kid_id, status);
+create index if not exists quests_kid_status_idx on quests(kid_id, status);
 
-create table submissions (
+create table if not exists submissions (
   id            uuid primary key default gen_random_uuid(),
   family_id     uuid not null references families(id) on delete cascade,
   quest_id      uuid not null references quests(id) on delete cascade,
@@ -183,14 +183,14 @@ create table submissions (
   submitted_at  timestamptz not null default now()
 );
 
-create index submissions_family_pending_idx on submissions(family_id, status);
-create index submissions_kid_hash_idx on submissions(kid_id, photo_hash);
+create index if not exists submissions_family_pending_idx on submissions(family_id, status);
+create index if not exists submissions_kid_hash_idx on submissions(kid_id, photo_hash);
 
 -- ---------------------------------------------------------------------------
 -- Rewards, notes, goals
 -- ---------------------------------------------------------------------------
 
-create table rewards (
+create table if not exists rewards (
   id          uuid primary key default gen_random_uuid(),
   family_id   uuid not null references families(id) on delete cascade,
   name        text not null,
@@ -200,7 +200,7 @@ create table rewards (
   created_at  timestamptz not null default now()
 );
 
-create table redemptions (
+create table if not exists redemptions (
   id         uuid primary key default gen_random_uuid(),
   family_id  uuid not null references families(id) on delete cascade,
   reward_id  uuid references rewards(id) on delete set null,
@@ -212,7 +212,7 @@ create table redemptions (
   given_at   timestamptz
 );
 
-create table notes (
+create table if not exists notes (
   id         uuid primary key default gen_random_uuid(),
   family_id  uuid not null references families(id) on delete cascade,
   kid_id     uuid not null references kids(id) on delete cascade,
@@ -222,7 +222,7 @@ create table notes (
   created_at timestamptz not null default now()
 );
 
-create table family_goals (
+create table if not exists family_goals (
   family_id  uuid primary key references families(id) on delete cascade,
   name       text not null,
   target_xp  int not null check (target_xp > 0),
@@ -233,7 +233,7 @@ create table family_goals (
 -- System Override Protocol (Elite)
 -- ---------------------------------------------------------------------------
 
-create table overrides (
+create table if not exists overrides (
   id          uuid primary key default gen_random_uuid(),
   family_id   uuid not null references families(id) on delete cascade,
   kid_id      uuid not null references kids(id) on delete cascade,
@@ -255,7 +255,7 @@ create table overrides (
 -- both sides plus moderation.
 -- ---------------------------------------------------------------------------
 
-create table guilds (
+create table if not exists guilds (
   id             uuid primary key default gen_random_uuid(),
   name           text not null,
   motto          text not null default '',
@@ -268,7 +268,7 @@ create table guilds (
   created_at     timestamptz not null default now()
 );
 
-create table guild_members (
+create table if not exists guild_members (
   guild_id  uuid not null references guilds(id) on delete cascade,
   kid_id    uuid not null references kids(id) on delete cascade,
   role      text not null default 'member' check (role in ('leader','member')),
@@ -278,7 +278,7 @@ create table guild_members (
   primary key (guild_id, kid_id)
 );
 
-create table guild_messages (
+create table if not exists guild_messages (
   id         uuid primary key default gen_random_uuid(),
   guild_id   uuid not null references guilds(id) on delete cascade,
   kid_id     uuid not null references kids(id) on delete cascade,
@@ -292,14 +292,14 @@ create table guild_messages (
 -- Parent Alliances (Elite) — the 20% Discount Tournament
 -- ---------------------------------------------------------------------------
 
-create table alliances (
+create table if not exists alliances (
   id         uuid primary key default gen_random_uuid(),
   name       text not null,
   capacity   int not null default 10,
   created_at timestamptz not null default now()
 );
 
-create table alliance_members (
+create table if not exists alliance_members (
   alliance_id uuid not null references alliances(id) on delete cascade,
   family_id   uuid not null references families(id) on delete cascade,
   joined_at   timestamptz not null default now(),
@@ -308,7 +308,7 @@ create table alliance_members (
 
 -- One row per month per alliance, written by a scheduled job that also has to
 -- apply the actual billing discount. See docs/PAYMENTS.md.
-create table alliance_results (
+create table if not exists alliance_results (
   alliance_id       uuid not null references alliances(id) on delete cascade,
   month_key         text not null,           -- 'YYYY-MM'
   winning_family_id uuid references families(id) on delete set null,
@@ -320,7 +320,7 @@ create table alliance_results (
 -- Activity log — what the AI Behaviour Blueprint reads
 -- ---------------------------------------------------------------------------
 
-create table events (
+create table if not exists events (
   id         bigserial primary key,
   family_id  uuid not null references families(id) on delete cascade,
   kid_id     uuid references kids(id) on delete cascade,
@@ -330,8 +330,8 @@ create table events (
   created_at timestamptz not null default now()
 );
 
-create index events_family_day_idx on events(family_id, day);
-create index events_kid_type_idx on events(kid_id, type);
+create index if not exists events_family_day_idx on events(family_id, day);
+create index if not exists events_kid_type_idx on events(kid_id, type);
 
 -- ---------------------------------------------------------------------------
 -- Row Level Security
@@ -380,13 +380,17 @@ alter table events          enable row level security;
 
 -- Family: everyone in it can read it. Only a parent can change it — and never
 -- the subscription columns, which only the Stripe webhook (service role) writes.
+drop policy if exists family_read on families;
 create policy family_read on families
   for select using (id = current_family_id());
+drop policy if exists family_update on families;
 create policy family_update on families
   for update using (id = current_family_id() and is_parent());
 
+drop policy if exists parents_read on parents;
 create policy parents_read on parents
   for select using (family_id = current_family_id());
+drop policy if exists parents_write on parents;
 create policy parents_write on parents
   for all using (family_id = current_family_id() and is_parent())
   with check (family_id = current_family_id() and is_parent());
@@ -394,29 +398,35 @@ create policy parents_write on parents
 -- Kids: parents manage them. A kid may read their own row but may NOT update it
 -- — otherwise they could set their own XP. All XP changes go through the
 -- approve_submission function below, which runs with elevated rights.
+drop policy if exists kids_read on kids;
 create policy kids_read on kids
   for select using (family_id = current_family_id());
+drop policy if exists kids_parent_write on kids;
 create policy kids_parent_write on kids
   for all using (family_id = current_family_id() and is_parent())
   with check (family_id = current_family_id() and is_parent());
 
 -- Quests: a kid can read their own; only a parent can create or edit one.
 -- This is the rule that keeps the game honest — a kid cannot raise a quest's XP.
+drop policy if exists quests_read on quests;
 create policy quests_read on quests
   for select using (
     family_id = current_family_id()
     and (is_parent() or kid_id = current_kid_id())
   );
+drop policy if exists quests_parent_write on quests;
 create policy quests_parent_write on quests
   for all using (family_id = current_family_id() and is_parent())
   with check (family_id = current_family_id() and is_parent());
 
 -- Submissions: a kid creates their own; only a parent decides one.
+drop policy if exists submissions_read on submissions;
 create policy submissions_read on submissions
   for select using (
     family_id = current_family_id()
     and (is_parent() or kid_id = current_kid_id())
   );
+drop policy if exists submissions_kid_insert on submissions;
 create policy submissions_kid_insert on submissions
   for insert with check (
     family_id = current_family_id()
@@ -424,50 +434,64 @@ create policy submissions_kid_insert on submissions
     and status = 'pending'
     and awarded_xp is null
   );
+drop policy if exists submissions_parent_update on submissions;
 create policy submissions_parent_update on submissions
   for update using (family_id = current_family_id() and is_parent());
 
+drop policy if exists rewards_read on rewards;
 create policy rewards_read on rewards
   for select using (family_id = current_family_id());
+drop policy if exists rewards_parent_write on rewards;
 create policy rewards_parent_write on rewards
   for all using (family_id = current_family_id() and is_parent())
   with check (family_id = current_family_id() and is_parent());
 
+drop policy if exists redemptions_read on redemptions;
 create policy redemptions_read on redemptions
   for select using (family_id = current_family_id());
+drop policy if exists redemptions_kid_insert on redemptions;
 create policy redemptions_kid_insert on redemptions
   for insert with check (family_id = current_family_id() and kid_id = current_kid_id());
+drop policy if exists redemptions_parent_update on redemptions;
 create policy redemptions_parent_update on redemptions
   for update using (family_id = current_family_id() and is_parent());
 
+drop policy if exists notes_read on notes;
 create policy notes_read on notes
   for select using (
     family_id = current_family_id()
     and (is_parent() or kid_id = current_kid_id())
   );
+drop policy if exists notes_insert on notes;
 create policy notes_insert on notes
   for insert with check (family_id = current_family_id());
+drop policy if exists notes_update on notes;
 create policy notes_update on notes
   for update using (family_id = current_family_id());
 
+drop policy if exists goals_read on family_goals;
 create policy goals_read on family_goals
   for select using (family_id = current_family_id());
+drop policy if exists goals_parent_write on family_goals;
 create policy goals_parent_write on family_goals
   for all using (family_id = current_family_id() and is_parent())
   with check (family_id = current_family_id() and is_parent());
 
 -- Overrides: a kid can see one applied to them (they are told the reason), but
 -- obviously cannot create or lift one.
+drop policy if exists overrides_read on overrides;
 create policy overrides_read on overrides
   for select using (
     family_id = current_family_id()
     and (is_parent() or kid_id = current_kid_id())
   );
+drop policy if exists overrides_parent_write on overrides;
 create policy overrides_parent_write on overrides
   for all using (family_id = current_family_id() and is_parent())
   with check (family_id = current_family_id() and is_parent());
 
 -- Guilds: visible only to members of that guild.
+drop policy if exists guilds_read on guilds;
 create policy guilds_read on guilds
   for select using (
     exists (
@@ -478,6 +502,7 @@ create policy guilds_read on guilds
         and k.family_id = current_family_id()
     )
   );
+drop policy if exists guild_members_read on guild_members;
 create policy guild_members_read on guild_members
   for select using (
     exists (
@@ -488,6 +513,7 @@ create policy guild_members_read on guild_members
         and k.family_id = current_family_id()
     )
   );
+drop policy if exists guild_messages_read on guild_messages;
 create policy guild_messages_read on guild_messages
   for select using (
     exists (
@@ -498,10 +524,12 @@ create policy guild_messages_read on guild_messages
         and k.family_id = current_family_id()
     )
   );
+drop policy if exists guild_messages_insert on guild_messages;
 create policy guild_messages_insert on guild_messages
   for insert with check (kid_id = current_kid_id());
 
 -- Alliances are for parents only.
+drop policy if exists alliances_read on alliances;
 create policy alliances_read on alliances
   for select using (
     is_parent() and exists (
@@ -509,6 +537,7 @@ create policy alliances_read on alliances
       where am.alliance_id = alliances.id and am.family_id = current_family_id()
     )
   );
+drop policy if exists alliance_members_read on alliance_members;
 create policy alliance_members_read on alliance_members
   for select using (
     is_parent() and exists (
@@ -517,6 +546,7 @@ create policy alliance_members_read on alliance_members
         and mine.family_id = current_family_id()
     )
   );
+drop policy if exists alliance_results_read on alliance_results;
 create policy alliance_results_read on alliance_results
   for select using (
     is_parent() and exists (
@@ -526,11 +556,13 @@ create policy alliance_results_read on alliance_results
     )
   );
 
+drop policy if exists events_read on events;
 create policy events_read on events
   for select using (
     family_id = current_family_id()
     and (is_parent() or kid_id = current_kid_id())
   );
+drop policy if exists events_insert on events;
 create policy events_insert on events
   for insert with check (family_id = current_family_id());
 
@@ -744,7 +776,7 @@ $$;
 -- why claiming is a single function call rather than a read followed by a write.
 -- ---------------------------------------------------------------------------
 
-create table pairing_codes (
+create table if not exists pairing_codes (
   code           text primary key check (code ~ '^[0-9]{6}$'),
   kid_id         uuid not null default gen_random_uuid(),
   -- The anonymous account the kid's device signed in as. Recorded here so that,
@@ -763,7 +795,7 @@ create table pairing_codes (
   revoked_at     timestamptz
 );
 
-create index pairing_codes_expiry_idx on pairing_codes(expires_at);
+create index if not exists pairing_codes_expiry_idx on pairing_codes(expires_at);
 
 alter table pairing_codes enable row level security;
 
@@ -1029,3 +1061,42 @@ grant execute on function read_pairing_code(text) to anon, authenticated;
 grant execute on function revoke_pairing_code(text) to anon, authenticated;
 grant execute on function record_pairing_attempt(text) to anon, authenticated;
 grant execute on function claim_pairing_code(text, uuid, text) to authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- Bringing an older database up to date
+--
+-- `create table if not exists` makes this file safe to run twice, but it also
+-- means an existing table is left exactly as it was — a column added to the
+-- definition above would never appear on a database created before it. So
+-- every column and constraint added after the first release is repeated here
+-- as an explicit, idempotent change.
+--
+-- That is the whole upgrade procedure: re-run the files in the order
+-- docs/BACKEND.md lists, over the live database, as often as you like. No
+-- migration tool, no version table, and nothing to get out of step — at the
+-- cost of this section, which has to be kept honest.
+--
+-- The rule when adding a column: put it in the CREATE TABLE above so a fresh
+-- database is right, and add an ALTER here so an existing one catches up.
+-- supabase/test/18-upgrade.sql fails the build if the two drift apart.
+-- ---------------------------------------------------------------------------
+
+-- A repeating chore, and the day it last came back.
+alter table quests add column if not exists recurrence text not null default 'once';
+alter table quests add column if not exists last_reset_on date;
+
+-- The check on `recurrence` gained 'weekdays'. A constraint cannot be replaced
+-- in place, so it is dropped and rebuilt; the name is fixed rather than the one
+-- Postgres generated, so this is repeatable.
+alter table quests drop constraint if exists quests_recurrence_check;
+alter table quests drop constraint if exists quests_recurrence_values;
+alter table quests add constraint quests_recurrence_values
+  check (recurrence in ('once','daily','weekdays','weekly'));
+
+-- The parent's one-tap reaction on an approval.
+alter table submissions add column if not exists sticker text;
+alter table submissions drop constraint if exists submissions_sticker_check;
+alter table submissions drop constraint if exists submissions_sticker_values;
+alter table submissions add constraint submissions_sticker_values
+  check (sticker in ('proud','spotless','fast','effort','kind','above','funny','thanks'));

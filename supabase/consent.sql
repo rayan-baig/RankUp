@@ -63,8 +63,10 @@ alter table consent_notices enable row level security;
 alter table parental_consents enable row level security;
 
 drop policy if exists consent_notices_read on consent_notices;
+drop policy if exists consent_notices_read on consent_notices;
 create policy consent_notices_read on consent_notices for select using (true);
 
+drop policy if exists parental_consents_read on parental_consents;
 drop policy if exists parental_consents_read on parental_consents;
 create policy parental_consents_read on parental_consents
   for select using (family_id = current_family_id());
