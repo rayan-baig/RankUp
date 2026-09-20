@@ -51,6 +51,10 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
           ./supabase/test/run.sh
+          # The app and the database both work out what a chore is worth. This
+          # runs the real calcReward and the real award_for_submission over
+          # three thousand combinations and fails if they ever disagree.
+          npm run test:awards
 
       - name: Install the browser
         run: npx playwright install --with-deps chromium

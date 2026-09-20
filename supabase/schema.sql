@@ -534,6 +534,92 @@ create policy events_insert on events
 -- ever needs to be fully tamper-proof, move that calculation in here too.
 -- ---------------------------------------------------------------------------
 
+/**
+ * What an approved chore is actually worth.
+ *
+ * This used to be the caller's business. approve_submission took p_xp and
+ * p_coins from the request and added them to the child's balance as given, so
+ * one HTTP request from a parent's account could mint any number it liked. That
+ * is a strange thing to protect a family from — until you remember that guild
+ * leaderboards put a child's XP in front of children in OTHER families, so an
+ * inflated number is not a private indulgence any more.
+ *
+ * So the number is computed here, from rows the caller cannot write: the
+ * quest's own XP, whether it is a double-XP day, whether the clock was beaten,
+ * the child's streak so far, the family's tier, and the test score recorded
+ * with the submission.
+ *
+ * MIRRORS calcReward and testScoreBonus in src/lib/xp.js, and
+ * supabase/test/15-awards.sql checks the two agree case by case. `round` on a
+ * numeric rounds half away from zero, which is what Math.round does — double
+ * precision would round half to even and the two would drift apart on .5.
+ */
+create or replace function award_for_submission(p_submission_id uuid)
+returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare
+  v_sub    submissions;
+  v_quest  quests;
+  v_kid    kids;
+  v_tier   text;
+  v_base   int;
+  v_xp     int;
+  v_coins  int;
+  v_streak numeric;
+  v_bonus  int;
+begin
+  select * into v_sub from submissions where id = p_submission_id;
+  if not found then return null; end if;
+  select * into v_quest from quests where id = v_sub.quest_id;
+  select * into v_kid   from kids   where id = v_sub.kid_id;
+  if v_quest is null or v_kid is null then return null; end if;
+  select tier into v_tier from families where id = v_sub.family_id;
+
+  v_base := coalesce(v_quest.xp, 30);
+  v_xp   := v_base;
+
+  if v_quest.double_xp then
+    v_xp := v_xp + v_base;
+  end if;
+  if v_quest.timer_seconds > 0 and v_sub.on_time then
+    v_xp := v_xp + round(v_base * 0.25::numeric);
+  end if;
+
+  -- Streaks add up to +25%, and it is the streak BEFORE this approval bumps it.
+  v_streak := case
+    when coalesce(v_kid.streak_count, 0) < 3 then 0
+    else least(0.25, floor(v_kid.streak_count / 3.0) * 0.05)
+  end;
+  if v_streak > 0 then
+    v_xp := v_xp + round(v_xp * v_streak);
+  end if;
+
+  if v_tier = 'elite' then
+    v_xp := v_xp + round(v_xp * 0.5::numeric);
+  end if;
+
+  v_coins := greatest(1, round(v_xp / 5.0));
+
+  -- The test-score bonus lands on top of both, and is counted separately,
+  -- exactly as the app shows it on the approval screen.
+  if v_quest.test_score and v_sub.test_score is not null then
+    v_bonus := case
+      when v_sub.test_score >= 95 then round(v_base * 1.0::numeric)
+      when v_sub.test_score >= 90 then round(v_base * 0.6::numeric)
+      when v_sub.test_score >= 80 then round(v_base * 0.3::numeric)
+      else 0
+    end;
+    if v_bonus > 0 then
+      v_xp    := v_xp + v_bonus;
+      v_coins := v_coins + greatest(1, round(v_bonus / 5.0));
+    end if;
+  end if;
+
+  return jsonb_build_object('xp', v_xp, 'coins', v_coins);
+end $$;
+
+revoke execute on function award_for_submission(uuid) from public;
+
 create or replace function approve_submission(
   p_submission_id uuid,
   p_xp int,
@@ -544,6 +630,9 @@ language plpgsql security definer set search_path = public as $$
 declare
   v_sub submissions;
   v_parent uuid;
+  v_award jsonb;
+  v_xp int;
+  v_coins int;
 begin
   select * into v_sub from submissions where id = p_submission_id;
   if not found then raise exception 'submission not found'; end if;
@@ -552,6 +641,16 @@ begin
   select id into v_parent from parents
    where user_id = auth.uid() and family_id = v_sub.family_id;
   if v_parent is null then raise exception 'only a parent in this family can approve'; end if;
+
+  -- What it is worth is decided here, not by the request.
+  --
+  -- p_xp and p_coins used to be added to the child's balance exactly as sent,
+  -- so one HTTP request could mint any number. The parameters stay so that a
+  -- phone running older code still works; they are ignored. See
+  -- award_for_submission.
+  v_award := award_for_submission(p_submission_id);
+  v_xp    := coalesce((v_award->>'xp')::int, 0);
+  v_coins := coalesce((v_award->>'coins')::int, 0);
 
   -- The photo is destroyed at the moment of the decision, not kept and tidied
   -- up later. A parent has just looked at it; that was its whole job. Holding a
@@ -562,8 +661,8 @@ begin
          decided_at = now(),
          decided_by = v_parent,
          parent_note = p_note,
-         awarded_xp = p_xp,
-         awarded_coins = p_coins,
+         awarded_xp = v_xp,
+         awarded_coins = v_coins,
          photo_data = null,
          photo_deleted_at = now()
    where id = p_submission_id;
@@ -571,8 +670,8 @@ begin
   update quests set status = 'approved', completed_at = now() where id = v_sub.quest_id;
 
   update kids
-     set xp = xp + p_xp,
-         coins = coins + p_coins,
+     set xp = xp + v_xp,
+         coins = coins + v_coins,
          -- One arcade token per approved chore, capped so they cannot be hoarded.
          play_tokens = least(play_tokens + 1, 5),
          streak_count = case
@@ -585,7 +684,7 @@ begin
 
   insert into events (family_id, kid_id, type, meta)
   values (v_sub.family_id, v_sub.kid_id, 'quest_approved',
-          jsonb_build_object('questId', v_sub.quest_id, 'xp', p_xp, 'coins', p_coins));
+          jsonb_build_object('questId', v_sub.quest_id, 'xp', v_xp, 'coins', v_coins));
 end;
 $$;
 

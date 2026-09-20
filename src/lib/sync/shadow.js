@@ -75,7 +75,11 @@ const SERVER_OWNED = {
   // approve_submission and reject_submission. If a device could push these
   // directly it could mark its own work approved.
   quests: ['status', 'completed_at', 'redo_note', 'redo_count'],
-  submissions: ['status', 'parent_note'],
+  submissions: ['status', 'parent_note',
+                // What a chore paid is decided by award_for_submission now, so
+                // the device must not push its own optimistic copy back over
+                // the figure that actually landed.
+                'awarded_xp', 'awarded_coins'],
 }
 
 function stripServerOwned(table, row) {

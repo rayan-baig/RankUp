@@ -139,10 +139,15 @@ begin
     raise notice '  PASS a parent from ANOTHER family cannot approve (%)', left(sqlerrm, 40);
   end;
 
+  -- 45 and 9 are what a tampered client would ASK for. The quest is worth 30
+  -- to a Standard family with no streak, so 30 is what must land: the figures
+  -- in the request are ignored entirely. See award_for_submission.
   perform become('11111111-1111-1111-1111-111111111111');
   perform approve_submission('ffffffff-0000-0000-0000-000000000001', 45, 9, 'nice work');
   select xp into v_xp from kids where id = 'cccccccc-0000-0000-0000-000000000001';
-  perform ok('the right parent CAN approve, and XP moves', v_xp = 145);
+  perform ok('the right parent CAN approve, and XP moves', v_xp = 130);
+  perform ok('and it is the quest''s worth, not the number the caller asked for',
+    v_xp = 130 and (select coins from kids where id = 'cccccccc-0000-0000-0000-000000000001') = 26);
   perform ok('the quest is marked approved',
     (select status from quests where id = 'eeeeeeee-0000-0000-0000-000000000001') = 'approved');
   perform ok('the streak advanced',
@@ -157,7 +162,7 @@ begin
   end;
 
   select xp into v_xp from kids where id = 'cccccccc-0000-0000-0000-000000000001';
-  perform ok('XP is still 145 after the double-approve attempt', v_xp = 145);
+  perform ok('XP is still 130 after the double-approve attempt', v_xp = 130);
 end $$;
 
 reset role;
