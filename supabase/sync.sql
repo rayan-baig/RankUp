@@ -370,6 +370,87 @@ begin
 end $$;
 
 /**
+ * Is a repeating chore due to come back?
+ *
+ * The rule, in one place, because the app works it out too — a phone with no
+ * backend still has to bring tomorrow's chores back by itself. Kept as its own
+ * function so the two can be checked against each other; tests/recurrence.mjs
+ * runs this and the app's version over every combination and fails if they
+ * ever disagree.
+ *
+ * `p_last` is the day the chore was last finished or last came back. A chore
+ * that is not finished is never due: the child still owes it, and bringing it
+ * back would quietly wipe a send-back a parent had just written.
+ */
+create or replace function recurring_quest_due(
+  p_recurrence text,
+  p_status text,
+  p_last date,
+  p_today date
+) returns boolean
+language sql immutable set search_path = public as $$
+  select case
+    when p_recurrence not in ('daily', 'weekdays', 'weekly') then false
+    when p_status <> 'approved' then false
+    when p_last is null or p_today is null then false
+    when p_recurrence = 'daily'    then p_today > p_last
+    -- Monday is 1 and Friday is 5 in ISO terms. A chore set for weekdays does
+    -- not reappear on a Saturday, which is the entire point of the option.
+    when p_recurrence = 'weekdays' then p_today > p_last and extract(isodow from p_today) between 1 and 5
+    when p_recurrence = 'weekly'   then p_today >= p_last + 7
+    else false
+  end;
+$$;
+
+/**
+ * Bring back every repeating chore in the caller's family that is due.
+ *
+ * The device asks; the DATABASE decides. A phone cannot name a quest to
+ * reopen — it calls this and the rule above is applied to the rows as they
+ * actually are. That matters because reopening a quest is how a chore gets
+ * paid a second time, so "which ones are due" must not be the caller's
+ * opinion. A child's own phone may call it: whoever opens the app first in
+ * the morning brings the day's chores back for everybody.
+ *
+ * Idempotent through last_reset_on, so two devices opening at breakfast do
+ * not bring the same chore back twice.
+ */
+create or replace function reset_due_recurring_quests()
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_family uuid := current_family_id();
+  v_today  date := current_date;
+  v_ids    uuid[];
+begin
+  if v_family is null then return jsonb_build_object('ok', false, 'reason', 'no_family'); end if;
+
+  with due as (
+    select q.id from quests q
+     where q.family_id = v_family
+       and recurring_quest_due(q.recurrence, q.status,
+                               coalesce(q.last_reset_on, q.completed_at::date), v_today)
+     for update
+  ), reopened as (
+    update quests q
+       set status = 'assigned',
+           completed_at = null,
+           redo_note = null,
+           redo_count = 0,
+           last_reset_on = v_today
+      from due
+     where q.id = due.id
+    returning q.id
+  )
+  select coalesce(array_agg(id), '{}') into v_ids from reopened;
+
+  return jsonb_build_object('ok', true, 'reset', to_jsonb(v_ids), 'count', coalesce(array_length(v_ids, 1), 0));
+end $$;
+
+grant execute on function reset_due_recurring_quests() to authenticated;
+revoke execute on function recurring_quest_due(text, text, date, date) from public;
+
+/**
  * A child changing how their own app looks.
  *
  * Row level security lets only a parent write the kids table, for good reason —

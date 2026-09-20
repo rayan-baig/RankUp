@@ -127,7 +127,13 @@ create table quests (
   timer_seconds  int not null default 0,
   test_score     boolean not null default false,
   double_xp      boolean not null default false,
-  recurrence     text not null default 'once' check (recurrence in ('once','daily','weekly')),
+  -- 'weekdays' is the one parents actually want for school-term chores: it
+  -- comes back Monday to Friday and leaves the weekend alone.
+  recurrence     text not null default 'once'
+                 check (recurrence in ('once','daily','weekdays','weekly')),
+  -- The day this quest last came back. Kept so that a reset is idempotent: two
+  -- devices opening the app on the same morning must not bring it back twice.
+  last_reset_on  date,
 
   status         text not null default 'assigned'
                  check (status in ('assigned','submitted','approved','redo')),

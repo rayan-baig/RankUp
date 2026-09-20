@@ -5,6 +5,7 @@ import { createInitialState, TIERS, makeKid } from './initialState.js'
 import { findSkin, isMarketOpen, ticketCost } from '../data/marketSkins.js'
 import { DAILY_COIN_CAP, MAX_TOKENS } from '../data/minigames.js'
 import { ENTITIES } from '../lib/sync/mappers.js'
+import { questsDueToReturn, dayOf } from '../lib/recurrence.js'
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -496,6 +497,7 @@ export function reducer(state, action) {
         adaptive: false,
         supports: [],
         recurrence: 'once',
+        lastResetOn: null,
         ...q,
       }))
       return logEvent({ ...state, quests: [...state.quests, ...quests] }, {
@@ -507,6 +509,35 @@ export function reducer(state, action) {
 
     case 'UPDATE_QUEST':
       return { ...state, quests: state.quests.map((q) => (q.id === action.questId ? { ...q, ...action.patch } : q)) }
+
+    /**
+     * Bring back the repeating chores that are due today.
+     *
+     * Dispatched when the app opens and when the date rolls over, so whoever
+     * looks at their phone first in the morning brings the day's chores back
+     * for everybody. The change is made here so a family with no backend still
+     * works; reset_due_recurring_quests is what makes it true across devices,
+     * and it applies the same rule to the rows as they actually are rather
+     * than taking this device's word for which quests were due.
+     */
+    case 'RETURN_RECURRING': {
+      const today = action.today || dayOf(new Date())
+      const due = questsDueToReturn(state.quests, today)
+      if (!due.length) return state
+      const ids = new Set(due.map((q) => q.id))
+      const next = {
+        ...state,
+        quests: state.quests.map((q) =>
+          ids.has(q.id)
+            ? { ...q, status: 'assigned', completedAt: null, redoNote: undefined, redoCount: 0, lastResetOn: today }
+            : q,
+        ),
+      }
+      return logEvent(queueRpc(next, 'reset_due_recurring_quests', {}), {
+        type: 'quests_returned',
+        meta: { count: due.length },
+      })
+    }
 
     case 'DELETE_QUEST':
       return {

@@ -3,6 +3,7 @@ import { useApp } from '../../state/AppContext.jsx'
 import { DIFFICULTY_LIST, DIFFICULTY } from '../../lib/xp.js'
 import { CATEGORIES, QUEST_PACKS, ADAPTIVE_SUPPORTS } from '../../data/questTemplates.js'
 import { Screen, Card, Button, Field, TextInput, TextArea, Select, Toggle, Chip, Banner, Tabs } from '../../components/ui.jsx'
+import { RECURRENCES } from '../../lib/recurrence.js'
 import { navigate } from '../../lib/router.js'
 
 const TABS = [
@@ -25,6 +26,7 @@ const blankQuest = (kidId, adaptive) => ({
   timerSeconds: 0,
   testScore: false,
   doubleXp: false,
+  recurrence: 'once',
 })
 
 export default function ParentAssign({ initialKidId }) {
@@ -159,6 +161,17 @@ export default function ParentAssign({ initialKidId }) {
               </Select>
             </Field>
           </div>
+
+          <Field
+            label="How often"
+            hint={RECURRENCES.find((r) => r.id === quest.recurrence)?.blurb}
+          >
+            <Select value={quest.recurrence} onChange={(e) => set({ recurrence: e.target.value })}>
+              {RECURRENCES.map((r) => (
+                <option key={r.id} value={r.id}>{r.label}</option>
+              ))}
+            </Select>
+          </Field>
 
           <Field label="XP reward" hint="Defaults to the difficulty. Override it for anything unusual.">
             <TextInput

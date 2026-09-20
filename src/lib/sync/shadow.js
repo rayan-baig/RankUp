@@ -74,7 +74,12 @@ const SERVER_OWNED = {
   // A quest's status and a submission's verdict are decided by submit_quest,
   // approve_submission and reject_submission. If a device could push these
   // directly it could mark its own work approved.
-  quests: ['status', 'completed_at', 'redo_note', 'redo_count'],
+  quests: ['status', 'completed_at', 'redo_note', 'redo_count',
+           // Part of the same state machine as `status`: it is what stops a
+           // repeating chore coming back twice in one morning. A device
+           // pushing its own optimistic copy would tell the server the chore
+           // had already returned, and it would then never actually return.
+           'last_reset_on'],
   submissions: ['status', 'parent_note',
                 // What a chore paid is decided by award_for_submission now, so
                 // the device must not push its own optimistic copy back over

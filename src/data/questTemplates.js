@@ -25,13 +25,13 @@ export const QUEST_PACKS = [
     ages: '6–11',
     blurb: 'Multi-step chores with a clear finished state.',
     quests: [
-      { title: 'Make your bed', category: 'bedroom', difficulty: 'easy', requiresPhoto: true, doneMeans: 'Duvet pulled up flat, pillows at the top, nothing on the floor beside the bed.', why: 'Starting the day with one finished thing makes the rest easier.' },
-      { title: 'Load the dishwasher', category: 'kitchen', difficulty: 'medium', requiresPhoto: true, doneMeans: 'Sink is empty and the dishwasher racks are loaded, not just stacked.', why: 'The kitchen is shared, so the cleanup is shared too.' },
-      { title: 'Take the bins out', category: 'outdoor', difficulty: 'medium', requiresPhoto: true, doneMeans: 'Bin is at the kerb with the lid shut and a fresh bag is in the kitchen bin.', why: 'Nobody enjoys it. That is exactly why it counts.' },
-      { title: 'Tidy your desk', category: 'bedroom', difficulty: 'medium', requiresPhoto: true, doneMeans: 'Desk surface is clear enough to write on.', why: 'A clear desk makes homework take less time.' },
-      { title: 'Vacuum the living room', category: 'outdoor', difficulty: 'hard', requiresPhoto: true, doneMeans: 'Visible crumbs gone, including under the coffee table.', why: 'Doing the bit nobody checks is what makes it real.' },
-      { title: 'Read for 20 minutes', category: 'school', difficulty: 'medium', requiresPhoto: false, timerSeconds: 1200, doneMeans: 'Timer ran the full 20 minutes with the book open.', why: 'Twenty minutes a day is about a million words a year.' },
-      { title: 'Homework done and checked', category: 'school', difficulty: 'hard', requiresPhoto: true, doneMeans: 'All set questions attempted and the page photographed.', why: 'Finishing is a skill you practise, not a talent you have.' },
+      { title: 'Make your bed', recurrence: 'daily', category: 'bedroom', difficulty: 'easy', requiresPhoto: true, doneMeans: 'Duvet pulled up flat, pillows at the top, nothing on the floor beside the bed.', why: 'Starting the day with one finished thing makes the rest easier.' },
+      { title: 'Load the dishwasher', recurrence: 'daily', category: 'kitchen', difficulty: 'medium', requiresPhoto: true, doneMeans: 'Sink is empty and the dishwasher racks are loaded, not just stacked.', why: 'The kitchen is shared, so the cleanup is shared too.' },
+      { title: 'Take the bins out', recurrence: 'weekly', category: 'outdoor', difficulty: 'medium', requiresPhoto: true, doneMeans: 'Bin is at the kerb with the lid shut and a fresh bag is in the kitchen bin.', why: 'Nobody enjoys it. That is exactly why it counts.' },
+      { title: 'Tidy your desk', recurrence: 'weekly', category: 'bedroom', difficulty: 'medium', requiresPhoto: true, doneMeans: 'Desk surface is clear enough to write on.', why: 'A clear desk makes homework take less time.' },
+      { title: 'Vacuum the living room', recurrence: 'weekly', category: 'outdoor', difficulty: 'hard', requiresPhoto: true, doneMeans: 'Visible crumbs gone, including under the coffee table.', why: 'Doing the bit nobody checks is what makes it real.' },
+      { title: 'Read for 20 minutes', recurrence: 'daily', category: 'school', difficulty: 'medium', requiresPhoto: false, timerSeconds: 1200, doneMeans: 'Timer ran the full 20 minutes with the book open.', why: 'Twenty minutes a day is about a million words a year.' },
+      { title: 'Homework done and checked', recurrence: 'weekdays', category: 'school', difficulty: 'hard', requiresPhoto: true, doneMeans: 'All set questions attempted and the page photographed.', why: 'Finishing is a skill you practise, not a talent you have.' },
     ],
   },
   {
@@ -40,12 +40,12 @@ export const QUEST_PACKS = [
     ages: '12+',
     blurb: 'Longer chores and independent responsibilities.',
     quests: [
-      { title: 'Cook one family meal', category: 'kitchen', difficulty: 'boss', requiresPhoto: true, doneMeans: 'A finished meal on the table that other people ate.', why: 'Feeding yourself well is the single most useful adult skill.' },
-      { title: 'Wash, dry and put away one load', category: 'laundry', difficulty: 'hard', requiresPhoto: true, doneMeans: 'Drawer or wardrobe photo showing the clothes actually put away.', why: 'Half-done laundry is not laundry.' },
-      { title: 'Clean the bathroom', category: 'bathroom', difficulty: 'hard', requiresPhoto: true, doneMeans: 'Sink, mirror and toilet all wiped, floor clear.', why: 'The rooms nobody wants are the ones that show real effort.' },
-      { title: 'Mow the lawn', category: 'outdoor', difficulty: 'boss', requiresPhoto: true, doneMeans: 'Whole lawn cut at an even height and clippings cleared.', why: 'Big jobs teach you to pace yourself.' },
+      { title: 'Cook one family meal', recurrence: 'weekly', category: 'kitchen', difficulty: 'boss', requiresPhoto: true, doneMeans: 'A finished meal on the table that other people ate.', why: 'Feeding yourself well is the single most useful adult skill.' },
+      { title: 'Wash, dry and put away one load', recurrence: 'weekly', category: 'laundry', difficulty: 'hard', requiresPhoto: true, doneMeans: 'Drawer or wardrobe photo showing the clothes actually put away.', why: 'Half-done laundry is not laundry.' },
+      { title: 'Clean the bathroom', recurrence: 'weekly', category: 'bathroom', difficulty: 'hard', requiresPhoto: true, doneMeans: 'Sink, mirror and toilet all wiped, floor clear.', why: 'The rooms nobody wants are the ones that show real effort.' },
+      { title: 'Mow the lawn', recurrence: 'weekly', category: 'outdoor', difficulty: 'boss', requiresPhoto: true, doneMeans: 'Whole lawn cut at an even height and clippings cleared.', why: 'Big jobs teach you to pace yourself.' },
       { title: 'Score 80%+ on a practice test', category: 'school', difficulty: 'hard', requiresPhoto: false, testScore: true, doneMeans: 'Enter your real percentage — 80% or higher earns the bonus.', why: 'Testing yourself beats re-reading notes every time.' },
-      { title: 'Plan and shop for one meal', category: 'kitchen', difficulty: 'boss', requiresPhoto: true, doneMeans: 'Photo of the ingredients bought within the budget agreed.', why: 'Money and food are the two things you will manage forever.' },
+      { title: 'Plan and shop for one meal', recurrence: 'weekly', category: 'kitchen', difficulty: 'boss', requiresPhoto: true, doneMeans: 'Photo of the ingredients bought within the budget agreed.', why: 'Money and food are the two things you will manage forever.' },
     ],
   },
   {
@@ -54,6 +54,13 @@ export const QUEST_PACKS = [
     ages: 'Any',
     adaptive: true,
     blurb: 'Built around what a specific kid can do, not a fixed standard.',
+    /*
+     * Nothing in this pack repeats, and that is a decision rather than an
+     * oversight. A chore that reappears every morning whether or not yesterday
+     * went well is a standing obligation, and a standing obligation is exactly
+     * the pressure this pack exists to take off. A parent who knows a routine
+     * helps their child can switch any of them to daily in one tap.
+     */
     quests: [
       { title: 'Put three things where they belong', category: 'bedroom', difficulty: 'easy', adaptive: true, requiresPhoto: true, doneMeans: 'Three items moved to their spot. Which three is up to you.', why: 'A countable, finishable target beats "tidy your room".', supports: ['Countable target', 'No time limit'] },
       { title: 'Wipe one surface you choose', category: 'kitchen', difficulty: 'easy', adaptive: true, requiresPhoto: true, doneMeans: 'Any one surface looks cleaner than before. Partial counts.', why: 'Choice removes the standoff before it starts.', supports: ['Kid picks the target', 'Partial credit'] },

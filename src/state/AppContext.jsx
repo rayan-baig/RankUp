@@ -10,6 +10,7 @@ import { NOTICES, notifyLocally, notifyRemote, getPrefs as notificationPrefs } f
 import { resolveKidTheme } from '../data/kidThemes.js'
 import { resolveParentTheme } from '../data/parentThemes.js'
 import { levelFromXp } from '../lib/xp.js'
+import { dayOf } from '../lib/recurrence.js'
 
 const AppContext = createContext(null)
 
@@ -71,6 +72,36 @@ export function AppProvider({ children }) {
     const engine = engineRef.current
     engine.start()
     return () => engine.stop()
+  }, [])
+
+  /**
+   * Bring back the repeating chores that are due, and keep watching the clock.
+   *
+   * A phone left open overnight is the normal case for a tablet on a kitchen
+   * counter, so this cannot only run at start-up — it checks every minute for
+   * the date rolling over. The reducer refuses when nothing is due, so the
+   * check is free on all but one tick a day.
+   */
+  // Checked whenever the quest list changes, because on a fresh device the list
+  // arrives from the server AFTER start-up — anything due while the app was
+  // closed would otherwise wait for the next midnight. The reducer returns the
+  // same state when nothing is due, so this settles immediately rather than
+  // chasing its own tail.
+  useEffect(() => {
+    dispatch({ type: 'RETURN_RECURRING', today: dayOf(new Date()) })
+  }, [state.quests])
+
+  // And a phone left open overnight — a tablet on a kitchen counter is the
+  // normal case — has to notice the date turning over on its own.
+  useEffect(() => {
+    let today = dayOf(new Date())
+    const timer = setInterval(() => {
+      const now = dayOf(new Date())
+      if (now === today) return
+      today = now
+      dispatch({ type: 'RETURN_RECURRING', today: now })
+    }, 60000)
+    return () => clearInterval(timer)
   }, [])
 
   // The moment a kid's device is linked, it is holding nothing: no quests, no

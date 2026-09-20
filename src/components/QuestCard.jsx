@@ -1,6 +1,14 @@
 import { DIFFICULTY } from '../lib/xp.js'
 import { CATEGORY_MAP } from '../data/questTemplates.js'
 import { formatDuration } from '../lib/dates.js'
+import { REPEATS } from '../lib/recurrence.js'
+
+/** Short enough to sit beside the others without pushing them onto a third row. */
+const REPEAT_CHIP = {
+  daily: '🔁 Daily',
+  weekdays: '🔁 School days',
+  weekly: '🔁 Weekly',
+}
 
 const STATUS_LABEL = {
   assigned: null,
@@ -47,6 +55,7 @@ export default function QuestCard({ quest, onClick, currency, showStatus = true 
             {quest.requiresPhoto && <span className="chip">📷 Photo</span>}
             {quest.timerSeconds > 0 && <span className="chip">⏱ {formatDuration(quest.timerSeconds * 1000)}</span>}
             {quest.testScore && <span className="chip">📊 Score</span>}
+            {REPEATS.has(quest.recurrence) && <span className="chip">{REPEAT_CHIP[quest.recurrence]}</span>}
           </div>
 
           {status && (

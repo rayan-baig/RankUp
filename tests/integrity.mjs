@@ -53,9 +53,13 @@ await page.evaluate(() => {
   const s = JSON.parse(localStorage.getItem('rankup.state.v1'))
   const past = Date.now() - 60000
   s.family.tier = 'elite'
-  s.overrides = [{ id: 'ovr_test', kidId: s.kids[0].id, kind: 'dimension', reason: 'test',
+  // A real UUID, because the id column is one. A made-up 'ovr_test' still
+  // exercised the expiry, but it was rejected by the server on every sync and
+  // filled the console with 400s that looked like a product bug.
+  const overrideId = '0be71de0-0000-4000-8000-00000000ffff'
+  s.overrides = [{ id: overrideId, kidId: s.kids[0].id, kind: 'dimension', reason: 'test',
                    consequence: '', minutes: 30, until: past, createdAt: past - 1800000, liftedAt: null }]
-  s.kids[0].lockout = { type: 'dimension', until: past, reason: 'test', overrideId: 'ovr_test' }
+  s.kids[0].lockout = { type: 'dimension', until: past, reason: 'test', overrideId }
   s.session = { role: 'parent', kidId: s.kids[0].id, parentUnlocked: true }
   localStorage.setItem('rankup.state.v1', JSON.stringify(s))
   window.location.hash = '/parent/override'
