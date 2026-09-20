@@ -27,6 +27,7 @@ const ROUTES = {
   health: () => import('../../api/health.js'),
   'run-retention': () => import('../../api/run-retention.js'),
   'send-push': () => import('../../api/send-push.js'),
+  'send-digests': () => import('../../api/send-digests.js'),
   'send-reminders': () => import('../../api/send-reminders.js'),
   'settle-alliances': () => import('../../api/settle-alliances.js'),
   'stripe-webhook': () => import('../../api/stripe-webhook.js'),

@@ -84,7 +84,7 @@ ok('a malformed image is refused', badImage.status === 400, `status ${badImage.s
 ok('and it cost the family nothing', after === before, `used ${before} → ${after}`)
 
 console.log('\n=== The scheduled jobs are not open to the public ===')
-for (const job of ['run-retention', 'send-reminders', 'settle-alliances']) {
+for (const job of ['run-retention', 'send-reminders', 'send-digests', 'settle-alliances']) {
   const open = await fetch(`${BASE}/api/${job}`, { method: 'POST' })
   ok(`${job} refuses a caller with no secret`, open.status === 401 || open.status === 403, `status ${open.status}`)
   const withSecret = await fetch(`${BASE}/api/${job}`, {

@@ -45,6 +45,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/send-digests",
+      "schedule": "5 * * * *"
+    },
+    {
       "path": "/api/run-retention",
       "schedule": "20 3 * * *"
     },

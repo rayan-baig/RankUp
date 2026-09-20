@@ -51,12 +51,13 @@ In the Supabase SQL editor, run these **in order**:
 - [ ] `supabase/billing.sql`
 - [ ] `supabase/alliances.sql`
 - [ ] `supabase/reminders.sql`
+- [ ] `supabase/digests.sql`
 - [ ] `supabase/retention.sql`
 - [ ] `supabase/crashes.sql`
 - [ ] `supabase/health.sql`
 - [ ] Create a **private** Storage bucket called `proof-photos`.
 
-## 2b. Schedule the three jobs — none of them are optional
+## 2b. Schedule the four jobs — none of them are optional
 
 Set `CRON_SECRET` to a long random string. Each job is one HTTP request with
 `Authorization: Bearer <CRON_SECRET>`; they accept GET or POST, because
@@ -70,10 +71,21 @@ itself once `CRON_SECRET` is set in the project — there is nothing else to do.
 small Worker with a Cron Trigger that `fetch`es the three URLs with the header,
 or point any external scheduler at them. Do not assume Pages will run them.
 
+| Job | How often | What breaks without it |
+|---|---|---|
+| `/api/send-reminders` | every 15 min | Daily reminders never arrive |
+| `/api/send-digests` | hourly | The Sunday digest never goes out |
+| `/api/run-retention` | daily | **Children's photos are never deleted** |
+| `/api/settle-alliances` | monthly | Nobody is ever paid their discount |
+
+The hourly one looks wasteful and is not: the database decides whose Sunday
+evening it actually is, so an hourly run is what makes a digest arrive at six
+in the evening in every time zone instead of six in yours.
+
 ### Knowing it is all still running
 
 Every job records that it ran, and `/api/health` reports how long each has been
-quiet. This is the failure mode that matters: all three fail by going SILENT —
+quiet. This is the failure mode that matters: all four fail by going SILENT —
 no error, no alert, just reminders that stop arriving. A scheduler that never
 fires looks identical to one that works, which is how the POST-only bug in this
 repo survived as long as it did.
