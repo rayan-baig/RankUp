@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { STICKER_MAP } from '../../data/stickers.js'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
 import { DIFFICULTY, calcReward } from '../../lib/xp.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
@@ -44,6 +45,20 @@ export default function QuestDetail({ questId }) {
         .filter((s) => s.hash)
         .map((s) => ({ hash: s.hash, submissionId: s.id, kidId: s.kidId })),
     [state.submissions],
+  )
+
+  /**
+   * The parent's reaction to this piece of work.
+   *
+   * The most recent approved submission, because a repeating chore has one per
+   * time it was done and the sticker that matters is the one from today.
+   */
+  const approval = useMemo(
+    () =>
+      state.submissions
+        .filter((s) => s.questId === questId && s.status === 'approved')
+        .sort((a, b) => (b.decidedAt || 0) - (a.decidedAt || 0))[0] || null,
+    [state.submissions, questId],
   )
 
   if (!quest || !kid) {
@@ -321,9 +336,30 @@ export default function QuestDetail({ questId }) {
           nothing else to do here.
         </Banner>
       ) : (
-        <Banner tone="good" icon="✅" title="Done and approved">
-          This quest is finished and the XP is already in your total.
-        </Banner>
+        <>
+          <Banner tone="good" icon="✅" title="Done and approved">
+            This quest is finished and the XP is already in your total.
+          </Banner>
+          {STICKER_MAP[approval?.sticker] && (
+            <div
+              className="card-flat p-3 mt-2.5 flex items-center gap-3"
+              style={{ borderColor: 'var(--accent)' }}
+            >
+              <span className="text-3xl leading-none" aria-hidden="true">
+                {STICKER_MAP[approval.sticker].emoji}
+              </span>
+              <div className="min-w-0">
+                <p className="font-display font-extrabold text-sm" style={{ color: 'var(--accent)' }}>
+                  {STICKER_MAP[approval.sticker].label}
+                </p>
+                <p className="text-xs text-muted">From your parent.</p>
+              </div>
+            </div>
+          )}
+          {approval?.parentNote && (
+            <p className="text-sm mt-2.5 italic text-center">“{approval.parentNote}”</p>
+          )}
+        </>
       )}
     </Screen>
   )

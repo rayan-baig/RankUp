@@ -158,6 +158,11 @@ create table submissions (
                   check (capture_source in ('live-camera','upload','none')),
 
   note          text not null default '',
+  -- A parent's one-tap reaction on approval. A fixed list rather than free
+  -- text: a child reads this, so it must not be a field anything can write a
+  -- sentence into. Mirrored in src/data/stickers.js.
+  sticker       text check (sticker in
+                  ('proud','spotless','fast','effort','kind','above','funny','thanks')),
   test_score    int check (test_score between 0 and 100),
   elapsed_ms    int,
   on_time       boolean not null default true,
@@ -626,11 +631,20 @@ end $$;
 
 revoke execute on function award_for_submission(uuid) from public;
 
+-- The signature gained p_sticker, and `create or replace` only replaces an
+-- EXACT match — so on a database that already has the four-argument version,
+-- both would exist side by side and PostgREST would happily route a
+-- four-argument call to the old body. That body is the one that trusted the
+-- caller's p_xp. Dropping it explicitly is what makes this file safe to re-run
+-- over a live deployment.
+drop function if exists approve_submission(uuid, int, int, text);
+
 create or replace function approve_submission(
   p_submission_id uuid,
   p_xp int,
   p_coins int,
-  p_note text default ''
+  p_note text default '',
+  p_sticker text default null
 ) returns void
 language plpgsql security definer set search_path = public as $$
 declare
@@ -667,6 +681,12 @@ begin
          decided_at = now(),
          decided_by = v_parent,
          parent_note = p_note,
+         -- Anything not on the list is dropped rather than refused: a sticker
+         -- is a nicety, and an older phone sending one this version has never
+         -- heard of must not cost a child their approval.
+         sticker = case when p_sticker in
+                     ('proud','spotless','fast','effort','kind','above','funny','thanks')
+                   then p_sticker else null end,
          awarded_xp = v_xp,
          awarded_coins = v_coins,
          photo_data = null,

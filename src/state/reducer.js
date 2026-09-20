@@ -6,6 +6,7 @@ import { findSkin, isMarketOpen, ticketCost } from '../data/marketSkins.js'
 import { DAILY_COIN_CAP, MAX_TOKENS } from '../data/minigames.js'
 import { ENTITIES } from '../lib/sync/mappers.js'
 import { questsDueToReturn, dayOf } from '../lib/recurrence.js'
+import { STICKER_MAP } from '../data/stickers.js'
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -647,6 +648,7 @@ export function reducer(state, action) {
                 status: 'approved',
                 decidedAt: Date.now(),
                 parentNote: action.note || '',
+                sticker: STICKER_MAP[action.sticker] ? action.sticker : null,
                 awarded: { xp, coins, lines },
                 // Dropping photoId is what actually deletes the image: the
                 // provider's purge sweeps any photo no submission points at.
@@ -680,6 +682,7 @@ export function reducer(state, action) {
         p_xp: xp,
         p_coins: coins,
         p_note: action.note || '',
+        p_sticker: STICKER_MAP[action.sticker] ? action.sticker : null,
       })
 
       next = queueNotice(next, {

@@ -8,6 +8,7 @@ import { resolveKidTheme } from '../../data/kidThemes.js'
 import { levelFromXp } from '../../lib/xp.js'
 import { isElite } from '../../state/reducer.js'
 import { Screen, Card, Button, SectionTitle, EmptyState, Banner, Chip, TextInput, Modal } from '../../components/ui.jsx'
+import { STICKERS, STICKER_MAP } from '../../data/stickers.js'
 
 /**
  * The approval queue.
@@ -22,6 +23,14 @@ export default function ParentApprovals() {
   const pending = pendingSubmissions(state)
   const [rejecting, setRejecting] = useState(null)
   const [rejectNote, setRejectNote] = useState('')
+  /**
+   * Which sticker is picked, per submission.
+   *
+   * Approving used to be a receipt — the XP landed and that was the whole
+   * message, whether they scrubbed a bathroom or dropped one sock in a basket.
+   * Optional, and never in the way: not choosing one approves exactly as before.
+   */
+  const [stickers, setStickers] = useState({})
   const [zoom, setZoom] = useState(null)
 
   if (pending.length === 0) {
@@ -113,12 +122,49 @@ export default function ParentApprovals() {
               </div>
             </div>
 
+            <div className="mb-3">
+              <span className="label">Say something (optional)</span>
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {STICKERS.map((st) => {
+                  const picked = stickers[sub.id] === st.id
+                  return (
+                    <button
+                      key={st.id}
+                      type="button"
+                      aria-pressed={picked}
+                      aria-label={st.label}
+                      title={st.label}
+                      className="chip text-base leading-none py-1.5 transition-transform active:scale-90"
+                      style={picked
+                        ? { borderColor: 'var(--accent)', color: 'var(--accent)', background: 'var(--surface-2)' }
+                        : undefined}
+                      onClick={() => setStickers((m) => ({ ...m, [sub.id]: picked ? null : st.id }))}
+                    >
+                      {st.emoji}
+                    </button>
+                  )
+                })}
+              </div>
+              {stickers[sub.id] && (
+                <p className="text-xs text-muted mt-1.5">
+                  {STICKER_MAP[stickers[sub.id]].emoji} “{STICKER_MAP[stickers[sub.id]].label}” goes with the approval.
+                </p>
+              )}
+            </div>
+
             <div className="flex gap-2">
               <Button variant="soft" className="flex-1" onClick={() => { setRejecting(sub); setRejectNote('') }}>
                 Send back
               </Button>
-              <Button className="flex-1" onClick={() => dispatch({ type: 'APPROVE_SUBMISSION', submissionId: sub.id })}>
-                Approve
+              <Button
+                className="flex-1"
+                onClick={() => dispatch({
+                  type: 'APPROVE_SUBMISSION',
+                  submissionId: sub.id,
+                  sticker: stickers[sub.id] || null,
+                })}
+              >
+                {stickers[sub.id] ? `Approve ${STICKER_MAP[stickers[sub.id]].emoji}` : 'Approve'}
               </Button>
             </div>
           </Card>

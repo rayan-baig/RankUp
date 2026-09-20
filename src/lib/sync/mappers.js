@@ -181,6 +181,7 @@ export const submissions = {
     status: row.status,
     decidedAt: ms(row.decided_at),
     parentNote: row.parent_note || '',
+    sticker: row.sticker || null,
     awarded:
       row.awarded_xp != null
         ? { xp: row.awarded_xp, coins: row.awarded_coins, lines: existing.awarded?.lines || [] }
