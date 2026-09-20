@@ -40,6 +40,38 @@ const MODEL_SUPPORTS_EFFORT = [
 ]
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
+/*
+ * WHAT ONE CHECK ACTUALLY COSTS, measured rather than guessed, because this is
+ * the number every "let's optimise the AI bill" idea has to beat.
+ *
+ * Photos are downscaled to 720px on the long side before they leave the phone
+ * (see toCanvas in src/lib/imaging.js), so a typical frame is about 520 image
+ * tokens. Add roughly 510 for the system prompt and 60 for the quest details,
+ * and a call is ~1,100 input tokens and ~150 output.
+ *
+ * On Haiku 4.5 ($1 / $5 per million) that is about $0.0018 — under two tenths
+ * of a cent. The monthly allowance is 200, so the worst a single family can
+ * cost is roughly 37 cents a month against a $9.99 subscription. The on-device
+ * checks settle most photos before a call is made at all, so the real average
+ * is far below that.
+ *
+ * TWO THINGS THAT LOOK LIKE SAVINGS AND ARE NOT:
+ *
+ * Caching the RESPONSE by input, the way you would cache an answer to a
+ * repeated question, saves nothing here. Every input is a different photograph
+ * of a different room; the same bytes essentially never arrive twice. And
+ * keying a cache on the image hash across families would let one family's
+ * verdict answer another family's submission, which is worse than the cost it
+ * would save.
+ *
+ * PROMPT caching of the system prompt is the right idea and would also do
+ * nothing, silently: the cacheable prefix here is ~510 tokens and Haiku 4.5
+ * will not create a cache entry below 4,096. It returns no error — just
+ * cache_creation_input_tokens: 0 — so it would look like it was working. If
+ * this ever moves to a model with a 512 or 1,024 minimum, or the prompt grows
+ * past 4K, revisit it; until then adding cache_control here is a no-op.
+ */
+
 const SYSTEM_PROMPT = `You help a parent check photo proof that their child submitted for a household chore in a kids' app called RankUp.
 
 You are an advisory second opinion, not a judge. The parent always makes the final decision, and a wrongly accused child is a much worse outcome than a missed cheat. When you are unsure, say you are unsure — do not guess "fake".
