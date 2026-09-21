@@ -54,7 +54,7 @@ function bumpStreak(streak) {
 }
 
 export function isElite(state) {
-  return state.family.tier === 'elite'
+  return effectiveTier(state.family) === 'elite'
 }
 
 /** The plan a family is on, falling back to the cheapest rather than the best. */
@@ -70,8 +70,41 @@ export function overdriveActive(state) {
   return isElite(state) && state.settings.overdrive !== false && !state.settings.reduceMotion
 }
 
+/**
+ * What this family is entitled to right now: the better of what they pay for
+ * and an unexpired trial.
+ *
+ * MIRRORS effective_tier() in supabase/schema.sql, which is the authority —
+ * every gate in the database asks that one, and tests/trials.mjs runs the two
+ * against each other so a trial can never be real on screen and refused by the
+ * server, or the reverse.
+ */
+const TIER_RANK = { starter: 0, standard: 1, elite: 2 }
+
+export function effectiveTier(family) {
+  const paid = TIERS[family?.tier] ? family.tier : 'starter'
+  const trial = family?.trialTier
+  const until = family?.trialEndsAt
+  if (!trial || !until || until <= Date.now()) return paid
+  return (TIER_RANK[trial] ?? 0) > (TIER_RANK[paid] ?? 0) ? trial : paid
+}
+
+/** Days left on a running trial, or null when there is not one. */
+export function trialDaysLeft(family) {
+  if (!family?.trialTier || !family?.trialEndsAt) return null
+  const ms = family.trialEndsAt - Date.now()
+  if (ms <= 0) return null
+  return Math.max(1, Math.ceil(ms / 86400000))
+}
+
+/** True while a trial is the reason they have what they have. */
+export function onTrial(state) {
+  return trialDaysLeft(state.family) !== null
+    && effectiveTier(state.family) !== (state.family.tier || 'starter')
+}
+
 export function planOf(state) {
-  return TIERS[state.family.tier] || TIERS.starter
+  return TIERS[effectiveTier(state.family)] || TIERS.starter
 }
 
 /**
@@ -96,7 +129,7 @@ export function guildsAllowedByPlan(state) {
 }
 
 export function guildCapacity(state) {
-  return TIERS[state.family.tier]?.guildSize ?? 0
+  return planOf(state).guildSize ?? 0
 }
 
 /** A lockout that has run out of time is treated as lifted. */
@@ -169,6 +202,10 @@ export function reducer(state, action) {
             name: family.name,
             parentThemeId: next.family.parentThemeId,
             tier: family.tier,
+            // Kept beside the paid tier, never merged into it: a trial ending
+            // has to leave whatever they actually pay for sitting untouched.
+            trialTier: family.trial_tier || null,
+            trialEndsAt: family.trial_ends_at ? Date.parse(family.trial_ends_at) : null,
             flashTickets: family.flash_tickets ?? next.family.flashTickets ?? 0,
           },
         }

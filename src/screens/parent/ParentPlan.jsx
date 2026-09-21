@@ -101,8 +101,7 @@ export default function ParentPlan() {
               <div className="flex items-baseline justify-between gap-2 mb-1">
                 <h2 className="font-display font-extrabold text-lg">{tier.name}</h2>
                 <span className="font-display font-extrabold text-xl">
-                  ${tier.price}
-                  <span className="text-xs font-normal text-muted">/mo</span>
+                  {tier.price === 0 ? 'Free' : <>${tier.price}<span className="text-xs font-normal text-muted">/mo</span></>}
                 </span>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -111,7 +110,11 @@ export default function ParentPlan() {
               </div>
               {below && (
                 <p className="text-sm mt-2">
-                  <strong>${(tier.price - below.price).toFixed(2)} more than {below.name}</strong>
+                  <strong>
+                    {below.price === 0
+                      ? `$${tier.price.toFixed(2)} a month`
+                      : `$${(tier.price - below.price).toFixed(2)} more than ${below.name}`}
+                  </strong>
                   {' — '}{UPGRADE_REASON[tier.id]}
                 </p>
               )}
@@ -134,7 +137,9 @@ export default function ParentPlan() {
                 >
                   {busy
                     ? 'Opening Stripe…'
-                    : `${live ? 'Subscribe to' : 'Switch to'} ${tier.name} · $${tier.price}/mo`}
+                    : tier.price === 0
+                      ? `Stay on ${tier.name}`
+                      : `${live ? 'Subscribe to' : 'Switch to'} ${tier.name} · $${tier.price}/mo`}
                 </Button>
               )}
             </Card>
@@ -165,7 +170,7 @@ export default function ParentPlan() {
                     className="block text-[10px] text-muted leading-tight"
                     style={{ fontVariantNumeric: 'tabular-nums' }}
                   >
-                    ${t.price}/mo
+                    {t.price === 0 ? 'Free' : `$${t.price}/mo`}
                   </span>
                 </th>
               ))}

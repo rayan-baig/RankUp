@@ -12,7 +12,7 @@
     "test:smoke": "node tests/config.mjs && node tests/mappers.mjs && node tests/badges.mjs && node tests/cursor.mjs && node tests/outbox.mjs && node tests/photos.mjs && node tests/screens.mjs && node tests/integrity.mjs && node tests/flows.mjs && node tests/pairing.mjs && node tests/notifications.mjs && node tests/plans.mjs && node tests/arcade.mjs && node tests/crash.mjs && node tests/erase.mjs",
     "test:sync": "node tests/sync.mjs && node tests/guilds.mjs && node tests/consent.mjs",
     "test:api": "node tests/api.mjs",
-    "test:awards": "node tests/awards.mjs && node tests/recurrence.mjs",
+    "test:awards": "node tests/awards.mjs && node tests/recurrence.mjs && node tests/trials.mjs",
     "test:db": "./supabase/test/run.sh"
   },
   "dependencies": {

@@ -36,6 +36,22 @@ create table if not exists families (
   subscription_status     text not null default 'none'
                           check (subscription_status in ('none','trialing','active','past_due','canceled')),
   subscription_renews_at  timestamptz,
+  /*
+   * A trial the family has not paid for.
+   *
+   * Separate from `tier` on purpose. `tier` is Stripe's, written by the
+   * webhook and by nothing else, and a trial must never overwrite it — a
+   * family whose free fortnight ends has to fall back to whatever they
+   * actually pay for, which means the paid answer has to still be sitting
+   * there untouched.
+   *
+   * So entitlement is the BETTER of the two, and effective_tier() below is the
+   * only thing that decides. Granted on sign-up so a parent can see the
+   * product work before being asked for a card, and by a referral or a guild
+   * invite.
+   */
+  trial_tier      text check (trial_tier in ('standard','elite')),
+  trial_ends_at   timestamptz,
   created_at      timestamptz not null default now()
 );
 
@@ -350,6 +366,68 @@ returns uuid language sql stable security definer set search_path = public as $$
   );
 $$;
 
+/**
+ * What this family is actually entitled to, right now.
+ *
+ * The better of what they pay for and an unexpired trial. Every gate in this
+ * schema asks this rather than reading `tier` directly, so a trial is real
+ * everywhere — the AI photo check, a second child, guilds, alliances — rather
+ * than being a flag some screens remember to honour and others do not.
+ *
+ * Immutable in the ordering sense: starter < standard < elite, and a trial can
+ * only ever raise. A family on Elite who is handed a Standard trial by a
+ * referral keeps Elite.
+ */
+create or replace function effective_tier(p_family_id uuid)
+returns text language sql stable security definer set search_path = public as $$
+  select case
+    when f.trial_tier is null or f.trial_ends_at is null or f.trial_ends_at <= now()
+      then f.tier
+    -- Rank both and keep the higher. Comparing the words themselves would put
+    -- 'elite' below 'standard' alphabetically and quietly demote people.
+    when (case f.trial_tier when 'elite' then 2 when 'standard' then 1 else 0 end)
+       > (case f.tier       when 'elite' then 2 when 'standard' then 1 else 0 end)
+      then f.trial_tier
+    else f.tier
+  end
+  from families f where f.id = p_family_id;
+$$;
+
+grant execute on function effective_tier(uuid) to authenticated;
+
+/**
+ * Start a trial, without touching what they pay for.
+ *
+ * Never shortens one that is already running and never lowers one that is
+ * already better — a second referral cannot cut someone's Elite trial down to
+ * Standard, and arriving by two routes at once is a nicer problem than a bug.
+ */
+create or replace function grant_trial(p_family_id uuid, p_tier text, p_days int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_until timestamptz := now() + make_interval(days => greatest(1, least(p_days, 90)));
+begin
+  if p_tier not in ('standard', 'elite') then
+    return jsonb_build_object('ok', false, 'reason', 'bad_tier');
+  end if;
+
+  update families f
+     set trial_tier = case
+           when f.trial_tier is null or f.trial_ends_at is null or f.trial_ends_at <= now() then p_tier
+           when (case p_tier when 'elite' then 2 else 1 end)
+              > (case f.trial_tier when 'elite' then 2 else 1 end) then p_tier
+           else f.trial_tier
+         end,
+         trial_ends_at = greatest(coalesce(f.trial_ends_at, now()), v_until)
+   where f.id = p_family_id;
+
+  return jsonb_build_object('ok', true, 'until', v_until);
+end $$;
+
+-- Not granted to anyone signed in: a browser asking for its own free month is
+-- the whole thing this must not allow. Trials are started by create_family,
+-- by a referral and by a guild invite — all of them server-side.
+revoke execute on function grant_trial(uuid, text, int) from public;
+
 create or replace function is_parent()
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from parents where user_id = auth.uid());
@@ -616,7 +694,7 @@ begin
   select * into v_quest from quests where id = v_sub.quest_id;
   select * into v_kid   from kids   where id = v_sub.kid_id;
   if v_quest is null or v_kid is null then return null; end if;
-  select tier into v_tier from families where id = v_sub.family_id;
+  select effective_tier(v_sub.family_id) into v_tier;
 
   v_base := coalesce(v_quest.xp, 30);
   v_xp   := v_base;
@@ -1093,6 +1171,14 @@ alter table quests drop constraint if exists quests_recurrence_check;
 alter table quests drop constraint if exists quests_recurrence_values;
 alter table quests add constraint quests_recurrence_values
   check (recurrence in ('once','daily','weekdays','weekly'));
+
+-- A trial the family has not paid for, kept separate from what they have.
+alter table families add column if not exists trial_tier text;
+alter table families add column if not exists trial_ends_at timestamptz;
+alter table families drop constraint if exists families_trial_tier_check;
+alter table families drop constraint if exists families_trial_tier_values;
+alter table families add constraint families_trial_tier_values
+  check (trial_tier in ('standard','elite'));
 
 -- The parent's one-tap reaction on an approval.
 alter table submissions add column if not exists sticker text;

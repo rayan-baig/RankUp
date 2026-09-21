@@ -89,8 +89,8 @@ begin
   end if;
 
   -- Starter has no guilds at all; a zero capacity is what stops one being made.
-  select case tier when 'elite' then 10 when 'standard' then 5 else 0 end into v_cap
-    from families where id = v_kid.family_id;
+  select case effective_tier(v_kid.family_id)
+           when 'elite' then 10 when 'standard' then 5 else 0 end into v_cap;
 
   if v_cap = 0 then
     return jsonb_build_object('ok', false, 'reason', 'plan_has_no_guilds');
@@ -140,7 +140,7 @@ begin
   -- refuses a Starter family outright, and this is the other door into the
   -- same room: without this check a Starter family simply joined somebody
   -- else's guild instead of making one, and had the whole feature for free.
-  if (select tier from families where id = v_kid.family_id) = 'starter' then
+  if effective_tier(v_kid.family_id) = 'starter' then
     return jsonb_build_object('ok', false, 'reason', 'plan_has_no_guilds');
   end if;
 

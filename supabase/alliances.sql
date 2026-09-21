@@ -52,7 +52,9 @@ revoke all on alliance_results from public;
 /** Elite is the tier that includes alliances; everyone else gets a clear no. */
 create or replace function alliance_capacity(p_family_id uuid)
 returns int language sql stable security definer set search_path = public as $$
-  select case tier when 'elite' then 10 else 0 end from families where id = p_family_id;
+  -- effective_tier, not `tier`: a family on a trial gets the real thing,
+  -- everywhere, rather than a trial that some screens honour and others do not.
+  select case effective_tier(p_family_id) when 'elite' then 10 else 0 end;
 $$;
 
 /**

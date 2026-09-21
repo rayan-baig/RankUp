@@ -58,6 +58,38 @@ export async function setKidInDatabase(kidName, patch) {
   await client.end()
 }
 
+/**
+ * End a family's free trial, the way time would.
+ *
+ * Has to happen in the database, not in localStorage: the family row syncs, so
+ * a browser-side edit is overwritten by the next pull a second later — which
+ * is correct behaviour and exactly why the trial is the server's to decide.
+ */
+export async function expireTrialInDatabase(familyName = null) {
+  const { default: pg } = await import('pg')
+  const client = new pg.Client({
+    host: process.env.PGHOST || '/tmp',
+    port: Number(process.env.PGPORT || 55432),
+    user: process.env.PGUSER || 'postgres',
+    database: process.env.PGDATABASE || 'rankup_test',
+  })
+  await client.connect()
+  // Without a name, the newest family — which is the one this test just made.
+  // setUpFamily does not name the family, so matching on one would miss.
+  if (familyName) {
+    await client.query(
+      "update families set trial_ends_at = now() - interval '1 minute' where name = $1",
+      [familyName],
+    )
+  } else {
+    await client.query(
+      `update families set trial_ends_at = now() - interval '1 minute'
+        where id = (select id from families order by created_at desc limit 1)`,
+    )
+  }
+  await client.end()
+}
+
 export async function launch() {
   const browser = await chromium.launch({
     executablePath: process.env.CHROMIUM_PATH || undefined,

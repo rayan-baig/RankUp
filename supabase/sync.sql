@@ -691,7 +691,25 @@ begin
   insert into parents (user_id, family_id, name)
   values (auth.uid(), v_family.id, coalesce(nullif(trim(p_parent_name), ''), 'Parent'));
 
-  return jsonb_build_object('ok', true, 'family_id', v_family.id, 'family_name', v_family.name);
+  /*
+   * A fortnight of the real thing, with no card asked for.
+   *
+   * Nobody buys a chore app on a feature list. They buy it the first time
+   * their child photographs a made bed and it lands on their phone. Asking for
+   * a card before that moment is asking someone to pay for a promise, and
+   * almost nobody does.
+   *
+   * Elite rather than Standard, and deliberately: the parts worth paying for —
+   * the AI check on the photo, a second child, the behaviour charts — are the
+   * parts that have to be felt during the fortnight, not read about after it.
+   * What they fall back to is Starter, which is free and still runs the whole
+   * loop, so the end of a trial is a smaller app rather than a locked one.
+   */
+  perform grant_trial(v_family.id, 'elite', 14);
+  select * into v_family from families where id = v_family.id;
+
+  return jsonb_build_object('ok', true, 'family_id', v_family.id, 'family_name', v_family.name,
+                            'trial_tier', v_family.trial_tier, 'trial_ends_at', v_family.trial_ends_at);
 end $$;
 
 grant execute on function create_family(text, text) to authenticated;

@@ -94,7 +94,7 @@ create or replace function enforce_kid_limit() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare v_tier text; v_count int;
 begin
-  select tier into v_tier from families where id = new.family_id;
+  select effective_tier(new.family_id) into v_tier;
   if v_tier is distinct from 'starter' then return new; end if;
   select count(*) into v_count from kids where family_id = new.family_id;
   if v_count >= 1 then
@@ -159,7 +159,7 @@ begin
   end if;
 
   -- The cheapest plan does not include the AI check at all.
-  if v_family.tier = 'starter' then
+  if effective_tier(v_family.id) = 'starter' then
     return jsonb_build_object('ok', false, 'reason', 'not_on_this_plan');
   end if;
 

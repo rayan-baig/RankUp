@@ -13,15 +13,28 @@ import { DEFAULT_PARENT_THEME } from '../data/parentThemes.js'
  * All three are billed monthly. There is no annual option and no trial charge.
  */
 export const TIERS = {
+  /*
+   * Free, and that is the whole growth strategy in one number.
+   *
+   * It was $4.99, which meant every single person had to enter a card before
+   * they had seen a chore go round once. A family app lives or dies on the
+   * first week, and you cannot have a first week behind a paywall.
+   *
+   * Starter still runs the entire loop — assign, photograph, approve, XP,
+   * themes, streaks, the arcade — so what someone loses at the end of a trial
+   * is a smaller app, not a locked one. That is what makes the upgrade a
+   * choice rather than a ransom.
+   */
   starter: {
     id: 'starter',
     name: 'Starter',
-    price: 4.99,
+    price: 0,
     order: 0,
     guildSize: 0,
     xpMultiplier: 1,
     limits: { maxKids: 1, aiPhotoCheck: false, guilds: false },
     features: [
+      'Free, for as long as you like',
       'One child',
       'Unlimited quests and rewards',
       'Photo proof, reviewed by you',
@@ -184,6 +197,17 @@ export function createInitialState() {
       parentThemeId: DEFAULT_PARENT_THEME,
       pin: '',
       tier: 'starter',
+      /*
+       * A fortnight of Elite, from the moment the app is opened.
+       *
+       * Set here as well as by create_family so it is true with no backend at
+       * all — somebody trying RankUp on one phone sees the whole product, not
+       * the floor of it. Nobody buys a chore app on a feature list; they buy it
+       * the first time their child photographs a made bed and it lands on their
+       * phone, and that has to happen before a card is ever mentioned.
+       */
+      trialTier: 'elite',
+      trialEndsAt: Date.now() + 14 * 86400000,
       subscription: { tier: 'starter', status: 'trial', startedAt: Date.now(), renewsAt: null },
       /* Flash Tickets the family has left. Only a parent can buy more. */
       flashTickets: 0,
