@@ -37,9 +37,20 @@ export default function TrialBanner() {
   if (plan.limits.aiPhotoCheck && !paid.limits.aiPhotoCheck) {
     losing.push('photos would come to you unchecked')
   }
-  if (plan.guildSize > paid.guildSize && (state.guild?.id || state.kids.some((k) => k.guildId))) {
-    losing.push('the guild would close')
-  }
+  /*
+   * There is deliberately no line about guilds here.
+   *
+   * The first draft had one, guarded on `state.guild?.id` — which is set
+   * unconditionally in createInitialState, so it was true for every family
+   * that had ever opened the app. Every parent on a trial was being told their
+   * guild would close, including the overwhelming majority who have never
+   * touched one. A sales message that makes a claim about somebody's own
+   * family had better be true of that family.
+   *
+   * It cannot be fixed by checking harder, either: real guild membership is
+   * fetched from the server by the guild screen and never enters app state, so
+   * this component genuinely does not know. Saying nothing beats guessing.
+   */
   if (plan.xpMultiplier > paid.xpMultiplier) {
     losing.push(`XP would drop back from ${plan.xpMultiplier}×`)
   }

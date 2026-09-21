@@ -63,12 +63,11 @@ begin
   set local role postgres;
   update families set trial_ends_at = now() - interval '1 minute'
    where id = '3a222222-0000-0000-0000-000000000001';
-  set local role app_user;
-
   perform ok('an expired trial gives back exactly what they pay for',
     effective_tier('3a222222-0000-0000-0000-000000000001') = 'starter');
   perform ok('and the paying family is still paying',
     effective_tier('3a222222-0000-0000-0000-000000000002') = 'elite');
+  set local role app_user;
 end $$;
 
 -- ---------- a trial is real everywhere, not just on the screens ----------
@@ -123,7 +122,7 @@ begin
   set local role app_user;
 end $$;
 
--- ---------- and a browser cannot give itself one ----------
+-- ---------- and a browser cannot give itself one, or read anyone else's ----------
 set role app_user;
 do $$
 begin
@@ -134,6 +133,17 @@ begin
   exception when others then
     if sqlerrm like 'FAIL%' then raise; end if;
     raise notice '  PASS a parent CANNOT grant themselves a trial (%)', left(sqlerrm, 32);
+  end;
+
+  -- effective_tier is security definer and takes any family id. Granted, it
+  -- would let a signed-in parent learn what plan every other household is on,
+  -- one guess at a time — the leak alliance_capacity is revoked for.
+  begin
+    perform effective_tier('3a222222-0000-0000-0000-000000000002');
+    raise exception 'FAIL a parent read another household''s plan';
+  exception when others then
+    if sqlerrm like 'FAIL%' then raise; end if;
+    raise notice '  PASS a parent CANNOT read another household''s plan (%)', left(sqlerrm, 32);
   end;
 end $$;
 reset role;
@@ -152,6 +162,7 @@ begin
   perform ok('creating a family starts the fortnight', res->>'trial_tier' = 'elite');
   perform ok('and says when it runs out, so the app can say so too',
     (res->>'trial_ends_at')::timestamptz > now() + interval '13 days');
+  set local role postgres;
   perform ok('so the very first thing they see is the whole product',
     effective_tier((res->>'family_id')::uuid) = 'elite');
 end $$;

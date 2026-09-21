@@ -393,7 +393,15 @@ returns text language sql stable security definer set search_path = public as $$
   from families f where f.id = p_family_id;
 $$;
 
-grant execute on function effective_tier(uuid) to authenticated;
+-- NOT granted. It is security definer and takes an arbitrary family id, so a
+-- grant to `authenticated` let any signed-in parent learn what plan any other
+-- household is on by guessing a uuid — the same leak alliance_capacity and
+-- alliance_score are revoked for, reintroduced by a new function.
+--
+-- Nothing needs the grant: every caller is another function in this schema
+-- running as the owner, and the app works its own entitlement out from the
+-- family row it already has.
+revoke execute on function effective_tier(uuid) from public;
 
 /**
  * Start a trial, without touching what they pay for.
