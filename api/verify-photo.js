@@ -13,31 +13,7 @@
  * parent decides. It must never approve or reject a chore by itself.
  */
 
-import Anthropic from '@anthropic-ai/sdk'
-
-/**
- * Which model judges the photos.
- *
- * Haiku 4.5 is the default, chosen for cost. The job here is a photograph
- * authenticity judgement — "is this a real photo of this chore, or a
- * screenshot" — rather than hard reasoning, and Haiku is a fifth of the price
- * ($1/$5 per million tokens against Opus 5's $5/$25).
- *
- * Set AI_VERIFY_MODEL=claude-opus-5 to trade the money back for the more
- * capable model. Check a handful of real photos, including a deliberately faked
- * one, before deciding either way — docs/AI-CHECK.md has the arithmetic.
- */
-const MODEL = process.env.AI_VERIFY_MODEL || 'claude-haiku-4-5'
-
-/**
- * Which models accept output_config.effort. Haiku 4.5 and Sonnet 4.5 reject it
- * with a 400, and Haiku is what this runs on by default — so sending it
- * unconditionally broke the feature everywhere it was cheapest to use.
- */
-const MODEL_SUPPORTS_EFFORT = [
-  'claude-fable-5', 'claude-mythos-5', 'claude-opus-5',
-  'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-5',
-]
+import { MODEL, ask, makeClient, servedBy } from './_shared/ai.js'
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 /*
@@ -223,7 +199,7 @@ export default async function handler(req, res) {
     return res.status(status).json({ error: claim?.reason || 'refused' })
   }
 
-  const client = new Anthropic({ apiKey })
+  const client = makeClient()
   const request = {
     model: MODEL,
     // The reply is a small JSON verdict. 1200 was room for an essay nobody
@@ -232,34 +208,21 @@ export default async function handler(req, res) {
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: buildUserContent(image, body) }],
   }
-  // `effort` is rejected outright by Haiku 4.5, which is the default model
-  // here — it was sent unconditionally, so every single photo check returned
-  // 400, the retry resent the identical request and 400'd again, and the
-  // family's monthly allowance had already been spent on a check that never
-  // ran. Only the models that accept it get it.
-  if (MODEL_SUPPORTS_EFFORT.some((prefix) => MODEL.startsWith(prefix))) {
-    request.output_config = { effort: 'medium' }
-  }
 
   try {
-    let message
-    try {
-      // Server-side refusal fallback: if a safety classifier declines the
-      // request, the API retries it on another model inside the same call.
-      message = await client.beta.messages.create({
-        ...request,
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
-      })
-    } catch (err) {
-      // Older accounts may not have the fallback beta enabled. Retry plainly
-      // rather than failing the whole photo check over an optional feature.
-      if (err?.status === 400) {
-        message = await client.messages.create(request)
-      } else {
-        throw err
-      }
-    }
+    /*
+     * Everything model-shaped is negotiated in _shared/ai.js rather than
+     * asserted here.
+     *
+     * This used to carry a hardcoded list of which models accept an effort
+     * setting, and the list was wrong: it sent the parameter to Haiku 4.5,
+     * which rejects it, so every check 400'd and the retry sent the identical
+     * request again — with the family's allowance already spent on a call that
+     * never ran. A list in a file nobody is looking at does not stay true. The
+     * code finds out for itself now, once per model, and a model released next
+     * year gets whatever it accepts with no change here.
+     */
+    const message = await ask(client, request, { effort: 'medium' })
 
     if (message.stop_reason === 'refusal') {
       return res.status(200).json({
@@ -291,7 +254,9 @@ export default async function handler(req, res) {
       summary: typeof parsed.summary === 'string' ? parsed.summary.slice(0, 240) : '',
       observations: Array.isArray(parsed.observations) ? parsed.observations.slice(0, 4).map(String) : [],
       concerns: Array.isArray(parsed.concerns) ? parsed.concerns.slice(0, 3).map(String) : [],
-      model: message.model || MODEL,
+      // What actually answered, which is not always what was asked for: a
+      // safety decline is re-run on another model inside the same call.
+      ...servedBy(message),
     })
   } catch (err) {
     // The check was claimed before the image was even parsed, so a failure here

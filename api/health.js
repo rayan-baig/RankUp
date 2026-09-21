@@ -24,6 +24,7 @@
  */
 
 import { makeServiceRpc, secretMatches } from './_shared/job.js'
+import { aiStatus } from './_shared/ai.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -37,6 +38,11 @@ function configured() {
     push: Boolean(process.env.VAPID_PRIVATE_KEY &&
       (process.env.VAPID_PUBLIC_KEY || process.env.VITE_VAPID_PUBLIC_KEY)),
     ai_photo_check: Boolean(process.env.ANTHROPIC_API_KEY),
+    // Which model is answering, and what it turned out to accept. Worth
+    // reporting because the model that serves a request is not always the one
+    // asked for, and because comparing models on real photographs is the only
+    // honest way to decide whether a dearer one earns its price.
+    ai_model: aiStatus().model,
     scheduled_jobs: Boolean(CRON_SECRET),
     // Without this, Stripe has nowhere to send a parent back to and checkout
     // refuses to start. It is the easiest one to forget because nothing breaks

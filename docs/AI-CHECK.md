@@ -1,5 +1,45 @@
 # How the photo check works
 
+## Keeping up with the models
+
+Everything model-shaped lives in `api/_shared/ai.js`. Nothing else in the
+codebase names a model, a beta flag or a parameter.
+
+**Nothing is hardcoded about what a model accepts, on purpose.** An earlier
+version carried a list of which models take an `effort` setting. The list was
+wrong within months — it sent the parameter to Haiku 4.5, which rejects it, so
+every photo check returned 400, the retry sent the identical request, and the
+family's monthly allowance had already been spent on a call that never ran.
+
+A list in a file nobody is looking at does not stay true. So the code finds out
+instead: it tries the richer request, and the first time the API says a
+parameter is not for this model it drops that one and never sends it again.
+
+What this buys you:
+
+- A model released next year that accepts something today's does not gets the
+  benefit with **no code change**.
+- A model that stops accepting something **degrades instead of breaking**.
+- Switching models is one environment variable, `AI_VERIFY_MODEL`. Nothing else
+  moves.
+- `/api/health` reports which model is answering, and `model` on every verdict
+  says which one actually did — a safety decline is re-run on a fallback, so it
+  is not always the one asked for.
+
+`tests/ai.mjs` holds that behaviour to three promises: it recovers, it pays the
+cost of learning exactly once however many photos follow, and what it learns
+about one model never caps another.
+
+### Trying a better model
+
+Set `AI_VERIFY_MODEL`, run a handful of real photographs through it including a
+deliberately faked one, and compare. Benchmarks do not transfer to a blurry
+picture of a made bed — this is the only honest way to decide whether a dearer
+model earns its price.
+
+---
+
+
 **The rule that governs everything here: the check gives the parent an opinion. The
 parent decides.** There is no auto-approve and there should not be one. In a family app,
 a child wrongly accused of cheating by a computer does more damage than a cheat that
