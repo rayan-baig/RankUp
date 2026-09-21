@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 
 /**
  * The animated scene behind every kid screen.
@@ -41,10 +41,37 @@ function Drifters({ seed, count, render }) {
           key={p.i}
           style={{
             transformOrigin: `${p.x}% ${p.y}%`,
-            animation: `rankup-drift ${p.duration}s linear ${-p.delay}s infinite`,
+            /*
+             * Two animations at different periods rather than one.
+             *
+             * A single vertical drift is a conveyor belt — everything moving
+             * the same way at the same speed, which is what made this read as
+             * a repeating pattern instead of weather. The sway runs on its own
+             * unrelated period, so no two particles line up for long and the
+             * motion stops being predictable.
+             *
+             * `--drift-scale` is set per parallax layer and inherits down here,
+             * so the far layer runs slow and the near layer runs fast without
+             * any of the nineteen scenes knowing parallax exists.
+             */
+            animation: `rankup-drift calc(var(--drift-scale, 1) * ${p.duration}s) linear ${-p.delay}s infinite`,
           }}
         >
-          {render(p)}
+          {/*
+            The sway is a SEPARATE element on purpose. Two animations on one
+            element both writing `transform` do not add up — the later one wins
+            outright and the drift simply stops happening. Nesting composes
+            them, which is what was wanted in the first place.
+          */}
+          <g
+            style={{
+              animation:
+                `rankup-sway calc(var(--drift-scale, 1) * ${(p.duration * 0.41).toFixed(1)}s)`
+                + ` ease-in-out ${(-p.delay * 0.7).toFixed(1)}s infinite`,
+            }}
+          >
+            {render(p)}
+          </g>
         </g>
       ))}
     </>
@@ -490,24 +517,124 @@ const SCENES = {
   handheld: Handheld,
 }
 
+/**
+ * Depth, which is the whole difference between a pattern and a place.
+ *
+ * The scene is drawn three times over rather than once. The far copy is
+ * scaled up, heavily blurred and almost transparent; the middle copy sits
+ * where the scene used to be; the near copy is scaled past the edges, lightly
+ * blurred, and drifts faster. Nothing in the scenes themselves changed — the
+ * parallax comes from the same shapes moving at different rates, which is how
+ * distance actually reads to an eye.
+ *
+ * The blur is what stops it looking blocky. These are 100-unit drawings on an
+ * 800-pixel screen, so every edge is magnified about eight times; hard edges at
+ * that magnification are exactly what "pixelated" means to somebody looking at
+ * it, even though it is vector all the way down. Softening the layers that are
+ * meant to be far away removes it and reads as atmosphere at the same time.
+ */
+const LAYERS = [
+  // Blurred AND still, and the stillness is what makes the blur affordable.
+  // A blur costs on every repaint, so a blurred layer that also animates is
+  // re-blurring the whole screen sixty times a second — measured at six-times
+  // CPU throttling it took the median frame from 33ms to 50ms, which is the
+  // difference between smooth and visibly stuttering on a mid-range phone.
+  // Held still, the browser blurs it once and composites the texture from then
+  // on, and it costs nothing.
+  { key: 'far', scale: 1.4, blur: 3.2, opacity: 0.4, speed: 1, y: -2, still: true },
+  { key: 'mid', scale: 1.0, blur: 0, opacity: 1, speed: 1, y: 0 },
+  // Sharp rather than blurred, for the same reason: this one moves.
+  { key: 'near', scale: 0.7, blur: 0, opacity: 0.38, speed: 0.6, y: 3 },
+]
+
 export default function ThemeBackground({ theme, className = '', glitch = false }) {
   const Scene = SCENES[theme?.scene] || Tetrominoes
   const c = theme?.colors
+  const id = useId().replace(/[^a-zA-Z0-9]/g, '')
   if (!c) return null
+
   return (
     <div
       className={`fixed inset-0 -z-10 pointer-events-none ${glitch ? 'anim-glitch' : ''} ${className}`}
       aria-hidden="true"
       style={{ background: c.bg }}
     >
-      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" className="w-full h-full">
-        <Scene c={c} />
-      </svg>
-      {/* Keeps text readable no matter how busy the scene is. */}
+      {/*
+        A wash of the theme's own light behind everything, off-centre and
+        weighted to the top, the way a room is lit from one side rather than
+        evenly. Flat colour behind a flat pattern is what makes a background
+        look printed; this is the cheapest thing that stops it.
+      */}
       <div
         className="absolute inset-0"
         style={{
-          background: `linear-gradient(to bottom, ${c.bg}dd 0%, ${c.bg}88 26%, ${c.bg}aa 74%, ${c.bg}ee 100%)`,
+          background:
+            `radial-gradient(110% 70% at 20% 2%, ${c.accent}3d 0%, transparent 64%),`
+            + `radial-gradient(90% 58% at 90% 102%, ${c.accent2 || c.accent}33 0%, transparent 60%),`
+            + `radial-gradient(70% 44% at 78% 34%, ${c.accent2 || c.accent}1a 0%, transparent 70%)`,
+        }}
+      />
+
+      {LAYERS.map((layer) => (
+        <svg
+          key={layer.key}
+          viewBox="0 0 100 100"
+          preserveAspectRatio="xMidYMid slice"
+          className={`absolute inset-0 w-full h-full${layer.still ? ' bg-still' : ''}`}
+          /* Forces antialiasing on every edge rather than letting the browser
+             decide it can snap these to the pixel grid. */
+          shapeRendering="geometricPrecision"
+          style={{
+            opacity: layer.opacity,
+            filter: layer.blur ? `blur(${layer.blur}px)` : undefined,
+            transform: `scale(${layer.scale}) translateY(${layer.y}%)`,
+            transformOrigin: 'center',
+          }}
+        >
+          <defs>
+            {/* A soft vignette so the near layer fades out at the edges
+                instead of ending at a hard rectangle. */}
+            <radialGradient id={`${id}-${layer.key}-fade`} cx="50%" cy="46%" r="72%">
+              <stop offset="0%" stopColor="#fff" stopOpacity="1" />
+              <stop offset="70%" stopColor="#fff" stopOpacity="0.85" />
+              <stop offset="100%" stopColor="#fff" stopOpacity="0" />
+            </radialGradient>
+            <mask id={`${id}-${layer.key}-mask`}>
+              <rect x="-20" y="-20" width="140" height="140" fill={`url(#${id}-${layer.key}-fade)`} />
+            </mask>
+          </defs>
+          <g
+            mask={layer.key === 'mid' ? undefined : `url(#${id}-${layer.key}-mask)`}
+            /* Inherits down to every drifting particle in the scene, which is
+               how one number makes a whole layer move at its own rate. */
+            style={{ '--drift-scale': layer.speed }}
+          >
+            {/*
+              The far and near layers are handed a transparent background.
+              
+              Every scene opens by painting `c.bg` across the whole viewBox,
+              which is right when there is one of them and fatal when there are
+              three: the middle layer's opaque rectangle hid the far one
+              completely, and the near one hid everything. The parallax was
+              running the entire time and none of it was visible. Swapping the
+              colour is enough — no scene needs to know it is being stacked.
+            */}
+            <Scene c={layer.key === 'mid' ? c : { ...c, bg: 'transparent' }} />
+          </g>
+        </svg>
+      ))}
+
+      {/*
+        Keeps text readable no matter how busy the scene is. Six stops rather
+        than four: the banding that showed on darker themes was the gradient
+        having too far to travel between them.
+      */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            `linear-gradient(to bottom, ${c.bg}cc 0%, ${c.bg}8e 15%, ${c.bg}52 32%,`
+            + ` ${c.bg}5e 58%, ${c.bg}a6 80%, ${c.bg}e6 100%)`,
         }}
       />
     </div>

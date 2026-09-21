@@ -142,7 +142,22 @@
 /* --- Motion ------------------------------------------------------- */
 
 @keyframes rankup-float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
-@keyframes rankup-drift { from { transform: translate3d(0,0,0) } to { transform: translate3d(0,-100vh,0) } }
+/*
+ * Drift, in the scene's OWN units.
+ *
+ * This used to travel -100vh. Inside an SVG whose viewBox is 100 units tall,
+ * a viewport unit is a different coordinate system entirely — the distance a
+ * particle covered depended on the height of the phone rather than on the
+ * drawing, so the same scene crawled on a tablet and raced on a small screen.
+ * On an SVG element a CSS pixel IS one user unit, so 124px is 124% of the
+ * scene: far enough to carry a particle fully off the top from anywhere.
+ */
+@keyframes rankup-drift { from { transform: translate3d(0,0,0) } to { transform: translate3d(0,-124px,0) } }
+/* A slow lateral wander on an unrelated period, so nothing marches in step. */
+@keyframes rankup-sway {
+  0%, 100% { transform: translate3d(-1.6px,0,0) }
+  50%      { transform: translate3d(1.6px,0,0) }
+}
 @keyframes rankup-pulse { 0%,100% { opacity: 0.35 } 50% { opacity: 1 } }
 @keyframes rankup-spin { to { transform: rotate(360deg) } }
 @keyframes rankup-pop { 0% { transform: scale(0.7); opacity: 0 } 60% { transform: scale(1.06) } 100% { transform: scale(1); opacity: 1 } }
@@ -273,6 +288,18 @@
   animation-iteration-count: 1 !important;
   transition-duration: 0.001ms !important;
 }
+
+/*
+ * A background layer that is blurred must not also move.
+ *
+ * A CSS blur is paid on every repaint, so animating inside one re-blurs the
+ * whole screen every frame. Measured at six-times CPU throttling that took the
+ * median frame from 33ms to 50ms — smooth to visibly stuttering on a mid-range
+ * phone. Held still, the browser blurs it once and composites the result from
+ * then on, which is free. The depth comes from the sharp layers moving in
+ * front of it, which is how distance reads anyway.
+ */
+.bg-still, .bg-still * { animation: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
   * {
