@@ -17,6 +17,12 @@ export default function ParentPlan() {
   const { state, dispatch } = useApp()
   const current = state.family.tier
   const [confirm, setConfirm] = useState(null)
+  /*
+   * Monthly or annual. Monthly is the default deliberately: annual is the
+   * better deal and the better business, but defaulting somebody into the
+   * larger charge is the kind of thing that gets refunded and remembered.
+   */
+  const [cycle, setCycle] = useState('month')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [status, setStatus] = useState(null)
@@ -45,7 +51,7 @@ export default function ParentPlan() {
     }
     setBusy(true)
     setError('')
-    const result = await startCheckout(tier.id)
+    const result = await startCheckout(tier.id, cycle)
     if (!result.ok) {
       setError(billingError(result.reason))
       setBusy(false)
@@ -89,6 +95,34 @@ export default function ParentPlan() {
 
       {error && <p className="text-sm mt-3" style={{ color: 'var(--bad)' }} role="alert">{error}</p>}
 
+      {/*
+        Two months free is the whole pitch for annual, so it is stated on the
+        control rather than hidden inside the cards a tap away.
+      */}
+      <div className="flex gap-1.5 p-1 rounded-xl mt-3" style={{ background: 'var(--surface-2)' }} role="tablist" aria-label="Billing period">
+        {[
+          { id: 'month', label: 'Monthly' },
+          { id: 'year', label: 'Yearly', note: '2 months free' },
+        ].map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            role="tab"
+            aria-selected={cycle === option.id}
+            onClick={() => setCycle(option.id)}
+            className="flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-colors"
+            style={cycle === option.id
+              ? { background: 'var(--accent)', color: '#fff' }
+              : { color: 'var(--ink-muted)' }}
+          >
+            {option.label}
+            {option.note && (
+              <span className="block text-[11px] font-normal opacity-80">{option.note}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
       <div className="mt-3 space-y-3">
         {TIER_LADDER.map((tier, i) => {
           const active = tier.id === current
@@ -101,12 +135,27 @@ export default function ParentPlan() {
               <div className="flex items-baseline justify-between gap-2 mb-1">
                 <h2 className="font-display font-extrabold text-lg">{tier.name}</h2>
                 <span className="font-display font-extrabold text-xl">
-                  {tier.price === 0 ? 'Free' : <>${tier.price}<span className="text-xs font-normal text-muted">/mo</span></>}
+                  {tier.price === 0
+                    ? 'Free'
+                    : cycle === 'year'
+                      ? <>${tier.yearPrice}<span className="text-xs font-normal text-muted">/yr</span></>
+                      : <>${tier.price}<span className="text-xs font-normal text-muted">/mo</span></>}
                 </span>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {active && <Chip tone="var(--accent)">Current plan</Chip>}
-                <Chip>Billed monthly · cancel any time</Chip>
+                <Chip>
+                  {tier.price === 0
+                    ? 'Free forever · no card'
+                    : cycle === 'year'
+                      ? 'Billed yearly · cancel any time'
+                      : 'Billed monthly · cancel any time'}
+                </Chip>
+                {tier.price > 0 && cycle === 'year' && (
+                  <Chip tone="var(--good)">
+                    ${(tier.price * 12 - tier.yearPrice).toFixed(2)} saved
+                  </Chip>
+                )}
               </div>
               {below && (
                 <p className="text-sm mt-2">
@@ -139,7 +188,8 @@ export default function ParentPlan() {
                     ? 'Opening Stripe…'
                     : tier.price === 0
                       ? `Stay on ${tier.name}`
-                      : `${live ? 'Subscribe to' : 'Switch to'} ${tier.name} · $${tier.price}/mo`}
+                      : `${live ? 'Subscribe to' : 'Switch to'} ${tier.name} · `
+                        + (cycle === 'year' ? `$${tier.yearPrice}/yr` : `$${tier.price}/mo`)}
                 </Button>
               )}
             </Card>

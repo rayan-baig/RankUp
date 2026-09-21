@@ -38,9 +38,16 @@ async function post(url, body) {
   }
 }
 
-/** Send the parent to Stripe's hosted checkout. */
-export async function startCheckout(tier) {
-  const result = await post(CHECKOUT_URL, { tier })
+/**
+ * Send the parent to Stripe's hosted checkout.
+ *
+ * `cycle` is passed through rather than decided here: the price ids live on the
+ * server, so this only ever names which one it wants. Anything that is not
+ * 'year' is a month, so an older phone that knows nothing about annual billing
+ * keeps working exactly as it did.
+ */
+export async function startCheckout(tier, cycle = 'month') {
+  const result = await post(CHECKOUT_URL, { tier, cycle: cycle === 'year' ? 'year' : 'month' })
   if (result.ok && result.url) window.location.href = result.url
   return result
 }

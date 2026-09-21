@@ -26,9 +26,23 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL |
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || ''
-const ELITE_PRICE = process.env.STRIPE_PRICE_ELITE || ''
-const STANDARD_PRICE = process.env.STRIPE_PRICE_STANDARD || ''
-const STARTER_PRICE = process.env.STRIPE_PRICE_STARTER || ''
+/*
+ * Every price id that maps to a tier, monthly and annual.
+ *
+ * The annual ids MUST be here. Without them an annual subscriber's price id
+ * matches nothing, tierFor falls through to the cheapest plan, and somebody who
+ * has just paid for a year of Elite is dropped to free by the webhook that was
+ * supposed to give it to them. Silently, on their first renewal event.
+ */
+const PRICE_TIERS = new Map(
+  [
+    [process.env.STRIPE_PRICE_ELITE, 'elite'],
+    [process.env.STRIPE_PRICE_ELITE_YEAR, 'elite'],
+    [process.env.STRIPE_PRICE_STANDARD, 'standard'],
+    [process.env.STRIPE_PRICE_STANDARD_YEAR, 'standard'],
+    [process.env.STRIPE_PRICE_STARTER, 'starter'],
+  ].filter(([id]) => id),
+)
 
 /** Vercel must not parse the body, or the signature cannot be verified. */
 export const config = { api: { bodyParser: false } }
@@ -75,9 +89,8 @@ async function serviceRpc(fn, args) {
  */
 function tierFor(subscription) {
   const priceId = subscription?.items?.data?.[0]?.price?.id
-  if (ELITE_PRICE && priceId === ELITE_PRICE) return 'elite'
-  if (STANDARD_PRICE && priceId === STANDARD_PRICE) return 'standard'
-  if (STARTER_PRICE && priceId === STARTER_PRICE) return 'starter'
+  const byPrice = priceId && PRICE_TIERS.get(priceId)
+  if (byPrice) return byPrice
   const claimed = subscription?.metadata?.tier
   return claimed === 'elite' || claimed === 'standard' ? claimed : 'starter'
 }

@@ -15,12 +15,33 @@ import { makeStripe } from './_shared/stripe.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
-/** All three plans are billed monthly. There is no annual price. */
+
+/**
+ * Two ways to pay for the same two plans.
+ *
+ * Starter is free and has no price id at all — there is nothing to charge for,
+ * and a checkout for it is refused below rather than sending somebody to Stripe
+ * to be billed nothing.
+ *
+ * Annual exists because the cancel decision then happens once a year instead of
+ * twelve times, which is most of what churn actually is in a family app. Two
+ * months free is the usual shape and is priced in Stripe, not here — this file
+ * only ever names a price id, so the numbers on the plan screen and the numbers
+ * on the card can never disagree because of something in this code.
+ */
 const PRICES = {
-  starter: process.env.STRIPE_PRICE_STARTER || '',
-  standard: process.env.STRIPE_PRICE_STANDARD || '',
-  elite: process.env.STRIPE_PRICE_ELITE || '',
+  month: {
+    standard: process.env.STRIPE_PRICE_STANDARD || '',
+    elite: process.env.STRIPE_PRICE_ELITE || '',
+  },
+  year: {
+    standard: process.env.STRIPE_PRICE_STANDARD_YEAR || '',
+    elite: process.env.STRIPE_PRICE_ELITE_YEAR || '',
+  },
 }
+
+/** Anything that is not the word "year" is a month. Never guess from a price. */
+const cycleOf = (value) => (value === 'year' ? 'year' : 'month')
 
 /**
  * One-off purchases: the three Flash Ticket packs.
@@ -99,8 +120,10 @@ export default async function handler(req, res) {
   // Either a subscription (a plan) or a one-off (a ticket pack), never both.
   const product = body?.product
   const tier = body?.tier
+  const cycle = cycleOf(body?.cycle)
   const oneOff = Boolean(product)
-  if (oneOff ? !PRODUCTS[product]?.price : !PRICES[tier]) {
+  const planPrice = oneOff ? '' : PRICES[cycle][tier] || ''
+  if (oneOff ? !PRODUCTS[product]?.price : !planPrice) {
     return res.status(400).json({ error: oneOff ? 'Unknown product.' : 'Unknown plan.' })
   }
 
@@ -127,13 +150,27 @@ export default async function handler(req, res) {
   try {
     const session = await stripe.checkout.sessions.create({
       mode: oneOff ? 'payment' : 'subscription',
-      line_items: [{ price: oneOff ? PRODUCTS[product].price : PRICES[tier], quantity: 1 }],
+      line_items: [{ price: oneOff ? PRODUCTS[product].price : planPrice, quantity: 1 }],
       client_reference_id: familyId,
       // Both, because different webhook events surface different ones.
       metadata: oneOff
         ? { family_id: familyId, product, ticket_count: String(PRODUCTS[product].tickets) }
-        : { family_id: familyId, tier },
-      ...(oneOff ? {} : { subscription_data: { metadata: { family_id: familyId, tier } } }),
+        : { family_id: familyId, tier, cycle },
+      ...(oneOff ? {} : {
+        subscription_data: {
+          metadata: { family_id: familyId, tier, cycle },
+          /*
+           * A fortnight on the card as well as the fortnight in the app.
+           *
+           * Somebody who decides to pay on day three should not lose the eleven
+           * days they have left, and should not be charged until the trial they
+           * were promised is actually over. Stripe holds the card and bills at
+           * the end, which is also what turns a trial into a subscription
+           * without asking them to come back and do it again.
+           */
+          trial_period_days: 14,
+        },
+      }),
       success_url: oneOff
         ? `${origin}/#/parent/settings?tickets=success`
         : `${origin}/#/parent/plan?checkout=success`,

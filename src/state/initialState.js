@@ -45,6 +45,16 @@ export const TIERS = {
     id: 'standard',
     name: 'Standard',
     price: 9.99,
+    /*
+     * Ten months' money for twelve months' app.
+     *
+     * The saving is the smaller half of why this exists. The larger half is
+     * that the decision to cancel then happens once a year instead of twelve
+     * times, and in a family app most churn is not a decision to leave — it is
+     * a quiet month where nobody opened it and the charge looked like a good
+     * thing to stop.
+     */
+    yearPrice: 99.9,
     order: 1,
     guildSize: 5,
     xpMultiplier: 1,
@@ -60,6 +70,7 @@ export const TIERS = {
     id: 'elite',
     name: 'Elite Pass',
     price: 15.99,
+    yearPrice: 159.9,
     order: 2,
     guildSize: 10,
     xpMultiplier: 1.5,

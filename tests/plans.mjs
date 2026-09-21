@@ -47,6 +47,41 @@ console.log('\n=== Nothing claims to remove ads, because there are none ===')
   ? fail('no ad-removal claim', 'the plan screen still sells ad removal')
   : pass('no plan sells the removal of ads that do not exist')
 
+console.log('\n=== Monthly or yearly, and yearly says what it saves ===')
+// Annual is most of the revenue difference in a subscription business, and the
+// thing that makes it work is that the saving is stated where the choice is
+// made rather than a tap away.
+await page.evaluate(() => { window.location.hash = '/parent/plan' })
+await page.waitForTimeout(700)
+await page.getByRole('tab', { name: /Yearly/ }).click()
+await page.waitForTimeout(500)
+const yearly = await page.evaluate(() => document.body.innerText)
+yearly.includes('$99.9') && yearly.includes('$159.9')
+  ? pass('yearly prices replace the monthly ones')
+  : fail('yearly prices shown', yearly.slice(0, 200))
+yearly.includes('2 months free')
+  ? pass('and the control itself says what yearly buys')
+  : fail('2 months free stated', 'phrase missing')
+// Assigned rather than written inline: a regex literal opening a line after a
+// closing paren is read as division, and the file stops parsing.
+const showsSaving = /\$\d+\.\d\d saved/.test(yearly)
+showsSaving
+  ? pass('each plan shows the money saved in cash, not a percentage')
+  : fail('saving in cash', yearly.slice(0, 200))
+yearly.includes('Billed yearly')
+  ? pass('and says plainly how it will be billed')
+  : fail('billed yearly stated', 'phrase missing')
+
+// Defaulting somebody into the larger charge is what gets refunded.
+await page.reload({ waitUntil: 'domcontentloaded' })
+await page.waitForTimeout(1200)
+await page.evaluate(() => { window.location.hash = '/parent/plan' })
+await page.waitForTimeout(700)
+const fresh = await page.evaluate(() => document.body.innerText)
+fresh.includes('$9.99') && !fresh.includes('$99.9')
+  ? pass('monthly is what a parent sees first')
+  : fail('monthly is the default', fresh.slice(0, 200))
+
 console.log('\n=== During the free trial, the limits are not in force ===')
 // A new family gets a fortnight of Elite with no card. If the Starter limit
 // bit during it, the trial would be a trial of the thing they already have.
