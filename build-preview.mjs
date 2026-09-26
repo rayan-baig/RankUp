@@ -23,11 +23,10 @@
  *    hand. Hand-written state means guessing at shapes the reducer owns, and
  *    one wrong field puts the whole demo inside a crash boundary.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, rmSync, cpSync, existsSync, readdirSync } from 'node:fs'
 import { spawn, spawnSync } from 'node:child_process'
 
 const OUT_DIR = 'preview'
-const OUT = `${OUT_DIR}/rankup-demo.html`
 const PORT = 5174
 const DIST = 'dist-demo'
 
@@ -61,7 +60,7 @@ const waitFor = async (url, tries = 60) => {
   return false
 }
 
-let html
+let pageSize = 0
 try {
   if (!(await waitFor(`http://localhost:${PORT}/`))) {
     console.error('the preview server never came up'); process.exit(1)
@@ -69,55 +68,70 @@ try {
   console.log('· driving the real screens to build a family')
   run('node', ['seed-demo.mjs'])
 
-  // --- 3. fold it all into one file -----------------------------------------
-  const index = readFileSync(`${DIST}/index.html`, 'utf8')
-  const js = index.match(/src="([^"]*\.js)"/)?.[1]
-  const css = index.match(/href="([^"]*\.css)"/)?.[1]
-  if (!js) { console.error('no bundle in the built index.html'); process.exit(1) }
+  // --- 3. assemble it ---------------------------------------------------------
+  // The built app, plus the seed, published as it is served: one index.html
+  // beside its assets. Inlining the 460 kB bundle into the page worked, but it
+  // also meant the icons and the manifest had to be thrown away, so the tab had
+  // no icon and it could not be added to a home screen.
+  rmSync(OUT_DIR, { recursive: true, force: true })
+  cpSync(DIST, OUT_DIR, { recursive: true })
 
-  const bundle = readFileSync(`${DIST}${js}`, 'utf8')
-  const styles = css ? readFileSync(`${DIST}${css}`, 'utf8') : ''
+  const index = readFileSync(`${DIST}/index.html`, 'utf8')
   const seed = JSON.parse(readFileSync('/tmp/demo-state.json', 'utf8'))
 
+  // Served from the artifact's own folder, so every path is relative to it.
+  const rooted = index.replace(/(src|href)="\//g, (_, attr) => `${attr}="`)
+
+  const MODULE_TAG = /\s*<script type="module"[^>]*><\/script>/
+  const tag = rooted.match(MODULE_TAG)
+  if (!tag) { console.error('no module script in the built index.html'); process.exit(1) }
+
+  const seedScript = `
+    <script>
+      /*
+       * The family, written before the app boots.
+       *
+       * The app saves its own state on a 250ms debounce, so a seed written
+       * after the bundle starts is overwritten by the empty state the app has
+       * just made — and the demo opens on the setup screen, the one screen it
+       * exists to skip. A plain script before the module tag runs first.
+       *
+       * It only ever seeds an untouched browser. Once someone has used this,
+       * their own family is the one that matters.
+       */
+      (function () {
+        try {
+          if (localStorage.getItem('rankup.state.v1')) return;
+          var seed = ${JSON.stringify(seed).replace(/</g, '\\u003c')};
+          for (var k in seed) localStorage.setItem(k, seed[k]);
+        } catch (e) { /* storage off in a private window: the app runs, empty */ }
+      })();
+    </script>`
+
   /*
-   * Every replacement below passes a FUNCTION, never a string.
+   * A FUNCTION, never a string.
    *
    * A replacement string treats $&, $` and $' as references to the match, and
-   * a 468 kB minified bundle contains those sequences by chance — which
-   * silently spliced fragments of the page into the middle of the JavaScript
-   * and produced "missing ) after argument list" on a file that looked
-   * perfectly fine in an editor.
+   * 76 kB of seeded state contains those sequences by chance — which silently
+   * splices fragments of the page into the middle of the JSON.
    */
-  const inline = (str) => () => str
+  const html = rooted.replace(MODULE_TAG, () => `${seedScript}\n${tag[0].trim()}`)
 
-  html = index
-    // The icons, manifest and service worker are served from paths that will
-    // not exist next to a file someone has downloaded. Drop them rather than
-    // ship 404s.
-    .replace(/\s*<link rel="(manifest|icon|apple-touch-icon)"[^>]*>/g, '')
-    .replace(/\s*<link[^>]*href="[^"]*\.css"[^>]*>/,
-      inline(`<style>${styles}</style>`))
-    .replace(/\s*<script type="module"[^>]*><\/script>/,
-      inline(`
-    <script>
-      /* The family, written before the app boots. See build-preview.mjs. */
-      try {
-        var seed = ${JSON.stringify(seed).replace(/</g, '\\u003c')};
-        for (var k in seed) localStorage.setItem(k, seed[k]);
-      } catch (e) { /* storage off in a private window: they get the app, empty */ }
-    </script>
-    <script type="module">${bundle.replace(/<\/script/gi, '<\\/script')}</script>`))
-
-  // The service worker has nothing to serve from a file:// page and only ever
-  // registers a failure in the console.
-  html = html.replace(/<script>[^<]*serviceWorker[^<]*<\/script>/g, '')
+  writeFileSync(`${OUT_DIR}/index.html`, html)
+  pageSize = Buffer.byteLength(html)
 } finally {
   try { process.kill(-server.pid) } catch { /* already gone */ }
 }
 
-if (!existsSync(OUT_DIR)) mkdirSync(OUT_DIR)
-writeFileSync(OUT, html)
+const files = []
+const walk = (dir, prefix = '') => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name
+    if (entry.isDirectory()) walk(`${dir}/${entry.name}`, rel)
+    else if (rel !== 'index.html') files.push(rel)
+  }
+}
+walk(OUT_DIR)
+console.log(`\n  ${OUT_DIR}/index.html — ${Math.round(pageSize / 1024)} kB`)
+console.log(`  ${files.length} files beside it: ${files.join(' ')}`)
 
-const kb = Math.round(Buffer.byteLength(html) / 1024)
-console.log(`\n  ${OUT} — ${kb} kB`)
-if (kb > 15000) console.log('  WARNING: over the 16 MB an artifact will take')
