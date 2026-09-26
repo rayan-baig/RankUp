@@ -41,6 +41,18 @@ else
   say schema "FAILED — see /tmp/rankup-sql.log"; tail -5 /tmp/rankup-sql.log; exit 1
 fi
 
+# --- how the browser finds it -----------------------------------------------
+# .env.local is gitignored, which means a recycled sandbox comes back without
+# it — and the app then runs in its no-backend mode, where onboarding never
+# asks for an account and every browser test times out looking for the email
+# box. That took an hour to work out once; it should not take one again.
+# VITE_GUILDS_ENABLED belongs here too: guilds ship off, so tests/guilds.mjs
+# sits waiting for a screen the app is deliberately not showing.
+if ! grep -q "VITE_GUILDS_ENABLED=true" .env.local 2>/dev/null; then
+  printf 'VITE_SUPABASE_URL=http://localhost:54321\nVITE_SUPABASE_ANON_KEY=local-anon-key\nVITE_GUILDS_ENABLED=true\n' > .env.local
+  say ".env.local" "written (mock API, guilds on for the tests)"
+fi
+
 # --- mock API ---------------------------------------------------------------
 setsid nohup node supabase/test/mock-server.mjs > /tmp/rankup-mock.log 2>&1 < /dev/null &
 for _ in $(seq 1 20); do curl -s -o /dev/null -m 1 http://localhost:54321/rest/v1/ && break; sleep 0.5; done
