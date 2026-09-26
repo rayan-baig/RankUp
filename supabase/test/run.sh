@@ -11,7 +11,7 @@ psql -q -tAc "drop database if exists $DB;" postgres >/dev/null 2>&1
 psql -q -tAc "create database $DB;" postgres >/dev/null 2>&1
 psql -q -v ON_ERROR_STOP=1 -f "$HERE/00-shim.sql" "$DB" >/dev/null 2>&1 || { echo "shim failed"; exit 1; }
 
-for f in "$HERE/../schema.sql" "$HERE/../sync.sql" "$HERE/../guilds.sql" "$HERE/../notifications.sql" "$HERE/../consent.sql" "$HERE/../billing.sql" "$HERE/../alliances.sql" "$HERE/../reminders.sql" "$HERE/../digests.sql" "$HERE/../retention.sql" "$HERE/../crashes.sql" "$HERE/../health.sql" "$HERE/00b-helpers.sql"; do
+for f in "$HERE/../schema.sql" "$HERE/../sync.sql" "$HERE/../guilds.sql" "$HERE/../notifications.sql" "$HERE/../consent.sql" "$HERE/../billing.sql" "$HERE/../alliances.sql" "$HERE/../reminders.sql" "$HERE/../digests.sql" "$HERE/../referrals.sql" "$HERE/../retention.sql" "$HERE/../crashes.sql" "$HERE/../health.sql" "$HERE/00b-helpers.sql"; do
   if ! psql -q -v ON_ERROR_STOP=1 -f "$f" "$DB" >"$OUT" 2>&1; then
     echo "$(basename "$f") FAILED TO APPLY:"; cat "$OUT"; exit 1
   fi
@@ -25,7 +25,7 @@ echo "schema applied cleanly"
 # EXISTS aborts its file and leaves everything after it unapplied — which is a
 # half-upgraded database with nothing on screen to say so. 18-upgrade.sql then
 # checks what survived.
-for f in "$HERE/../schema.sql" "$HERE/../sync.sql" "$HERE/../guilds.sql" "$HERE/../notifications.sql" "$HERE/../consent.sql" "$HERE/../billing.sql" "$HERE/../alliances.sql" "$HERE/../reminders.sql" "$HERE/../digests.sql" "$HERE/../retention.sql" "$HERE/../crashes.sql" "$HERE/../health.sql"; do
+for f in "$HERE/../schema.sql" "$HERE/../sync.sql" "$HERE/../guilds.sql" "$HERE/../notifications.sql" "$HERE/../consent.sql" "$HERE/../billing.sql" "$HERE/../alliances.sql" "$HERE/../reminders.sql" "$HERE/../digests.sql" "$HERE/../referrals.sql" "$HERE/../retention.sql" "$HERE/../crashes.sql" "$HERE/../health.sql"; do
   if ! psql -q -v ON_ERROR_STOP=1 -f "$f" "$DB" >"$OUT" 2>&1; then
     echo "$(basename "$f") IS NOT SAFE TO RE-RUN:"; cat "$OUT"; exit 1
   fi
@@ -33,7 +33,12 @@ done
 echo "schema re-applies cleanly over itself"
 
 status=0
-for f in "$HERE"/0[1-9]-*.sql "$HERE"/1[0-9]-*.sql; do
+# Every numbered file, not a hand-maintained range. The previous pattern only
+# matched 01-19, so 20-referrals.sql was written, committed, and silently never
+# run — the worst way for a test to fail.
+for f in "$HERE"/[0-9][0-9]-*.sql; do
+  # 00-shim.sql is the Supabase stand-in, not a test, and it has already run.
+  case "$(basename "$f")" in 00-*) continue;; esac
   echo ""
   echo "=== $(basename "$f") ==="
   PGOPTIONS='-c client_min_messages=notice' psql -q -v ON_ERROR_STOP=1 -f "$f" "$DB" >"$OUT" 2>&1

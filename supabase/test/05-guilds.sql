@@ -280,12 +280,31 @@ begin
    where kid_id = '9d000000-0000-0000-0000-000000000002';
   set local role app_user;
 
+  -- A Starter child holding a friend's code has already been sold the product
+  -- by the person who matters most, so the first time it happens they get a
+  -- fortnight rather than a closed door. What must NOT happen is that they get
+  -- guilds for free, so the trial is what lets them in — not the Starter plan.
   perform become('92222222-2222-2222-2222-222222222222');
   res := request_guild_join('9d000000-0000-0000-0000-000000000002', code);
-  perform ok('a Starter family cannot join a guild either',
+  perform ok('a Starter child with a code is given a trial, not a refusal',
+    (res->>'ok')::boolean = true, coalesce(res->>'reason', '?'));
+  set local role postgres;
+  perform ok('and it is a trial, not a plan they did not pay for',
+    (select tier from families where id = '9b000000-0000-0000-0000-000000000002') = 'starter'
+    and effective_tier('9b000000-0000-0000-0000-000000000002') = 'elite');
+
+  -- The second time is the honest answer: they have had their fortnight.
+  update families set trial_ends_at = now() - interval '1 minute'
+   where id = '9b000000-0000-0000-0000-000000000002';
+  delete from guild_members where kid_id = '9d000000-0000-0000-0000-000000000002';
+  set local role app_user;
+  perform become('92222222-2222-2222-2222-222222222222');
+  res := request_guild_join('9d000000-0000-0000-0000-000000000002', code);
+  perform ok('once the trial has run out, Starter means Starter',
     (res->>'ok')::boolean = false and res->>'reason' = 'plan_has_no_guilds');
 
   set local role postgres;
+  delete from guild_members where kid_id = '9d000000-0000-0000-0000-000000000002';
   update families set tier = 'standard' where id = '9b000000-0000-0000-0000-000000000002';
   set local role app_user;
   perform become('92222222-2222-2222-2222-222222222222');

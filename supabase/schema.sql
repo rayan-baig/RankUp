@@ -663,6 +663,19 @@ create policy events_insert on events
 -- ever needs to be fully tamper-proof, move that calculation in here too.
 -- ---------------------------------------------------------------------------
 
+/*
+ * A stub, replaced by the real thing in referrals.sql.
+ *
+ * approve_submission calls this, and schema.sql has to be applicable on its
+ * own — a project that never runs referrals.sql must still be able to approve
+ * a chore. `create or replace` in referrals.sql then overwrites this with the
+ * version that pays out.
+ */
+create or replace function qualify_referral(p_family_id uuid)
+returns void language sql immutable as $$ select $$;
+
+revoke execute on function qualify_referral(uuid) from public;
+
 /**
  * What an approved chore is actually worth.
  *
@@ -829,6 +842,11 @@ begin
   insert into events (family_id, kid_id, type, meta)
   values (v_sub.family_id, v_sub.kid_id, 'quest_approved',
           jsonb_build_object('questId', v_sub.quest_id, 'xp', v_xp, 'coins', v_coins));
+
+  -- A referred family earns their referrer a month here, on the first chore
+  -- they actually finish — not when they signed up. Cannot fail an approval;
+  -- see referrals.sql.
+  perform qualify_referral(v_sub.family_id);
 end;
 $$;
 

@@ -12,6 +12,7 @@ import { transport } from '../../lib/sync/transport.js'
 import { Screen, Card, Button, Section, SectionTitle, Field, TextInput, TextArea, Toggle, Banner, Modal, Select, Chip } from '../../components/ui.jsx'
 import NotificationSettings from '../../components/NotificationSettings.jsx'
 import DataRights from '../../components/DataRights.jsx'
+import InviteCard from '../../components/InviteCard.jsx'
 import { navigate } from '../../lib/router.js'
 
 export default function ParentSettings() {
@@ -30,6 +31,8 @@ export default function ParentSettings() {
     <Screen>
       <h1 className="font-display text-2xl font-extrabold mb-1">Settings</h1>
       <p className="text-sm text-muted mb-4">Tap a section to open it.</p>
+
+      <InviteCard />
 
       <Section title="Dashboard theme" icon="🎨"
         summary={PARENT_THEMES.find((t) => t.id === state.family.parentThemeId)?.name || 'Choose a look'}>

@@ -140,8 +140,19 @@ begin
   -- refuses a Starter family outright, and this is the other door into the
   -- same room: without this check a Starter family simply joined somebody
   -- else's guild instead of making one, and had the whole feature for free.
+  --
+  -- A Starter family arriving here is not a problem to refuse, though. They
+  -- are a child whose friend has already sold them the product and who is
+  -- standing at the door with the code in their hand. So the first time it
+  -- happens they get a fortnight of Elite instead of a closed door, and the
+  -- second time — once they have had their trial and let it lapse — they get
+  -- the honest answer.
   if effective_tier(v_kid.family_id) = 'starter' then
-    return jsonb_build_object('ok', false, 'reason', 'plan_has_no_guilds');
+    if exists (select 1 from families
+                where id = v_kid.family_id and trial_tier is not null) then
+      return jsonb_build_object('ok', false, 'reason', 'plan_has_no_guilds');
+    end if;
+    perform grant_trial(v_kid.family_id, 'elite', 14);
   end if;
 
   if exists (select 1 from guild_members where guild_id = v_guild.id and kid_id = p_kid_id and status <> 'removed') then
