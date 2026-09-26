@@ -38,6 +38,18 @@ await page.waitForTimeout(500)
 step('whose phone')
 await page.getByRole('button', { name: /I'm a parent/ }).click()
 await page.waitForTimeout(500)
+
+// Setup opens with an account now, before anything else — so the family
+// exists before a child's name is ever typed. Guarded rather than assumed:
+// this file has already been broken once by a step appearing in front of it.
+if (await page.locator('input[type=email]').count()) {
+  step('an account to hang the family on')
+  await page.locator('input[type=email]').fill(`demo${Date.now()}@example.com`)
+  await page.locator('input[type=password]').fill('correct-horse-battery')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await page.waitForTimeout(1800)
+}
+
 await page.getByRole('button', { name: 'Continue' }).click()   // welcome
 await page.waitForTimeout(500)
 

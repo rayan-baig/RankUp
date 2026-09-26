@@ -12,3 +12,8 @@ npm-debug.log*
 
 # Wrangler scratch output from `wrangler pages dev`.
 .wrangler/
+
+# Build output for the shareable demo (see build-preview.mjs). Regenerated,
+# never edited, and half a megabyte of bundled app — not worth versioning.
+dist-demo/
+preview/
