@@ -9,6 +9,7 @@ import Logo, { SLOGAN, Wordmark } from '../components/Logo.jsx'
 import KidDeviceSetup from './kid/KidDeviceSetup.jsx'
 import SignIn from './SignIn.jsx'
 import ParentalConsent from './ParentalConsent.jsx'
+import JoinFamily from './JoinFamily.jsx'
 import { transport } from '../lib/sync/transport.js'
 import { navigate } from '../lib/router.js'
 
@@ -27,6 +28,8 @@ export default function Onboarding() {
   // rule, so skipping this would simply fail when the kid is created.
   const [consented, setConsented] = useState(false)
   const [serverFamilyId, setServerFamilyId] = useState(null)
+  // A second parent is not setting anything up — their family already exists.
+  const [joining, setJoining] = useState(false)
   const [creating, setCreating] = useState(false)
 
   /**
@@ -90,6 +93,10 @@ export default function Onboarding() {
 
   if (mode === 'parent' && !signedIn) {
     return <SignIn onDone={() => setSignedIn(true)} onBack={() => setMode(null)} />
+  }
+
+  if (mode === 'parent' && signedIn && joining) {
+    return <JoinFamily onBack={() => setJoining(false)} />
   }
 
   if (mode === 'parent' && !consented && step >= 2) {
@@ -204,6 +211,25 @@ export default function Onboarding() {
               placeholder="••••"
             />
           </Field>
+
+          {/*
+            * The second parent's door, and it has to be on this screen.
+            *
+            * They arrive with a code from the other parent and no reason to
+            * think they are meant to do anything other than what the app is
+            * asking — which here is to set up a family that already exists.
+            * Two households then end up unable to see each other's chores,
+            * which is the one problem this feature exists to solve.
+            */}
+          {transport.isConfigured() && (
+            <button
+              type="button"
+              onClick={() => setJoining(true)}
+              className="text-sm underline text-muted mt-1"
+            >
+              Has the other grown-up already set this up? Join their family instead.
+            </button>
+          )}
         </div>
       )}
 

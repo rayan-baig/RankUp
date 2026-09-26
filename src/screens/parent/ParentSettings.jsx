@@ -13,6 +13,7 @@ import { Screen, Card, Button, Section, SectionTitle, Field, TextInput, TextArea
 import NotificationSettings from '../../components/NotificationSettings.jsx'
 import DataRights from '../../components/DataRights.jsx'
 import InviteCard from '../../components/InviteCard.jsx'
+import AdultsCard from '../../components/AdultsCard.jsx'
 import { navigate } from '../../lib/router.js'
 
 export default function ParentSettings() {
@@ -32,6 +33,7 @@ export default function ParentSettings() {
       <h1 className="font-display text-2xl font-extrabold mb-1">Settings</h1>
       <p className="text-sm text-muted mb-4">Tap a section to open it.</p>
 
+      <AdultsCard />
       <InviteCard />
 
       <Section title="Dashboard theme" icon="🎨"

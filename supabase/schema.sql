@@ -63,6 +63,17 @@ create table if not exists parents (
   name       text not null,
   email      text,
   is_owner   boolean not null default true,
+  /*
+   * What this adult is allowed to do.
+   *
+   * 'parent' approves chores and holds the plan. 'supporter' is a grandparent
+   * or anyone else the family wants looking in — they see how it is going and
+   * can put something into a child's pot, and that is all. is_parent() below
+   * is the single gate, and every write policy in this file already asks it,
+   * so a supporter is read-only everywhere by construction rather than by a
+   * list of screens somebody has to remember to check.
+   */
+  role       text not null default 'parent' check (role in ('parent','supporter')),
   created_at timestamptz not null default now()
 );
 
@@ -438,7 +449,8 @@ revoke execute on function grant_trial(uuid, text, int) from public;
 
 create or replace function is_parent()
 returns boolean language sql stable security definer set search_path = public as $$
-  select exists (select 1 from parents where user_id = auth.uid());
+  select exists (select 1 from parents
+                  where user_id = auth.uid() and role = 'parent');
 $$;
 
 create or replace function current_kid_id()
@@ -476,10 +488,23 @@ create policy family_update on families
 drop policy if exists parents_read on parents;
 create policy parents_read on parents
   for select using (family_id = current_family_id());
+/*
+ * An adult may edit their own row, and nobody else's.
+ *
+ * This used to be `for all`, which was harmless while a family could only ever
+ * have one adult in it. The moment a second one can be invited it stops being
+ * harmless: a co-parent could delete the owner, or quietly promote a supporter
+ * to a parent, with a single write from a browser. Adding and removing adults
+ * goes through the functions in coparents.sql, which check who is asking.
+ */
 drop policy if exists parents_write on parents;
 create policy parents_write on parents
-  for all using (family_id = current_family_id() and is_parent())
-  with check (family_id = current_family_id() and is_parent());
+  for update using (user_id = auth.uid())
+  with check (user_id = auth.uid()
+              and family_id = current_family_id()
+              -- Nobody edits their own way into more power.
+              and role = (select p.role from parents p where p.user_id = auth.uid())
+              and is_owner = (select p.is_owner from parents p where p.user_id = auth.uid()));
 
 -- Kids: parents manage them. A kid may read their own row but may NOT update it
 -- — otherwise they could set their own XP. All XP changes go through the
@@ -1205,6 +1230,14 @@ alter table families drop constraint if exists families_trial_tier_check;
 alter table families drop constraint if exists families_trial_tier_values;
 alter table families add constraint families_trial_tier_values
   check (trial_tier in ('standard','elite'));
+
+-- What an adult in the family is allowed to do. Existing rows are parents,
+-- which is what the default gives them.
+alter table parents add column if not exists role text not null default 'parent';
+alter table parents drop constraint if exists parents_role_check;
+alter table parents drop constraint if exists parents_role_values;
+alter table parents add constraint parents_role_values
+  check (role in ('parent','supporter'));
 
 -- The parent's one-tap reaction on an approval.
 alter table submissions add column if not exists sticker text;

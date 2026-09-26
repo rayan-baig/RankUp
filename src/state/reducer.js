@@ -331,6 +331,35 @@ export function reducer(state, action) {
       return logEvent(next, { type: 'family_created', kidId: kid.id })
     }
 
+    /**
+     * A second grown-up arriving in a family that already exists.
+     *
+     * Unlike COMPLETE_ONBOARDING there is no child to create and no guild to
+     * name — the family already has both, and the sync layer brings them down
+     * a moment later. All this does is stop the app asking to be set up and
+     * point it at the right family.
+     *
+     * kidId is left null on purpose. App.jsx falls back to the first child it
+     * knows about, which is the correct answer both before the first snapshot
+     * arrives (none) and after it (theirs).
+     */
+    case 'JOIN_FAMILY': {
+      const { familyId, familyName, parentName, pin } = action
+      return {
+        ...state,
+        onboarded: true,
+        device: { ...state.device, role: 'parent', linkedKidId: null },
+        family: {
+          ...state.family,
+          id: familyId,
+          name: familyName || state.family.name,
+          parentName: parentName || state.family.parentName,
+          pin: pin || state.family.pin,
+        },
+        session: { role: 'parent', kidId: null, parentUnlocked: true },
+      }
+    }
+
     /* ---------- session ---------- */
 
     case 'SET_ROLE':
