@@ -76,28 +76,63 @@ async function request(path, options = {}) {
   return body
 }
 
+/**
+ * A hard stop on all outbound traffic.
+ *
+ * Set while somebody is looking around the demo family. Gating each caller
+ * worked until the next screen was written that fetched something on mount,
+ * and then the demo was quietly talking to a server again — which a test
+ * caught twice in one afternoon. One switch at the door is the only version of
+ * this that stays true as the app grows.
+ *
+ * Reads resolve to null and writes throw, because a read that fails should
+ * leave a card showing nothing while a write that silently did not happen is a
+ * lie to whoever called it.
+ */
+let paused = false
+
+export function pauseNetwork(on) {
+  paused = Boolean(on)
+}
+
+class NetworkPaused extends Error {
+  constructor() {
+    super('RankUp is in look-around mode; nothing is sent to a server.')
+    this.name = 'NetworkPaused'
+    this.retryable = false
+  }
+}
+
 export const transport = {
   isConfigured,
+  pauseNetwork,
 
   /** Call a Postgres function. */
   rpc: (fn, args = {}) =>
-    request(`/rest/v1/rpc/${fn}`, { method: 'POST', headers: headers(), body: JSON.stringify(args) }),
+    (paused
+      ? Promise.resolve(null)
+      : request(`/rest/v1/rpc/${fn}`, { method: 'POST', headers: headers(), body: JSON.stringify(args) })),
 
   /** Insert or replace a row. Row level security decides whether it is allowed. */
   upsert: (table, row) =>
-    request(`/rest/v1/${table}`, {
-      method: 'POST',
-      headers: headers({ Prefer: 'resolution=merge-duplicates,return=minimal' }),
-      body: JSON.stringify(row),
-    }),
+    (paused
+      ? Promise.reject(new NetworkPaused())
+      : request(`/rest/v1/${table}`, {
+        method: 'POST',
+        headers: headers({ Prefer: 'resolution=merge-duplicates,return=minimal' }),
+        body: JSON.stringify(row),
+      })),
 
   delete: (table, id) =>
-    request(`/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-      headers: headers({ Prefer: 'return=minimal' }),
-    }),
+    (paused
+      ? Promise.reject(new NetworkPaused())
+      : request(`/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: headers({ Prefer: 'return=minimal' }),
+      })),
 
   select: (table, params = {}) => {
+    if (paused) return Promise.resolve(null)
     const query = new URLSearchParams(params).toString()
     return request(`/rest/v1/${table}${query ? `?${query}` : ''}`, { method: 'GET', headers: headers() })
   },

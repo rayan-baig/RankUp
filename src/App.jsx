@@ -39,6 +39,7 @@ import ParentPairKid from './screens/parent/ParentPairKid.jsx'
 import ParentPlan from './screens/parent/ParentPlan.jsx'
 import ParentSettings from './screens/parent/ParentSettings.jsx'
 import ScreenBoundary from './components/ScreenBoundary.jsx'
+import DemoBanner from './components/DemoBanner.jsx'
 
 const KID_NAV = [
   { to: '/kid', icon: '🏠', label: 'Home', exact: true },
@@ -193,6 +194,10 @@ export default function App() {
   return (
     <>
       {isParentArea ? <ParentBackground theme={parentTheme} /> : <ThemeBackground theme={kidTheme} glitch={glitch} />}
+
+      {/* Outside the boundary: if a screen crashes, the way out of the demo
+          must still be on screen. */}
+      <DemoBanner />
 
       {/*
         Keyed on the route, so a screen that crashed gets a clean mount when you

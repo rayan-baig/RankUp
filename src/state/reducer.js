@@ -343,6 +343,23 @@ export function reducer(state, action) {
      * knows about, which is the correct answer both before the first snapshot
      * arrives (none) and after it (theirs).
      */
+    /**
+     * Load the look-around family.
+     *
+     * The whole state is replaced rather than merged: a visitor who has been
+     * halfway through setting up their own family and backed out must not end
+     * up with their half-finished household tangled into the demo's.
+     *
+     * LEAVE_DEMO is deliberately a full reset rather than a flag being turned
+     * off. Keeping any of it would mean a real family starting life with
+     * somebody else's children in it.
+     */
+    case 'START_DEMO':
+      return action.state
+
+    case 'LEAVE_DEMO':
+      return createInitialState()
+
     case 'JOIN_FAMILY': {
       const { familyId, familyName, parentName, pin } = action
       return {

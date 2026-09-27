@@ -5,11 +5,13 @@ import { KID_THEMES } from '../data/kidThemes.js'
 import { ADAPTIVE_SUPPORTS } from '../data/questTemplates.js'
 import { Button, Card, Field, TextInput, TextArea, Banner, ProgressBar } from '../components/ui.jsx'
 import ThemePicker from '../components/ThemePicker.jsx'
-import Logo, { SLOGAN, Wordmark } from '../components/Logo.jsx'
+import { SLOGAN, Wordmark } from '../components/Logo.jsx'
 import KidDeviceSetup from './kid/KidDeviceSetup.jsx'
 import SignIn from './SignIn.jsx'
 import ParentalConsent from './ParentalConsent.jsx'
 import JoinFamily from './JoinFamily.jsx'
+import Welcome from './Welcome.jsx'
+import { buildDemoFamily } from '../lib/demoFamily.js'
 import { transport } from '../lib/sync/transport.js'
 import { navigate } from '../lib/router.js'
 
@@ -105,56 +107,14 @@ export default function Onboarding() {
 
   if (mode === null) {
     return (
-      <div className="shell px-5 py-8 min-h-screen flex flex-col justify-center">
-        <div className="text-center mb-7 anim-slide-up">
-          <div className="flex justify-center mb-4">
-            <Logo size={92} glow />
-          </div>
-          <h1 className="font-display text-4xl font-extrabold leading-tight tracking-tight">
-            Rank<span style={{ color: '#FFC93D' }}>Up</span>
-          </h1>
-          <p className="font-display font-bold mt-1" style={{ color: 'var(--accent)' }}>{SLOGAN}</p>
-          <p className="text-muted text-sm mt-3">
-            Your kid does the chore and photographs the proof. You approve it. They earn XP.
-          </p>
-        </div>
-
-        <p className="section-title text-center">Whose phone is this?</p>
-
-        <button
-          type="button"
-          onClick={() => setMode('parent')}
-          className="card w-full text-left p-4 mb-3 flex items-center gap-4 transition-transform active:scale-[0.98]"
-        >
-          <span className="text-3xl" aria-hidden="true">🧑‍🍳</span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-display font-bold">I'm a parent</span>
-            <span className="block text-xs text-muted">
-              Set up your family, add kids and assign quests.
-            </span>
-          </span>
-          <span aria-hidden="true" className="text-muted">›</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setMode('kid')}
-          className="card w-full text-left p-4 flex items-center gap-4 transition-transform active:scale-[0.98]"
-        >
-          <span className="text-3xl" aria-hidden="true">🎮</span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-display font-bold">I'm a kid</span>
-            <span className="block text-xs text-muted">
-              Get a code to connect to your grown-up's account.
-            </span>
-          </span>
-          <span aria-hidden="true" className="text-muted">›</span>
-        </button>
-
-        <p className="text-xs text-muted text-center mt-6">
-          A kid's phone never creates its own account — it joins a parent's.
-        </p>
-      </div>
+      <Welcome
+        onLookAround={() => {
+          dispatch({ type: 'START_DEMO', state: buildDemoFamily() })
+          navigate('/parent')
+        }}
+        onParent={() => setMode('parent')}
+        onKid={() => setMode('kid')}
+      />
     )
   }
 

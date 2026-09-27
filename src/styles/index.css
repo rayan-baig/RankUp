@@ -308,3 +308,14 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * The self-playing loop on the front door. See components/LoopPreview.jsx.
+ *
+ * These live here rather than inline so that the reduce-motion rule at the top
+ * of this file switches them off with everything else, rather than needing the
+ * component to remember.
+ * ------------------------------------------------------------------------- */
+@keyframes rankup-shutter { 0% { opacity: 0 } 12% { opacity: 0.9 } 100% { opacity: 0 } }
+@keyframes rankup-sweep   { from { width: 0 } to { width: 100% } }
+@keyframes rankup-fill    { from { width: 18% } to { width: 72% } }

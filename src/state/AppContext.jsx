@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState, useLayoutEffect } from 'react'
 import { reducer, isElite, guildCapacity, activeLockout } from './reducer.js'
 import { createInitialState, TIERS } from './initialState.js'
 import { loadState, saveState, clearState, purgeOrphanPhotos, getPhoto, putPhoto } from '../lib/storage.js'
@@ -23,6 +23,29 @@ function init() {
 }
 
 export function AppProvider({ children }) {
+/**
+ * Does this installation talk to a server?
+ *
+ * A backend being configured is not enough on its own, for two reasons that a
+ * test caught rather than a review.
+ *
+ * The look-around family is not signed in to anything and its rows belong to
+ * nobody, so every one of them would be refused — and worse, a visitor who
+ * liked it and then made a real account would find a stranger's children
+ * queued up to upload into their household.
+ *
+ * And nothing at all should be polled before setup is finished. A visitor
+ * standing on the welcome screen was firing family_snapshot every fifteen
+ * seconds at a server with no account to answer for. The kid's pairing screen
+ * is the one thing that runs before onboarding and it watches its code itself,
+ * so nothing here depends on the engine being up.
+ *
+ * One function, asked everywhere, rather than a condition each effect has to
+ * remember.
+ */
+const syncs = (state) =>
+  transport.isConfigured() && !state.demo && state.onboarded
+
   const [state, dispatch] = useReducer(reducer, undefined, init)
   const saveTimer = useRef(null)
   const engineRef = useRef(null)
@@ -68,11 +91,33 @@ export function AppProvider({ children }) {
     })
   }
 
+  /*
+   * The engine itself, stopped for the look-around.
+   *
+   * Gating the individual effects is not enough: the engine polls on its own
+   * timer, and a demo visitor would generate a failing request every fifteen
+   * seconds for as long as they browsed. It restarts when they leave the demo
+   * and make a real family, because `state.demo` goes false and this runs
+   * again.
+   */
+  /*
+   * The switch at the door, flipped before anything else can fire.
+   *
+   * A layout effect rather than an ordinary one: children of this provider run
+   * their own mount effects, and several of them fetch. Left until after
+   * paint, the demo would have made two requests before this ran.
+   */
+  useLayoutEffect(() => {
+    transport.pauseNetwork(Boolean(state.demo))
+  }, [state.demo])
+
+  const syncing = syncs(state)
   useEffect(() => {
+    if (!syncing) return undefined
     const engine = engineRef.current
     engine.start()
     return () => engine.stop()
-  }, [])
+  }, [syncing])
 
   /**
    * Bring back the repeating chores that are due, and keep watching the clock.
@@ -151,7 +196,7 @@ export function AppProvider({ children }) {
       })
     }
 
-    if (!wanted.length || !transport.isConfigured()) return
+    if (!wanted.length || !syncs(state)) return
     // Marked before the request, not after: two renders in the same tick would
     // otherwise both fire, and a photo is the most expensive thing to ask for
     // twice.
@@ -182,7 +227,7 @@ export function AppProvider({ children }) {
   // Move any server calls the reducer asked for into the outbox.
   useEffect(() => {
     if (!state.syncQueue?.length) return
-    if (transport.isConfigured()) {
+    if (syncs(state)) {
       state.syncQueue.forEach(({ fn, args }) => enqueueOp({ type: 'rpc', fn, args }))
       engineRef.current?.wake()
     }
@@ -273,7 +318,7 @@ export function AppProvider({ children }) {
    * The short delay still batches a burst of edits into one round trip.
    */
   useEffect(() => {
-    if (!transport.isConfigured()) return undefined
+    if (!syncs(state)) return undefined
     const t = setTimeout(() => engineRef.current?.sync({ silent: true }), 1200)
     return () => clearTimeout(t)
   }, [state.quests, state.submissions, state.kids, state.syncQueue])
@@ -286,7 +331,7 @@ export function AppProvider({ children }) {
       // Drop photos nothing points at any more — see purgeOrphanPhotos.
       purgeOrphanPhotos(state)
 
-      if (transport.isConfigured()) {
+      if (syncs(state)) {
         const photoFor = (submission) => (submission.photoId ? getPhoto(submission.photoId) : null)
         // Rows the server just sent are recorded as the server's...
         if (mergedIds.current.size > 0) {

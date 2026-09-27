@@ -29,6 +29,10 @@ export default function ParentPlan() {
   const live = billingLive()
 
   useEffect(() => {
+    // Nothing is asked of the server during the look-around. There is no
+    // account for it to answer about, and a visitor browsing the plans should
+    // not be generating traffic on somebody else's behalf.
+    if (state.demo) return undefined
     fetchBillingStatus().then(setStatus)
     // Coming back from Stripe's checkout, the webhook may still be in flight.
     if (window.location.hash.includes('checkout=success')) {
@@ -36,7 +40,7 @@ export default function ParentPlan() {
       return () => clearTimeout(t)
     }
     return undefined
-  }, [])
+  }, [state.demo])
 
   /**
    * With Stripe live, the only route to Elite is a real payment — the database
