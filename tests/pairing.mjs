@@ -175,7 +175,10 @@ for (let i = 0; i < 12; i += 1) {
   throttled = await parent.locator('[role=alert]').textContent().catch(() => '') // eslint-disable-line no-await-in-loop
   if (/too many/i.test(throttled || '')) break
 }
-;/too many/i.test(throttled || '')
+// Assigned rather than tested inline: a regex literal opening a line is the
+// trap this repo keeps falling into, and a name reads better anyway.
+const stopped = /too many/i.test(throttled || '')
+stopped
   ? pass('a run of wrong codes stops the account guessing')
   : fail('a run of wrong codes stops the account guessing', `error was: ${throttled}`)
 

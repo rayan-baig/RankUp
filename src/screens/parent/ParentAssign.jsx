@@ -4,6 +4,7 @@ import { DIFFICULTY_LIST, DIFFICULTY } from '../../lib/xp.js'
 import { CATEGORIES, QUEST_PACKS, ADAPTIVE_SUPPORTS } from '../../data/questTemplates.js'
 import { Screen, Card, Button, Field, TextInput, TextArea, Select, Toggle, Chip, Banner, Tabs } from '../../components/ui.jsx'
 import { RECURRENCES } from '../../lib/recurrence.js'
+import { parseMoney, symbolFor } from '../../lib/money.js'
 import { navigate } from '../../lib/router.js'
 
 const TABS = [
@@ -18,6 +19,7 @@ const blankQuest = (kidId, adaptive) => ({
   category: 'bedroom',
   difficulty: 'medium',
   xp: DIFFICULTY.medium.xp,
+  money: '',
   requiresPhoto: true,
   adaptive,
   doneMeans: '',
@@ -36,6 +38,10 @@ export default function ParentAssign({ initialKidId }) {
   const kid = state.kids.find((k) => k.id === kidId)
   const [quest, setQuest] = useState(() => blankQuest(kidId, Boolean(kid?.accessibility?.hasNeeds)))
   const [saved, setSaved] = useState('')
+  const currency = state.family.currency || 'GBP'
+  // Blank is fine — it means unpaid. Only something typed that is not an
+  // amount is worth saying anything about.
+  const moneyError = quest.money.trim() !== '' && parseMoney(quest.money, currency) === null
 
   const set = (patch) => setQuest((q) => ({ ...q, ...patch }))
 
@@ -49,7 +55,14 @@ export default function ParentAssign({ initialKidId }) {
     if (!quest.title.trim() || !kidId) return
     dispatch({
       type: 'ADD_QUESTS',
-      quests: [{ ...quest, kidId, title: quest.title.trim(), xp: Number(quest.xp) || DIFFICULTY[quest.difficulty].xp }],
+      quests: [{
+        ...quest,
+        kidId,
+        title: quest.title.trim(),
+        xp: Number(quest.xp) || DIFFICULTY[quest.difficulty].xp,
+        // Blank means this chore is not a paid one, which is most of them.
+        pence: parseMoney(quest.money, currency) || 0,
+      }],
     })
     setSaved(`“${quest.title.trim()}” assigned to ${kid?.name}.`)
     setQuest(blankQuest(kidId, Boolean(kid?.accessibility?.hasNeeds)))
@@ -181,6 +194,34 @@ export default function ParentAssign({ initialKidId }) {
             />
           </Field>
 
+          {/*
+            * Pocket money, and blank by default.
+            *
+            * Most chores are not paid ones, and a family that does not do
+            * pocket money should never be shown a money box asking to be
+            * filled in. So it is optional, it is empty, and nothing is added
+            * up anywhere until somebody types in it.
+            */}
+          <Field
+            label={`Pocket money (optional)`}
+            hint={moneyError
+              ? 'That is not an amount — try 2 or 2.50.'
+              : 'Left blank, this chore pays no money. XP either way.'}
+          >
+            <div className="flex items-center gap-2">
+              <span className="font-display font-bold" style={{ color: 'var(--ink-muted)' }}>
+                {symbolFor(currency)}
+              </span>
+              <TextInput
+                value={quest.money}
+                onChange={(e) => set({ money: e.target.value })}
+                inputMode="decimal"
+                placeholder="0.00"
+                aria-label="Pocket money"
+              />
+            </div>
+          </Field>
+
           <Field
             label={quest.adaptive ? 'What counts as done for this kid' : 'What counts as done'}
             hint="Both your kid and the photo check read this. Be concrete."
@@ -250,7 +291,7 @@ export default function ParentAssign({ initialKidId }) {
             )}
           </div>
 
-          <Button className="w-full" disabled={!quest.title.trim()} onClick={save}>
+          <Button className="w-full" disabled={!quest.title.trim() || moneyError} onClick={save}>
             Assign to {kid?.name}
           </Button>
         </Card>

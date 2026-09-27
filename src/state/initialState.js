@@ -239,6 +239,17 @@ export function createInitialState() {
     overrides: [],
     rewards: [],
     redemptions: [],
+    /*
+     * Pocket money, as a list of lines rather than a balance.
+     *
+     * A running total nobody can point at is a total everybody argues with. A
+     * list adds up, and can be read out loud to a child who is certain they
+     * are owed more. See supabase/allowance.sql.
+     *
+     * This is a local mirror. The server's answer wins whenever one arrives —
+     * only the database may decide what a chore paid.
+     */
+    allowance: [],
     notes: [],
     events: [],
     familyGoal: null,

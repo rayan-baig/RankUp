@@ -148,6 +148,36 @@ export function overrideHasExpired(override) {
 /* Reducer                                                             */
 /* ------------------------------------------------------------------ */
 
+/**
+ * What a child is owed: the lines, added up.
+ *
+ * Exported because every screen that shows a pot must add it up the same way
+ * the reducer does. Two places summing a ledger slightly differently is how a
+ * parent ends up looking at two different numbers on two screens.
+ */
+export function potFor(state, kidId) {
+  const local = (state.allowance || []).filter((e) => e.kidId === kidId)
+  const pots = state.allowancePots
+
+  // No server answer yet — a device with no backend, or one that has not
+  // synced. Its own lines are all there is, and they are complete.
+  if (!pots) return local.reduce((total, e) => total + e.pence, 0)
+
+  /*
+   * With a server answer, the pot comes FROM it rather than from adding up the
+   * lines it sent. The summary sums every line but only returns the most
+   * recent two hundred, so re-adding them would quietly lose every penny older
+   * than that.
+   *
+   * Lines made since that answer are added on top: a payout recorded on a
+   * train has not reached the server yet, and a parent who has just tapped Paid
+   * must not watch the number jump back up.
+   */
+  const since = state.allowanceAt || 0
+  return (pots[kidId] || 0)
+    + local.filter((e) => e.at > since).reduce((total, e) => total + e.pence, 0)
+}
+
 export function reducer(state, action) {
   switch (action.type) {
     /* ---------- lifecycle ---------- */
@@ -760,6 +790,37 @@ export function reducer(state, action) {
             : k.bestTimes,
       }))
 
+      /*
+       * The chore's cash value, if it has one.
+       *
+       * Mirrors credit_allowance, and the mirroring is trivial on purpose: the
+       * amount is paid exactly as set, with no streak bonus, no Elite
+       * multiplier and no surprise double. XP is a game currency and
+       * multipliers make it fun; real money with surprise multipliers is a
+       * parent's budget going wrong. It also means the two implementations
+       * have nothing to drift about.
+       *
+       * Keyed on the submission, like the database row, so the server's answer
+       * replacing this one cannot double-count it.
+       */
+      if (quest.pence > 0) {
+        next = {
+          ...next,
+          allowance: [
+            ...next.allowance.filter((e) => e.submissionId !== submission.id),
+            {
+              id: uid('al'),
+              kidId: kid.id,
+              pence: quest.pence,
+              kind: 'earned',
+              submissionId: submission.id,
+              note: quest.title,
+              at: Date.now(),
+            },
+          ],
+        }
+      }
+
       next = queueRpc(next, 'approve_submission', {
         p_submission_id: action.submissionId,
         p_xp: xp,
@@ -836,6 +897,63 @@ export function reducer(state, action) {
       return { ...state, noticeQueue: [] }
 
     /* ---------- rewards ---------- */
+
+    /* ---------- pocket money ---------- */
+
+    /**
+     * A parent records handing money over, or adding some from outside the
+     * chore list.
+     *
+     * Applied locally first so the screen answers immediately, and queued for
+     * the server, which is the one that decides. When its summary comes back,
+     * MERGE_ALLOWANCE replaces all of this with its answer.
+     *
+     * Over-payment is refused here as well as in the database, and for a
+     * better reason than belt and braces: on a phone with no signal the
+     * database is not there to refuse it, and a parent would see a pot go
+     * negative and stay negative until they next had signal.
+     */
+    case 'RECORD_MONEY': {
+      const { kidId, pence, kind, note } = action
+      const kid = state.kids.find((k) => k.id === kidId)
+      if (!kid || !Number.isInteger(pence) || pence <= 0) return state
+      if (kind !== 'paid' && kind !== 'gift') return state
+
+      const pot = potFor(state, kidId)
+      if (kind === 'paid' && pence > pot) return state
+
+      const signed = kind === 'paid' ? -pence : pence
+      const next = {
+        ...state,
+        allowance: [
+          ...state.allowance,
+          { id: uid('al'), kidId, pence: signed, kind, note: note || '', at: Date.now() },
+        ],
+      }
+      return queueRpc(next, kind === 'paid' ? 'record_payout' : 'record_gift', {
+        p_kid_id: kidId,
+        p_pence: pence,
+        p_note: note || '',
+      })
+    }
+
+    /**
+     * The server's answer, which wins outright.
+     *
+     * Not a field-by-field merge like MERGE_SNAPSHOT: the ledger is
+     * append-only and the database is the only thing allowed to decide what a
+     * chore paid, so keeping any local line that the server does not have
+     * would be keeping a line that never happened.
+     */
+    case 'MERGE_ALLOWANCE':
+      return {
+        ...state,
+        allowance: action.entries,
+        allowancePots: action.pots,
+        // The moment the answer describes, not the moment it arrived: a line
+        // written while the request was in flight is still in flight.
+        allowanceAt: action.at,
+      }
 
     case 'ADD_REWARD':
       return { ...state, rewards: [...state.rewards, { id: uid('rw'), createdAt: Date.now(), ...action.reward }] }

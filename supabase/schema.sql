@@ -52,6 +52,11 @@ create table if not exists families (
    */
   trial_tier      text check (trial_tier in ('standard','elite')),
   trial_ends_at   timestamptz,
+  /*
+   * What to put in front of the numbers. Display only — nothing here converts
+   * anything, and a family that moves country keeps whatever they set.
+   */
+  currency        text not null default 'GBP',
   created_at      timestamptz not null default now()
 );
 
@@ -142,6 +147,19 @@ create table if not exists quests (
   difficulty     text not null default 'medium'
                  check (difficulty in ('easy','medium','hard','boss')),
   xp             int  not null default 30 check (xp between 0 and 9999),
+  /*
+   * Real money, in minor units — pence, cents. Never a decimal: a float will
+   * eventually pay a child £2.9999999999 and no arithmetic here is worth a
+   * rounding argument with a nine-year-old.
+   *
+   * Zero by default, because most chores are not paid ones and a family that
+   * does not do pocket money should never see a money field asking to be
+   * filled in.
+   *
+   * Capped at £100 a chore. The cap is not about what anyone should pay; it
+   * is about a slipped finger on a number pad turning £2 into £2000.
+   */
+  pence          int  not null default 0 check (pence between 0 and 10000),
 
   -- Adaptive tasks: same reward structure, difficulty and "done" scoped to one
   -- kid. `done_means` is what both the kid and the AI check read.
@@ -689,6 +707,16 @@ create policy events_insert on events
 -- ---------------------------------------------------------------------------
 
 /*
+ * A stub, replaced by the real thing in allowance.sql. Same reason as the one
+ * below it: approve_submission calls this, and schema.sql has to be applicable
+ * on its own.
+ */
+create or replace function credit_allowance(p_submission_id uuid)
+returns void language sql immutable as $$ select $$;
+
+revoke execute on function credit_allowance(uuid) from public;
+
+/*
  * A stub, replaced by the real thing in referrals.sql.
  *
  * approve_submission calls this, and schema.sql has to be applicable on its
@@ -867,6 +895,11 @@ begin
   insert into events (family_id, kid_id, type, meta)
   values (v_sub.family_id, v_sub.kid_id, 'quest_approved',
           jsonb_build_object('questId', v_sub.quest_id, 'xp', v_xp, 'coins', v_coins));
+
+  -- The chore's cash value, if it has one. Same tap as the XP, so the two can
+  -- never disagree about whether it was approved. Cannot fail an approval;
+  -- see allowance.sql.
+  perform credit_allowance(p_submission_id);
 
   -- A referred family earns their referrer a month here, on the first chore
   -- they actually finish — not when they signed up. Cannot fail an approval;
@@ -1230,6 +1263,15 @@ alter table families drop constraint if exists families_trial_tier_check;
 alter table families drop constraint if exists families_trial_tier_values;
 alter table families add constraint families_trial_tier_values
   check (trial_tier in ('standard','elite'));
+
+-- Pocket money: what a chore is worth in real money, and what to put in front
+-- of the number. Both default to the behaviour of a family that does not use
+-- it at all — zero, and never shown.
+alter table quests   add column if not exists pence int not null default 0;
+alter table quests   drop constraint if exists quests_pence_check;
+alter table quests   drop constraint if exists quests_pence_range;
+alter table quests   add constraint quests_pence_range check (pence between 0 and 10000);
+alter table families add column if not exists currency text not null default 'GBP';
 
 -- What an adult in the family is allowed to do. Existing rows are parents,
 -- which is what the default gives them.

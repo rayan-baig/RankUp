@@ -7,7 +7,7 @@
  * shadow and queued a DELETE for every kid, quest, reward and note, which then
  * reached every other device.
  */
-import { setUpFamily, asParent, launch, reporter, finish, BASE } from './helpers.mjs'
+import { setUpFamily, asParent, launch, reporter, finish } from './helpers.mjs'
 
 const { pass, fail, fails } = reporter()
 const { browser, page } = await launch()

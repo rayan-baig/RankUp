@@ -6,6 +6,7 @@ import { PROFILE_FRAMES, DROP_SELECTORS } from '../../state/initialState.js'
 import Avatar, { avatarTier, TIER_THRESHOLDS } from '../../components/Avatar.jsx'
 import ThemePicker from '../../components/ThemePicker.jsx'
 import { Screen, Card, Button, SectionTitle, Stat, Modal, TextInput, Banner, Chip, DemoTag } from '../../components/ui.jsx'
+import KidPot from '../../components/KidPot.jsx'
 import { navigate } from '../../lib/router.js'
 import BadgeShelf from '../../components/BadgeShelf.jsx'
 
@@ -55,6 +56,8 @@ export default function KidProfile() {
   return (
     <Screen>
       <h1 className="font-display text-2xl font-extrabold mb-3">Your profile</h1>
+
+      <KidPot kidId={kid.id} />
 
       <Card className="mb-3 text-center">
         <div className="flex justify-center mb-2">

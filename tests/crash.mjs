@@ -6,7 +6,7 @@
  * the app survives, the navigation still works, and the crash is reported once
  * rather than on every render.
  */
-import { setUpFamily, asKid, launch, reporter, finish, BASE } from './helpers.mjs'
+import { setUpFamily, asKid, launch, reporter, finish } from './helpers.mjs'
 
 const { pass, fail, fails } = reporter()
 const { browser, page } = await launch()

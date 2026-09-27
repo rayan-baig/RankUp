@@ -123,6 +123,8 @@ export const quests = {
     status: row.status,
     redoNote: row.redo_note || undefined,
     redoCount: row.redo_count || 0,
+    // Real money, in minor units. See lib/money.js.
+    pence: row.pence ?? 0,
     completedAt: ms(row.completed_at),
     createdAt: ms(row.created_at) || Date.now(),
     rev: row.rev,
@@ -137,6 +139,7 @@ export const quests = {
     category: q.category || 'bedroom',
     difficulty: q.difficulty || 'medium',
     xp: q.xp ?? 30,
+    pence: q.pence ?? 0,
     adaptive: Boolean(q.adaptive),
     done_means: q.doneMeans || '',
     supports: q.supports || [],

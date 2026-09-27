@@ -8,6 +8,7 @@ import { levelFromXp, formatXp } from '../../lib/xp.js'
 import Avatar from '../../components/Avatar.jsx'
 import ThemePicker from '../../components/ThemePicker.jsx'
 import { Screen, Card, Button, Field, TextInput, TextArea, Modal, Chip, Banner, Toggle } from '../../components/ui.jsx'
+import PocketMoney from '../../components/PocketMoney.jsx'
 import { navigate } from '../../lib/router.js'
 
 export default function ParentKids() {
@@ -47,6 +48,8 @@ export default function ParentKids() {
           + Add
         </Button>
       </div>
+
+      <PocketMoney />
 
       {room ? (
         <Banner tone="info" icon="∞" title="Unlimited kid profiles">
