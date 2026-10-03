@@ -1,7 +1,7 @@
 import { uid } from '../lib/id.js'
 import { dayKey } from '../lib/dates.js'
-import { DEFAULT_KID_THEME } from '../data/kidThemes.js'
-import { DEFAULT_PARENT_THEME } from '../data/parentThemes.js'
+import { DEFAULT_KID_THEME, KID_THEMES } from '../data/kidThemes.js'
+import { DEFAULT_PARENT_THEME, PARENT_THEMES } from '../data/parentThemes.js'
 
 /**
  * The three plans, cheapest first.
@@ -102,7 +102,27 @@ export const PLAN_COMPARISON = [
   { label: 'Quests & rewards', value: () => 'Unlimited' },
   { label: 'Photo proof', value: () => true },
   { label: 'AI photo check', value: (t) => t.limits.aiPhotoCheck },
-  { label: 'All 25 themes', value: () => true },
+  /*
+   * Counted, not asserted.
+   *
+   * This line said "All 25 themes" while the app shipped fifteen for children
+   * and ten for the parent dashboard. The total was right and the sentence was
+   * not: a child reading it expects twenty-five worlds to choose from and
+   * finds fifteen. A pricing page that has to be explained is a pricing page
+   * that is wrong.
+   *
+   * Reading the lengths rather than writing a number also means the claim can
+   * never drift from the data again — add a theme and the plan screen says so
+   * by itself.
+   */
+  {
+    label: `All ${KID_THEMES.length} kid themes`,
+    value: () => true,
+  },
+  {
+    label: `${PARENT_THEMES.length} parent dashboard themes`,
+    value: () => true,
+  },
   { label: 'Guilds', value: (t) => (t.guildSize ? `${t.guildSize}-player` : false) },
   { label: 'XP rate', value: (t) => (t.xpMultiplier > 1 ? `${t.xpMultiplier}×` : 'Normal') },
   { label: 'Sunday Market', value: () => true },

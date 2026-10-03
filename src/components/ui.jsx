@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 
 /* Small, boring building blocks. Every screen uses these so the app stays
- * visually consistent no matter which of the 25 themes is active. */
+ * visually consistent no matter which of the 15 kid themes or 10 parent ones
+ * is active. */
 
 /*
  * Every screen in the app, and the one place a route transition can live.

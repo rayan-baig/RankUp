@@ -284,7 +284,7 @@
 --------------------------------------------------------------------------- */
 /*
  * Everything here hangs off one attribute on <html>, so it layers over all
- * twenty-five themes without a single screen knowing it exists. Every effect is
+ * fifteen kid themes without a single screen knowing it exists. Every effect is
  * drawn from the theme's own --accent variables, so Overdrive looks like a
  * richer version of the world the child already chose rather than a different
  * one bolted on top.

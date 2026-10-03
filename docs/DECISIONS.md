@@ -41,7 +41,8 @@ Layout and spacing use **Tailwind** (`className="flex gap-2"` and so on) so the 
 that describes a screen is in one place instead of split between two files.
 
 Colours are **not** Tailwind's. Every theme sets CSS variables (`--bg`, `--accent`, …)
-on the page, and Tailwind reads those. That is why 25 themes work without a single
+on the page, and Tailwind reads those. That is why 15 kid themes and 10 parent
+ones work without a single
 `if (theme === 'blockcraft')` anywhere in a screen. One file does it:
 `src/lib/applyTheme.js`.
 
