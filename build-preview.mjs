@@ -76,6 +76,16 @@ run('npx', ['vite', 'build', '--outDir', DIST], {
     VITE_GUILDS_ENABLED: '',
     // The demo is a demo. Nothing in it should try to take a card.
     VITE_STRIPE_PUBLISHABLE_KEY: '',
+    /*
+     * Walk straight in.
+     *
+     * The front door is right in the real app and wrong in a link somebody
+     * was sent: two of its three choices are dead ends for a visitor, since
+     * "I'm a kid" wants a connection code only a parent's phone can produce
+     * and "I'm a parent" wants an email address. A preview opens inside the
+     * family, with the banner offering the way out to a real one.
+     */
+    VITE_DEMO_ON_BOOT: 'true',
   },
 })
 

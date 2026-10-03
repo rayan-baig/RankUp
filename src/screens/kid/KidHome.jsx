@@ -55,7 +55,7 @@ export default function KidHome() {
       </header>
 
       {/* Avatar + level */}
-      <Card className="mb-3 text-center relative overflow-visible">
+      <Card className="mb-3 text-center relative overflow-visible fx-hero">
         <div className="flex justify-center mb-2">
           <Avatar
             theme={theme}
@@ -95,7 +95,7 @@ export default function KidHome() {
         )}
       </Card>
 
-      <div className="flex gap-2 mb-3">
+      <div className="flex gap-2 mb-3 anim-stagger">
         {/*
           * Counting, not just displaying.
           *

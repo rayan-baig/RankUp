@@ -40,6 +40,7 @@ import ParentPlan from './screens/parent/ParentPlan.jsx'
 import ParentSettings from './screens/parent/ParentSettings.jsx'
 import ScreenBoundary from './components/ScreenBoundary.jsx'
 import DemoBanner from './components/DemoBanner.jsx'
+import { buildDemoFamily } from './lib/demoFamily.js'
 
 const KID_NAV = [
   { to: '/kid', icon: '🏠', label: 'Home', exact: true },
@@ -65,6 +66,29 @@ function queryParam(path, key) {
   const q = path.split('?')[1]
   if (!q) return null
   return new URLSearchParams(q).get(key)
+}
+
+/*
+ * Set only for the shareable preview. Never in a real deployment, where the
+ * front door is the whole point.
+ */
+const DEMO_ON_BOOT = String(import.meta.env?.VITE_DEMO_ON_BOOT || '') === 'true'
+
+/**
+ * Loads the look-around family and gets out of the way.
+ *
+ * An effect rather than a dispatch during render, because dispatching while
+ * rendering is how React ends up warning about updating one component from
+ * inside another. One frame of nothing is invisible; the alternative is a
+ * console full of warnings on the one build strangers will open.
+ */
+function DemoBoot() {
+  const { dispatch } = useApp()
+  useEffect(() => {
+    dispatch({ type: 'START_DEMO', state: buildDemoFamily() })
+    navigate('/parent')
+  }, [dispatch])
+  return null
 }
 
 export default function App() {
@@ -152,6 +176,24 @@ export default function App() {
   }
 
   if (!state.onboarded) {
+    /*
+     * A preview build walks straight in.
+     *
+     * Built with VITE_DEMO_ON_BOOT, the app skips the front door and opens
+     * inside the look-around family. That build exists for one job — somebody
+     * following a link to see what this is — and every screen between them
+     * and the product is a place they leave instead.
+     *
+     * The door matters in the real app and is untouched there. In a preview
+     * it was a choice between three things, two of which are dead ends for a
+     * visitor: "I'm a kid" asks for a connection code only a parent's phone
+     * can give, and "I'm a parent" asks for an email address. They were
+     * being asked to prove they belonged to a household that does not exist.
+     */
+    if (DEMO_ON_BOOT && !state.pendingPairing) {
+      return <DemoBoot />
+    }
+
     // A kid's device that has already generated a code goes straight back to it
     // on reload, rather than making them start setup over.
     if (state.pendingPairing) {

@@ -257,6 +257,40 @@
 .anim-screen { animation: rankup-screen-in 240ms cubic-bezier(0.22, 0.9, 0.3, 1) both; }
 
 /*
+ * Depth behind the character, on every tier.
+ *
+ * The hero card was a flat panel with an avatar floating in the middle of it,
+ * and on the fourteen themes that are not Elite there was nothing else going
+ * on at all — the ring and the travelling highlight are Overdrive, which most
+ * families never see. This is the part everybody gets: a wash of the theme's
+ * own accent behind the character, so it reads as lit rather than pasted on.
+ *
+ * Two radial gradients rather than a box-shadow, because a shadow that large
+ * is blurred on every repaint and this is painted once. The colours come from
+ * the active theme, so it is the right glow on all fifteen without any screen
+ * knowing which one is on.
+ */
+.fx-hero {
+  position: relative;
+  isolation: isolate;
+  /*
+   * Wide and faint, not tight and bright.
+   *
+   * The first attempt used two gradients at 16% and 12% over about half the
+   * card, and on an Elite family — where the Overdrive aurora is already
+   * painting behind everything — the two stacked into a glowing two-tone ball
+   * with a visible edge. The character looked stuck on rather than lit.
+   *
+   * One gradient, spread wider than the card so no edge lands inside it, at
+   * an opacity that reads as light rather than as a shape.
+   */
+  background-image:
+    radial-gradient(78% 56% at 50% 26%,
+      color-mix(in srgb, var(--accent) 9%, transparent) 0%, transparent 78%);
+  background-repeat: no-repeat;
+}
+
+/*
  * The sheen on a primary button.
  *
  * Once, on arrival, and never again — a button that shines forever reads as an
@@ -358,15 +392,37 @@
 [data-overdrive='true']:not([data-reduce-motion='true']) .fx-avatar {
   position: relative;
 }
+/*
+ * A turning ring of the theme's colours, close to the character.
+ *
+ * It used to sit at -7% with a 7px blur at 0.75 — which on a 132px avatar is
+ * a hard-edged disc half again its size, reading as a coloured ball the
+ * character had been pasted onto rather than as light coming off it. On a
+ * screenshot it was the first thing the eye went to, and it was not the
+ * child's avatar.
+ *
+ * Tighter to the edge, blurred much further, and faint enough to be light.
+ * The mask is what removes the disc: the gradient only exists in a band
+ * around the rim, so there is nothing filling the middle behind the face.
+ */
 [data-overdrive='true']:not([data-reduce-motion='true']) .fx-avatar::before {
   content: '';
   position: absolute;
-  inset: -7%;
+  inset: -3%;
   border-radius: 50%;
   z-index: -1;
   background: conic-gradient(from 0deg, var(--accent), var(--accent-2), var(--accent));
-  filter: blur(7px);
-  opacity: 0.75;
+  /*
+   * 8px, not 14. The ring TURNS, and a rotating element inside a blur is
+   * re-blurred on every frame — doubling the radius took frames over budget
+   * from 22 to 39 out of 180 at 6x CPU throttle, which is visible stutter on
+   * a mid-range phone. The mask below is what stopped this reading as a
+   * ball; the blur was never doing that job, so it does not need to be large.
+   */
+  filter: blur(8px);
+  opacity: 0.42;
+  -webkit-mask: radial-gradient(closest-side, transparent 58%, #000 76%, #000 100%);
+  mask: radial-gradient(closest-side, transparent 58%, #000 76%, #000 100%);
   animation: rankup-orbit 7s linear infinite;
 }
 

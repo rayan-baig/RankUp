@@ -168,6 +168,17 @@ export function buildDemoFamily() {
     demo: true,
     syncQueue: [],
     noticeQueue: [],
+    /*
+     * No level-up card waiting.
+     *
+     * Approving five chores above earns somebody a level, and the overlay
+     * that celebrates it was still queued when the demo opened — so the first
+     * thing a visitor saw was a full-screen modal about a child they had not
+     * met yet, sitting on top of the dashboard on every screen until they
+     * found the button. The celebration is right when you earn it and wrong
+     * when you arrive.
+     */
+    pendingLevelUp: null,
     createdAt: ago(14),
   }
 }

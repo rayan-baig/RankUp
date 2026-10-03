@@ -21,7 +21,17 @@ export default function RoleSwitch() {
   const [error, setError] = useState('')
 
   const openParent = () => {
-    if (!state.family.pin) {
+    /*
+     * No PIN in the look-around.
+     *
+     * The demo family has one, because a real family does and the screen
+     * should look like the real thing. But a visitor was never given it, so
+     * the lock stopped people at the most important door in the app — the
+     * parent side is where the product actually is. Being shut out by a
+     * four-digit code nobody told you is not a feature demonstration, it is
+     * a dead end.
+     */
+    if (state.demo || !state.family.pin) {
       dispatch({ type: 'UNLOCK_PARENT' })
       navigate('/parent')
       return
@@ -80,7 +90,7 @@ export default function RoleSwitch() {
         <h2 className="font-display font-bold mb-1">Parent Mode</h2>
         <p className="text-xs text-muted mb-3">Assign quests, approve photo proof, manage the plan.</p>
         <Button className="w-full" onClick={openParent}>
-          {state.family.pin ? 'Enter PIN' : 'Open Parent Mode'}
+          {state.demo || !state.family.pin ? 'Open Parent Mode' : 'Enter PIN'}
         </Button>
       </Card>
 
