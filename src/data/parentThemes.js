@@ -88,7 +88,7 @@ export const PARENT_THEMES = [
     pattern: 'sunrise',
     colors: {
       bg: '#fff3e8', surface: '#fffaf6', surface2: '#ffe6d2', line: '#f5c9a8',
-      ink: '#4a2f1c', inkMuted: '#946a4c', accent: '#e08a2c', accent2: '#e8623c',
+      ink: '#4a2f1c', inkMuted: '#946a4c', accent: '#d17a1b', accent2: '#e8623c',
     },
   },
   {

@@ -177,9 +177,9 @@ export const KID_THEMES = [
     shadow: '0 12px 26px -14px rgb(124 92 214 / 0.6)',
     colors: {
       bg: '#f2ecff', surface: '#ffffff', surface2: '#e8e0ff', line: '#cfc2f5',
-      ink: '#33235e', inkMuted: '#7a6aa8', accent: '#7c5cd6', accent2: '#3ba9e8',
+      ink: '#33235e', inkMuted: '#7a6aa8', accent: '#7c5cd6', accent2: '#1b9ae4',
     },
-    avatar: { motif: 'wing', hues: ['#c9b8f5', '#a98cf0', '#7c5cd6', '#3ba9e8', '#ffd166'] },
+    avatar: { motif: 'wing', hues: ['#c9b8f5', '#a98cf0', '#7c5cd6', '#1b9ae4', '#ffd166'] },
   },
   {
     id: 'sugarrush',
@@ -194,9 +194,9 @@ export const KID_THEMES = [
     shadow: '0 10px 24px -12px rgb(0 0 0 / 0.25)',
     colors: {
       bg: '#e6fbf3', surface: '#ffffff', surface2: '#d5f6ea', line: '#a8e6d1',
-      ink: '#2a4a41', inkMuted: '#5f8b7e', accent: '#ff6fae', accent2: '#00b894',
+      ink: '#2a4a41', inkMuted: '#547a6f', accent: '#ff4f9c', accent2: '#00a383',
     },
-    avatar: { motif: 'cupcake', hues: ['#ffd0e3', '#ff9ec7', '#ff6fae', '#c2529a', '#00b894'] },
+    avatar: { motif: 'cupcake', hues: ['#ffd0e3', '#ff9ec7', '#ff4f9c', '#c2529a', '#00a383'] },
   },
   {
     id: 'glam',
@@ -226,9 +226,9 @@ export const KID_THEMES = [
     shadow: '0 8px 20px -12px rgb(90 62 33 / 0.5)',
     colors: {
       bg: '#fbf3e4', surface: '#fffaf0', surface2: '#f0e2c8', line: '#d9c39b',
-      ink: '#48331c', inkMuted: '#8a7350', accent: '#4e9c52', accent2: '#e0813f',
+      ink: '#48331c', inkMuted: '#856d4a', accent: '#4e9c52', accent2: '#db722a',
     },
-    avatar: { motif: 'leaf', hues: ['#a7d3a1', '#7bbd78', '#4e9c52', '#e0813f', '#f3c969'] },
+    avatar: { motif: 'leaf', hues: ['#a7d3a1', '#7bbd78', '#4e9c52', '#db722a', '#f3c969'] },
   },
   {
     id: 'cybergrid',
@@ -259,9 +259,9 @@ export const KID_THEMES = [
     shadow: '0 8px 0 0 rgb(0 0 0 / 0.18)',
     colors: {
       bg: '#bfe6ff', surface: '#ffffff', surface2: '#e6f4ff', line: '#8cc7ef',
-      ink: '#1e3a5f', inkMuted: '#4f7a9c', accent: '#e5342b', accent2: '#f7c948',
+      ink: '#1e3a5f', inkMuted: '#4f7a9c', accent: '#e5342b', accent2: '#c08800',
     },
-    avatar: { motif: 'cap', hues: ['#f7c948', '#5cb85c', '#3b82f6', '#e5342b', '#ffffff'] },
+    avatar: { motif: 'cap', hues: ['#c08800', '#5cb85c', '#3b82f6', '#e5342b', '#ffffff'] },
   },
   {
     id: 'neonpulse',

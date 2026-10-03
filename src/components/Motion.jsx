@@ -78,10 +78,19 @@ export function Words({ children, className = '', as: Tag = 'span' }) {
  * than a fixed number of steps, so a slow phone shows fewer frames of the same
  * animation instead of taking twice as long to finish it.
  */
-export function CountUp({ value, format = (n) => n, className = '', duration = 650 }) {
+export function CountUp({
+  value,
+  // Where to start, for the cases where the interesting thing is the journey
+  // rather than the change: a level-up counts from the old level, even though
+  // this component has only just been mounted and has nothing to compare to.
+  from: startAt = null,
+  format = (n) => n,
+  className = '',
+  duration = 650,
+}) {
   const still = useStillness()
-  const [shown, setShown] = useState(value)
-  const from = useRef(value)
+  const [shown, setShown] = useState(startAt ?? value)
+  const from = useRef(startAt ?? value)
   const frame = useRef(0)
   const node = useRef(null)
 

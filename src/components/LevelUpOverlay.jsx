@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import Avatar, { avatarTier } from './Avatar.jsx'
 import { Button, SparkleBurst } from './ui.jsx'
+import { CountUp } from './Motion.jsx'
 import { nextEvolution, KID_THEME_MAP } from '../data/kidThemes.js'
 
 /** The moment the whole loop is built around. Keep it short and loud. */
@@ -27,8 +28,13 @@ export default function LevelUpOverlay({ levelUp, kid, theme, onClose }) {
           <SparkleBurst trigger={1} count={20} colors={theme.avatar?.hues || ['#fff']} />
         </div>
         <p className="text-xs uppercase tracking-[0.2em] text-muted">Level up</p>
+        {/*
+          * Counting from the old level to the new one, not just showing the
+          * new one. This is the single moment the whole loop is built around
+          * and the number climbing is the thing a child remembers.
+          */}
         <h2 className="font-display text-4xl font-extrabold mb-1" style={{ color: theme.colors.accent }}>
-          {levelUp.to}
+          <CountUp value={levelUp.to} from={levelUp.from} duration={900} />
         </h2>
         <p className="text-sm text-muted mb-4">
           {kid.name} went from level {levelUp.from} to {levelUp.to}.

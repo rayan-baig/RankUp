@@ -242,6 +242,21 @@
 .anim-bump { animation: rankup-bump 420ms cubic-bezier(0.3, 1.4, 0.4, 1) }
 
 /*
+ * A screen arriving.
+ *
+ * The route boundary already remounts on every navigation, so this needs no
+ * router involvement at all — a class on the screen wrapper is the whole
+ * mechanism. Short and shallow on purpose: this fires on every single tap of
+ * the nav bar, and anything longer than about a quarter of a second starts
+ * being something you wait for rather than something you notice.
+ */
+@keyframes rankup-screen-in {
+  from { opacity: 0; transform: translate3d(0, 10px, 0) }
+  to   { opacity: 1; transform: translate3d(0, 0, 0) }
+}
+.anim-screen { animation: rankup-screen-in 240ms cubic-bezier(0.22, 0.9, 0.3, 1) both; }
+
+/*
  * The sheen on a primary button.
  *
  * Once, on arrival, and never again — a button that shines forever reads as an

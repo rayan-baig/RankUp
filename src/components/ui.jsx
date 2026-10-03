@@ -3,8 +3,15 @@ import { useEffect, useRef, useState } from 'react'
 /* Small, boring building blocks. Every screen uses these so the app stays
  * visually consistent no matter which of the 25 themes is active. */
 
+/*
+ * Every screen in the app, and the one place a route transition can live.
+ *
+ * ScreenBoundary is keyed on the route, so this remounts on every navigation
+ * and the arrival animation replays without the router knowing anything about
+ * it.
+ */
 export function Screen({ children, className = '' }) {
-  return <div className={`shell px-4 pb-28 pt-3 ${className}`}>{children}</div>
+  return <div className={`shell px-4 pb-28 pt-3 anim-screen ${className}`}>{children}</div>
 }
 
 export function Card({ children, className = '', flat = false, ...rest }) {
