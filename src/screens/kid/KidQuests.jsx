@@ -41,14 +41,19 @@ export default function KidQuests() {
           {tab === 'todo' && lists.todo.some((q) => q.status === 'redo') && (
             <SectionTitle>Sent back — do these again</SectionTitle>
           )}
-          {list.map((q) => (
-            <QuestCard
-              key={q.id}
-              quest={q}
-              currency={theme.currency}
-              onClick={() => navigate(`/kid/quest/${q.id}`)}
-            />
-          ))}
+          {/* Keyed on the tab so switching tabs replays the arrival — without
+              it, React reuses the nodes and the second tab appears all at
+              once while the first one animated. */}
+          <div key={tab} className="anim-stagger">
+            {list.map((q) => (
+              <QuestCard
+                key={q.id}
+                quest={q}
+                currency={theme.currency}
+                onClick={() => navigate(`/kid/quest/${q.id}`)}
+              />
+            ))}
+          </div>
         </>
       )}
     </Screen>

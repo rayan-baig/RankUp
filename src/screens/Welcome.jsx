@@ -1,5 +1,6 @@
 import Logo, { SLOGAN } from '../components/Logo.jsx'
 import LoopPreview from '../components/LoopPreview.jsx'
+import { Words } from '../components/Motion.jsx'
 
 /**
  * The front door.
@@ -29,9 +30,12 @@ export default function Welcome({ onLookAround, onParent, onKid }) {
         <h1 className="font-display text-4xl font-extrabold leading-none tracking-tight">
           Rank<span style={{ color: '#FFC93D' }}>Up</span>
         </h1>
-        <p className="font-display font-bold mt-1.5" style={{ color: 'var(--accent)' }}>
+        {/* Three words arriving one after another. It is the first motion
+            anybody sees and it says the app is alive before a button is
+            tapped. */}
+        <Words as="p" className="font-display font-bold mt-1.5 text-[var(--accent)]">
           {SLOGAN}
-        </p>
+        </Words>
       </div>
 
       <LoopPreview />
@@ -45,7 +49,7 @@ export default function Welcome({ onLookAround, onParent, onKid }) {
         <button
           type="button"
           onClick={onLookAround}
-          className="btn btn-primary w-full font-display font-extrabold"
+          className="btn btn-primary anim-shine w-full font-display font-extrabold"
           style={{ fontSize: 16, paddingTop: 14, paddingBottom: 14 }}
         >
           Have a look around →

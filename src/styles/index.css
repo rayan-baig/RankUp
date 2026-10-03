@@ -171,11 +171,98 @@
   80% { clip-path: inset(75% 0 5% 0); transform: translate(2px) }
 }
 
+/* ---------------------------------------------------------------------------
+ * Words and arrivals.
+ *
+ * Everything below animates transform and opacity only, which the compositor
+ * handles without touching layout — the same rule the Overdrive tier follows,
+ * and the reason a five-year-old phone can run all of it at once.
+ *
+ * Each one is a ONE-SHOT. Nothing here loops: a heading that keeps moving is a
+ * heading nobody can read, and a screen full of perpetual motion is exhausting
+ * on the fourth visit even when it was charming on the first.
+ * ------------------------------------------------------------------------- */
+
+/* A word arriving: up, and into focus. The blur is what makes it read as
+   settling rather than sliding. */
+@keyframes rankup-word-in {
+  from { opacity: 0; transform: translate3d(0, 0.5em, 0); filter: blur(4px) }
+  to   { opacity: 1; transform: translate3d(0, 0, 0);     filter: blur(0) }
+}
+
+/* A number that has just changed, drawing the eye without shouting. */
+@keyframes rankup-bump {
+  0%   { transform: scale(1) }
+  35%  { transform: scale(1.18) }
+  100% { transform: scale(1) }
+}
+
+/* A light travelling across the main action once, on arrival. */
+@keyframes rankup-shine {
+  from { transform: translate3d(-140%, 0, 0) }
+  to   { transform: translate3d(240%, 0, 0) }
+}
+
 .anim-pop { animation: rankup-pop 260ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
 .anim-slide-up { animation: rankup-slide-up 240ms ease-out both; }
 .anim-float { animation: rankup-float 3.6s ease-in-out infinite; }
 .anim-glitch { animation: rankup-glitch 420ms steps(2) 3; }
 .anim-pulse { animation: rankup-pulse 1.1s ease-in-out infinite; }
+
+/*
+ * A heading whose words arrive one after another.
+ *
+ * The stagger is carried on a custom property set per word rather than by
+ * nth-child rules, so a six-word heading needs no new CSS. Capped at eight
+ * steps: past that the last word turns up long after somebody has started
+ * reading, which is worse than no animation at all.
+ */
+.anim-words > * {
+  display: inline-block;
+  animation: rankup-word-in 420ms cubic-bezier(0.22, 0.9, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+
+/*
+ * Cards arriving in sequence. Same idea, applied to whatever children it has.
+ *
+ * Deliberately shorter and gentler than the words: a list of six cards each
+ * sliding a full half-em is a screen that looks like it is falling over.
+ */
+.anim-stagger > * {
+  animation: rankup-slide-up 320ms ease-out both;
+}
+.anim-stagger > *:nth-child(1) { animation-delay: 0ms }
+.anim-stagger > *:nth-child(2) { animation-delay: 45ms }
+.anim-stagger > *:nth-child(3) { animation-delay: 90ms }
+.anim-stagger > *:nth-child(4) { animation-delay: 135ms }
+.anim-stagger > *:nth-child(5) { animation-delay: 180ms }
+.anim-stagger > *:nth-child(n+6) { animation-delay: 210ms }
+
+.anim-bump { animation: rankup-bump 420ms cubic-bezier(0.3, 1.4, 0.4, 1) }
+
+/*
+ * The sheen on a primary button.
+ *
+ * Once, on arrival, and never again — a button that shines forever reads as an
+ * advert. `overflow: hidden` on the button and a skewed highlight wide enough
+ * to clear the corners.
+ */
+.anim-shine {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.anim-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 45%;
+  background: linear-gradient(100deg, transparent, rgb(255 255 255 / 0.35), transparent);
+  transform: translate3d(-140%, 0, 0);
+  animation: rankup-shine 1100ms ease-out 420ms 1 both;
+  pointer-events: none;
+}
 
 /* ---------------------------------------------------------------------------
    Overdrive — the Elite Pass visual tier.
@@ -302,9 +389,23 @@
 .bg-still, .bg-still * { animation: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
-  * {
+  /*
+   * The pseudo-element selectors are not decoration on this list — they are
+   * most of it.
+   *
+   * `*` matches elements. It does NOT match ::before or ::after, and this app
+   * animates a lot of them: the aurora behind the whole screen, the sheen on
+   * the avatar, the light that crosses the primary button. Every one of them
+   * carried on running for somebody who had asked their device to stop moving
+   * things, and a test that counted running animations was what found it —
+   * nothing about the screen looks wrong, which is exactly why it survived.
+   */
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
     transition-duration: 0.001ms !important;
   }
 }

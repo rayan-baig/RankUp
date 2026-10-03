@@ -4,6 +4,7 @@ import { potFor } from '../state/reducer.js'
 import { fetchAllowance, mergeFrom } from '../lib/allowance.js'
 import { formatMoney, parseMoney, symbolFor } from '../lib/money.js'
 import { Card, Button, TextInput, Banner, Modal } from './ui.jsx'
+import { CountUp } from './Motion.jsx'
 
 /**
  * What each child is owed, and the button that settles it.
@@ -78,9 +79,11 @@ export default function PocketMoney({ kidId = null }) {
         return (
           <div key={kid.id} className="flex items-center gap-2 py-2">
             <span className="min-w-0 flex-1 font-semibold text-sm">{kid.name}</span>
-            <span className="font-display font-extrabold" style={{ fontSize: 17 }}>
-              {formatMoney(pot, currency)}
-            </span>
+            <CountUp
+              value={pot}
+              format={(p) => formatMoney(p, currency)}
+              className="font-display font-extrabold text-[17px]"
+            />
             {pot > 0 && (
               <Button variant="soft" onClick={() => openPay(kid)}>Paid</Button>
             )}

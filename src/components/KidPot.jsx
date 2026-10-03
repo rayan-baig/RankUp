@@ -4,6 +4,7 @@ import { potFor } from '../state/reducer.js'
 import { fetchAllowance, mergeFrom } from '../lib/allowance.js'
 import { formatMoney } from '../lib/money.js'
 import { Card } from './ui.jsx'
+import { CountUp } from './Motion.jsx'
 
 /**
  * What a child is owed, on their own phone.
@@ -45,9 +46,13 @@ export default function KidPot({ kidId }) {
     <Card className="mb-3">
       <div className="flex items-baseline gap-2">
         <span className="section-title mb-0">You're owed</span>
-        <span className="ml-auto font-display font-extrabold" style={{ fontSize: 26 }}>
-          {formatMoney(pot, currency)}
-        </span>
+        {/* The number a child checks. Watching it climb after an approval is
+            the entire reason this is on their phone rather than the parent's. */}
+        <CountUp
+          value={pot}
+          format={(p) => formatMoney(p, currency)}
+          className="ml-auto font-display font-extrabold text-[26px] leading-none"
+        />
       </div>
 
       {mine.length > 0 && (

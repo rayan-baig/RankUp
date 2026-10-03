@@ -7,6 +7,7 @@ import { dayKey, lastSevenDays } from '../../lib/dates.js'
 import Avatar, { avatarTier, nextTierLevel } from '../../components/Avatar.jsx'
 import QuestCard from '../../components/QuestCard.jsx'
 import { Screen, Card, Button, ProgressBar, Stat, SectionTitle, EmptyState, Banner, Chip } from '../../components/ui.jsx'
+import { Words, CountUp } from '../../components/Motion.jsx'
 import SyncBadge from '../../components/SyncBadge.jsx'
 import { navigate } from '../../lib/router.js'
 import InstallPrompt from '../../components/InstallPrompt.jsx'
@@ -44,7 +45,9 @@ export default function KidHome() {
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-widest text-muted">{theme.name}</p>
           <SyncBadge />
-          <h1 className="font-display text-2xl font-extrabold truncate">Hi {kid.name} 👋</h1>
+          <Words as="h1" className="font-display text-2xl font-extrabold truncate">
+            {`Hi ${kid.name} 👋`}
+          </Words>
         </div>
         <button type="button" onClick={() => navigate('/kid/profile')} className="chip shrink-0">
           Lv {level}
@@ -64,7 +67,9 @@ export default function KidHome() {
           />
         </div>
         <div className="flex items-baseline justify-center gap-2 mb-1">
-          <span className="font-display text-3xl font-extrabold">Level {level}</span>
+          <span className="font-display text-3xl font-extrabold">
+            Level <CountUp value={level} />
+          </span>
           <span className="chip">Form {tier} / 5</span>
         </div>
         <p className="text-xs text-muted mb-3">
@@ -91,9 +96,22 @@ export default function KidHome() {
       </Card>
 
       <div className="flex gap-2 mb-3">
-        <Stat icon={theme.currency.icon} value={formatXp(kid.coins)} label={theme.currency.name} tone="var(--accent)" />
-        <Stat icon="🔥" value={kid.streak.count} label="Day streak" tone="var(--warn)" />
-        <Stat icon="⭐" value={formatXp(weekXp)} label="XP this week" />
+        {/*
+          * Counting, not just displaying.
+          *
+          * This is the one piece of motion in the app doing a job rather than
+          * being nice: a child who watches 158 climb to 203 has felt the
+          * reward. One who finds the number already sitting there has been
+          * told about it.
+          */}
+        <Stat
+          icon={theme.currency.icon}
+          value={<CountUp value={kid.coins} format={formatXp} />}
+          label={theme.currency.name}
+          tone="var(--accent)"
+        />
+        <Stat icon="🔥" value={<CountUp value={kid.streak.count} />} label="Day streak" tone="var(--warn)" />
+        <Stat icon="⭐" value={<CountUp value={weekXp} format={formatXp} />} label="XP this week" />
       </div>
 
       {bonusAvailable && (
