@@ -387,10 +387,28 @@ create index if not exists events_kid_type_idx on events(kid_id, type);
 -- ---------------------------------------------------------------------------
 
 -- Which family does the logged-in user belong to?
+/**
+ * The family whose rows this account may touch.
+ *
+ * Every read and write policy in this schema hangs off this one function, so
+ * what it returns IS the access model.
+ *
+ * A supporter — a grandparent, an aunt, whoever a parent has let look in — is
+ * deliberately NOT here, and that is the whole design. Including them would
+ * have handed them every table the family can see: the proof photos are
+ * already safe behind their own check, but the consent record with a parent's
+ * signed name, the private notes to a child, and the override history were
+ * not. Auditing ten policies for one new role is how a leak gets shipped.
+ *
+ * So a supporter has no table access whatsoever, and sees the family through
+ * exactly one function — supporter_view() in coparents.sql — which returns
+ * the handful of things they are meant to see and nothing else.
+ */
 create or replace function current_family_id()
 returns uuid language sql stable security definer set search_path = public as $$
   select coalesce(
-    (select family_id from parents where user_id = auth.uid()),
+    (select family_id from parents
+      where user_id = auth.uid() and role = 'parent'),
     (select family_id from kids    where user_id = auth.uid())
   );
 $$;

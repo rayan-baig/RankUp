@@ -48,10 +48,18 @@ begin
   perform ok('the code is six readable characters',
     code ~ '^[ABCDEFGHJKLMNPQRSTUVWXYZ2-9]{6}$', code);
 
-  -- A supporter is a different thing and its read rules are not written yet.
-  -- Better a refusal than handing a stranger a family's proof photos.
+  -- A supporter is a grandparent or similar: they look in and can put
+  -- something in a pot, and that is all.
   res := create_parent_invite('supporter');
-  perform ok('supporter invitations are refused until the supporter side exists',
+  perform ok('a supporter can be invited too', (res->>'ok')::boolean = true,
+             coalesce(res->>'reason', '?'));
+
+  -- Hand the seat back: an outstanding invitation counts against the cap,
+  -- and the cap test further down assumes it starts from one adult.
+  perform revoke_parent_invite(res->>'code');
+
+  res := create_parent_invite('accountant');
+  perform ok('but only the two roles that exist',
     (res->>'ok')::boolean = false and res->>'reason' = 'role_not_available');
 
   perform ok('and the invitation shows up for the family',

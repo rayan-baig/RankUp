@@ -110,10 +110,9 @@ revoke execute on function new_invite_code() from public;
  * is an ordinary thing in a blended family, and making it the owner's job
  * means one person is the bottleneck for their own household.
  *
- * Supporters are refused here until the supporter screens exist. The role
- * column is already right; what is missing is the restriction on what a
- * supporter may READ, and handing someone a family's proof photos before that
- * is written is not a corner worth cutting.
+ * Supporters are allowed now that current_family_id() excludes them, which
+ * means they reach no table at all and see the family only through
+ * supporter_view() below.
  */
 create or replace function create_parent_invite(p_role text default 'parent')
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -127,7 +126,7 @@ begin
   if v_family is null or not is_parent() then
     raise exception 'only a parent can invite another adult';
   end if;
-  if p_role <> 'parent' then
+  if p_role not in ('parent', 'supporter') then
     return jsonb_build_object('ok', false, 'reason', 'role_not_available');
   end if;
 
@@ -325,3 +324,106 @@ begin
 end $$;
 
 grant execute on function remove_adult(uuid) to authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- Supporters: the grandparents.
+--
+-- They already fund rewards, in cash, badly — a tenner at the door and nobody
+-- remembers what it was for. This gives that money somewhere to land and
+-- gives them a reason to open the app, which is the point: a second adult
+-- inside a household that already pays, who did not have to be acquired.
+--
+-- What a supporter can do is deliberately tiny. They see how the children are
+-- getting on and they can put something in a pot. They cannot approve a
+-- chore, cannot see a proof photo, cannot read a private note, cannot change
+-- anything. Everything about that is enforced by them having no table access
+-- whatsoever — see current_family_id() in schema.sql — rather than by a list
+-- of screens that remember to check.
+-- ---------------------------------------------------------------------------
+
+/** The family this account supports, or null if it is not a supporter. */
+create or replace function supporter_family_id()
+returns uuid language sql stable security definer set search_path = public as $$
+  select family_id from parents
+   where user_id = auth.uid() and role = 'supporter';
+$$;
+
+revoke execute on function supporter_family_id() from public;
+
+/**
+ * Everything a supporter sees, in one call.
+ *
+ * Names, levels and what each child is owed. No photographs, no chore
+ * history, no notes, no consent record, no other adult's details. If
+ * something is not in this function, a supporter cannot reach it — there is
+ * no second route.
+ */
+create or replace function supporter_view()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_family uuid := supporter_family_id();
+begin
+  if v_family is null then
+    return jsonb_build_object('ok', false, 'reason', 'not_a_supporter');
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'familyName', (select name from families where id = v_family),
+    'currency', (select currency from families where id = v_family),
+    'kids', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', k.id,
+               'name', k.name,
+               'xp', k.xp,
+               -- The streak is the one number that makes a grandparent
+               -- message the child, which is the behaviour worth encouraging.
+               'streak', k.streak_count,
+               'pence', (select coalesce(sum(e.pence), 0)
+                           from allowance_entries e where e.kid_id = k.id))
+             order by k.name)
+        from kids k where k.family_id = v_family), '[]'::jsonb)
+  );
+end $$;
+
+grant execute on function supporter_view() to authenticated;
+
+/**
+ * A supporter putting something into a child's pot.
+ *
+ * Separate from record_gift rather than sharing it, because the two have
+ * different rules: a parent may gift freely, a supporter is a guest and is
+ * capped. The line is marked as a gift like any other, so the parent sees it
+ * in the same ledger and nothing about the pot has to know who paid.
+ *
+ * RankUp still holds no money. This records an intention between two adults
+ * who will settle it the way they already do.
+ */
+create or replace function supporter_gift(p_kid_id uuid, p_pence int, p_note text default '')
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_family uuid := supporter_family_id();
+  v_me     uuid;
+begin
+  if v_family is null then
+    return jsonb_build_object('ok', false, 'reason', 'not_a_supporter');
+  end if;
+  if not exists (select 1 from kids where id = p_kid_id and family_id = v_family) then
+    return jsonb_build_object('ok', false, 'reason', 'no_such_kid');
+  end if;
+  -- £100 a go. A guest typing an extra nought should hit a wall, not a
+  -- conversation with the child's parents.
+  if p_pence is null or p_pence <= 0 or p_pence > 10000 then
+    return jsonb_build_object('ok', false, 'reason', 'not_an_amount');
+  end if;
+
+  select id into v_me from parents where user_id = auth.uid();
+  insert into allowance_entries (family_id, kid_id, pence, kind, note, created_by)
+  values (v_family, p_kid_id, p_pence, 'gift',
+          coalesce(nullif(trim(p_note), ''), 'From ' ||
+                   (select name from parents where id = v_me)), v_me);
+
+  return jsonb_build_object('ok', true);
+end $$;
+
+grant execute on function supporter_gift(uuid, int, text) to authenticated;
