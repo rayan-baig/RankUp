@@ -14,7 +14,7 @@
  * Whatever comes out of here is, by construction, state the app made itself.
  */
 
-import { reducer } from '../state/reducer.js'
+import { reducer, potFor } from '../state/reducer.js'
 import { createInitialState, makeKid } from '../state/initialState.js'
 import { QUEST_PACKS } from '../data/questTemplates.js'
 import { DIFFICULTY } from './xp.js'
@@ -42,6 +42,20 @@ export function buildDemoFamily() {
   // fortnight of it anyway, so this is what they would actually see.
   s = run(s, { type: 'SET_TIER', tier: 'elite' }, { type: 'ADD_KID', kid: noah })
 
+  /*
+   * A few of the chores are paid ones, because a demo where nothing has a
+   * price shows none of the pocket money and a visitor concludes it is not
+   * there. Deliberately only a few: most chores are unpaid, and a demo where
+   * every single one pays would advertise something no family does.
+   */
+  const PRICES = {
+    'Take the bins out': 100,
+    'Tidy your desk': 150,
+    'Vacuum the living room': 200,
+    'Cook one family meal': 300,
+    'Mow the lawn': 500,
+  }
+
   const packFor = (id) => QUEST_PACKS.find((p) => p.id === id).quests
   const assign = (kidId, quests) => ({
     type: 'ADD_QUESTS',
@@ -49,6 +63,7 @@ export function buildDemoFamily() {
       ...q,
       kidId,
       xp: DIFFICULTY[q.difficulty]?.xp ?? DIFFICULTY.medium.xp,
+      pence: PRICES[q.title] || 0,
       supports: [],
       doubleXp: false,
     })),
@@ -91,6 +106,7 @@ export function buildDemoFamily() {
 
   s = finish(s, 'Make your bed', ava.id, 3)
   s = finish(s, 'Load the dishwasher', ava.id, 2)
+  s = finish(s, 'Tidy your desk', ava.id, 2)
   s = finish(s, 'Take the bins out', ava.id, 1)
   s = finish(s, 'Cook one family meal', noah.id, 2)
   s = finish(s, 'Wash, dry and put away one load', noah.id, 1)
@@ -120,6 +136,15 @@ export function buildDemoFamily() {
         captureSource: 'timer',
       },
     })
+  }
+
+  /*
+   * One payout already made, so the ledger reads like a household that has
+   * been doing this for a fortnight rather than one that started this
+   * morning. The earned lines come from the approvals above.
+   */
+  if (potFor(s, ava.id) >= 100) {
+    s = run(s, { type: 'RECORD_MONEY', kidId: ava.id, pence: 100, kind: 'paid', note: '' })
   }
 
   const rewards = [
