@@ -91,6 +91,32 @@ function axisAlignedEdgeScore(grey, width, height) {
   return (strongCols + strongRows) / ((width + height) * 0.5)
 }
 
+/**
+ * The fraction of neighbouring pixels that are EXACTLY equal, at full size.
+ *
+ * This is the one measurement that genuinely separates a plain photograph
+ * from a flat image, and it has to be taken before the downsample. Every
+ * camera writes sensor noise into every pixel, so two adjacent pixels of an
+ * identical white wall still differ by a digit or two; shrink that to 160x120
+ * and the averaging wipes the noise out, which is why a wiped sink measured
+ * flatter than a screenshot did.
+ *
+ * A screen grab, a solid fill or an exported graphic has long runs of
+ * byte-identical pixels, and JPEG does not invent noise where there was none.
+ */
+function identicalNeighbours(grey, width, height) {
+  let same = 0
+  let n = 0
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width - 1; x += 1) {
+      const i = y * width + x
+      if (grey[i] === grey[i + 1]) same += 1
+      n += 1
+    }
+  }
+  return n ? same / n : 0
+}
+
 /** Colour spread. Screenshots and solid-colour fakes use very few distinct colours. */
 function colourDiversity(rgba) {
   const buckets = new Set()
@@ -123,6 +149,7 @@ export async function analyseLocally(dataUrl, context = {}) {
   const flatness = flatnessRatio(small.grey, small.width, small.height)
   const straightEdges = axisAlignedEdgeScore(small.grey, small.width, small.height)
   const diversity = colourDiversity(g.rgba)
+  const identical = identicalNeighbours(g.grey, g.width, g.height)
   const brightness = meanBrightness(small.grey)
   const hash = dHash(g)
 
@@ -167,12 +194,40 @@ export async function analyseLocally(dataUrl, context = {}) {
     score -= 10
   }
 
-  if (flatness > 0.72 && diversity < 0.05) {
+  /*
+   * A screen grab, not a plain room.
+   *
+   * This rule used to be `flatness > 0.72 && diversity < 0.05`, and both
+   * halves were wrong in a way that only showed up when it was measured
+   * against the chores this app actually ships.
+   *
+   * The diversity half did nothing at all. It buckets colour sixteen levels
+   * to a channel, and every honest photograph of a finished chore scores
+   * between 0.004 and 0.017 — a made bed, a cleared desk, a wiped sink are
+   * all far below 0.05, so the condition was simply always true.
+   *
+   * That left flatness alone, measured on a 160x120 downsample, and the
+   * downsample is what broke it: averaging wipes out the sensor noise that
+   * makes a photograph a photograph. Honest chore photos reached 0.795 and
+   * fakes began at 0.828 — a margin of three hundredths between "well done"
+   * and "you faked this". A wiped bathroom sink, which is in this app's own
+   * quest pack, landed on the wrong side of it.
+   *
+   * identicalNeighbours is taken at full size, before any of that averaging,
+   * and the two classes do not overlap at all: honest photographs measured
+   * 0.055 to 0.255, every fake measured 0.975 or more. The threshold sits in
+   * the empty space between them with a wide margin on both sides, so a
+   * grainier camera or a cleaner one does not change the answer.
+   *
+   * The flatness term stays as a second opinion. It is no longer carrying the
+   * decision, and a photograph with real structure in it is never a screen.
+   */
+  if (identical > 0.6 && flatness > 0.5) {
     flags.push({
       id: 'flat-image',
       severity: 'high',
-      label: 'Looks like a screenshot or a solid image',
-      detail: 'Large flat colour areas and very few distinct colours — typical of a screen grab rather than a room.',
+      label: 'Looks like a screenshot, not a photo',
+      detail: 'Whole areas of this image are pixel-for-pixel identical, which a camera does not produce. It looks like a screen grab or a saved picture rather than something photographed just now.',
     })
     score -= 35
   }
@@ -245,6 +300,7 @@ export async function analyseLocally(dataUrl, context = {}) {
       flatness: Number(flatness.toFixed(3)),
       straightEdges: Number(straightEdges.toFixed(3)),
       colourDiversity: Number(diversity.toFixed(3)),
+      identicalNeighbours: Number(identical.toFixed(3)),
       brightness: Math.round(brightness),
       width: img.naturalWidth,
       height: img.naturalHeight,

@@ -140,22 +140,58 @@ begin
         from reminder_schedules r
        where r.enabled
     ) s
-   where s.at_local <= s.local_now::time
-     -- Measured in minutes within the local day, not by subtracting an interval
-     -- from the timestamp: at 00:30 that subtraction wraps to 22:30 yesterday,
-     -- and a reminder set for 00:15 would then never be due at all.
-     and extract(epoch from (s.local_now::time - s.at_local)) / 60 <= p_grace_minutes
-     and (s.last_sent_on is null or s.last_sent_on < s.local_now::date);
+   /*
+    * How long ago it was due, measured ROUND THE CLOCK.
+    *
+    * The previous version required at_local <= local_now, which quietly threw
+    * away every evening reminder the moment midnight passed: a 20:00 bedtime
+    * check that the job missed — server restarting, phone off, laptop shut —
+    * stopped being due at 00:00 because 20:00 is not <= 00:30. It did not fire
+    * late, it did not fire at all, and nothing anywhere said so.
+    *
+    * Adding a day before taking the remainder puts the gap on the right side
+    * of midnight: at 00:30 a 20:00 reminder is four and a half hours late, not
+    * nineteen and a half hours early. The grace window then decides on its own
+    * whether that is too late to be worth sending, which is what it is for.
+    */
+   -- mod() on the seconds rather than on the interval: Postgres has no
+   -- interval % interval operator, and going through epoch seconds keeps the
+   -- arithmetic in one unit from end to end.
+   where mod(
+           extract(epoch from (s.local_now::time - s.at_local))::numeric + 86400,
+           86400
+         ) / 60 <= p_grace_minutes
+     /*
+      * ...against the day it was due, which is yesterday for one that has
+      * wrapped. Comparing against today would let a reminder fire twice: once
+      * late after midnight, and again at its proper hour the same evening.
+      */
+     and (s.last_sent_on is null or s.last_sent_on < (
+           case when s.at_local <= s.local_now::time
+                then s.local_now::date
+                else s.local_now::date - 1
+           end));
 
   return jsonb_build_object('ok', true, 'reminders', v_rows);
 end $$;
 
-/** Marks one as delivered, against the family's own local date. */
+/**
+ * Marks one as delivered, against the day it was DUE.
+ *
+ * Not today's date. A reminder set for 20:00 and delivered late at 00:30
+ * belongs to yesterday; stamping it with today would mark tonight's genuine
+ * 20:00 occurrence as already sent, and the family would quietly stop getting
+ * it. Same arithmetic as due_reminders, for the same reason.
+ */
 create or replace function mark_reminder_sent(p_id uuid)
 returns void language sql security definer set search_path = public as $$
-  update reminder_schedules
-     set last_sent_on = (now() at time zone timezone)::date
-   where id = p_id;
+  update reminder_schedules r
+     set last_sent_on = case
+           when r.at_local <= (now() at time zone r.timezone)::time
+             then (now() at time zone r.timezone)::date
+           else (now() at time zone r.timezone)::date - 1
+         end
+   where r.id = p_id;
 $$;
 
 grant execute on function save_reminder_schedule(text, uuid, text, jsonb) to anon, authenticated;

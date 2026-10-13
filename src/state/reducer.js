@@ -836,6 +836,33 @@ export function reducer(state, action) {
         args: [quest.title, xp],
       })
 
+      /*
+       * The parent disagreed with the check.
+       *
+       * Synthetic images can show the rules are not obviously wrong; only
+       * real families can show how often they are wrong in practice, and
+       * nothing in the app was recording it. A parent who looks at a flagged
+       * photo and approves it anyway has just told us, for free and with no
+       * survey, that the check got this one wrong.
+       *
+       * Recorded as an ordinary event, so it stays on the device and in the
+       * family's own history like everything else here. What it is for is
+       * tuning a threshold against reality instead of against six pictures
+       * drawn in a test.
+       */
+      if (submission.report?.flags?.length) {
+        next = logEvent(next, {
+          type: 'ai_overruled',
+          kidId: kid.id,
+          meta: {
+            questId: quest.id,
+            score: submission.report.score,
+            verdict: submission.report.verdict,
+            flags: submission.report.flags.map((f) => f.id),
+          },
+        })
+      }
+
       next = logEvent(next, {
         type: 'quest_approved',
         kidId: kid.id,

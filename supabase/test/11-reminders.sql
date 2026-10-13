@@ -117,6 +117,46 @@ begin
   perform ok('but a wider grace window still catches it up',
     jsonb_array_length(due_reminders(600)->'reminders') = 1);
 
+  /*
+   * Midnight, forced.
+   *
+   * The assertions above use the clock as it happens to be, so they only
+   * exercise the wrap when the suite is run in the small hours — which is
+   * exactly how this bug survived: an evening reminder the job missed stopped
+   * being due at midnight and was never delivered at all. Here the family's
+   * timezone is bent so that it is always just after midnight for them,
+   * whatever time it is for the machine.
+   */
+  update reminder_schedules
+     set timezone = (
+           -- A fixed offset that puts this family at 00:30 right now.
+           select 'UTC' || to_char(
+             ((-extract(hour from now() at time zone 'UTC') * 60
+               - extract(minute from now() at time zone 'UTC') + 30)::int / 60), 'SG00')
+         ),
+         at_local = '20:00',
+         last_sent_on = null,
+         enabled = true
+   where id = v_id;
+
+  perform ok('an evening reminder missed by the job is still due after midnight',
+    jsonb_array_length(due_reminders(600)->'reminders') = 1,
+    'local now: ' || (now() at time zone
+      (select timezone from reminder_schedules where id = v_id))::text);
+
+  perform ok('and a short grace window still refuses to buzz at half past twelve',
+    jsonb_array_length(due_reminders(60)->'reminders') = 0);
+
+  -- Delivered late, it must be stamped with the evening it belonged to, or
+  -- tonight's genuine 20:00 would be treated as already sent.
+  perform mark_reminder_sent(v_id);
+  perform ok('a late delivery is recorded against yesterday, not today',
+    (select last_sent_on from reminder_schedules where id = v_id)
+      = (now() at time zone
+         (select timezone from reminder_schedules where id = v_id))::date - 1);
+  perform ok('so it does not fire twice for the same evening',
+    jsonb_array_length(due_reminders(600)->'reminders') = 0);
+
   perform ok('a disabled reminder is never due',
     (select count(*) from reminder_schedules where not enabled) = 0);
   update reminder_schedules set enabled = false, last_sent_on = null where id = v_id;
