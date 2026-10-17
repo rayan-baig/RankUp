@@ -37,6 +37,33 @@ export const MINIGAMES = [
     blurb: 'Flip the cards, find the pairs, beat your time.',
     howTo: 'Eight pairs. Fewer flips and less time means a better score.',
   },
+  /*
+   * The second three, chosen to be different KINDS of game rather than three
+   * more of the same. The first three are all "hit the thing at the right
+   * moment" in different clothes, which leaves out the child who is simply
+   * not quick — and that child is doing chores too.
+   */
+  {
+    id: 'chain',
+    name: 'Colour Chain',
+    icon: '🟢',
+    blurb: 'Watch the colours. Play them back. It gets one longer each time.',
+    howTo: 'No timer. Get to a chain of ten for a perfect round.',
+  },
+  {
+    id: 'lights',
+    name: 'Lights Out',
+    icon: '💡',
+    blurb: 'Tap a tile and its neighbours flip. Turn them all off.',
+    howTo: 'A puzzle, not a race — there is no clock. Fewer moves scores more.',
+  },
+  {
+    id: 'catch',
+    name: 'Star Catcher',
+    icon: '⭐',
+    blurb: 'Stars fall. Catch them. The rocks you do not.',
+    howTo: 'Thirty seconds. Drag the basket. Twenty stars is a great run.',
+  },
 ]
 
 export function findGame(id) {

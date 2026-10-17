@@ -5,10 +5,20 @@ import { dayKey } from '../../lib/dates.js'
 import QuickTap from '../../components/games/QuickTap.jsx'
 import Stacker from '../../components/games/Stacker.jsx'
 import MemoryMatch from '../../components/games/MemoryMatch.jsx'
+import ColourChain from '../../components/games/ColourChain.jsx'
+import LightsOut from '../../components/games/LightsOut.jsx'
+import Catcher from '../../components/games/Catcher.jsx'
 import { Screen, Card, Button, SectionTitle, Banner, Stat, Chip, EmptyState } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
 
-const COMPONENTS = { tap: QuickTap, stack: Stacker, memory: MemoryMatch }
+const COMPONENTS = {
+  tap: QuickTap,
+  stack: Stacker,
+  memory: MemoryMatch,
+  chain: ColourChain,
+  lights: LightsOut,
+  catch: Catcher,
+}
 
 /**
  * The arcade.
