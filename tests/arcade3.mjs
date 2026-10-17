@@ -41,7 +41,23 @@ const coinsNow = async () => (await readState(page)).kids[0].coins
  * both mention the game — so the card is the one carrying the plain
  * "Play · 1 token" button rather than "Play Snake · 1 token".
  */
+/*
+ * Top the tokens back up before every game.
+ *
+ * Until the database's game list was fixed, play_minigame() rejected these
+ * games outright — so the server never took a token, every reload handed
+ * five back, and a test could play twenty games on five tokens without
+ * noticing. Now that the server accepts them it also charges for them, which
+ * is correct and means a test playing more than five games has to say where
+ * the tokens came from. They come from approved chores, so they are written
+ * the way an approval writes them.
+ */
+const topUp = async () => {
+  await setKidInDatabase('Ava', { play_tokens: 5 })
+}
+
 const playGame = async (name) => {
+  await topUp()
   await openArcade()
   const card = page.locator('.card', { hasText: name })
     .filter({ has: page.getByRole('button', { name: /^Play · 1 token$/ }) })
@@ -58,7 +74,8 @@ await openArcade()
 const hub = await text()
 const NAMES = ['Snake', '2048', 'Brick Breaker', 'Minesweeper', 'Sky Hop',
   'Four in a Row', 'Slide Puzzle', 'Colour Chain', 'Lights Out', 'Star Catcher',
-  'Quick Tap', 'Stacker', 'Memory Match']
+  'Stacker', 'Memory Match', 'SportsMania', 'Turbo Ball', 'Block Drop',
+  'Sweet Swap', 'Find the Impostor']
 const hasFeatured = /today.s pick/i.test(hub)
 const missing = NAMES.filter((n) => !hub.includes(n))
 missing.length === 0

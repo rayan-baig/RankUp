@@ -5,7 +5,6 @@ import {
   MAX_TOKENS, DAILY_COIN_CAP, payout,
 } from '../../data/minigames.js'
 import { dayKey } from '../../lib/dates.js'
-import QuickTap from '../../components/games/QuickTap.jsx'
 import Stacker from '../../components/games/Stacker.jsx'
 import MemoryMatch from '../../components/games/MemoryMatch.jsx'
 import ColourChain from '../../components/games/ColourChain.jsx'
@@ -18,11 +17,18 @@ import Sweeper from '../../components/games/Sweeper.jsx'
 import SkyHop from '../../components/games/SkyHop.jsx'
 import FourInARow from '../../components/games/FourInARow.jsx'
 import SlidePuzzle from '../../components/games/SlidePuzzle.jsx'
+import SportsMania from '../../components/games/SportsMania.jsx'
+import TurboBall from '../../components/games/TurboBall.jsx'
+import BlockDrop from '../../components/games/BlockDrop.jsx'
+import SweetSwap from '../../components/games/SweetSwap.jsx'
+import Impostor from '../../components/games/Impostor.jsx'
+import Trackstar from '../../components/games/Trackstar.jsx'
+import Wildfire from '../../components/games/Wildfire.jsx'
+import RoyalDraw from '../../components/games/RoyalDraw.jsx'
 import { Screen, Card, Button, SectionTitle, Banner, Stat, Chip, EmptyState } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
 
 const COMPONENTS = {
-  tap: QuickTap,
   stack: Stacker,
   memory: MemoryMatch,
   chain: ColourChain,
@@ -35,6 +41,14 @@ const COMPONENTS = {
   sky: SkyHop,
   four: FourInARow,
   slide: SlidePuzzle,
+  sports: SportsMania,
+  turbo: TurboBall,
+  blocks: BlockDrop,
+  sweets: SweetSwap,
+  impostor: Impostor,
+  track: Trackstar,
+  wildfire: Wildfire,
+  royal: RoyalDraw,
 }
 
 /**

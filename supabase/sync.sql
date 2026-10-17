@@ -307,7 +307,22 @@ begin
     raise exception 'not allowed to play for this child';
   end if;
 
-  if p_game not in ('tap', 'stack', 'memory') then
+  /*
+   * The game ids the arcade actually ships. This list and MINIGAMES in
+   * src/data/minigames.js have to agree: a game missing from here is one a
+   * child can play and finish while the server quietly refuses to pay for
+   * it, which looks exactly like the app losing their winnings.
+   *
+   * That is not a hypothetical. Ten games were added to the app and this
+   * list was not touched, so every one of them was being rejected here.
+   * tests/gameids.mjs now compares the two and fails if they drift again.
+   */
+  if p_game not in (
+    'stack', 'memory', 'chain', 'lights', 'catch',
+    'snake', 'merge', 'bricks', 'sweeper', 'sky', 'four', 'slide',
+    'sports', 'blocks', 'sweets', 'impostor', 'turbo',
+    'track', 'wildfire', 'royal'
+  ) then
     return jsonb_build_object('ok', false, 'reason', 'no_game');
   end if;
   if v_kid.play_tokens < 1 then

@@ -66,10 +66,10 @@ const playGame = async (name) => {
   await page.waitForTimeout(800)
 }
 
-console.log('\n=== The six older games are still offered ===')
+console.log('\n=== The older games are still offered ===')
 await openArcade()
 const listed = await page.evaluate(() => document.body.innerText)
-for (const name of ['Quick Tap', 'Stacker', 'Memory Match', 'Colour Chain', 'Lights Out', 'Star Catcher']) {
+for (const name of ['Stacker', 'Memory Match', 'Colour Chain', 'Lights Out', 'Star Catcher']) {
   listed.includes(name) ? pass(`${name} is in the arcade`) : fail(`${name} listed`, listed.slice(0, 200))
 }
 
