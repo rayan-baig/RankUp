@@ -50,7 +50,7 @@ const COMPONENTS = {
  * a child has is "have I got time for this before tea".
  */
 export default function KidArcade() {
-  const { dispatch } = useApp()
+  const { state, dispatch } = useApp()
   const kid = useKid()
   const theme = useKidTheme()
   const [playing, setPlaying] = useState(null)
@@ -58,7 +58,9 @@ export default function KidArcade() {
   const [shelf, setShelf] = useState('all')
   if (!kid) return null
 
-  const tokens = kid.playTokens || 0
+  // The demo is a shop window: it should not run out of tokens two games in.
+  const unlimited = Boolean(state.demo)
+  const tokens = unlimited ? Infinity : kid.playTokens || 0
   const earnedToday = kid.gameDay === dayKey() ? kid.gameCoinsToday || 0 : 0
   const capped = earnedToday >= DAILY_COIN_CAP
   const bests = kid.bestScores || {}
@@ -141,7 +143,7 @@ export default function KidArcade() {
           : <Chip tone="var(--good)">New</Chip>}
       </div>
       <Button className="w-full mt-3" disabled={tokens < 1} onClick={() => setPlaying(g.id)}>
-        {tokens < 1 ? 'Needs a token' : 'Play · 1 token'}
+        {tokens < 1 ? 'Needs a token' : unlimited ? 'Play' : 'Play · 1 token'}
       </Button>
     </Card>
   )
@@ -150,11 +152,19 @@ export default function KidArcade() {
     <Screen>
       <h1 className="font-display text-2xl font-extrabold mb-1">Arcade</h1>
       <p className="text-sm text-muted mb-3">
-        {MINIGAMES.length} games. One token for every chore your parent approves.
+        {MINIGAMES.length} games.{' '}
+        {unlimited
+          ? 'Play as much as you like — this is the demo.'
+          : 'One token for every chore your parent approves.'}
       </p>
 
       <div className="flex gap-2 mb-4">
-        <Stat icon="🎮" value={`${tokens}/${MAX_TOKENS}`} label="Play tokens" tone="var(--accent)" />
+        <Stat
+          icon="🎮"
+          value={unlimited ? '∞' : `${tokens}/${MAX_TOKENS}`}
+          label="Play tokens"
+          tone="var(--accent)"
+        />
         <Stat
           icon={theme.currency.icon}
           value={`${earnedToday}/${DAILY_COIN_CAP}`}
@@ -164,7 +174,7 @@ export default function KidArcade() {
         <Stat icon="🏆" value={`${played}/${MINIGAMES.length}`} label="Tried" tone="var(--good)" />
       </div>
 
-      {tokens === 0 && (
+      {tokens === 0 && !unlimited && (
         <EmptyState
           icon="🎮"
           title="No tokens yet"
@@ -189,7 +199,7 @@ export default function KidArcade() {
           </div>
         </div>
         <Button className="w-full mt-3" disabled={tokens < 1} onClick={() => setPlaying(featured.id)}>
-          {tokens < 1 ? 'Needs a token' : `Play ${featured.name} · 1 token`}
+          {tokens < 1 ? 'Needs a token' : unlimited ? `Play ${featured.name}` : `Play ${featured.name} · 1 token`}
         </Button>
       </Card>
 

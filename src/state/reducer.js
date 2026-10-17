@@ -554,14 +554,24 @@ export function reducer(state, action) {
      */
     case 'FINISH_MINIGAME': {
       const kid = state.kids.find((k) => k.id === action.kidId)
-      if (!kid || (kid.playTokens || 0) < 1) return state
+      /*
+       * The look-around demo has no chores anybody actually did, so gating its
+       * arcade behind earned tokens means somebody trying the app can open two
+       * games and then hit a wall. In the demo the tokens never run out.
+       *
+       * Nowhere else. A real family's tokens come from approved chores and
+       * nothing else — that gate is the only thing keeping the arcade from
+       * being a reason not to do them.
+       */
+      const unlimited = Boolean(state.demo)
+      if (!kid || (!unlimited && (kid.playTokens || 0) < 1)) return state
       const today = dayKey()
       const earned = kid.gameDay === today ? kid.gameCoinsToday || 0 : 0
       const coins = Math.max(0, Math.min(action.coins || 0, DAILY_COIN_CAP - earned))
       const score = Math.max(0, Math.min(100, Math.round(action.score || 0)))
       const next = mapKid(state, kid.id, (k) => ({
         ...k,
-        playTokens: k.playTokens - 1,
+        playTokens: unlimited ? k.playTokens : k.playTokens - 1,
         coins: k.coins + coins,
         gameDay: today,
         gameCoinsToday: earned + coins,
