@@ -8,63 +8,159 @@
  * the chore list rather than away from it — which is the whole point of putting
  * it behind an approval in the first place.
  *
- * Every game reports a single 0–100 score, so one payout rule covers all three
- * and the database can check the sum without knowing how any game is played.
+ * Every game reports a single 0–100 score, so one payout rule covers every one
+ * of them and the database can check the sum without knowing how any game is played.
  */
 
 export const MAX_TOKENS = 5
 export const DAILY_COIN_CAP = 15
 
+/**
+ * The hub's shelves. Every game carries the kind of game it is, because a
+ * list of thirteen identical cards is not a hub — it is a wall. A child who
+ * is tired wants the puzzle shelf; a child with four minutes wants the quick
+ * shelf; and the arcade can say so.
+ */
+export const CATEGORIES = [
+  { id: 'all', name: 'Everything', icon: '🎲' },
+  { id: 'arcade', name: 'Arcade', icon: '🕹️' },
+  { id: 'puzzle', name: 'Puzzles', icon: '🧩' },
+  { id: 'brain', name: 'Brain', icon: '🧠' },
+  { id: 'versus', name: 'Versus', icon: '⚔️' },
+]
+
 export const MINIGAMES = [
   {
-    id: 'tap',
-    name: 'Quick Tap',
-    icon: '👆',
-    blurb: 'Targets appear. Hit them before they vanish.',
-    howTo: 'Twenty seconds. Tap every target you can — they get faster.',
+    id: 'snake',
+    name: 'Snake',
+    icon: '🐍',
+    category: 'arcade',
+    blurb: 'Eat, grow, and run out of room. The one everybody already knows.',
+    howTo: 'Swipe, use the pad, or the arrow keys. Reach twenty-five long.',
+    minutes: 2,
   },
   {
-    id: 'stack',
-    name: 'Stacker',
-    icon: '🧱',
-    blurb: 'Time your tap. Stack the tower. Do not wobble.',
-    howTo: 'Tap when the moving block lines up. Miss badly and the run ends.',
+    id: 'merge',
+    name: '2048',
+    icon: '🔢',
+    category: 'puzzle',
+    blurb: 'Slide the board. Matching numbers join. Build the biggest tile.',
+    howTo: 'No timer. Every doubling scores; 2048 is perfect. Cash in whenever.',
+    minutes: 6,
   },
   {
-    id: 'memory',
-    name: 'Memory Match',
-    icon: '🃏',
-    blurb: 'Flip the cards, find the pairs, beat your time.',
-    howTo: 'Eight pairs. Fewer flips and less time means a better score.',
+    id: 'bricks',
+    name: 'Brick Breaker',
+    icon: '🏓',
+    category: 'arcade',
+    blurb: 'A ball, a paddle, and a wall that will not clear itself.',
+    howTo: 'Drag the paddle. The edge sends the ball off at an angle. Three lives.',
+    minutes: 3,
   },
-  /*
-   * The second three, chosen to be different KINDS of game rather than three
-   * more of the same. The first three are all "hit the thing at the right
-   * moment" in different clothes, which leaves out the child who is simply
-   * not quick — and that child is doing chores too.
-   */
+  {
+    id: 'sweeper',
+    name: 'Minesweeper',
+    icon: '💣',
+    category: 'brain',
+    blurb: 'Ten mines hidden in sixty-four squares. Work out where.',
+    howTo: 'The numbers count the mines touching. Your first tap is always safe.',
+    minutes: 5,
+  },
+  {
+    id: 'sky',
+    name: 'Sky Hop',
+    icon: '🚀',
+    category: 'arcade',
+    blurb: 'One tap to fly. Gravity does the rest. Mind the gaps.',
+    howTo: 'Tap to lift. Fifteen gaps is a perfect run.',
+    minutes: 2,
+  },
+  {
+    id: 'four',
+    name: 'Four in a Row',
+    icon: '🔴',
+    category: 'versus',
+    blurb: 'You against the app. It plays properly, but you can beat it.',
+    howTo: 'Drop counters. Four across, down or slanted wins. You go first.',
+    minutes: 4,
+  },
+  {
+    id: 'slide',
+    name: 'Slide Puzzle',
+    icon: '🧩',
+    category: 'puzzle',
+    blurb: 'Fifteen tiles, one gap, one correct order.',
+    howTo: 'Tap a tile next to the gap. Green means it is already home. No timer.',
+    minutes: 6,
+  },
   {
     id: 'chain',
     name: 'Colour Chain',
     icon: '🟢',
+    category: 'brain',
     blurb: 'Watch the colours. Play them back. It gets one longer each time.',
     howTo: 'No timer. Get to a chain of ten for a perfect round.',
+    minutes: 3,
   },
   {
     id: 'lights',
     name: 'Lights Out',
     icon: '💡',
+    category: 'puzzle',
     blurb: 'Tap a tile and its neighbours flip. Turn them all off.',
     howTo: 'A puzzle, not a race — there is no clock. Fewer moves scores more.',
+    minutes: 4,
   },
   {
     id: 'catch',
     name: 'Star Catcher',
     icon: '⭐',
+    category: 'arcade',
     blurb: 'Stars fall. Catch them. The rocks you do not.',
     howTo: 'Thirty seconds. Drag the basket. Twenty stars is a great run.',
+    minutes: 1,
+  },
+  {
+    id: 'tap',
+    name: 'Quick Tap',
+    icon: '👆',
+    category: 'arcade',
+    blurb: 'Targets appear. Hit them before they vanish.',
+    howTo: 'Twenty seconds. Tap every target you can — they get faster.',
+    minutes: 1,
+  },
+  {
+    id: 'stack',
+    name: 'Stacker',
+    icon: '🧱',
+    category: 'arcade',
+    blurb: 'Time your tap. Stack the tower. Do not wobble.',
+    howTo: 'Tap when the moving block lines up. Miss badly and the run ends.',
+    minutes: 2,
+  },
+  {
+    id: 'memory',
+    name: 'Memory Match',
+    icon: '🃏',
+    category: 'brain',
+    blurb: 'Flip the cards, find the pairs, beat your time.',
+    howTo: 'Eight pairs. Fewer flips and less time means a better score.',
+    minutes: 3,
   },
 ]
+
+/**
+ * The game on the front of the hub, which changes every day.
+ *
+ * Picked from the date rather than at random, so every child in the family
+ * sees the same one and it is the same all day — a featured game that
+ * reshuffles on every screen change is just a flashing light.
+ */
+export function featuredGame(dayStamp) {
+  const digits = String(dayStamp || '').replace(/\D/g, '')
+  const n = Number(digits.slice(-6)) || 0
+  return MINIGAMES[n % MINIGAMES.length]
+}
 
 export function findGame(id) {
   return MINIGAMES.find((g) => g.id === id) || null

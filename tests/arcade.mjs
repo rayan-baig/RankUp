@@ -53,7 +53,14 @@ const coinsBefore = (await readState(page)).kids[0].coins
 
 // Memory Match is the one that can be played deterministically: flip every
 // card, remember what was where, then pair them up.
-await page.getByRole('button', { name: 'Play · 1 token' }).nth(2).click()
+// By name, not by position: the hub reorders its shelves and has a featured
+// card of its own, so an index here would quietly open a different game and
+// go on "passing".
+await page.locator('.card', { hasText: 'Memory Match' })
+  .filter({ has: page.getByRole('button', { name: /^Play · 1 token$/ }) })
+  .first()
+  .getByRole('button', { name: /^Play · 1 token$/ })
+  .click()
 await page.waitForTimeout(600)
 await page.screenshot({ path: `${SHOT_DIR}/arcade-memory.png` })
 const cards = await page.locator('button[aria-label="Face-down card"]').count()

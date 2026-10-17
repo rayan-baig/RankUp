@@ -57,12 +57,16 @@ const coinsNow = async () => (await readState(page)).kids[0].coins
  */
 const playGame = async (name) => {
   await openArcade()
+  // The hub also has a "today's pick" card, whose button reads "Play Snake ·
+  // 1 token" — so match on the plain shelf button to avoid hitting two cards.
   const card = page.locator('.card', { hasText: name })
-  await card.getByRole('button', { name: /Play · 1 token/ }).click()
+    .filter({ has: page.getByRole('button', { name: /^Play · 1 token$/ }) })
+    .first()
+  await card.getByRole('button', { name: /^Play · 1 token$/ }).click()
   await page.waitForTimeout(800)
 }
 
-console.log('\n=== All six games are offered ===')
+console.log('\n=== The six older games are still offered ===')
 await openArcade()
 const listed = await page.evaluate(() => document.body.innerText)
 for (const name of ['Quick Tap', 'Stacker', 'Memory Match', 'Colour Chain', 'Lights Out', 'Star Catcher']) {
