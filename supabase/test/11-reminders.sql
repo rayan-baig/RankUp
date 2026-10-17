@@ -127,12 +127,26 @@ begin
    * timezone is bent so that it is always just after midnight for them,
    * whatever time it is for the machine.
    */
+  /*
+   * A real timezone where it is currently the small hours, chosen from the
+   * database's own list rather than built by hand.
+   *
+   * The first attempt assembled a POSIX string like 'UTC+5', which is a trap
+   * twice over: POSIX offsets run backwards from what anybody expects, and
+   * rounding the offset to whole hours lands on the wrong hour for most of
+   * every hour. The test then passed or failed depending on the minute it ran
+   * at, which is worse than not having it.
+   *
+   * Offsets span -12 to +14, so there is always some zone in the first hour
+   * of its day, whatever time it is here.
+   */
   update reminder_schedules
      set timezone = (
-           -- A fixed offset that puts this family at 00:30 right now.
-           select 'UTC' || to_char(
-             ((-extract(hour from now() at time zone 'UTC') * 60
-               - extract(minute from now() at time zone 'UTC') + 30)::int / 60), 'SG00')
+           select name from pg_timezone_names
+            where extract(hour from now() at time zone name) = 0
+              and name not like 'posix/%'
+            order by name
+            limit 1
          ),
          at_local = '20:00',
          last_sent_on = null,

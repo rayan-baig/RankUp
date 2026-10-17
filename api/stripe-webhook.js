@@ -151,7 +151,11 @@ export default async function handler(req, res) {
           p_family_id: familyId,
           p_count: Number(object.metadata?.ticket_count) || 3,
           p_stripe_event: event.id,
-          p_payload: { type: event.type },
+          p_payload: {
+            type: event.type,
+            amount_pence: Number(object.amount_total || 0) || null,
+            currency: String(object.currency || 'gbp').toUpperCase(),
+          },
         })
       }
       // For a subscription, the events that follow carry the authoritative
@@ -178,6 +182,31 @@ export default async function handler(req, res) {
         p_stripe_event: event.id,
         p_payload: { type: event.type },
       })
+      return res.status(200).json({ received: true })
+    }
+
+    /*
+     * The recurring charge, which is where almost all the revenue is.
+     *
+     * Nothing was recording it. The subscription events carry a status and no
+     * price, so a Charity Week total built on those alone would have been
+     * close to zero — and the one number this company publishes about itself
+     * had better be the real one.
+     */
+    if (event.type === 'invoice.paid' || event.type === 'invoice.payment_succeeded') {
+      const familyId = await familyIdFor(object, stripe)
+      const paid = Number(object.amount_paid ?? object.amount_due ?? 0)
+      if (familyId && paid > 0) {
+        await serviceRpc('record_payment', {
+          p_family_id: familyId,
+          p_stripe_event: event.id,
+          p_type: event.type,
+          // Stripe already works in minor units, which is the same unit this
+          // app stores money in everywhere. No conversion, nothing to round.
+          p_amount_pence: paid,
+          p_currency: String(object.currency || 'gbp').toUpperCase(),
+        })
+      }
       return res.status(200).json({ received: true })
     }
 

@@ -53,8 +53,14 @@ declare v_tier text;
 begin
   if p_stripe_event is not null then
     begin
-      insert into billing_events (family_id, stripe_event, type, payload)
-      values (p_family_id, p_stripe_event, p_status, p_payload);
+      insert into billing_events (family_id, stripe_event, type, payload,
+                                  amount_pence, currency)
+      values (p_family_id, p_stripe_event, p_status, p_payload,
+              -- Pulled out once, here, rather than dug out of nested JSON at
+              -- the moment somebody is totalling Charity Week. Null when no
+              -- money moved, which is a real event but not revenue.
+              nullif(p_payload->>'amount_pence', '')::int,
+              nullif(p_payload->>'currency', ''));
     exception when unique_violation then
       -- Already handled. Stripe retries; we do not act twice.
       return jsonb_build_object('ok', true, 'duplicate', true);
@@ -201,8 +207,11 @@ begin
 
   if p_stripe_event is not null then
     begin
-      insert into billing_events (family_id, stripe_event, type, payload)
-      values (p_family_id, p_stripe_event, 'flash_tickets', p_payload);
+      insert into billing_events (family_id, stripe_event, type, payload,
+                                  amount_pence, currency)
+      values (p_family_id, p_stripe_event, 'flash_tickets', p_payload,
+              nullif(p_payload->>'amount_pence', '')::int,
+              nullif(p_payload->>'currency', ''));
     exception when unique_violation then
       return jsonb_build_object('ok', true, 'duplicate', true);
     end;

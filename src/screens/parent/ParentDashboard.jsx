@@ -11,6 +11,7 @@ import { Screen, Card, Button, SectionTitle, Stat, ProgressBar, EmptyState, Bann
 import SyncBadge from '../../components/SyncBadge.jsx'
 import { navigate } from '../../lib/router.js'
 import TrialBanner from '../../components/TrialBanner.jsx'
+import CharityWeek from '../../components/CharityWeek.jsx'
 import InstallPrompt from '../../components/InstallPrompt.jsx'
 
 export default function ParentDashboard() {
@@ -33,6 +34,7 @@ export default function ParentDashboard() {
   return (
     <Screen>
       <TrialBanner />
+      <CharityWeek />
       <header className="mb-3">
         <p className="text-xs uppercase tracking-widest text-muted">Parent dashboard</p>
         <h1 className="font-display text-2xl font-extrabold truncate">{state.family.name || 'Your family'}</h1>
