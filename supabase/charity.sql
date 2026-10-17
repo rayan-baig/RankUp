@@ -3,7 +3,7 @@
 --
 -- Run after billing.sql.
 --
--- Seven days every year from 22 June, when every penny the app takes goes to
+-- The calendar week containing 22 June, every year, when every penny the app takes goes to
 -- charity. This file is the part that makes that a fact rather than a slogan:
 -- a total computed from the payments that actually happened, which can be
 -- read off at the end of the week and handed over.
@@ -32,10 +32,14 @@ alter table billing_events add column if not exists currency text;
 create index if not exists billing_events_received_idx
   on billing_events (received_at);
 
-/** Midnight UTC on the 22nd of June, for a given year. */
+-- The Monday of the calendar week that 22 June falls in. date_trunc('week')
+-- is ISO, so its weeks already start on Monday; doing it this way means the
+-- window is a week as people keep them rather than seven days hanging off a
+-- date, and it matches charityWindow() in src/lib/charity.js exactly.
 create or replace function charity_week_start(p_year int)
 returns timestamptz language sql immutable as $$
-  select make_timestamptz(p_year, 6, 22, 0, 0, 0, 'UTC');
+  select date_trunc('week', make_timestamptz(p_year, 6, 22, 0, 0, 0, 'UTC') at time zone 'UTC')
+         at time zone 'UTC';
 $$;
 
 /**
@@ -44,13 +48,21 @@ $$;
  * Half-open: the end is the first instant NOT in it, which is the only way to
  * say "seven whole days" without an argument about the final second. UTC on
  * both sides so a family in Auckland and one in Vancouver are in the week at
- * the same moment rather than on their own local 22nd.
+ * the same moment rather than on their own local Monday.
  */
 create or replace function in_charity_week(p_at timestamptz default now())
 returns boolean language sql stable as $$
-  select p_at >= charity_week_start(extract(year from p_at at time zone 'UTC')::int)
-     and p_at <  charity_week_start(extract(year from p_at at time zone 'UTC')::int)
-                 + interval '7 days';
+  -- The week can start in the month before its anchor, so check the
+  -- neighbouring years too rather than assuming it sits inside its own.
+  select exists (
+    select 1
+      from generate_series(
+             extract(year from p_at at time zone 'UTC')::int - 1,
+             extract(year from p_at at time zone 'UTC')::int + 1
+           ) as y
+     where p_at >= charity_week_start(y)
+       and p_at <  charity_week_start(y) + interval '7 days'
+  );
 $$;
 
 /**

@@ -1,8 +1,8 @@
 /**
  * Charity Week.
  *
- * Seven days every year, starting 22 June, when what the app takes goes to
- * charity instead of to us.
+ * The whole calendar week containing 22 June, every year — Monday to Sunday —
+ * when what the app takes goes to charity instead of to us.
  *
  * Two things about this are engineering problems rather than marketing ones,
  * and both are why this file exists instead of a hardcoded banner.
@@ -20,7 +20,7 @@
  * Vancouver are in it or out of it at the same instant.
  */
 
-/** The day it starts, every year. */
+/** The day it is anchored to, every year. */
 export const CHARITY_MONTH = 5 // June, zero-indexed as Date wants it
 export const CHARITY_DAY = 22
 export const CHARITY_DAYS = 7
@@ -28,21 +28,34 @@ export const CHARITY_DAYS = 7
 /**
  * The window for a given year, as timestamps.
  *
- * Starts at midnight UTC on the 22nd and runs for seven days, so it ends at
- * midnight UTC on the 29th. Half-open on purpose — the end is the first
- * instant NOT in the week, which is the only way to express "seven whole
- * days" without an off-by-one argument about the last second.
+ * It is the calendar week that 22 June falls in: Monday 00:00 UTC to the
+ * following Monday 00:00 UTC. Anchoring to the week rather than to the date
+ * means it is always a whole week as people actually keep them — it starts on
+ * a Monday and ends on a Sunday night, so a shop sign, a school newsletter and
+ * a payout report all describe the same seven days.
+ *
+ * Half-open on purpose — the end is the first instant NOT in the week, which
+ * is the only way to express "seven whole days" without an off-by-one
+ * argument about the last second.
  */
 export function charityWindow(year) {
-  const from = Date.UTC(year, CHARITY_MONTH, CHARITY_DAY)
-  const to = Date.UTC(year, CHARITY_MONTH, CHARITY_DAY + CHARITY_DAYS)
-  return { from, to, year }
+  const anchor = Date.UTC(year, CHARITY_MONTH, CHARITY_DAY)
+  // getUTCDay has Sunday as 0; shift it so Monday is 0 and Sunday is 6.
+  const weekday = (new Date(anchor).getUTCDay() + 6) % 7
+  const from = anchor - weekday * 86400000
+  return { from, to: from + CHARITY_DAYS * 86400000, year }
 }
 
 /** Is this instant inside the week? */
 export function inCharityWeek(at = Date.now()) {
-  const { from, to } = charityWindow(new Date(at).getUTCFullYear())
-  return at >= from && at < to
+  // The week can begin in the year before or end in the year after its
+  // anchor date only in the sense of month boundaries, but checking the
+  // neighbouring years costs nothing and removes a whole class of edge case.
+  const year = new Date(at).getUTCFullYear()
+  return [year - 1, year, year + 1].some((y) => {
+    const { from, to } = charityWindow(y)
+    return at >= from && at < to
+  })
 }
 
 /**
@@ -66,7 +79,7 @@ export function daysUntilCharityWeek(at = Date.now()) {
 /** Whole days left of the one running, or 0 when none is. */
 export function daysLeftOfCharityWeek(at = Date.now()) {
   if (!inCharityWeek(at)) return 0
-  const { to } = charityWindow(new Date(at).getUTCFullYear())
+  const { to } = nextCharityWindow(at)
   return Math.max(1, Math.ceil((to - at) / 86400000))
 }
 
@@ -88,8 +101,10 @@ export const CHARITY_COPY = {
 
 /** "22–28 June 2027", for a specific year. */
 export function charityDatesLabel(year) {
-  const end = new Date(Date.UTC(year, CHARITY_MONTH, CHARITY_DAY + CHARITY_DAYS - 1))
-  const start = new Date(Date.UTC(year, CHARITY_MONTH, CHARITY_DAY))
+  const { from, to } = charityWindow(year)
+  const start = new Date(from)
+  // `to` is the first instant after the week, so the last day is the one before.
+  const end = new Date(to - 86400000)
   const month = new Intl.DateTimeFormat(undefined, { month: 'long', timeZone: 'UTC' }).format(start)
   return `${start.getUTCDate()}–${end.getUTCDate()} ${month} ${year}`
 }

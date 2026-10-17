@@ -34,9 +34,24 @@ const iso = (ms) => new Date(ms).toISOString()
 console.log('\n=== The window is where it should be ===')
 {
   const w = charityWindow(2027)
-  ok('starts midnight UTC on 22 June', iso(w.from) === '2027-06-22T00:00:00.000Z', iso(w.from))
-  ok('and ends midnight UTC on the 29th', iso(w.to) === '2027-06-29T00:00:00.000Z', iso(w.to))
+  // The week containing 22 June 2027, which is a Tuesday — so the window is
+  // Monday the 21st to Sunday the 27th. Hardcoded on purpose: a test that
+  // recomputes the answer the same way the code does proves nothing.
+  ok('starts midnight UTC on the Monday', iso(w.from) === '2027-06-21T00:00:00.000Z', iso(w.from))
+  ok('and ends when the next Monday starts', iso(w.to) === '2027-06-28T00:00:00.000Z', iso(w.to))
   ok('which is exactly seven days', (w.to - w.from) === 7 * 86400000)
+  ok('and 22 June itself is inside it', inCharityWeek(Date.UTC(2027, 5, 22)))
+
+  // Every year, whatever weekday the 22nd lands on, the week must start on a
+  // Monday and must contain the 22nd. That is the whole promise.
+  let wrong = 0
+  for (let y = 2026; y <= 2046; y += 1) {
+    const win = charityWindow(y)
+    const startsMonday = new Date(win.from).getUTCDay() === 1
+    const holds22nd = inCharityWeek(Date.UTC(y, 5, 22))
+    if (!startsMonday || !holds22nd) wrong += 1
+  }
+  ok('and that holds for the next twenty-one years', wrong === 0, `${wrong} years wrong`)
 }
 
 console.log('\n=== Both ends, to the second ===')
@@ -46,14 +61,14 @@ console.log('\n=== Both ends, to the second ===')
     ? ok('the very first instant is in', true)
     : ok('the very first instant is in', false)
   inCharityWeek(w.to - 1000)
-    ? ok('the last second of the 28th is in', true)
-    : ok('the last second of the 28th is in', false)
+    ? ok('the last second of the Sunday is in', true)
+    : ok('the last second of the Sunday is in', false)
   !inCharityWeek(w.to)
-    ? ok('and midnight on the 29th is out — half-open, no double-counted day', true)
-    : ok('midnight on the 29th is out', false)
+    ? ok('and the next Monday is out — half-open, no double-counted day', true)
+    : ok('the next Monday is out', false)
   !inCharityWeek(w.from - 1000)
-    ? ok('the last second of the 21st is out', true)
-    : ok('the last second of the 21st is out', false)
+    ? ok('the last second before it is out', true)
+    : ok('the last second before it is out', false)
 }
 
 console.log('\n=== The countdown reads correctly from both sides ===')
@@ -84,8 +99,8 @@ console.log('\n=== The countdown reads correctly from both sides ===')
 }
 
 console.log('\n=== It reads properly to a person ===')
-charityDatesLabel(2027) === '22–28 June 2027'
-  ? ok('the dates label says 22–28 June 2027', true)
+charityDatesLabel(2027) === '21–27 June 2027'
+  ? ok('the dates label says 21–27 June 2027', true)
   : ok('dates label', false, charityDatesLabel(2027))
 
 console.log('\n=== And the database agrees, instant for instant ===')
