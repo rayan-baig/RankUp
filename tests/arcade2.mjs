@@ -55,14 +55,25 @@ const coinsNow = async () => (await readState(page)).kids[0].coins
  * up the wrong game, which is worse. Each card carries its own title, so the
  * Play button inside that card is the one to press.
  */
+/*
+ * Open a game by its name.
+ *
+ * The arcade is a grid of tiles now rather than a list of cards with a
+ * button each, so the tile itself is what gets pressed. Selecting by name
+ * rather than position matters more than ever: the shelves reorder, and an
+ * index would quietly open a different game and go on passing.
+ */
+const openGame = async (page, name) => {
+  await page.getByRole('button', { name: new RegExp('^' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) })
+    .first()
+    .click()
+}
+
 const playGame = async (name) => {
   await openArcade()
   // The hub also has a "today's pick" card, whose button reads "Play Snake ·
   // 1 token" — so match on the plain shelf button to avoid hitting two cards.
-  const card = page.locator('.card', { hasText: name })
-    .filter({ has: page.getByRole('button', { name: /^Play · 1 token$/ }) })
-    .first()
-  await card.getByRole('button', { name: /^Play · 1 token$/ }).click()
+  await openGame(page, name)
   await page.waitForTimeout(800)
 }
 

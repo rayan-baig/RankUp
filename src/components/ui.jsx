@@ -44,8 +44,87 @@ export function Chip({ children, tone, className = '', ...rest }) {
 export function SectionTitle({ children, action }) {
   return (
     <div className="flex items-center justify-between mb-2">
-      <h2 className="section-title mb-0">{children}</h2>
+      <h2 className="section-title mb-0 flex items-center gap-2">
+        {/* A lit tick before the heading, so the eye finds the start of a
+            section without the heading having to shout. */}
+        <span
+          aria-hidden="true"
+          style={{
+            width: 3,
+            height: 13,
+            borderRadius: 2,
+            background: 'var(--accent)',
+            boxShadow: '0 0 8px var(--accent)',
+            flex: '0 0 auto',
+          }}
+        />
+        {children}
+      </h2>
       {action}
+    </div>
+  )
+}
+
+/**
+ * The big title at the top of a screen, with the line under it that says
+ * what the screen is for.
+ *
+ * Every screen in the design opens the same way — name, one line, then the
+ * content — so it is one component rather than a heading copied onto each
+ * screen and drifting apart.
+ */
+export function PageTitle({ children, sub, right }) {
+  return (
+    <div className="flex items-start justify-between gap-3 mb-3">
+      <div className="min-w-0">
+        <h1
+          className="font-display text-2xl font-extrabold leading-tight"
+          style={{ textShadow: '0 0 22px color-mix(in srgb, var(--accent) 45%, transparent)' }}
+        >
+          {children}
+        </h1>
+        {sub && <p className="text-sm text-muted mt-0.5">{sub}</p>}
+      </div>
+      {right}
+    </div>
+  )
+}
+
+/**
+ * The row of filter pills the design uses on Quests and the Arcade
+ * ("To Do · Waiting · Done", "All Games · Puzzle · Racing").
+ */
+export function Segmented({ options, value, onChange, label = 'Filter' }) {
+  return (
+    <div
+      className="flex gap-1.5 overflow-x-auto pb-1 mb-3"
+      role="group"
+      aria-label={label}
+    >
+      {options.map((o) => {
+        const on = o.id === value
+        return (
+          <button
+            key={o.id}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onChange(o.id)}
+            className="whitespace-nowrap rounded-full font-semibold transition-colors"
+            style={{
+              padding: '8px 15px',
+              fontSize: 13,
+              color: on ? 'var(--bg)' : 'var(--ink-muted)',
+              background: on
+                ? 'linear-gradient(97deg, var(--accent), color-mix(in srgb, var(--accent-2) 62%, var(--accent)))'
+                : 'color-mix(in srgb, var(--surface-2) 88%, var(--accent) 12%)',
+              border: `1px solid ${on ? 'transparent' : 'color-mix(in srgb, var(--accent) 24%, var(--line))'}`,
+              boxShadow: on ? '0 6px 20px -10px var(--accent)' : 'none',
+            }}
+          >
+            {o.icon ? `${o.icon} ` : ''}{o.name}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -164,7 +243,16 @@ export function ProgressBar({ value, max = 1, height = 10, tone, label }) {
 
 export function Stat({ icon, value, label, tone }) {
   return (
-    <div className="card-flat px-3 py-2.5 flex-1 min-w-0">
+    <div
+      className="card-flat px-3 py-2.5 flex-1 min-w-0"
+      style={{
+        // A stat tile is a readout, so it gets its own faint edge light in
+        // whatever colour the number is. Falls back to the theme accent, so
+        // a tile with no tone still belongs to the same set.
+        borderColor: `color-mix(in srgb, ${tone || 'var(--accent)'} 34%, var(--line))`,
+        boxShadow: `inset 0 0 26px -18px ${tone || 'var(--accent)'}`,
+      }}
+    >
       <div className="flex items-center gap-1.5">
         {icon && <span aria-hidden="true">{icon}</span>}
         <span className="font-display font-extrabold text-lg leading-none truncate" style={tone ? { color: tone } : undefined}>

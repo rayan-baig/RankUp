@@ -40,13 +40,24 @@ const openArcade = async () => {
 const text = () => page.evaluate(() => document.body.innerText)
 const ended = () => page.evaluate(() => /\d+ points/.test(document.body.innerText))
 
+/*
+ * Open a game by its name.
+ *
+ * The arcade is a grid of tiles now rather than a list of cards with a
+ * button each, so the tile itself is what gets pressed. Selecting by name
+ * rather than position matters more than ever: the shelves reorder, and an
+ * index would quietly open a different game and go on passing.
+ */
+const openGame = async (page, name) => {
+  await page.getByRole('button', { name: new RegExp('^' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) })
+    .first()
+    .click()
+}
+
 const playGame = async (name) => {
   await topUp()
   await openArcade()
-  const card = page.locator('.card', { hasText: name })
-    .filter({ has: page.getByRole('button', { name: /^Play · 1 token$/ }) })
-    .first()
-  await card.getByRole('button', { name: /^Play · 1 token$/ }).click()
+  await openGame(page, name)
   await page.waitForTimeout(1200)
 }
 

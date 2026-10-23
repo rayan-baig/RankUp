@@ -66,43 +66,68 @@
     @apply mx-auto w-full max-w-phone min-h-full relative;
   }
 
+  /*
+   * Cards are lit rather than filled.
+   *
+   * The look is a panel floating on a dark field with its own edge light —
+   * a faint gradient down the face, an accent-tinted border, and a bloom
+   * sitting just outside it. Every colour comes through color-mix from the
+   * theme's own accent, so the same rule gives a green glow under Block
+   * Craft and a pink one under Coquette Circuit, and the light themes get
+   * a soft edge instead of a halo rather than a grey smudge.
+   */
   .card {
-    background: var(--surface);
-    border: 1px solid var(--line);
+    background:
+      linear-gradient(168deg,
+        color-mix(in srgb, var(--surface) 94%, var(--accent) 6%) 0%,
+        var(--surface) 55%,
+        color-mix(in srgb, var(--surface) 88%, var(--bg) 12%) 100%);
+    border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line));
     border-radius: var(--radius);
-    box-shadow: var(--shadow);
+    box-shadow:
+      0 0 24px -12px color-mix(in srgb, var(--accent) 70%, transparent),
+      0 10px 26px -16px rgb(0 0 0 / 0.6),
+      inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent);
   }
 
   .card-flat {
-    background: var(--surface-2);
-    border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface-2) 92%, var(--accent) 8%);
+    border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
     border-radius: var(--radius);
   }
 
+  /* Buttons are pills. A rounded rectangle reads as a form control; a pill
+     reads as something you press, which is what a child is looking for. */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-3 font-semibold text-[15px] transition-transform;
-    border-radius: var(--radius);
+    @apply inline-flex items-center justify-center gap-2 px-5 py-3 font-semibold text-[15px] transition-transform;
+    border-radius: 999px;
     min-height: 48px;
   }
   .btn:active { transform: scale(0.97); }
-  .btn:disabled { opacity: 0.45; pointer-events: none; }
+  .btn:disabled { opacity: 0.45; pointer-events: none; box-shadow: none; }
 
+  /* The one bright thing on the screen, so it is obvious what to press. The
+     gradient runs accent to accent-2, which every theme defines, and the
+     text takes the page background so it stays readable on a light theme. */
   .btn-primary {
-    background: var(--accent);
+    background: linear-gradient(97deg,
+      var(--accent) 0%,
+      color-mix(in srgb, var(--accent-2) 62%, var(--accent)) 100%);
     color: var(--bg);
-    border: 1px solid var(--accent);
+    border: 0;
+    box-shadow: 0 8px 26px -10px color-mix(in srgb, var(--accent) 90%, transparent);
   }
 
   .btn-ghost {
-    background: transparent;
+    background: color-mix(in srgb, var(--surface) 55%, transparent);
     color: var(--ink);
-    border: 1px solid var(--line);
+    border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
   }
 
   .btn-soft {
-    background: var(--surface-2);
+    background: color-mix(in srgb, var(--surface-2) 88%, var(--accent) 12%);
     color: var(--ink);
-    border: 1px solid var(--line);
+    border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
   }
 
   .btn-danger {
@@ -112,21 +137,24 @@
   }
 
   .chip {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full;
-    background: var(--surface-2);
-    border: 1px solid var(--line);
-    color: var(--ink-muted);
+    @apply inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full;
+    background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+    color: var(--ink);
   }
 
   .field {
-    @apply w-full px-3.5 py-3 outline-none;
-    background: var(--surface-2);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
+    @apply w-full px-4 py-3 outline-none;
+    background: color-mix(in srgb, var(--surface-2) 92%, var(--bg) 8%);
+    border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line));
+    border-radius: 14px;
     color: var(--ink);
   }
   .field::placeholder { color: var(--ink-muted); opacity: 0.75; }
-  .field:focus { border-color: var(--accent); }
+  .field:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
 
   .label {
     @apply block text-xs font-semibold uppercase tracking-wider mb-1.5;

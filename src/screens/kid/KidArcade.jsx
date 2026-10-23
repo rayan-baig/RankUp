@@ -26,8 +26,18 @@ import Trackstar from '../../components/games/Trackstar.jsx'
 import TennisTour from '../../components/games/TennisTour.jsx'
 import Wildfire from '../../components/games/Wildfire.jsx'
 import RoyalDraw from '../../components/games/RoyalDraw.jsx'
-import { Screen, Card, Button, SectionTitle, Banner, Stat, Chip, EmptyState } from '../../components/ui.jsx'
+import { Screen, Card, Button, SectionTitle, Banner, Stat, EmptyState, PageTitle, Segmented } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
+
+/** One colour per shelf, so the grid is scannable without artwork. */
+const TILE_TINT = {
+  arcade: '#38bdf8',
+  puzzle: '#a855f7',
+  brain: '#f59e0b',
+  versus: '#f43f5e',
+  sports: '#22c55e',
+  cards: '#e879f9',
+}
 
 const COMPONENTS = {
   stack: Stacker,
@@ -143,38 +153,87 @@ export default function KidArcade() {
   const shown = shelf === 'all' ? MINIGAMES : MINIGAMES.filter((g) => g.category === shelf)
   const played = MINIGAMES.filter((g) => bests[g.id] > 0).length
 
-  const GameCard = (g) => (
-    <Card key={g.id} className="mb-2.5">
-      <div className="flex items-center gap-3">
-        <span className="text-2xl" aria-hidden="true">{g.icon}</span>
-        <div className="min-w-0 flex-1">
-          <div className="font-semibold text-sm">{g.name}</div>
-          <div className="text-xs text-muted">{g.blurb}</div>
-          <div className="text-xs text-muted mt-0.5">
-            About {g.minutes} {g.minutes === 1 ? 'minute' : 'minutes'}
-            {/* Everything else here works with no signal. Say when one does not. */}
-            {g.needsNet && ' · needs the internet'}
+  /*
+   * A game tile.
+   *
+   * Twenty-one games as full-width cards with a button each meant one game
+   * filled half the screen and choosing meant scrolling past the rest. The
+   * design puts them in a grid of tiles instead, which is right: a child
+   * picking a game is looking at pictures, not reading descriptions. The
+   * whole tile is the button, so there is nothing to aim at.
+   *
+   * The art is the game's own colour drawn behind its icon, so every tile
+   * looks different at a glance without needing twenty-one images.
+   */
+  const GameTile = (g) => {
+    const best = bests[g.id] || 0
+    const locked = tokens < 1
+    return (
+      <button
+        key={g.id}
+        type="button"
+        disabled={locked}
+        onClick={() => setPlaying(g.id)}
+        /*
+         * Spelled out rather than left to the tile's contents. Read aloud,
+         * the tile would otherwise start with the word NEW — the badge sits
+         * first in the markup — so a screen reader would announce every
+         * unplayed game as "New" before saying which game it is.
+         */
+        aria-label={`${g.name}. ${g.blurb} ${best > 0 ? `Your best is ${best}.` : 'Not played yet.'}`}
+        className="text-left rounded-2xl overflow-hidden transition-transform active:scale-95 disabled:opacity-50"
+        style={{
+          background: 'color-mix(in srgb, var(--surface) 94%, var(--accent) 6%)',
+          border: '1px solid color-mix(in srgb, var(--accent) 28%, var(--line))',
+          boxShadow: '0 0 20px -12px color-mix(in srgb, var(--accent) 80%, transparent)',
+        }}
+      >
+        <div
+          className="grid place-items-center relative"
+          style={{
+            aspectRatio: '1 / 1',
+            background: `radial-gradient(circle at 50% 42%,
+              color-mix(in srgb, ${TILE_TINT[g.category] || 'var(--accent)'} 46%, transparent),
+              color-mix(in srgb, var(--bg) 85%, transparent) 72%)`,
+          }}
+        >
+          <span style={{ fontSize: 30, lineHeight: 1 }} aria-hidden="true">{g.icon}</span>
+          {best === 0 && (
+            <span
+              className="absolute top-1.5 right-1.5 rounded-full font-bold"
+              style={{
+                fontSize: 8,
+                padding: '1px 5px',
+                background: 'var(--good)',
+                color: 'var(--bg)',
+              }}
+            >
+              NEW
+            </span>
+          )}
+        </div>
+        <div className="px-2 py-1.5">
+          <div className="font-semibold text-[11px] leading-tight truncate">{g.name}</div>
+          {/* The high score is the thing a child checks, so it is the line
+              that gets the space once they have played. */}
+          <div className="text-[9.5px] text-muted mt-0.5 truncate">
+            {best > 0 ? `High: ${best.toLocaleString()}` : `${g.minutes} min`}
+            {g.needsNet ? ' · online' : ''}
           </div>
         </div>
-        {bests[g.id] > 0
-          ? <Chip tone="var(--accent)">Best {bests[g.id]}</Chip>
-          : <Chip tone="var(--good)">New</Chip>}
-      </div>
-      <Button className="w-full mt-3" disabled={tokens < 1} onClick={() => setPlaying(g.id)}>
-        {tokens < 1 ? 'Needs a token' : unlimited ? 'Play' : 'Play · 1 token'}
-      </Button>
-    </Card>
-  )
+      </button>
+    )
+  }
 
   return (
     <Screen>
-      <h1 className="font-display text-2xl font-extrabold mb-1">Arcade</h1>
-      <p className="text-sm text-muted mb-3">
-        {MINIGAMES.length} games.{' '}
-        {unlimited
-          ? 'Play as much as you like — this is the demo.'
-          : 'One token for every chore your parent approves.'}
-      </p>
+      <PageTitle
+        sub={unlimited
+          ? `${MINIGAMES.length} games. Play as much as you like — this is the demo.`
+          : `${MINIGAMES.length} games. One token for every chore your parent approves.`}
+      >
+        Arcade
+      </PageTitle>
 
       <div className="flex gap-2 mb-4">
         <Stat
@@ -216,28 +275,27 @@ export default function KidArcade() {
             <div className="text-xs text-muted">{featured.blurb}</div>
           </div>
         </div>
-        <Button className="w-full mt-3" disabled={tokens < 1} onClick={() => setPlaying(featured.id)}>
+        <Button
+          className="w-full mt-3"
+          style={{ minHeight: 44, fontSize: 14 }}
+          disabled={tokens < 1}
+          onClick={() => setPlaying(featured.id)}
+        >
           {tokens < 1 ? 'Needs a token' : unlimited ? `Play ${featured.name}` : `Play ${featured.name} · 1 token`}
         </Button>
       </Card>
 
       <SectionTitle>All games</SectionTitle>
-      <div className="flex gap-2 overflow-x-auto pb-2 mb-1" role="group" aria-label="Kinds of game">
-        {CATEGORIES.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            aria-pressed={shelf === c.id}
-            onClick={() => setShelf(c.id)}
-            className={`btn ${shelf === c.id ? 'btn-primary' : 'btn-soft'} whitespace-nowrap`}
-            style={{ minHeight: 0, padding: '8px 14px', fontSize: 13 }}
-          >
-            {c.icon} {c.name}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        options={CATEGORIES}
+        value={shelf}
+        onChange={setShelf}
+        label="Kinds of game"
+      />
 
-      {shown.map(GameCard)}
+      <div className="grid grid-cols-3 gap-2">
+        {shown.map(GameTile)}
+      </div>
 
       <p className="text-xs text-muted mt-4">
         Games pay a little, chores pay properly. The arcade tops out at {DAILY_COIN_CAP}{' '}
