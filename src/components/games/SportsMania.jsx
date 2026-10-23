@@ -1,23 +1,22 @@
 import { useState } from 'react'
 import AimShot from './sports/AimShot.jsx'
 import GrandPrix from './sports/GrandPrix.jsx'
-import Football from './sports/Football.jsx'
-import Tennis from './sports/Tennis.jsx'
+import SoccerMatch from './sports/SoccerMatch.jsx'
 import TableTennis from './sports/TableTennis.jsx'
 import Volleyball from './sports/Volleyball.jsx'
 import Hockey from './sports/Hockey.jsx'
 
 /**
- * SportsMania: eleven sports behind one card.
+ * SportsMania: ten sports behind one card.
  *
- * Eleven separate entries on the hub would bury everything else, and most of
+ * Ten separate entries on the hub would bury everything else, and most of
  * them would never be opened. One card you pick a sport from keeps the hub
  * readable and makes the sports feel like a set, which is what they are.
  *
- * Underneath there are four engines, not eleven. Golf, basketball, the field
+ * Underneath there are a handful of engines, not ten. Golf, basketball, the field
  * goal, cricket and baseball are all "how hard, and exactly when"; tennis,
  * table tennis and hockey are all "keep it away from the other bat". Writing
- * each one separately would mean eleven chances to get the maths slightly wrong
+ * each one separately would mean ten chances to get the maths slightly wrong
  * rather than four, and the difference between those sports really is the
  * numbers — a table tennis ball is not a hockey puck with a different name
  * once it is moving at twice the speed off a bat a third the size.
@@ -25,12 +24,8 @@ import Hockey from './sports/Hockey.jsx'
 
 const SPORTS = [
   {
-    id: 'football', name: 'Football', icon: '⚽', kind: 'penalty',
-    blurb: 'A shootout. Run-up, power, placement, then you go in goal.',
-  },
-  {
-    id: 'tennis', name: 'Tennis', icon: '🎾', kind: 'tennis',
-    blurb: 'A full game. Move them around, and mind the lines.',
+    id: 'football', name: 'Football', icon: '⚽', kind: 'soccer',
+    blurb: 'A full ninety minutes. Pass, shoot, defend a lead.',
   },
   {
     id: 'pingpong', name: 'Table Tennis', icon: '🏓', kind: 'tabletennis',
@@ -94,9 +89,8 @@ export default function SportsMania({ onDone }) {
   const [sport, setSport] = useState(null)
 
   if (sport) {
-    if (sport.kind === 'penalty') return <Football onDone={onDone} />
+    if (sport.kind === 'soccer') return <SoccerMatch onDone={onDone} />
     if (sport.kind === 'f1') return <GrandPrix onDone={onDone} />
-    if (sport.kind === 'tennis') return <Tennis onDone={onDone} />
     if (sport.kind === 'tabletennis') return <TableTennis onDone={onDone} />
     if (sport.kind === 'volleyball') return <Volleyball onDone={onDone} />
     if (sport.kind === 'hockey') return <Hockey onDone={onDone} />

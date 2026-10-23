@@ -38,7 +38,7 @@ begin
   perform ok('a new child has no play tokens',
     (select play_tokens from kids where id = 'e4a44444-0000-0000-0000-000000000001') = 0);
 
-  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'tap', 100);
+  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'memory', 100);
   perform ok('with no token there is no game',
     (res->>'ok')::boolean = false and res->>'reason' = 'no_tokens');
   perform ok('and no currency appeared',
@@ -71,12 +71,12 @@ do $$
 declare res jsonb;
 begin
   perform become('e3a33333-3333-3333-3333-333333333333');
-  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'tap', 999999999);
+  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'memory', 999999999);
   perform ok('an absurd score is clamped to 100', (res->>'score')::int = 100);
   perform ok('so the very best a game can pay is five', (res->>'coins')::int = 5);
   perform ok('the token was spent', (res->>'tokens_left')::int = 0);
 
-  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'tap', 50);
+  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'memory', 50);
   perform ok('and a spent token cannot be spent twice',
     (res->>'ok')::boolean = false and res->>'reason' = 'no_tokens');
 end $$;
@@ -140,7 +140,7 @@ begin
   -- Another family's child is not yours to play for.
   perform become('11111111-1111-1111-1111-111111111111');
   begin
-    perform play_minigame('e4a44444-0000-0000-0000-000000000001', 'tap', 100);
+    perform play_minigame('e4a44444-0000-0000-0000-000000000001', 'memory', 100);
     raise exception 'FAIL played a game for another family''s child';
   exception when others then
     if sqlerrm like 'FAIL%' then raise; end if;

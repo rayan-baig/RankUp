@@ -321,7 +321,7 @@ begin
     'stack', 'memory', 'chain', 'lights', 'catch',
     'snake', 'merge', 'bricks', 'sweeper', 'sky', 'four', 'slide',
     'sports', 'blocks', 'sweets', 'impostor', 'turbo',
-    'track', 'wildfire', 'royal'
+    'track', 'wildfire', 'royal', 'tennis'
   ) then
     return jsonb_build_object('ok', false, 'reason', 'no_game');
   end if;

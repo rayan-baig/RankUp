@@ -23,6 +23,7 @@ import BlockDrop from '../../components/games/BlockDrop.jsx'
 import SweetSwap from '../../components/games/SweetSwap.jsx'
 import Impostor from '../../components/games/Impostor.jsx'
 import Trackstar from '../../components/games/Trackstar.jsx'
+import TennisTour from '../../components/games/TennisTour.jsx'
 import Wildfire from '../../components/games/Wildfire.jsx'
 import RoyalDraw from '../../components/games/RoyalDraw.jsx'
 import { Screen, Card, Button, SectionTitle, Banner, Stat, Chip, EmptyState } from '../../components/ui.jsx'
@@ -47,6 +48,7 @@ const COMPONENTS = {
   sweets: SweetSwap,
   impostor: Impostor,
   track: Trackstar,
+  tennis: TennisTour,
   wildfire: Wildfire,
   royal: RoyalDraw,
 }
@@ -150,6 +152,8 @@ export default function KidArcade() {
           <div className="text-xs text-muted">{g.blurb}</div>
           <div className="text-xs text-muted mt-0.5">
             About {g.minutes} {g.minutes === 1 ? 'minute' : 'minutes'}
+            {/* Everything else here works with no signal. Say when one does not. */}
+            {g.needsNet && ' · needs the internet'}
           </div>
         </div>
         {bests[g.id] > 0
