@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import AimShot from './sports/AimShot.jsx'
-import Rally from './sports/Rally.jsx'
 import GrandPrix from './sports/GrandPrix.jsx'
-import Penalty from './Penalty.jsx'
+import Football from './sports/Football.jsx'
+import Tennis from './sports/Tennis.jsx'
+import TableTennis from './sports/TableTennis.jsx'
+import Volleyball from './sports/Volleyball.jsx'
+import Hockey from './sports/Hockey.jsx'
 
 /**
  * SportsMania: eleven sports behind one card.
@@ -23,31 +26,23 @@ import Penalty from './Penalty.jsx'
 const SPORTS = [
   {
     id: 'football', name: 'Football', icon: '⚽', kind: 'penalty',
-    blurb: 'Five penalties each way.',
+    blurb: 'A shootout. Run-up, power, placement, then you go in goal.',
   },
   {
-    id: 'tennis', name: 'Tennis', icon: '🎾', kind: 'rally',
-    blurb: 'Best of five games on grass.',
-    paddle: 62, speed: 4.1, foeSkill: 0.78, upTo: 5, puck: 8,
-    surface: 'color-mix(in srgb, var(--good) 14%, transparent)',
+    id: 'tennis', name: 'Tennis', icon: '🎾', kind: 'tennis',
+    blurb: 'A full game. Move them around, and mind the lines.',
   },
   {
-    id: 'pingpong', name: 'Table Tennis', icon: '🏓', kind: 'rally',
-    blurb: 'Small bat, fast ball, first to seven.',
-    paddle: 44, speed: 5.4, foeSkill: 0.84, upTo: 7, puck: 6,
-    surface: 'color-mix(in srgb, var(--accent) 16%, transparent)',
+    id: 'pingpong', name: 'Table Tennis', icon: '🏓', kind: 'tabletennis',
+    blurb: 'Read the spin, pick the stroke. First to eleven.',
   },
   {
-    id: 'hockey', name: 'Ice Hockey', icon: '🏒', kind: 'rally',
-    blurb: 'Heavy puck, wide stick, first to five.',
-    paddle: 76, speed: 4.6, foeSkill: 0.7, upTo: 5, puck: 11,
-    surface: 'color-mix(in srgb, #38bdf8 18%, transparent)',
+    id: 'hockey', name: 'Ice Hockey', icon: '🏒', kind: 'hockey',
+    blurb: 'Six breakaways. Beat the defender, then the goalie.',
   },
   {
-    id: 'volleyball', name: 'Volleyball', icon: '🏐', kind: 'rally',
-    blurb: 'Big ball over the net, first to five.',
-    paddle: 84, speed: 3.8, foeSkill: 0.68, upTo: 5, puck: 13,
-    surface: 'color-mix(in srgb, #f59e0b 16%, transparent)',
+    id: 'volleyball', name: 'Volleyball', icon: '🏐', kind: 'volleyball',
+    blurb: 'Bump, set, spike — past a block that moves.',
   },
   {
     id: 'basketball', name: 'Basketball', icon: '🏀', kind: 'aim',
@@ -99,9 +94,12 @@ export default function SportsMania({ onDone }) {
   const [sport, setSport] = useState(null)
 
   if (sport) {
-    if (sport.kind === 'penalty') return <Penalty onDone={onDone} />
+    if (sport.kind === 'penalty') return <Football onDone={onDone} />
     if (sport.kind === 'f1') return <GrandPrix onDone={onDone} />
-    if (sport.kind === 'rally') return <Rally sport={sport} onDone={onDone} />
+    if (sport.kind === 'tennis') return <Tennis onDone={onDone} />
+    if (sport.kind === 'tabletennis') return <TableTennis onDone={onDone} />
+    if (sport.kind === 'volleyball') return <Volleyball onDone={onDone} />
+    if (sport.kind === 'hockey') return <Hockey onDone={onDone} />
     return <AimShot sport={sport} onDone={onDone} />
   }
 
