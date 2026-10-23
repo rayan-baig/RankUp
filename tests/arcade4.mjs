@@ -1,15 +1,18 @@
 /**
- * SportsMania, Turbo Ball, Block Drop, Sweet Swap and Find the Impostor,
- * played in a real browser.
+ * SportsMania, Turbo Ball, Block Drop and Find the Impostor, played in a
+ * real browser.
  *
- * The generators behind the last two are checked exhaustively in
+ * Sweet Swap and Trackstar used to be here too. They are supplied HTML
+ * games now rather than React, so they are tested through their frame in
+ * tests/embedded.mjs instead.
+ *
+ * The generator behind the impostor rounds is checked exhaustively in
  * tests/sweets.mjs; what is checked here is the part maths cannot prove —
  * that each one opens, responds to a tap, and reaches an ending that pays.
  * A game that cannot be finished costs a child a token they earned by doing
  * a chore, which makes it worse than a game that does not exist.
  */
 import { launch, reporter, finish, SHOT_DIR, setUpFamily, asKid, asParent, readState, setKidInDatabase } from './helpers.mjs'
-import { SIZE, findMatches, swapped, adjacent } from '../src/components/games/sweetBoard.js'
 
 const { browser, page, errors } = await launch()
 const { fails, pass, fail } = reporter()
@@ -160,64 +163,6 @@ for (let i = 0; i < 90; i += 1) {
 await page.screenshot({ path: `${SHOT_DIR}/game-blocks.png` })
 await ended() ? pass('and it reaches an ending') : fail('Block Drop ends', (await text()).slice(0, 160))
 
-console.log('\n=== Sweet Swap ===')
-await playGame('Sweet Swap')
-;(await text()).includes('moves left')
-  ? pass('it opens')
-  : fail('Sweet Swap opens', (await text()).slice(0, 160))
-const movesLeft = async () => Number((await text()).match(/(\d+) moves left/)?.[1] ?? -1)
-const start = await movesLeft()
-start === 20 ? pass('twenty moves to spend') : fail('move count', String(start))
-
-/*
- * Find a swap that really matches, rather than tapping pairs and hoping.
- * The board is readable from the aria-labels, and the game's own logic says
- * which swap is legal — so this plays the move a person would see, and a
- * failure here means the game refused a move that its own rules allow.
- */
-const readBoard = () => page.evaluate(() =>
-  [...document.querySelectorAll('button[aria-label^="Row"]')].map((b) => b.textContent))
-const grid = await readBoard()
-const kinds = [...new Set(grid)]
-const asNumbers = grid.map((g) => kinds.indexOf(g))
-
-let move = null
-for (let i = 0; i < asNumbers.length && !move; i += 1) {
-  for (const j of [i + 1, i + SIZE]) {
-    if (j >= asNumbers.length) continue
-    if (!adjacent(i, j)) continue
-    if (findMatches(swapped(asNumbers, i, j)).size) { move = [i, j]; break }
-  }
-}
-move
-  ? pass(`the board has a legal move in it (${move.join(' and ')})`)
-  : fail('a legal move exists', 'the board arrived with no move on it')
-
-if (move) {
-  await page.locator('button[aria-label^="Row"]').nth(move[0]).click()
-  await page.locator('button[aria-label^="Row"]').nth(move[1]).click()
-  await page.waitForTimeout(1400)
-  const after = await movesLeft()
-  after === start - 1
-    ? pass(`playing it costs exactly one move (${start} → ${after})`)
-    : fail('a swap costs one move', `${start} → ${after}`)
-
-  const score = Number((await text()).match(/(\d+) cleared/)?.[1] ?? 0)
-  score >= 3
-    ? pass(`and at least three sweets went (${score} cleared)`)
-    : fail('sweets clear', `${score} cleared`)
-}
-
-// And the other half of the rule: a swap that matches nothing is free.
-const before2 = await movesLeft()
-await page.locator('button[aria-label^="Row"]').nth(0).click()
-await page.locator('button[aria-label^="Row"]').nth(SIZE * 3).click()
-await page.waitForTimeout(600)
-;(await movesLeft()) === before2
-  ? pass('and tapping two that are not touching costs nothing')
-  : fail('a non-move is free', `${before2} → ${await movesLeft()}`)
-await page.screenshot({ path: `${SHOT_DIR}/game-sweets.png` })
-
 console.log('\n=== Find the Impostor ===')
 await playGame('Find the Impostor')
 const meeting = await text()
@@ -275,9 +220,21 @@ for (let i = 0; i < 90; i += 1) {
     // eslint-disable-next-line no-await-in-loop
     await pickUp.first().click().catch(() => {})
   } else {
+    /*
+     * A card in your hand, not just any button with a space in its label:
+     * the hub's game tiles carry spelled-out labels too, and picking the
+     * last of those clicked a tile instead of playing a card. Unplayable
+     * cards are disabled, so those are skipped too — clicking one does
+     * nothing and the loop would spin until it ran out.
+     */
     // eslint-disable-next-line no-await-in-loop
-    const playable = page.locator('button[aria-label*=" "]:not([disabled])')
-      .filter({ hasNotText: /pick up|Give up/ })
+    const playable = page.locator(
+      'button[aria-label^="red "]:not([disabled]), '
+      + 'button[aria-label^="yellow "]:not([disabled]), '
+      + 'button[aria-label^="green "]:not([disabled]), '
+      + 'button[aria-label^="blue "]:not([disabled]), '
+      + 'button[aria-label^="wild "]:not([disabled])',
+    )
     // eslint-disable-next-line no-await-in-loop
     await playable.last().click({ timeout: 1200 }).catch(() => {})
   }
@@ -288,22 +245,6 @@ await page.screenshot({ path: `${SHOT_DIR}/game-wildfire.png` })
 await ended()
   ? pass('somebody goes out and the hand settles up')
   : fail('Wildfire ends', (await text()).slice(0, 220))
-
-console.log('\n=== Trackstar ===')
-await playGame('Trackstar')
-;(await text()).includes('dodged')
-  ? pass('it opens')
-  : fail('Trackstar opens', (await text()).slice(0, 160))
-await page.getByRole('button', { name: 'Left' }).click()
-await page.getByRole('button', { name: 'Jump' }).click()
-await page.getByRole('button', { name: 'Right' }).click()
-pass('it steers and jumps without throwing')
-await page.waitForTimeout(3000)
-const dodged = Number((await text()).match(/(\d+) dodged/)?.[1] ?? -1)
-dodged >= 0
-  ? pass(`obstacles are arriving (${dodged} dealt with so far)`)
-  : fail('things arrive', (await text()).slice(0, 160))
-await page.screenshot({ path: `${SHOT_DIR}/game-track.png` })
 
 console.log('\n=== Turbo Ball ===')
 await playGame('Turbo Ball')
