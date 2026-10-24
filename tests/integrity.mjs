@@ -87,9 +87,15 @@ await page.evaluate(() => {
 })
 await page.reload({ waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(900)
-;(await page.getByText(/Hi Ava/).count()) > 0
+/*
+ * The home screen leads with the child's name as its heading. It used to
+ * read "Hi Ava" and the design moved it into the header card, so this
+ * looks for the heading rather than the old greeting — still proof the
+ * screen rendered with a real child in it rather than blanking.
+ */
+;(await page.getByRole('heading', { name: 'Ava' }).count()) > 0
   ? pass('falls back to the first kid instead of rendering nothing')
-  : fail('falls back to the first kid', 'no greeting rendered')
+  : fail('falls back to the first kid', `screen read: ${(await page.evaluate(() => document.body.innerText)).slice(0, 120)}`)
 
 console.log('\n=== A reviewed photo is destroyed, not retained ===')
 // This is now the stronger guarantee: the photo goes at the moment of the
