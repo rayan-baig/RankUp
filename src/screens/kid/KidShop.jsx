@@ -2,6 +2,7 @@ import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import { formatXp } from '../../lib/xp.js'
 import { relativeTime } from '../../lib/dates.js'
 import { Screen, Card, Button, SectionTitle, EmptyState, Stat, Chip } from '../../components/ui.jsx'
+import HeroArt from '../../components/HeroArt.jsx'
 import { isMarketOpen, nextOpeningLabel } from '../../data/marketSkins.js'
 import { navigate } from '../../lib/router.js'
 
@@ -15,8 +16,12 @@ export default function KidShop() {
 
   return (
     <Screen>
-      <h1 className="font-display text-2xl font-extrabold mb-1">Rewards</h1>
-      <p className="text-sm text-muted mb-3">Spend your {theme.currency.name} on things your parent set up.</p>
+      <HeroArt
+        slot="hero-rewards"
+        emblem="🎁"
+        title="Rewards"
+        sub={`Spend your ${theme.currency.name} on things your parent set up.`}
+      />
 
       <div className="flex gap-2 mb-4">
         <Stat icon={theme.currency.icon} value={formatXp(kid.coins)} label={`${theme.currency.name} in the bank`} tone="var(--accent)" />

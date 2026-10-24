@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import QuestCard from '../../components/QuestCard.jsx'
 import { Screen, SectionTitle, Tabs, EmptyState } from '../../components/ui.jsx'
+import HeroArt from '../../components/HeroArt.jsx'
 import { navigate } from '../../lib/router.js'
 
 const TABS = [
@@ -27,7 +28,12 @@ export default function KidQuests() {
 
   return (
     <Screen>
-      <h1 className="font-display text-2xl font-extrabold mb-3">Quests</h1>
+      <HeroArt
+        slot="hero-quests"
+        emblem="⚔️"
+        title="Quests"
+        sub="Do the job, photograph the proof, get it approved."
+      />
       <Tabs tabs={TABS.map((t) => ({ ...t, label: `${t.label} (${lists[t.id].length})` }))} value={tab} onChange={setTab} />
 
       {list.length === 0 ? (

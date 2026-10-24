@@ -28,6 +28,8 @@ import Wildfire from '../../components/games/Wildfire.jsx'
 import RoyalDraw from '../../components/games/RoyalDraw.jsx'
 import { Screen, Card, Button, SectionTitle, Banner, Stat, EmptyState, PageTitle, Segmented } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
+import HeroArt from '../../components/HeroArt.jsx'
+import { art } from '../../data/art.js'
 
 /** One colour per shelf, so the grid is scannable without artwork. */
 const TILE_TINT = {
@@ -168,6 +170,7 @@ export default function KidArcade() {
   const GameTile = (g) => {
     const best = bests[g.id] || 0
     const locked = tokens < 1
+    const picture = art(`game-${g.id}`)
     return (
       <button
         key={g.id}
@@ -192,12 +195,26 @@ export default function KidArcade() {
           className="grid place-items-center relative"
           style={{
             aspectRatio: '1 / 1',
-            background: `radial-gradient(circle at 50% 42%,
-              color-mix(in srgb, ${TILE_TINT[g.category] || 'var(--accent)'} 46%, transparent),
-              color-mix(in srgb, var(--bg) 85%, transparent) 72%)`,
+            // The game's own artwork once it exists; until then its shelf
+            // colour behind its emoji, which still tells the tiles apart.
+            background: picture
+              ? undefined
+              : `radial-gradient(circle at 50% 42%,
+                color-mix(in srgb, ${TILE_TINT[g.category] || 'var(--accent)'} 46%, transparent),
+                color-mix(in srgb, var(--bg) 85%, transparent) 72%)`,
           }}
         >
-          <span style={{ fontSize: 30, lineHeight: 1 }} aria-hidden="true">{g.icon}</span>
+          {picture
+            ? (
+              <img
+                src={picture}
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 w-full h-full"
+                style={{ objectFit: 'cover' }}
+              />
+            )
+            : <span style={{ fontSize: 30, lineHeight: 1 }} aria-hidden="true">{g.icon}</span>}
           {best === 0 && (
             <span
               className="absolute top-1.5 right-1.5 rounded-full font-bold"
@@ -227,13 +244,14 @@ export default function KidArcade() {
 
   return (
     <Screen>
-      <PageTitle
+      <HeroArt
+        slot="hero-arcade"
+        emblem="🕹️"
+        title="Arcade"
         sub={unlimited
           ? `${MINIGAMES.length} games. Play as much as you like — this is the demo.`
           : `${MINIGAMES.length} games. One token for every chore your parent approves.`}
-      >
-        Arcade
-      </PageTitle>
+      />
 
       <div className="flex gap-2 mb-4">
         <Stat
