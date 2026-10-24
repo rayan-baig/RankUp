@@ -237,7 +237,7 @@ export default function App() {
   return (
     <>
       {isParentArea ? <ParentBackground theme={parentTheme} /> : <ThemeBackground theme={kidTheme} glitch={glitch} />}
-      {!isParentArea && <WorldBackdrop path={route} />}
+      {!isParentArea && <WorldBackdrop path={route} theme={kidTheme} />}
 
       {/* Outside the boundary: if a screen crashes, the way out of the demo
           must still be on screen. */}

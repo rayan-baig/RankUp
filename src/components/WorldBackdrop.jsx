@@ -26,12 +26,23 @@ function slotFor(path) {
   return null
 }
 
-export default function WorldBackdrop({ path }) {
+export default function WorldBackdrop({ path, theme }) {
   const tab = slotFor(path || '')
   if (!tab) return null
 
   const world = artAny(`world-${tab}`, `hero-${tab}`)
   if (!world) return null
+
+  /*
+   * Some themes are light — Block Craft turns cream at level 101, and a
+   * few of the parent themes are light throughout. The worlds are all
+   * dark night scenes, and under a light theme that put dark artwork
+   * behind dark-on-light text: the wordmark and its strapline were
+   * unreadable. So a light theme gets a much heavier wash of its own
+   * background colour and a fainter picture. The world is still there,
+   * as a tint rather than a scene, and the words come back.
+   */
+  const light = theme?.mode === 'light'
 
   return (
     <>
@@ -48,6 +59,7 @@ export default function WorldBackdrop({ path }) {
           backgroundImage: `url(${world})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center top',
+          opacity: light ? 0.3 : 1,
         }}
       />
       <div
@@ -57,10 +69,15 @@ export default function WorldBackdrop({ path }) {
           // Enough of the page's own colour over the picture that white
           // text on glass still reads wherever the artwork is bright,
           // and heavier towards the bottom where the lists are longest.
-          background: `linear-gradient(180deg,
-            color-mix(in srgb, var(--bg) 30%, transparent) 0%,
-            color-mix(in srgb, var(--bg) 46%, transparent) 50%,
-            color-mix(in srgb, var(--bg) 68%, transparent) 100%)`,
+          background: light
+            ? `linear-gradient(180deg,
+                color-mix(in srgb, var(--bg) 76%, transparent) 0%,
+                color-mix(in srgb, var(--bg) 84%, transparent) 50%,
+                color-mix(in srgb, var(--bg) 92%, transparent) 100%)`
+            : `linear-gradient(180deg,
+                color-mix(in srgb, var(--bg) 30%, transparent) 0%,
+                color-mix(in srgb, var(--bg) 46%, transparent) 50%,
+                color-mix(in srgb, var(--bg) 68%, transparent) 100%)`,
         }}
       />
     </>
