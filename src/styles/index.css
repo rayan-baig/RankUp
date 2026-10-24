@@ -554,3 +554,53 @@
 @keyframes rankup-shutter { 0% { opacity: 0 } 12% { opacity: 0.9 } 100% { opacity: 0 } }
 @keyframes rankup-sweep   { from { width: 0 } to { width: 100% } }
 @keyframes rankup-fill    { from { width: 18% } to { width: 72% } }
+
+/*
+ * Atmosphere.
+ *
+ * The scene behind each theme is a parallax of flat shapes, which is the
+ * right base but reads as a printed backdrop on its own. These are the
+ * things that make a place feel like air: light that moves and dust
+ * that drifts. All of it is
+ * transform and opacity, which the compositor does on its own thread, so
+ * it costs nothing on a phone.
+ *
+ * Everything here stops dead under prefers-reduced-motion, handled by the
+ * global rule above rather than repeated per animation.
+ */
+@keyframes rankup-aurora-a {
+  0%   { transform: translate3d(-8%, -4%, 0) scale(1.1); opacity: 0.55; }
+  50%  { transform: translate3d(10%, 6%, 0) scale(1.35); opacity: 0.85; }
+  100% { transform: translate3d(-8%, -4%, 0) scale(1.1); opacity: 0.55; }
+}
+@keyframes rankup-aurora-b {
+  0%   { transform: translate3d(6%, 8%, 0) scale(1.25); opacity: 0.4; }
+  50%  { transform: translate3d(-9%, -6%, 0) scale(1.05); opacity: 0.7; }
+  100% { transform: translate3d(6%, 8%, 0) scale(1.25); opacity: 0.4; }
+}
+.atmos-aurora-a {
+  animation: rankup-aurora-a 26s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+.atmos-aurora-b {
+  animation: rankup-aurora-b 34s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+/* Dust rising. Each mote gets its own duration and delay inline. */
+@keyframes rankup-mote {
+  0%   { transform: translate3d(0, 0, 0); opacity: 0; }
+  10%  { opacity: var(--mote-peak, 0.7); }
+  85%  { opacity: var(--mote-peak, 0.7); }
+  100% { transform: translate3d(var(--mote-drift, 10px), -120vh, 0); opacity: 0; }
+}
+.atmos-mote {
+  position: absolute;
+  border-radius: 999px;
+  animation-name: rankup-mote;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+
+
