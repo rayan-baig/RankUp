@@ -26,6 +26,9 @@ import Trackstar from '../../components/games/Trackstar.jsx'
 import TennisTour from '../../components/games/TennisTour.jsx'
 import Wildfire from '../../components/games/Wildfire.jsx'
 import RoyalDraw from '../../components/games/RoyalDraw.jsx'
+import HoldEm from '../../components/games/HoldEm.jsx'
+import Blackjack from '../../components/games/Blackjack.jsx'
+import GoFish from '../../components/games/GoFish.jsx'
 import { Screen, Card, Button, SectionTitle, Banner, Stat, EmptyState, PageTitle, Segmented } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
 import HeroArt from '../../components/HeroArt.jsx'
@@ -64,6 +67,9 @@ const COMPONENTS = {
   tennis: TennisTour,
   wildfire: Wildfire,
   royal: RoyalDraw,
+  holdem: HoldEm,
+  blackjack: Blackjack,
+  gofish: GoFish,
 }
 
 /**
@@ -73,7 +79,7 @@ const COMPONENTS = {
  * the only thing standing between "a game you earn" and "a game instead of
  * doing anything", so the empty state points straight back at the quest list.
  *
- * With thirteen games a flat list stops being browsable, so this is a hub: one
+ * With twenty-four games a flat list stops being browsable, so this is a hub: one
  * game on the front that changes daily, shelves by the kind of game it is, and
  * every card saying roughly how long a round takes — because the real question
  * a child has is "have I got time for this before tea".

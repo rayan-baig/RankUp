@@ -137,6 +137,24 @@ begin
   perform ok('a game that does not exist is refused',
     (res->>'ok')::boolean = false and res->>'reason' = 'no_game');
 
+  -- The three card games, because this allow-list is exactly where a new
+  -- game goes wrong: the app ships it, the tile appears, the child plays
+  -- it, and the server quietly refuses to pay for it. That happened to
+  -- ten games at once, and it was invisible from the browser because a
+  -- refused game also never spends the token.
+  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'holdem', 60);
+  perform ok('hold''em is a game the server knows', (res->>'ok')::boolean = true);
+  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'blackjack', 60);
+  perform ok('and blackjack', (res->>'ok')::boolean = true);
+
+  set local role postgres;
+  update kids set play_tokens = 3 where id = 'e4a44444-0000-0000-0000-000000000001';
+  set local role app_user;
+  perform become('e3a33333-3333-3333-3333-333333333333');
+
+  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'gofish', 60);
+  perform ok('and go fish', (res->>'ok')::boolean = true);
+
   -- Another family's child is not yours to play for.
   perform become('11111111-1111-1111-1111-111111111111');
   begin
