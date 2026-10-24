@@ -27,8 +27,14 @@ const ago = (days) => Date.now() - days * day
 export function buildDemoFamily() {
   const run = (state, ...actions) => actions.reduce(reducer, state)
 
-  const ava = makeKid({ name: 'Ava', themeId: 'matrixblocks' })
-  const noah = makeKid({ name: 'Noah', themeId: 'matrixblocks' })
+  /*
+   * Block Craft, because it is the theme with the art finished: nine
+   * avatar forms, a world behind every tab, and the only theme whose
+   * later levels are a story rather than a recolour. A demo should show
+   * the product at its best, and this is where the product looks best.
+   */
+  const ava = makeKid({ name: 'Ava', themeId: 'blockcraft' })
+  const noah = makeKid({ name: 'Noah', themeId: 'blockcraft' })
 
   let s = createInitialState()
 
