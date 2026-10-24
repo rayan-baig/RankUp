@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="MTRX">
+  <!--
+    The MTRX mark: a bright M inside a dark bubble, with an orbit around it.
+
+    Three things keep it off the Gmail envelope the old one kept
+    evoking. The M is a folded prism — alternate faces catch the light,
+    so it reads as one piece of bent material rather than a flat
+    chevron. Its V drives deep, nearly to the baseline, instead of
+    sitting shallow in the middle like an envelope flap. And the orbit
+    carries three nodes, one per app, which is the whole point of the
+    company rather than decoration.
+
+    The bubble is near-black so the mark is the brightest thing in it.
+    Pure vector, no blur filters, so it survives being a favicon.
+  -->
+  <defs>
+    <linearGradient id="mx-bubble" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#131a4a"/>
+      <stop offset="50%" stop-color="#0b0f2e"/>
+      <stop offset="100%" stop-color="#2a0f55"/>
+    </linearGradient>
+    <radialGradient id="mx-inner" cx="28%" cy="14%" r="86%">
+      <stop offset="0%" stop-color="#5a7bff" stop-opacity="0.38"/>
+      <stop offset="55%" stop-color="#5a7bff" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.35"/>
+    </radialGradient>
+    <linearGradient id="mx-face" x1="0.08" y1="0" x2="0.95" y2="1">
+      <stop offset="0%" stop-color="#6ff0ff"/>
+      <stop offset="42%" stop-color="#4f8bff"/>
+      <stop offset="100%" stop-color="#c45cff"/>
+    </linearGradient>
+    <linearGradient id="mx-orbit" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#6ff0ff"/>
+      <stop offset="50%" stop-color="#8a7bff"/>
+      <stop offset="100%" stop-color="#d06cff"/>
+    </linearGradient>
+
+    <!-- The M as a shape, so gradients and facets can be poured in. -->
+    <mask id="mx-m">
+      <rect width="128" height="128" fill="#000"/>
+      <path d="M35 92 L35 41 L64 82 L93 41 L93 92"
+            fill="none" stroke="#fff" stroke-width="12.5"
+            stroke-linejoin="miter" stroke-miterlimit="10"/>
+    </mask>
+
+    <!-- The near half of the orbit: the part that passes in FRONT. -->
+    <mask id="mx-orbit-front">
+      <rect x="0" y="74" width="128" height="54" fill="#fff"/>
+    </mask>
+  </defs>
+
+  <rect x="2" y="2" width="124" height="124" rx="34" fill="url(#mx-bubble)"/>
+  <rect x="2" y="2" width="124" height="124" rx="34" fill="url(#mx-inner)"/>
+
+  <!-- Orbit, far half. -->
+  <g transform="rotate(-18 64 72)" opacity="0.6">
+    <ellipse cx="64" cy="72" rx="45" ry="16" fill="none" stroke="url(#mx-orbit)" stroke-width="2.2"/>
+    <circle cx="21.7" cy="66.5" r="3" fill="#6ff0ff"/>
+    <circle cx="98.5" cy="61.7" r="3" fill="#d06cff"/>
+  </g>
+
+  <!-- The M. -->
+  <g mask="url(#mx-m)">
+    <rect width="128" height="128" fill="url(#mx-face)"/>
+    <!-- Folded, not flat. The two outward faces turn toward the light,
+         the inward one turns away; it is the same geometry at two
+         different angles, which is all a fold ever is. -->
+    <polygon points="35,34 41.5,34 41.5,99 35,99" fill="#ffffff" opacity="0.28"/>
+    <polygon points="64,82 71,72 71,99 64,99" fill="#000000" opacity="0.24"/>
+    <polygon points="86.5,34 93,34 93,99 86.5,99" fill="#000000" opacity="0.14"/>
+    <polygon points="41.5,47 46,47 68,78 64,82" fill="#ffffff" opacity="0.4"/>
+  </g>
+
+  <!-- Orbit, near half — in front of the M, which is what sells it as an
+       orbit rather than a ring parked behind a letter. -->
+  <g transform="rotate(-18 64 72)" mask="url(#mx-orbit-front)">
+    <ellipse cx="64" cy="72" rx="45" ry="16" fill="none" stroke="url(#mx-orbit)" stroke-width="2.6"/>
+    <circle cx="70.6" cy="87.9" r="5.5" fill="#6ff0ff" opacity="0.3"/>
+    <circle cx="70.6" cy="87.9" r="3.4" fill="#9ff6ff"/>
+  </g>
+
+  <!-- An edge, so the bubble stops deliberately rather than just ending. -->
+  <rect x="2.75" y="2.75" width="122.5" height="122.5" rx="33.25"
+        fill="none" stroke="#7f93ff" stroke-opacity="0.3" stroke-width="1.5"/>
+</svg>
