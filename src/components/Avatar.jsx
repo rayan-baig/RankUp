@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { SparkleBurst } from './ui.jsx'
 // The ladder lives in a plain module so it can be tested without a browser.
 import { avatarTier, nextTierLevel, tiersFor, DEFAULT_TIERS } from '../lib/avatarTiers.js'
+import { artAny } from '../data/art.js'
 
 /**
  * The avatar that grows with a child's level.
@@ -94,6 +95,16 @@ export default function Avatar({ theme, level = 1, size = 120, companion = false
   const [reacting, setReacting] = useState(false)
   const [burst, setBurst] = useState(0)
   const tier = avatarTier(level, theme)
+  /*
+   * The picture for this theme at this form, if one has been drawn. The
+   * per-form file wins; the theme's single portrait is the fallback; with
+   * neither, the generated character below is drawn instead. The art
+   * arrives a theme at a time, so all three states are normal.
+   */
+  const portrait = artAny(
+    `avatar-${theme?.id}-${tiersFor(theme)[tier - 1]}`,
+    `avatar-${theme?.id}`,
+  )
   const hues = theme?.avatar?.hues || ['#888', '#999', '#aaa', '#bbb', '#ccc']
   const colour = hues[Math.min(tier, hues.length) - 1]
   const motif = MOTIFS[theme?.avatar?.motif] || MOTIFS.block
@@ -159,14 +170,36 @@ export default function Avatar({ theme, level = 1, size = 120, companion = false
 
           <circle cx="50" cy="50" r="26" fill={c.surface || '#222'} stroke={colour} strokeWidth="1.4" />
 
-          <g transform="translate(50 48) scale(1.28)">{motif(colour)}</g>
+          {/*
+            The theme's own drawn character, where one has been supplied,
+            sitting inside the rings. The rings still count the forms, so
+            levelling up is still visible — the character is the same
+            picture at every form because that is what the artwork is.
+            Per-form pictures drop in the moment they exist: this looks
+            for avatar-<theme>-<level> first.
+          */}
+          {portrait ? (
+            <image
+              href={portrait}
+              x="26"
+              y="26"
+              width="48"
+              height="48"
+              preserveAspectRatio="xMidYMid meet"
+              clipPath={`circle(24px at 24px 24px)`}
+            />
+          ) : (
+            <>
+              <g transform="translate(50 48) scale(1.28)">{motif(colour)}</g>
 
-          {/* Eyes, so it reads as a character rather than an icon. */}
-          <g fill={c.bg || '#000'} opacity="0.85">
-            <circle cx="44" cy="47" r={reacting ? 1.4 : 2.2} />
-            <circle cx="56" cy="47" r={reacting ? 1.4 : 2.2} />
-          </g>
-          {reacting && <path d="M44 55 Q50 60 56 55" stroke={c.bg || '#000'} strokeWidth="1.6" fill="none" opacity="0.8" />}
+              {/* Eyes, so it reads as a character rather than an icon. */}
+              <g fill={c.bg || '#000'} opacity="0.85">
+                <circle cx="44" cy="47" r={reacting ? 1.4 : 2.2} />
+                <circle cx="56" cy="47" r={reacting ? 1.4 : 2.2} />
+              </g>
+              {reacting && <path d="M44 55 Q50 60 56 55" stroke={c.bg || '#000'} strokeWidth="1.6" fill="none" opacity="0.8" />}
+            </>
+          )}
 
           {tier >= 4 && (
             <g opacity="0.85">
