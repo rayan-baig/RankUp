@@ -60,29 +60,72 @@ export default function KidProfile() {
         slot="hero-you"
         emblem="🙂"
         title="Your profile"
-        sub="Your level, your badges, and what you have earned."
+        sub="Your level, your forms, and what you have earned."
       />
 
       <KidPot kidId={kid.id} />
 
-      <Card className="mb-3 text-center">
-        <div className="flex justify-center mb-2">
-          <Avatar theme={theme} level={level} size={128} companion={Boolean(theme.evolution?.companion)} frame={elite ? kid.profileFrame : 'none'} />
+      {/*
+        The design puts the avatar beside the name rather than above it,
+        with the streak in its own box, and then the figures as a list of
+        rows instead of three tiles. Rows win here: "Chores completed 24"
+        reads as a fact about you, which is what a profile is for, while
+        three tiles read as a dashboard.
+      */}
+      <Card className="mb-3">
+        <div className="flex items-center gap-3">
+          <Avatar
+            theme={theme}
+            level={level}
+            size={76}
+            companion={Boolean(theme.evolution?.companion)}
+            frame={elite ? kid.profileFrame : 'none'}
+          />
+          <div className="min-w-0 flex-1">
+            <h2 className="font-display text-xl font-extrabold truncate">{kid.name}</h2>
+            <p className="text-xs text-muted truncate">
+              Level {level} · {formatXp(kid.xp)} XP
+            </p>
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              <Chip tone="var(--accent)">Form {tier} of {tiersFor(theme).length}</Chip>
+              {theme.evolution && (
+                <Chip tone="var(--accent-2)">✦ {theme.evolution.label}</Chip>
+              )}
+            </div>
+          </div>
+          <div
+            className="text-center shrink-0 px-2.5 py-2 rounded-xl"
+            style={{
+              background: 'color-mix(in srgb, var(--warn) 14%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--warn) 42%, transparent)',
+            }}
+          >
+            <div className="text-lg leading-none" aria-hidden="true">🔥</div>
+            <div className="font-display font-extrabold text-lg leading-none mt-0.5">{kid.streak.count}</div>
+            <div className="text-[9px] uppercase tracking-wider text-muted">Day streak</div>
+          </div>
         </div>
-        <h2 className="font-display text-xl font-extrabold">{kid.name}</h2>
-        <p className="text-sm text-muted">
-          Level {level} · Form {tier} of {tiersFor(theme).length} · {formatXp(kid.xp)} lifetime XP
-        </p>
-        {theme.evolution && (
-          <Chip tone="var(--accent-2)" className="mt-2">✦ {theme.evolution.label} unlocked</Chip>
-        )}
-      </Card>
 
-      <div className="flex gap-2 mb-3">
-        <Stat icon="✅" value={stats.approved} label="Quests approved" tone="var(--good)" />
-        <Stat icon="↩️" value={stats.rejected} label="Sent back" tone="var(--warn)" />
-        <Stat icon="🔥" value={kid.streak.count} label="Day streak" />
-      </div>
+        <div className="mt-3">
+          {[
+            ['Chores completed', stats.approved, 'var(--good)'],
+            ['Sent back to redo', stats.rejected, 'var(--warn)'],
+            ['Total XP', formatXp(kid.xp), 'var(--accent)'],
+            // Not the form again — that is already on the chip two lines
+            // up, and a profile repeating itself looks like a mistake.
+            ['Playing as', theme.name, 'var(--accent-2)'],
+          ].map(([label, value, tone]) => (
+            <div
+              key={label}
+              className="flex items-center justify-between gap-3 py-2"
+              style={{ borderTop: '1px solid color-mix(in srgb, var(--line) 70%, transparent)' }}
+            >
+              <span className="text-sm text-muted">{label}</span>
+              <span className="font-display font-extrabold text-sm" style={{ color: tone }}>{value}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
 
       {/* Above the avatar forms on purpose: this is the part with a next step
           in it, and the part a child will come back to look at. */}

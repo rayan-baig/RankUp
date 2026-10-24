@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import QuestCard from '../../components/QuestCard.jsx'
-import { Screen, SectionTitle, Tabs, EmptyState } from '../../components/ui.jsx'
+import { Screen, SectionTitle, Segmented, EmptyState } from '../../components/ui.jsx'
 import HeroArt from '../../components/HeroArt.jsx'
 import { navigate } from '../../lib/router.js'
 
 const TABS = [
-  { id: 'todo', label: 'To do' },
-  { id: 'waiting', label: 'Waiting' },
-  { id: 'done', label: 'Done' },
+  { id: 'todo', name: 'To Do' },
+  { id: 'waiting', name: 'Waiting' },
+  { id: 'done', name: 'Done' },
 ]
 
 export default function KidQuests() {
@@ -32,9 +32,16 @@ export default function KidQuests() {
         slot="hero-quests"
         emblem="⚔️"
         title="Quests"
-        sub="Do the job, photograph the proof, get it approved."
+        sub="Complete quests. Earn XP. Unlock rewards."
       />
-      <Tabs tabs={TABS.map((t) => ({ ...t, label: `${t.label} (${lists[t.id].length})` }))} value={tab} onChange={setTab} />
+      {/* The design counts each pill, so you can see what is waiting
+          without opening it. */}
+      <Segmented
+        options={TABS.map((t) => ({ ...t, name: `${t.name} (${lists[t.id].length})` }))}
+        value={tab}
+        onChange={setTab}
+        label="Which quests"
+      />
 
       {list.length === 0 ? (
         <EmptyState

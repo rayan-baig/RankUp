@@ -30,19 +30,41 @@ export default function QuestCard({ quest, onClick, currency, showStatus = true 
       style={quest.status === 'redo' ? { borderColor: 'var(--warn)' } : undefined}
     >
       <div className="flex items-start gap-3">
-        <span className="text-xl leading-none mt-0.5" aria-hidden="true">{cat?.icon || '✅'}</span>
+        {/* The design gives the icon its own lit tile rather than letting it
+            float next to the words, which is what makes the rows scan as a
+            list instead of a wall of text. */}
+        <span
+          className="shrink-0 grid place-items-center"
+          aria-hidden="true"
+          style={{
+            width: 42,
+            height: 42,
+            borderRadius: 12,
+            fontSize: 20,
+            background: 'color-mix(in srgb, var(--accent) 16%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--accent) 34%, var(--line))',
+            boxShadow: 'inset 0 0 20px -12px var(--accent)',
+          }}
+        >
+          {cat?.icon || '✅'}
+        </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-display font-bold text-[15px] leading-snug">{quest.title}</h3>
-            <span className="shrink-0 text-right">
-              <span className="block font-display font-extrabold text-sm" style={{ color: diff.color }}>
-                +{quest.xp ?? diff.xp} XP
-              </span>
-              {currency && (
-                <span className="block text-[11px] text-muted">
-                  {currency.icon} ~{Math.max(1, Math.round((quest.xp ?? diff.xp) / 5))}
+            <span className="shrink-0 text-right flex items-center gap-1.5">
+              <span>
+                <span className="block font-display font-extrabold text-sm" style={{ color: diff.color }}>
+                  +{quest.xp ?? diff.xp} XP
                 </span>
-              )}
+                {currency && (
+                  <span className="block text-[11px] text-muted">
+                    {currency.icon} ~{Math.max(1, Math.round((quest.xp ?? diff.xp) / 5))}
+                  </span>
+                )}
+              </span>
+              {/* The design ends every row with one, so a row reads as
+                  something you open rather than something you have read. */}
+              <span className="text-muted" style={{ fontSize: 18, lineHeight: 1 }}>›</span>
             </span>
           </div>
 
