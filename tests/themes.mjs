@@ -164,14 +164,24 @@ for (const theme of KID_THEMES) {
 
   const text = await page.evaluate(() => document.body.innerText)
   const crashed = /went wrong/i.test(text)
-  // The currency name is theme-specific and appears on the home screen, so it
-  // is the cheapest proof that this theme's data actually reached the page
-  // rather than the default's.
-  const applied = text.toLowerCase().includes(theme.currency.name.toLowerCase())
+  // Proof that this theme's data reached the page rather than the default's.
+  //
+  // This used to look for the currency name, which was on the home screen
+  // until the redesign moved it — so the check passed for a year and then
+  // failed for all fifteen themes at once without a single theme being
+  // broken. The accent variable cannot drift that way: it is what every
+  // themed pixel on the screen is actually drawn from, so if it is right
+  // the theme is applied, wherever the words happen to sit this month.
+  const accent = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--accent').trim().toLowerCase(),
+  )
+  const want = theme.colors.accent.toLowerCase()
+  const named = text.toLowerCase().includes(theme.name.toLowerCase())
 
   if (crashed) fail(`${theme.name} renders`, text.slice(0, 100))
-  else if (!applied) fail(`${theme.name} applied`, `no "${theme.currency.name}" on screen`)
-  else pass(`${theme.name} renders, with its own currency`)
+  else if (accent !== want) fail(`${theme.name} applied`, `--accent is ${accent || '(unset)'}, wanted ${want}`)
+  else if (!named) fail(`${theme.name} applied`, `theme name not shown anywhere on screen`)
+  else pass(`${theme.name} renders, in its own colours`)
 }
 
 await page.screenshot({ path: `${SHOT_DIR}/theme-last.png` })

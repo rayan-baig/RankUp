@@ -154,14 +154,35 @@ export default function KidProfile() {
         </div>
       </Card>
 
+      {/*
+        The story so far. Every theme is a place with something going on in
+        it, not a colour scheme — so the profile says what that is: the
+        premise, where the child has got to, and where it goes next. The
+        "where you are" line is the world's own text when one has been
+        reached and the theme's premise before that.
+      */}
+      <SectionTitle>Your story</SectionTitle>
+      <Card className="mb-3">
+        <p className="text-sm">{KID_THEME_MAP[kid.themeId]?.story}</p>
+        {theme.evolution?.story && (
+          <p className="text-sm mt-2 pt-2" style={{ borderTop: '1px solid var(--line)' }}>
+            <strong style={{ color: 'var(--accent-2)' }}>{theme.evolution.label}.</strong>{' '}
+            {theme.evolution.story}
+          </p>
+        )}
+      </Card>
+
       {evolution && (
         <Card className="mb-3" style={{ borderColor: 'var(--accent-2)' }}>
-          <SectionTitle>Secret evolution ahead</SectionTitle>
+          <SectionTitle>What happens next</SectionTitle>
           <p className="text-sm">
             Reach level {evolution.level} and {KID_THEME_MAP[kid.themeId].name} changes into{' '}
             <strong style={{ color: 'var(--accent-2)' }}>{evolution.label}</strong>
             {evolution.companion ? ' — and something joins you.' : '.'}
           </p>
+          {/* Deliberately not the next world's story text: knowing the name
+              of what is coming is the hook, being told what happens in it
+              is the spoiler. */}
         </Card>
       )}
 

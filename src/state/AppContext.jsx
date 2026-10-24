@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState, useLayoutEffect } from 'react'
 import { reducer, isElite, guildCapacity, activeLockout } from './reducer.js'
 import { createInitialState, TIERS } from './initialState.js'
-import { buildDemoFamily } from '../lib/demoFamily.js'
+import { buildDemoFamily, DEMO_VERSION } from '../lib/demoFamily.js'
 import { loadState, saveState, clearState, purgeOrphanPhotos, getPhoto, putPhoto } from '../lib/storage.js'
 import { createSyncEngine, SYNC_STATUS } from '../lib/sync/syncEngine.js'
 import { queueChanges, recordServerState } from '../lib/sync/shadow.js'
@@ -20,16 +20,21 @@ function init() {
   if (!saved) return createInitialState()
 
   /*
-   * A saved look-around is rebuilt rather than restored.
+   * A saved look-around is rebuilt when it is out of date, and otherwise
+   * restored like anything else.
    *
-   * The demo family is disposable by definition — nothing in it belongs to
-   * anybody, and the banner across the top says so. But it was being
-   * reloaded from storage like real data, so somebody who opened the demo
-   * once kept that exact copy for ever: a new theme, a new game, a changed
-   * screen, none of it reached them, and from their side the app simply
-   * had not changed. That is a bad way to find out your demo is stale.
+   * The demo family is disposable by definition, and a visitor who opened
+   * it once must not keep that exact copy for ever: a new theme, a new
+   * game, a changed screen, none of it would reach them and from their
+   * side the app simply had not changed.
+   *
+   * But rebuilding on EVERY load is the opposite mistake, and it is worse,
+   * because it is the one the visitor can see. Everything they did in the
+   * demo vanished on the next load — pick a theme, reload, back to the
+   * default. The version stamp draws the line in the right place: stale
+   * demos are replaced, a demo of the current build is left alone.
    */
-  if (saved.demo) return buildDemoFamily()
+  if (saved.demo && saved.demoVersion !== DEMO_VERSION) return buildDemoFamily()
 
   // Merge onto a fresh state so a new field added in a later version never
   // crashes an app that is loading data saved by an older version.

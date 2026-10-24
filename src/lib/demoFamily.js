@@ -21,6 +21,12 @@ import { DIFFICULTY } from './xp.js'
 
 const day = 86400000
 
+/**
+ * Bump this whenever what the demo contains changes, so saved copies of
+ * the old one are rebuilt instead of lingering for ever.
+ */
+export const DEMO_VERSION = 3
+
 /** Wind a timestamp back, so the demo does not look like it started today. */
 const ago = (days) => Date.now() - days * day
 
@@ -172,6 +178,17 @@ export function buildDemoFamily() {
      * a stranger's demo chores waiting to upload into it.
      */
     demo: true,
+    /*
+     * Which build of the demo this copy came from.
+     *
+     * Bump it whenever the demo itself changes — a new theme, a new game,
+     * a different set of chores — and every saved demo rebuilds on the
+     * next load. Without it the only way to guarantee a visitor saw the
+     * current demo was to rebuild on every load, which threw away
+     * everything they had just done in it: change the theme, reload, and
+     * it was Block Craft again.
+     */
+    demoVersion: DEMO_VERSION,
     syncQueue: [],
     noticeQueue: [],
     /*

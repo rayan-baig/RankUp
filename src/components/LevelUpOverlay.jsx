@@ -47,9 +47,17 @@ export default function LevelUpOverlay({ levelUp, kid, theme, onClose }) {
           </p>
         )}
         {evolutionHit && (
-          <p className="text-sm mb-2" style={{ color: theme.colors.accent2 }}>
-            ✦ {evolutionHit.label} unlocked{evolutionHit.companion ? ' — and something has joined you.' : '.'}
-          </p>
+          <>
+            <p className="text-sm mb-1" style={{ color: theme.colors.accent2 }}>
+              ✦ {evolutionHit.label} unlocked{evolutionHit.companion ? ' — and something has joined you.' : '.'}
+            </p>
+            {/* The line of story that goes with the world. This is the one
+                moment it lands hardest: the screen has just changed colour
+                around the child and this says what the new place is. */}
+            {evolutionHit.story && (
+              <p className="text-xs text-muted mb-2 max-w-[22rem] mx-auto">{evolutionHit.story}</p>
+            )}
+          </>
         )}
         {!newForm && !evolutionHit && upcoming && (
           <p className="text-xs text-muted mb-2">Next secret at level {upcoming.level}.</p>

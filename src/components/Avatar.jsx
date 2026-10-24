@@ -72,7 +72,7 @@ const MOTIFS = {
   ),
 }
 
-/** Block Craft's secret companion, revealed by the level 51 evolution. */
+/** Block Craft's secret companion, revealed by the Nether worlds. */
 function Boarling({ colors }) {
   return (
     <g transform="translate(24 22) scale(0.85)" className="anim-float">

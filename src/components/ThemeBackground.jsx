@@ -3,9 +3,12 @@ import { useId, useMemo } from 'react'
 /**
  * The animated scene behind every kid screen.
  *
- * One component, one `scene` prop, 19 scenes (15 themes + Block Craft's 4
- * level-gated evolutions). Everything is inline SVG + CSS so there are no image
- * files to load and it re-colours itself from the active theme.
+ * One component, one `scene` prop, 19 scenes (15 themes + Block Craft's
+ * level-gated worlds), plus a `sky` prop that hangs a sun, a moon, stars,
+ * an eclipse, rings, a comet or a storm over any of them — which is how
+ * the other fourteen themes travel without losing their own shapes.
+ * Everything is inline SVG + CSS so there are no image files to load and
+ * it re-colours itself from the active theme.
  */
 
 /** Deterministic pseudo-random so a scene doesn't reshuffle on every render. */
@@ -495,6 +498,211 @@ function Handheld({ c }) {
   )
 }
 
+/* ---------------------------------------------------------------- */
+
+/**
+ * What is in the sky.
+ *
+ * Block Craft travels by changing scene outright — the Overworld, the
+ * Nether and the End are three different drawings. The other fourteen
+ * themes cannot do that: a theme IS its shape language, and a Coquette
+ * world built out of Cyber Grid wireframes stops being Coquette.
+ *
+ * So they travel the way a day travels: the shapes stay, the light and
+ * what hangs above them change. A low sun, a crescent, a field of stars,
+ * an eclipse, a ringed planet, a comet, a storm. It is one small drawing
+ * sitting over whichever scene is underneath, which is why a single
+ * component can serve every theme's whole journey.
+ *
+ * Drawn into the middle parallax layer only. Three moons at three
+ * different sizes is not depth, it is a mistake.
+ *
+ * Everything sits around a third of the way down rather than at the very
+ * top. The readability wash over the scene is heaviest at the top edge —
+ * it has to be, the header sits there — so a moon at y=14 was drawn
+ * faithfully and then almost entirely painted out. y≈28 is the clearest
+ * band on the screen and it is still unmistakably sky.
+ */
+function Sky({ c, kind }) {
+  // The crescent's mask needs an id of its own: theme pickers draw several
+  // of these at once, and a shared id makes every one of them use the
+  // first instance's mask.
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
+  if (!kind) return null
+  const warm = c.accent2 || c.accent
+  const glow = `drop-shadow(0 0 3px ${c.accent})`
+
+  if (kind === 'sun') {
+    return (
+      <g style={{ filter: glow }}>
+        <circle cx="79" cy="28" r="13" fill={warm} opacity="0.16" />
+        <circle cx="79" cy="28" r="7" fill={warm} opacity="0.9" />
+        {Array.from({ length: 12 }, (_, i) => {
+          const a = (i * Math.PI) / 6
+          return (
+            <line
+              key={i}
+              x1={79 + Math.cos(a) * 9}
+              y1={28 + Math.sin(a) * 9}
+              x2={79 + Math.cos(a) * 12.5}
+              y2={28 + Math.sin(a) * 12.5}
+              stroke={warm}
+              strokeWidth="0.5"
+              opacity="0.5"
+            />
+          )
+        })}
+      </g>
+    )
+  }
+
+  if (kind === 'dusk') {
+    /* A sun already most of the way down, with the band of light it lays
+       along the horizon. */
+    return (
+      <g>
+        <rect x="0" y="34" width="100" height="14" fill={warm} opacity="0.12" />
+        <circle cx="50" cy="41" r="16" fill={warm} opacity="0.14" />
+        <circle cx="50" cy="41" r="9" fill={warm} opacity="0.7" style={{ filter: glow }} />
+        <rect x="0" y="41" width="100" height="9" fill={c.bg} opacity="0.55" />
+      </g>
+    )
+  }
+
+  if (kind === 'moon') {
+    /* The crescent is one disc with a second punched out of it — a mask
+       rather than a bg-coloured circle on top, because the far and near
+       layers are handed a transparent background and a solid cut-out
+       would show as a blob there. */
+    return (
+      <g style={{ filter: glow }}>
+        <defs>
+          <mask id={`${uid}-moon`}>
+            <rect x="0" y="0" width="100" height="100" fill="#000" />
+            <circle cx="80" cy="27" r="8" fill="#fff" />
+            <circle cx="76" cy="24" r="7" fill="#000" />
+          </mask>
+        </defs>
+        <circle cx="80" cy="27" r="12" fill={c.ink} opacity="0.1" />
+        <circle cx="80" cy="27" r="8" fill={c.ink} opacity="0.95" mask={`url(#${uid}-moon)`} />
+      </g>
+    )
+  }
+
+  if (kind === 'stars') {
+    const r = rng(31)
+    return (
+      <g>
+        {Array.from({ length: 34 }, (_, i) => {
+          const x = r() * 100
+          const y = 6 + r() * 46
+          const size = 0.25 + r() * 0.6
+          return (
+            <circle
+              key={i}
+              cx={x}
+              cy={y}
+              r={size}
+              fill={i % 4 === 0 ? c.accent : c.ink}
+              opacity="0.8"
+              style={{
+                animation: `rankup-pulse ${(3 + r() * 5).toFixed(1)}s ease-in-out ${(-r() * 6).toFixed(1)}s infinite`,
+              }}
+            />
+          )
+        })}
+      </g>
+    )
+  }
+
+  if (kind === 'eclipse') {
+    return (
+      <g>
+        <circle cx="74" cy="30" r="20" fill={c.accent} opacity="0.1" />
+        <circle
+          cx="74"
+          cy="30"
+          r="9"
+          fill={c.bg}
+          stroke={c.accent}
+          strokeWidth="1.1"
+          style={{ filter: `drop-shadow(0 0 4px ${c.accent})` }}
+        />
+      </g>
+    )
+  }
+
+  if (kind === 'rings') {
+    return (
+      <g style={{ filter: glow }}>
+        <circle cx="76" cy="29" r="8" fill={warm} opacity="0.7" />
+        <ellipse
+          cx="76"
+          cy="29"
+          rx="16"
+          ry="4"
+          fill="none"
+          stroke={c.accent}
+          strokeWidth="0.8"
+          opacity="0.75"
+          transform="rotate(-18 76 29)"
+        />
+        <ellipse
+          cx="76"
+          cy="29"
+          rx="19"
+          ry="5"
+          fill="none"
+          stroke={c.accent}
+          strokeWidth="0.4"
+          opacity="0.45"
+          transform="rotate(-18 76 17)"
+        />
+      </g>
+    )
+  }
+
+  if (kind === 'comet') {
+    return (
+      <g style={{ animation: 'rankup-float 14s ease-in-out infinite' }}>
+        <path d="M26 14 L72 36" stroke={c.accent} strokeWidth="0.7" opacity="0.35" />
+        <path d="M44 23 L72 36" stroke={c.accent} strokeWidth="1.6" opacity="0.6" />
+        <circle cx="73" cy="36.5" r="2.2" fill={warm} style={{ filter: glow }} />
+      </g>
+    )
+  }
+
+  if (kind === 'storm') {
+    return (
+      <g>
+        <path
+          d="M18 30 a7 7 0 0 1 13-3 a6 6 0 0 1 11 3 a5 5 0 0 1-1 9 H22 a5 5 0 0 1-4-9z"
+          fill={c.ink}
+          opacity="0.14"
+        />
+        <path
+          d="M60 24 a8 8 0 0 1 15-3 a7 7 0 0 1 12 3 a6 6 0 0 1-1 10 H64 a6 6 0 0 1-4-10z"
+          fill={c.ink}
+          opacity="0.18"
+        />
+        <path
+          d="M70 35 l-5 9 h4 l-4 8"
+          fill="none"
+          stroke={c.accent}
+          strokeWidth="1"
+          opacity="0.85"
+          style={{
+            filter: glow,
+            animation: 'rankup-pulse 2.6s steps(1, end) infinite',
+          }}
+        />
+      </g>
+    )
+  }
+
+  return null
+}
+
 const SCENES = {
   tetrominoes: Tetrominoes,
   voxel: (p) => <Voxel {...p} variant="overworld" />,
@@ -620,6 +828,7 @@ export default function ThemeBackground({ theme, className = '', glitch = false 
               colour is enough — no scene needs to know it is being stacked.
             */}
             <Scene c={layer.key === 'mid' ? c : { ...c, bg: 'transparent' }} />
+            {layer.key === 'mid' && <Sky c={c} kind={theme.sky} />}
           </g>
         </svg>
       ))}
