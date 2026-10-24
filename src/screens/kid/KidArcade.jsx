@@ -29,6 +29,7 @@ import RoyalDraw from '../../components/games/RoyalDraw.jsx'
 import { Screen, Card, Button, SectionTitle, Banner, Stat, EmptyState, PageTitle, Segmented } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
 import HeroArt from '../../components/HeroArt.jsx'
+import AppHeader from '../../components/AppHeader.jsx'
 import { art } from '../../data/art.js'
 
 /** One colour per shelf, so the grid is scannable without artwork. */
@@ -215,7 +216,7 @@ export default function KidArcade() {
               />
             )
             : <span style={{ fontSize: 30, lineHeight: 1 }} aria-hidden="true">{g.icon}</span>}
-          {best === 0 && (
+          {best === 0 ? (
             <span
               className="absolute top-1.5 right-1.5 rounded-full font-bold"
               style={{
@@ -227,6 +228,20 @@ export default function KidArcade() {
             >
               NEW
             </span>
+          ) : (
+            /* The design stars a game once it has a score on it, which is
+               how a child finds the one they are good at in a grid of
+               twenty-one. */
+            <span
+              className="absolute top-1 right-1.5"
+              aria-hidden="true"
+              style={{
+                fontSize: 11,
+                filter: 'drop-shadow(0 0 6px var(--warn))',
+              }}
+            >
+              ★
+            </span>
           )}
         </div>
         <div className="px-2 py-1.5">
@@ -234,7 +249,7 @@ export default function KidArcade() {
           {/* The high score is the thing a child checks, so it is the line
               that gets the space once they have played. */}
           <div className="text-[9.5px] text-muted mt-0.5 truncate">
-            {best > 0 ? `High: ${best.toLocaleString()}` : `${g.minutes} min`}
+            {best > 0 ? `High Score: ${best.toLocaleString()}` : `${g.minutes} min`}
             {g.needsNet ? ' · online' : ''}
           </div>
         </div>
@@ -244,6 +259,7 @@ export default function KidArcade() {
 
   return (
     <Screen>
+      <AppHeader theme={theme} />
       <HeroArt
         slot="hero-arcade"
         emblem="🕹️"

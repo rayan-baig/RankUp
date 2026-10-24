@@ -3,6 +3,7 @@ import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import QuestCard from '../../components/QuestCard.jsx'
 import { Screen, SectionTitle, Segmented, EmptyState } from '../../components/ui.jsx'
 import HeroArt from '../../components/HeroArt.jsx'
+import AppHeader from '../../components/AppHeader.jsx'
 import { navigate } from '../../lib/router.js'
 
 const TABS = [
@@ -28,6 +29,7 @@ export default function KidQuests() {
 
   return (
     <Screen>
+      <AppHeader theme={theme} />
       <HeroArt
         slot="hero-quests"
         emblem="⚔️"

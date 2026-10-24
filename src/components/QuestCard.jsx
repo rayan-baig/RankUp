@@ -51,16 +51,41 @@ export default function QuestCard({ quest, onClick, currency, showStatus = true 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-display font-bold text-[15px] leading-snug">{quest.title}</h3>
-            <span className="shrink-0 text-right flex items-center gap-1.5">
-              <span>
-                <span className="block font-display font-extrabold text-sm" style={{ color: diff.color }}>
-                  +{quest.xp ?? diff.xp} XP
-                </span>
+            {/*
+              The design puts the two rewards in their own small boxes
+              rather than as loose text — the currency on top, the XP
+              under it — so what a quest is worth reads at a glance down
+              a list instead of having to be picked out of a line.
+            */}
+            <span className="shrink-0 flex items-center gap-1.5">
+              <span className="flex flex-col gap-1 items-end">
                 {currency && (
-                  <span className="block text-[11px] text-muted">
-                    {currency.icon} ~{Math.max(1, Math.round((quest.xp ?? diff.xp) / 5))}
+                  <span
+                    className="font-display font-extrabold whitespace-nowrap"
+                    style={{
+                      fontSize: 11,
+                      padding: '2px 7px',
+                      borderRadius: 7,
+                      background: 'color-mix(in srgb, var(--accent) 16%, transparent)',
+                      border: '1px solid color-mix(in srgb, var(--accent) 36%, transparent)',
+                    }}
+                  >
+                    {currency.icon} +{Math.max(1, Math.round((quest.xp ?? diff.xp) / 5))}
                   </span>
                 )}
+                <span
+                  className="font-display font-extrabold whitespace-nowrap"
+                  style={{
+                    fontSize: 11,
+                    padding: '2px 7px',
+                    borderRadius: 7,
+                    color: diff.color,
+                    background: `color-mix(in srgb, ${diff.color} 14%, transparent)`,
+                    border: `1px solid color-mix(in srgb, ${diff.color} 38%, transparent)`,
+                  }}
+                >
+                  +{quest.xp ?? diff.xp} XP
+                </span>
               </span>
               {/* The design ends every row with one, so a row reads as
                   something you open rather than something you have read. */}

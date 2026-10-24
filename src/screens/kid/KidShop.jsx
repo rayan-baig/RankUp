@@ -3,6 +3,7 @@ import { formatXp } from '../../lib/xp.js'
 import { relativeTime } from '../../lib/dates.js'
 import { Screen, Card, Button, SectionTitle, EmptyState, Stat, Chip } from '../../components/ui.jsx'
 import HeroArt from '../../components/HeroArt.jsx'
+import AppHeader from '../../components/AppHeader.jsx'
 import { isMarketOpen, nextOpeningLabel } from '../../data/marketSkins.js'
 import { navigate } from '../../lib/router.js'
 
@@ -16,6 +17,7 @@ export default function KidShop() {
 
   return (
     <Screen>
+      <AppHeader theme={theme} />
       {/*
         Laid out as the design has it: the balance sits on the banner
         rather than in a card of its own, the market is a wide panel with

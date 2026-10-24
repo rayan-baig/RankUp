@@ -7,6 +7,7 @@ import Avatar, { avatarTier, tiersFor } from '../../components/Avatar.jsx'
 import ThemePicker from '../../components/ThemePicker.jsx'
 import { Screen, Card, Button, SectionTitle, Stat, Modal, TextInput, Banner, Chip, DemoTag } from '../../components/ui.jsx'
 import HeroArt from '../../components/HeroArt.jsx'
+import AppHeader from '../../components/AppHeader.jsx'
 import KidPot from '../../components/KidPot.jsx'
 import { navigate } from '../../lib/router.js'
 import BadgeShelf from '../../components/BadgeShelf.jsx'
@@ -56,6 +57,7 @@ export default function KidProfile() {
 
   return (
     <Screen>
+      <AppHeader theme={theme} />
       <HeroArt
         slot="hero-you"
         emblem="🙂"

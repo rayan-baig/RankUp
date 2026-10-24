@@ -11,6 +11,7 @@ import { Words, CountUp } from '../../components/Motion.jsx'
 import SyncBadge from '../../components/SyncBadge.jsx'
 import { navigate } from '../../lib/router.js'
 import InstallPrompt from '../../components/InstallPrompt.jsx'
+import AppHeader from '../../components/AppHeader.jsx'
 
 export default function KidHome() {
   const { state, dispatch } = useApp()
@@ -39,6 +40,11 @@ export default function KidHome() {
 
   const unreadNotes = state.notes.filter((n) => n.kidId === kid.id && n.from === 'parent' && !n.read)
 
+  /* The cheapest reward still out of reach — the one worth saving for. */
+  const nextReward = [...state.rewards]
+    .sort((a, b) => a.cost - b.cost)
+    .find((r) => r.cost > kid.coins) || [...state.rewards].sort((a, b) => b.cost - a.cost)[0] || null
+
   return (
     <Screen>
       {/*
@@ -47,29 +53,7 @@ export default function KidHome() {
         level, XP and bar beside it, with the streak sitting to its right.
         Then the quest you are on, three small cards, and the way forward.
       */}
-      <header className="flex items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <span
-            className="font-display font-extrabold tracking-tight"
-            style={{
-              fontSize: 20,
-              color: 'var(--accent)',
-              textShadow: '0 0 18px color-mix(in srgb, var(--accent) 60%, transparent)',
-            }}
-          >
-            RANKUP
-          </span>
-          <span className="chip shrink-0">{theme.currency.icon} {theme.name}</span>
-        </div>
-        <button
-          type="button"
-          onClick={() => navigate('/kid/profile')}
-          aria-label="Your profile"
-          className="chip shrink-0"
-        >
-          Lv {level}
-        </button>
-      </header>
+      <AppHeader theme={theme} />
 
       <SyncBadge />
 
@@ -190,7 +174,14 @@ export default function KidHome() {
           label="Weekly goal"
           tone="var(--accent-2)"
         />
-        <Stat icon="⭐" value={<CountUp value={weekXp} format={formatXp} />} label="XP this week" />
+        {/* The design's third card is what you are saving towards. A
+            number you cannot spend is a worse thing to look at than the
+            reward you are three chores away from. */}
+        <Stat
+          icon="🎁"
+          value={nextReward ? `${theme.currency.icon} ${nextReward.cost}` : '—'}
+          label={nextReward ? nextReward.name : 'No rewards set'}
+        />
       </div>
 
       {/* The way forward, which the design puts right under the numbers. */}
