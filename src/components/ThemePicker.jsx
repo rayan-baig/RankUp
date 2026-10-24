@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { art } from '../data/art.js'
 import { KID_THEMES, resolveKidTheme } from '../data/kidThemes.js'
 import Avatar from './Avatar.jsx'
 import { Card } from './ui.jsx'
@@ -73,10 +74,25 @@ export default function ThemePicker({ value, onChange, previewLevel = 1, showEvo
               }}
             >
               <div
-                className="h-10 mb-2 rounded-md relative overflow-hidden"
+                className="h-16 mb-2 rounded-md relative overflow-hidden grid place-items-center"
                 style={{ background: theme.colors.bg }}
               >
                 <span className="absolute inset-0 opacity-70" style={{ background: `radial-gradient(circle at 30% 40%, ${theme.colors.accent}55, transparent 60%), radial-gradient(circle at 75% 70%, ${theme.colors.accent2}55, transparent 55%)` }} />
+                {/*
+                  The theme's own character, where one has been drawn. This
+                  is the question the picker is actually answering — a child
+                  chooses a theme because of who they get to be, not because
+                  of two colours in a swatch.
+                */}
+                {art(`avatar-${theme.id}`) && (
+                  <img
+                    src={art(`avatar-${theme.id}`)}
+                    alt=""
+                    aria-hidden="true"
+                    className="relative"
+                    style={{ height: '100%', width: 'auto', objectFit: 'contain' }}
+                  />
+                )}
               </div>
               <div className="font-display font-bold text-[13px] leading-tight truncate">{theme.name}</div>
               <div className="text-[10px] truncate" style={{ color: theme.colors.inkMuted }}>{theme.inspiredBy}</div>

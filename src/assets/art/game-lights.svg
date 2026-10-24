@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="360" viewBox="0 0 512 360">
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#06132f"/><stop offset=".55" stop-color="#102b63"/><stop offset="1" stop-color="#251052"/></linearGradient>
+ <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#6df7ff"/><stop offset="1" stop-color="#087bff"/></linearGradient>
+ <linearGradient id="purple" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f18aff"/><stop offset="1" stop-color="#6b35ff"/></linearGradient>
+ <linearGradient id="green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#a8ff7a"/><stop offset="1" stop-color="#00b878"/></linearGradient>
+ <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+ 
+</defs>
+<rect width="512" height="360" rx="26" fill="url(#bg)"/><circle cx="360" cy="90" r="130" fill="#fe54d6" opacity=".16" filter="url(#glow)"/><path d="M0 275 L150 190 L280 260 L410 160 L512 230 V360 H0Z" fill="#07112a" opacity=".9"/><circle cx="245" cy="95" r="25" fill="#dffbff" stroke="#fe54d6" stroke-width="5"/><path d="M245 125 l-20 65 l45 25 M225 190 l-45 45 M270 215 l45 40 M236 150 l-55 20 M239 150 l48 5" fill="none" stroke="#fe54d6" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/><circle cx="95" cy="250" r="12" fill="#ffd35d" stroke="#fff0a0" stroke-width="3"/><circle cx="370" cy="220" r="12" fill="#ffd35d" stroke="#fff0a0" stroke-width="3"/><circle cx="420" cy="275" r="12" fill="#ffd35d" stroke="#fff0a0" stroke-width="3"/><path d="M25 315 H487" stroke="#fe54d6" stroke-width="2" opacity=".55"/></svg>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#06132f"/><stop offset=".55" stop-color="#102b63"/><stop offset="1" stop-color="#251052"/></linearGradient>
+ <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#6df7ff"/><stop offset="1" stop-color="#087bff"/></linearGradient>
+ <linearGradient id="purple" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f18aff"/><stop offset="1" stop-color="#6b35ff"/></linearGradient>
+ <linearGradient id="green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#a8ff7a"/><stop offset="1" stop-color="#00b878"/></linearGradient>
+ <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+ 
+</defs>
+<g fill="none" stroke="url(#cyan)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"><path d="M30 15 H70 V40 Q70 62 50 62 Q30 62 30 40Z M30 24 H12 V35 Q12 52 34 52 M70 24 H88 V35 Q88 52 66 52 M50 62 V78 M32 88 H68"/></g></svg>
