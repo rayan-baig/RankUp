@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState, useLayoutEffect } from 'react'
 import { reducer, isElite, guildCapacity, activeLockout } from './reducer.js'
 import { createInitialState, TIERS } from './initialState.js'
+import { buildDemoFamily } from '../lib/demoFamily.js'
 import { loadState, saveState, clearState, purgeOrphanPhotos, getPhoto, putPhoto } from '../lib/storage.js'
 import { createSyncEngine, SYNC_STATUS } from '../lib/sync/syncEngine.js'
 import { queueChanges, recordServerState } from '../lib/sync/shadow.js'
@@ -17,6 +18,19 @@ const AppContext = createContext(null)
 function init() {
   const saved = loadState()
   if (!saved) return createInitialState()
+
+  /*
+   * A saved look-around is rebuilt rather than restored.
+   *
+   * The demo family is disposable by definition — nothing in it belongs to
+   * anybody, and the banner across the top says so. But it was being
+   * reloaded from storage like real data, so somebody who opened the demo
+   * once kept that exact copy for ever: a new theme, a new game, a changed
+   * screen, none of it reached them, and from their side the app simply
+   * had not changed. That is a bad way to find out your demo is stale.
+   */
+  if (saved.demo) return buildDemoFamily()
+
   // Merge onto a fresh state so a new field added in a later version never
   // crashes an app that is loading data saved by an older version.
   return { ...createInitialState(), ...saved, settings: { ...createInitialState().settings, ...saved.settings } }
