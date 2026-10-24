@@ -16,14 +16,23 @@ import { navigate } from '../lib/router.js'
 export default function NavBar({ items, path, badges = {} }) {
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 border-t"
+      className="fixed left-0 right-0 z-40"
       style={{
-        background: 'color-mix(in srgb, var(--surface) 86%, transparent)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        borderColor: 'color-mix(in srgb, var(--accent) 22%, var(--line))',
-        paddingBottom: 'var(--safe-bottom)',
-        boxShadow: '0 -8px 30px -18px rgb(0 0 0 / 0.8)',
+        /*
+         * An inset bar rather than a slab welded to the bottom edge, as
+         * the design has it — the scene carries on underneath and round
+         * the sides, which is what makes the app feel like a window onto
+         * a world rather than a form with a toolbar.
+         */
+        bottom: 'calc(var(--safe-bottom) + 8px)',
+        marginLeft: 10,
+        marginRight: 10,
+        borderRadius: 20,
+        background: 'color-mix(in srgb, var(--surface) 72%, transparent)',
+        backdropFilter: 'blur(18px) saturate(1.3)',
+        WebkitBackdropFilter: 'blur(18px) saturate(1.3)',
+        border: '1px solid color-mix(in srgb, var(--accent) 38%, var(--line))',
+        boxShadow: '0 10px 34px -14px rgb(0 0 0 / 0.85), 0 0 26px -14px var(--accent)',
       }}
       aria-label="Main"
     >

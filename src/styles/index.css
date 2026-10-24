@@ -76,23 +76,42 @@
    * Craft and a pink one under Coquette Circuit, and the light themes get
    * a soft edge instead of a halo rather than a grey smudge.
    */
+  /*
+   * Cards are glass, not panels.
+   *
+   * This is the change that finally made the app look like the design.
+   * Every kid theme already paints a whole illustrated scene behind the
+   * screen — floating islands, a neon city, a campfire — and opaque cards
+   * were covering all of it, so nineteen scenes nobody could see were
+   * being drawn every frame for nothing.
+   *
+   * Letting the scene through is most of the look: a lit edge, a bloom
+   * outside it, and the world carrying on behind. The blur is what keeps
+   * the text readable over whatever happens to be back there, and the
+   * background colour is still opaque enough to carry small grey type if
+   * a browser refuses the blur.
+   */
   .card {
     background:
       linear-gradient(168deg,
-        color-mix(in srgb, var(--surface) 94%, var(--accent) 6%) 0%,
-        var(--surface) 55%,
-        color-mix(in srgb, var(--surface) 88%, var(--bg) 12%) 100%);
-    border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line));
+        color-mix(in srgb, var(--surface) 72%, transparent) 0%,
+        color-mix(in srgb, var(--surface) 66%, transparent) 55%,
+        color-mix(in srgb, var(--bg) 62%, transparent) 100%);
+    backdrop-filter: blur(14px) saturate(1.2);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
     border-radius: var(--radius);
     box-shadow:
-      0 0 24px -12px color-mix(in srgb, var(--accent) 70%, transparent),
-      0 10px 26px -16px rgb(0 0 0 / 0.6),
-      inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent);
+      0 0 26px -10px color-mix(in srgb, var(--accent) 80%, transparent),
+      0 12px 30px -18px rgb(0 0 0 / 0.75),
+      inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
   }
 
   .card-flat {
-    background: color-mix(in srgb, var(--surface-2) 92%, var(--accent) 8%);
-    border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+    background: color-mix(in srgb, var(--surface-2) 64%, transparent);
+    backdrop-filter: blur(12px) saturate(1.2);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+    border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
     border-radius: var(--radius);
   }
 
