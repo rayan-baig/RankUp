@@ -53,9 +53,16 @@ export const KID_THEMES = [
     ...base,
     radius: '0px',
     shadow: '4px 4px 0 0 rgb(0 0 0 / 0.45)',
+    /*
+     * The Overworld: a deep evening sky with grass and water in it. This
+     * was brown soil under a brown sky, which is how a voxel theme ends
+     * up looking like mud rather than like standing outside at dusk. The
+     * ground strata still read as earth because the scene draws those
+     * from `surface`; what changed is that the sky is now sky.
+     */
     colors: {
-      bg: '#1d1710', surface: '#3a2c1e', surface2: '#4c3a27', line: '#6b5133',
-      ink: '#f2e9d8', inkMuted: '#bda887', accent: '#3ddc84', accent2: '#8bd450',
+      bg: '#081425', surface: '#123050', surface2: '#1b4570', line: '#2f6b9e',
+      ink: '#eaf4ff', inkMuted: '#9fc3e2', accent: '#5ad85a', accent2: '#58c7ff',
     },
     /*
      * Block Craft is the one theme with nine forms instead of five.
@@ -82,27 +89,59 @@ export const KID_THEMES = [
      * Block Craft is the one theme with level-gated evolutions. Each entry
      * overrides the colours / scene from that level upward.
      */
+    /*
+     * The worlds, on the levels the story uses.
+     *
+     * These were at 51, 101, 200 and 300 — numbers from before the nine
+     * forms existed — so the world changed in the gaps between forms
+     * instead of at them. Now each new world arrives exactly when the
+     * avatar does: the portal at 125, deeper in at 175, the End at 250,
+     * the dragon at 399.
+     *
+     * The old "Pale Cream" world is gone. A cream Minecraft is not part
+     * of this story, and being the only light theme in the set it also
+     * put dark night artwork behind dark-on-light text.
+     */
     evolutions: [
       {
-        level: 51, label: 'Volcanic Crimson', scene: 'voxel-volcanic',
+        level: 125,
+        label: 'The Nether Portal',
+        scene: 'voxel-volcanic',
         companion: 'boarling',
-        colors: { bg: '#1c0705', surface: '#3d100b', surface2: '#571610', line: '#8c2a1c', ink: '#ffe9e2', inkMuted: '#d59d8f', accent: '#ff6a3d', accent2: '#ffb302' },
+        colors: {
+          bg: '#1b0605', surface: '#3f120c', surface2: '#5c1a12', line: '#8f2e1d',
+          ink: '#ffe9e2', inkMuted: '#d79d8f', accent: '#ff6a3d', accent2: '#ffb302',
+        },
       },
       {
-        level: 101, label: 'Pale Cream', scene: 'voxel-cream', mode: 'light',
+        level: 175,
+        label: 'Nether Rise',
+        scene: 'voxel-nether',
         companion: 'boarling',
-        colors: { bg: '#E5E3A7', surface: '#f2f0c8', surface2: '#dedca0', line: '#a89fd0', ink: '#2c2350', inkMuted: '#5f5590', accent: '#6d28d9', accent2: '#8b5cf6' },
-        shadow: '5px 5px 0 0 rgb(109 40 217 / 0.35)',
+        colors: {
+          bg: '#170305', surface: '#3d0a12', surface2: '#57101c', line: '#8d1f32',
+          ink: '#ffe4e9', inkMuted: '#d2919f', accent: '#ff3b5c', accent2: '#ff9f43',
+        },
       },
       {
-        level: 200, label: 'Nether', scene: 'voxel-nether', glitchIntro: true,
-        companion: 'boarling',
-        colors: { bg: '#170305', surface: '#3a0710', surface2: '#500b17', line: '#7d1226', ink: '#ffd9d9', inkMuted: '#c98a8a', accent: '#ff3b5c', accent2: '#ff9d00' },
+        level: 250,
+        label: 'The End',
+        scene: 'voxel-end',
+        companion: 'ender',
+        colors: {
+          bg: '#0a0713', surface: '#1d1533', surface2: '#2b1f4d', line: '#4a3880',
+          ink: '#f0e8ff', inkMuted: '#b3a4d6', accent: '#d6b4ff', accent2: '#7ef0ff',
+        },
       },
       {
-        level: 300, label: 'End Void', scene: 'voxel-end', glitchIntro: true,
-        companion: 'boarling',
-        colors: { bg: '#0a0713', surface: '#1b1230', surface2: '#261844', line: '#4a2f7a', ink: '#efe6ff', inkMuted: '#a794cc', accent: '#d6b4ff', accent2: '#7cf5d8' },
+        level: 399,
+        label: 'The Dragon',
+        scene: 'voxel-end',
+        companion: 'ender',
+        colors: {
+          bg: '#0d0418', surface: '#2a0c3d', surface2: '#3d1157', line: '#6a1f96',
+          ink: '#fbe9ff', inkMuted: '#c79add', accent: '#e879f9', accent2: '#a855f7',
+        },
       },
     ],
   },
