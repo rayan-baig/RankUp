@@ -3,7 +3,7 @@ import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.js
 import { levelFromXp, formatXp } from '../../lib/xp.js'
 import { KID_THEME_MAP, nextEvolution } from '../../data/kidThemes.js'
 import { PROFILE_FRAMES, DROP_SELECTORS } from '../../state/initialState.js'
-import Avatar, { avatarTier, TIER_THRESHOLDS } from '../../components/Avatar.jsx'
+import Avatar, { avatarTier, tiersFor } from '../../components/Avatar.jsx'
 import ThemePicker from '../../components/ThemePicker.jsx'
 import { Screen, Card, Button, SectionTitle, Stat, Modal, TextInput, Banner, Chip, DemoTag } from '../../components/ui.jsx'
 import HeroArt from '../../components/HeroArt.jsx'
@@ -35,7 +35,7 @@ export default function KidProfile() {
 
   if (!kid) return null
   const { level } = levelFromXp(kid.xp)
-  const tier = avatarTier(level)
+  const tier = avatarTier(level, theme)
   const evolution = nextEvolution(kid.themeId, level)
 
   // A kid's own device holds no PIN — the parent's PIN lives on the parent's
@@ -71,7 +71,7 @@ export default function KidProfile() {
         </div>
         <h2 className="font-display text-xl font-extrabold">{kid.name}</h2>
         <p className="text-sm text-muted">
-          Level {level} · Form {tier} of 5 · {formatXp(kid.xp)} lifetime XP
+          Level {level} · Form {tier} of {tiersFor(theme).length} · {formatXp(kid.xp)} lifetime XP
         </p>
         {theme.evolution && (
           <Chip tone="var(--accent-2)" className="mt-2">✦ {theme.evolution.label} unlocked</Chip>
@@ -93,7 +93,7 @@ export default function KidProfile() {
       <SectionTitle>Avatar forms</SectionTitle>
       <Card className="mb-3">
         <div className="flex justify-between gap-1">
-          {TIER_THRESHOLDS.map((t) => (
+          {tiersFor(theme).map((t) => (
             <div key={t} className="text-center flex-1 min-w-0">
               <div style={{ opacity: level >= t ? 1 : 0.3 }}>
                 <Avatar theme={theme} level={t} size={48} interactive={false} />

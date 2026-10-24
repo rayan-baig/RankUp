@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { SparkleBurst } from './ui.jsx'
+// The ladder lives in a plain module so it can be tested without a browser.
+import { avatarTier, nextTierLevel, tiersFor, DEFAULT_TIERS } from '../lib/avatarTiers.js'
 
 /**
- * The 5-tier avatar.
+ * The avatar that grows with a child's level.
  *
  * Every theme uses the same underlying character so progress reads the same way
  * across the app; the `motif` in the theme file changes the silhouette, and the
@@ -10,21 +12,11 @@ import { SparkleBurst } from './ui.jsx'
  *
  * Tap it and it reacts — a small squash-and-stretch plus a sparkle burst. Kids
  * poke things; the app should poke back.
+ *
+ * How many forms a theme has is in src/lib/avatarTiers.js.
  */
 
-export const TIER_THRESHOLDS = [1, 10, 25, 50, 100]
-
-export function avatarTier(level) {
-  let tier = 1
-  TIER_THRESHOLDS.forEach((t, i) => {
-    if (level >= t) tier = i + 1
-  })
-  return tier
-}
-
-export function nextTierLevel(level) {
-  return TIER_THRESHOLDS.find((t) => t > level) ?? null
-}
+export { avatarTier, nextTierLevel, tiersFor, DEFAULT_TIERS }
 
 const MOTIFS = {
   block: (col) => <rect x="-9" y="-9" width="18" height="18" fill={col} />,
@@ -101,7 +93,7 @@ function Boarling({ colors }) {
 export default function Avatar({ theme, level = 1, size = 120, companion = false, frame = 'none', onTap, interactive = true }) {
   const [reacting, setReacting] = useState(false)
   const [burst, setBurst] = useState(0)
-  const tier = avatarTier(level)
+  const tier = avatarTier(level, theme)
   const hues = theme?.avatar?.hues || ['#888', '#999', '#aaa', '#bbb', '#ccc']
   const colour = hues[Math.min(tier, hues.length) - 1]
   const motif = MOTIFS[theme?.avatar?.motif] || MOTIFS.block

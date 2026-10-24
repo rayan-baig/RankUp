@@ -4,7 +4,7 @@ import { levelFromXp, formatXp, xpToNext } from '../../lib/xp.js'
 import { nextEvolution } from '../../data/kidThemes.js'
 import { isMarketOpen } from '../../data/marketSkins.js'
 import { dayKey, lastSevenDays } from '../../lib/dates.js'
-import Avatar, { avatarTier, nextTierLevel } from '../../components/Avatar.jsx'
+import Avatar, { avatarTier, nextTierLevel, tiersFor } from '../../components/Avatar.jsx'
 import QuestCard from '../../components/QuestCard.jsx'
 import { Screen, Card, Button, ProgressBar, Stat, SectionTitle, EmptyState, Banner, Chip } from '../../components/ui.jsx'
 import { Words, CountUp } from '../../components/Motion.jsx'
@@ -22,8 +22,8 @@ export default function KidHome() {
   if (!kid) return null
 
   const { level, intoLevel, needed, progress } = levelFromXp(kid.xp)
-  const tier = avatarTier(level)
-  const nextTier = nextTierLevel(level)
+  const tier = avatarTier(level, theme)
+  const nextTier = nextTierLevel(level, theme)
   const evolution = nextEvolution(kid.themeId, level)
   const quests = state.quests.filter((q) => q.kidId === kid.id)
   const active = quests.filter((q) => q.status === 'assigned' || q.status === 'redo')
@@ -70,7 +70,7 @@ export default function KidHome() {
           <span className="font-display text-3xl font-extrabold">
             Level <CountUp value={level} />
           </span>
-          <span className="chip">Form {tier} / 5</span>
+          <span className="chip">Form {tier} / {tiersFor(theme).length}</span>
         </div>
         <p className="text-xs text-muted mb-3">
           {formatXp(intoLevel)} / {formatXp(needed)} XP to level {level + 1}

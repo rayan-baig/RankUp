@@ -76,7 +76,13 @@ yearly.includes('Billed yearly')
 await page.reload({ waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(1200)
 await page.evaluate(() => { window.location.hash = '/parent/plan' })
-await page.waitForTimeout(700)
+/*
+ * Wait for the screen, not for a clock. This was a fixed 700ms, which was
+ * fine until the artwork shipped with the bundle and first paint got
+ * slower — then it sometimes read an empty page and failed a working app.
+ */
+await page.waitForFunction(() => /\$\d/.test(document.body.innerText), null, { timeout: 15000 })
+  .catch(() => {})
 const fresh = await page.evaluate(() => document.body.innerText)
 fresh.includes('$9.99') && !fresh.includes('$99.9')
   ? pass('monthly is what a parent sees first')

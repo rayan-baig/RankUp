@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import Avatar, { avatarTier } from './Avatar.jsx'
+import Avatar, { avatarTier, tiersFor } from './Avatar.jsx'
 import { Button, SparkleBurst } from './ui.jsx'
 import { CountUp } from './Motion.jsx'
 import { nextEvolution, KID_THEME_MAP } from '../data/kidThemes.js'
@@ -11,8 +11,9 @@ export default function LevelUpOverlay({ levelUp, kid, theme, onClose }) {
     return () => clearTimeout(t)
   }, [onClose])
 
-  const tierBefore = avatarTier(levelUp.from)
-  const tierAfter = avatarTier(levelUp.to)
+  const tierBefore = avatarTier(levelUp.from, theme)
+  const tierAfter = avatarTier(levelUp.to, theme)
+  const formCount = tiersFor(theme).length
   const newForm = tierAfter > tierBefore
   const evolutionHit = KID_THEME_MAP[kid.themeId]?.evolutions?.find(
     (e) => levelUp.from < e.level && levelUp.to >= e.level,
@@ -42,7 +43,7 @@ export default function LevelUpOverlay({ levelUp, kid, theme, onClose }) {
 
         {newForm && (
           <p className="text-sm mb-2" style={{ color: theme.colors.accent2 }}>
-            ✦ New avatar form unlocked — form {tierAfter} of 5.
+            ✦ New avatar form unlocked — form {tierAfter} of {formCount}.
           </p>
         )}
         {evolutionHit && (

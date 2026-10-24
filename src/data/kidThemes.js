@@ -57,7 +57,27 @@ export const KID_THEMES = [
       bg: '#1d1710', surface: '#3a2c1e', surface2: '#4c3a27', line: '#6b5133',
       ink: '#f2e9d8', inkMuted: '#bda887', accent: '#3ddc84', accent2: '#8bd450',
     },
-    avatar: { motif: 'block', hues: ['#8bd450', '#3ddc84', '#2fb36a', '#26d0c8', '#7ef0ff'] },
+    /*
+     * Block Craft is the one theme with nine forms instead of five.
+     *
+     * Its later levels are a story rather than a recolour — the portal
+     * opens, then the Nether, then the End, then the dragon — and a
+     * five-rung ladder would stop that story halfway. Everything that
+     * shows a form number reads this list rather than assuming five, so a
+     * child here is told "form 6 of 9" and nobody on another theme is
+     * measured against it.
+     *
+     * One hue per rung, in the order the story goes: overworld greens,
+     * then diamond, then the Nether reds, the End purples, and the dragon.
+     */
+    tiers: [1, 10, 25, 50, 100, 125, 175, 250, 399],
+    avatar: {
+      motif: 'block',
+      hues: [
+        '#8bd450', '#c9d1d9', '#f5c542', '#26d0c8', '#7ef0ff',
+        '#ff5c4d', '#b4202a', '#b06bff', '#6b21a8',
+      ],
+    },
     /**
      * Block Craft is the one theme with level-gated evolutions. Each entry
      * overrides the colours / scene from that level upward.
