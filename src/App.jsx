@@ -8,6 +8,7 @@ import { resolveParentTheme } from './data/parentThemes.js'
 import { levelFromXp } from './lib/xp.js'
 
 import ThemeBackground from './components/ThemeBackground.jsx'
+import WorldBackdrop from './components/WorldBackdrop.jsx'
 import ParentBackground from './components/ParentBackground.jsx'
 import NavBar from './components/NavBar.jsx'
 import LevelUpOverlay from './components/LevelUpOverlay.jsx'
@@ -236,6 +237,7 @@ export default function App() {
   return (
     <>
       {isParentArea ? <ParentBackground theme={parentTheme} /> : <ThemeBackground theme={kidTheme} glitch={glitch} />}
+      {!isParentArea && <WorldBackdrop path={route} />}
 
       {/* Outside the boundary: if a screen crashes, the way out of the demo
           must still be on screen. */}

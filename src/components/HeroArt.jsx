@@ -18,50 +18,6 @@ export default function HeroArt({ slot, title, sub, emblem, right }) {
 
   return (
     <>
-      {/*
-        The same artwork again, filling the screen behind everything.
-        In the design the whole phone is a window onto a world and the
-        cards float on it; the app was drawing its scene so dark that the
-        glass had nothing to show through it. This puts the tab's own
-        picture back there, dimmed far enough that white text on a card
-        still reads but the world is unmistakably present.
-
-        Fixed, so it does not slide away as the page scrolls, and behind
-        everything including the theme's own animated scene.
-      */}
-      {picture && (
-        <div
-          aria-hidden="true"
-          /*
-           * -z-10, the same layer the theme's own scene uses. At z-index 0
-           * a fixed element paints above ordinary unpositioned content, so
-           * the first version of this washed out every heading on the page
-           * — the picture was in front of the words, not behind them.
-           */
-          className="fixed inset-0 -z-10 pointer-events-none"
-          style={{
-            backgroundImage: `url(${picture})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            opacity: 0.5,
-          }}
-        />
-      )}
-      {picture && (
-        <div
-          aria-hidden="true"
-          className="fixed inset-0 -z-10 pointer-events-none"
-          style={{
-            // A wash over the picture so the cards keep their contrast
-            // wherever the artwork happens to be bright.
-            background: `linear-gradient(180deg,
-              color-mix(in srgb, var(--bg) 58%, transparent) 0%,
-              color-mix(in srgb, var(--bg) 72%, transparent) 55%,
-              color-mix(in srgb, var(--bg) 88%, transparent) 100%)`,
-          }}
-        />
-      )}
-
     <div
       className="relative overflow-hidden mb-3"
       style={{
