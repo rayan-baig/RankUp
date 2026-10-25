@@ -1,25 +1,20 @@
 # MTRX marks
 
-Two drawings of the same mark, both pure vector.
+`mtrx-logo.webp` is the mark, as supplied: the faceted M inside its
+particle sphere with the orbit across it. 1312x1199, which is not
+square.
 
-- `mtrx-mark.svg` — the badge. A bright M in a dark bubble. This is the
-  one for favicons, app icons, the site header and anywhere small; it
-  still reads at 16px.
-- `mtrx-mark-sphere.svg` — the sphere. The same M standing inside the
-  glowing globe from the hero image. Needs room; use it above ~48px.
+The three PNGs beside it are that file squared on its own centre and
+resized, because an app icon, a favicon and an avatar slot are all
+square and letting a square frame crop the original clips the orbit:
 
-What makes it not the Gmail envelope, which the old mark kept evoking:
+- `mtrx-logo-512.png` — app icon, store listing, anywhere large.
+- `mtrx-logo-192.png` — header, cards, touch icon.
+- `mtrx-logo-64.png` — favicon and anywhere small.
 
-- The M is a folded prism. Alternate faces are lit differently, so it
-  reads as one piece of bent material rather than a flat chevron.
-- Its V drives deep, nearly to the baseline, instead of sitting shallow
-  in the middle the way an envelope flap does.
-- The orbit carries three nodes — one per app. Three apps, one
-  ecosystem, said by the mark instead of by the strapline under it.
+Below about 48px the particle sphere stops being lines and becomes
+haze. That is a property of this drawing, not a fault in the resize: if
+a very small mark is ever needed, it wants a simplified cut of the M on
+its own rather than a further reduction of this one.
 
-Both are drawn with gradients and plain shapes only: no blur filters, no
-embedded bitmaps. That is why they stay sharp at any size, survive being
-a favicon, and weigh a couple of kilobytes each.
-
-Colours: `#6ff0ff` cyan into `#4f8bff` blue into `#c45cff` violet, on a
-near-black `#0b0f2e` / `#2a0f55` bubble.
+Everything here is a raster. There is no vector version of this mark.
