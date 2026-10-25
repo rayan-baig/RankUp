@@ -3,6 +3,11 @@
 Everything needed to pick this project up cold, on a new machine or in a new
 Claude account, and be productive in under an hour.
 
+**Its companion is [`ESSAY.md`](ESSAY.md)** — the same project explained as
+continuous prose rather than tables: what it is, why every part of it is the way
+it is, and what each mistake cost to learn. Read the essay to understand the
+project; read this file to find things in it.
+
 Every number in this document was counted from the repository on
 **25 October 2026**, not remembered. Where something is a mockup it says so.
 
@@ -199,7 +204,7 @@ Block Craft at 125 becomes **The Nether Portal**; at 250, **The End**; at 399,
 │  App.jsx ── hash router (src/lib/router.js)                 │
 │     │                                                       │
 │     ├── AppContext ── ONE reducer, ONE store                │
-│     │     src/state/reducer.js  (61 action types)           │
+│     │     src/state/reducer.js  (60 action types)           │
 │     │     src/state/initialState.js                         │
 │     │          │                                            │
 │     │          └── debounced persistence                    │
@@ -235,7 +240,7 @@ Block Craft at 125 becomes **The Nether Portal**; at 250, **The End**; at 399,
 | Choice | Reason |
 |---|---|
 | **Plain JSX, not TypeScript** | The owner has no coding background. Types would be a second language to debug on top of the first. |
-| **One reducer, one store** | 61 action types in one file beats state scattered across 90 components. Every state change is greppable. |
+| **One reducer, one store** | 60 action types in one file beats state scattered across 90 components. Every state change is greppable. |
 | **Hash routing** | Works from `file://`, from a subdirectory, and from any static host with no server rewrites. |
 | **Offline-first, localStorage primary** | The app is fully usable with no backend at all. Sync is an upgrade, not a dependency. |
 | **An outbox, not direct writes** | `src/lib/sync/` queues changes. A bad afternoon on the server must not delete a child's work — there is a test named exactly that. |
@@ -247,7 +252,7 @@ Block Craft at 125 becomes **The Nether Portal**; at 250, **The End**; at 399,
 
 ## 5. State model
 
-`src/state/reducer.js` — one function, 61 action types:
+`src/state/reducer.js` — one function, 60 action types:
 
 ```
 ADD_KID ADD_NOTE ADD_QUESTS ADD_REWARD ADOPT_PAIRED_KID APPLY_OVERRIDE
