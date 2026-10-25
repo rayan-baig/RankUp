@@ -22,7 +22,8 @@ Legend: ✅ genuinely works · 🟡 works but only on this device · ❌ looks r
 | Streaks and streak freeze | ✅ | |
 | 15 kid themes | ✅ | Background, currency and avatar all change |
 | 5-tier avatar that evolves | ✅ | Tap it — it reacts |
-| Block Craft level evolutions | ✅ | 51 Volcanic + Boarling companion, 101 Pale Cream, 200 Nether, 300 End Void |
+| A world that changes as you level | ✅ | Every theme has four worlds at levels 10/25/50/100, each with its own palette, sky and line of story |
+| Block Craft level evolutions | ✅ | Nine forms, not five: Overworld, then The Nether Portal (125), Nether Rise (175), The End (250), The Dragon (399). Boarling companion from 125, Ender from 250 |
 | 10 parent dashboard themes | ✅ | Cosmetic only, by design |
 | Timer / "race the clock" quests | ✅ | Best times are recorded per quest |
 | Test-score quests | ✅ | 80%+ earns a bonus |
