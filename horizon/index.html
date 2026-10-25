@@ -1,0 +1,278 @@
+<title>MTRX Horizon</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* The artwork is the design, untouched and full-bleed. Everything here is
+   positioning and hit areas laid over it, in percentages, so the hotspots
+   stay on their targets at any width. Single-theme dark by design. */
+:root {
+  --void: #05060f;
+  --cyan: #35d0ff;
+  --ink: #ffffff;
+  --ink-dim: #a9b8d8;
+  --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+body::before {
+  content: "";
+  position: fixed; inset: 0 0 auto;
+  height: env(safe-area-inset-top, 0px);
+  z-index: 60; background: var(--void);
+}
+
+.stage { position: relative; width: 100%; max-width: 1671px; margin: 0 auto; }
+.shot { position: relative; display: block; width: 100%; height: auto; }
+
+/* A hit area over the artwork. Invisible until you point at it, then it
+   lights the thing you are about to open rather than covering it. */
+.hit {
+  position: absolute;
+  z-index: 3;
+  display: block;
+  border-radius: 14px;
+  border: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.hit:hover, .hit:focus-visible {
+  border-color: var(--glow, var(--cyan));
+  box-shadow: 0 0 28px -4px var(--glow, var(--cyan)), inset 0 0 40px -18px var(--glow, var(--cyan));
+  background: rgba(255, 255, 255, 0.04);
+  outline: none;
+}
+.hit .tip {
+  position: absolute; left: 50%; bottom: -34px; transform: translateX(-50%);
+  white-space: nowrap; opacity: 0; pointer-events: none;
+  background: rgba(5, 8, 22, 0.95); border: 1px solid var(--glow, var(--cyan));
+  color: #fff; font-size: 12px; font-weight: 600;
+  padding: 5px 11px; border-radius: 999px;
+  transition: opacity .15s ease;
+}
+.hit:hover .tip, .hit:focus-visible .tip { opacity: 1; }
+.hit.small { border-radius: 999px; }
+
+/* The one control that is not part of the artwork: a way back and forth
+   between the two screens, and a plain way into RankUp on a phone where
+   hovering a hotspot is not a thing. */
+.bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  background: rgba(5, 6, 15, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(70, 120, 220, 0.22);
+  padding-block: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.seg {
+  display: inline-flex; background: rgba(14, 22, 52, 0.8);
+  border: 1px solid rgba(70, 120, 220, 0.3); border-radius: 999px; padding: 3px;
+}
+.seg button {
+  appearance: none; background: none; border: 0; border-radius: 999px;
+  color: var(--ink-dim); font: 600 13px var(--font);
+  padding: 8px 16px; cursor: pointer; white-space: nowrap;
+}
+.seg button[aria-selected="true"] {
+  background: linear-gradient(97deg, #22b8ff, #3b6ef5 55%, #7c5cf0);
+  color: #fff;
+}
+.open {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 8px;
+  border-radius: 999px; padding: 10px 20px; text-decoration: none;
+  font: 700 13.5px var(--font); color: #04240f;
+  background: linear-gradient(97deg, #2ee68a, #0f9f5c);
+  box-shadow: 0 8px 26px -8px rgba(46, 230, 138, 0.8);
+  white-space: nowrap;
+}
+.open:hover { filter: brightness(1.08); }
+.hint {
+  color: var(--ink-dim); font-size: 12px; white-space: nowrap;
+}
+@media (max-width: 680px) {
+  .hint { display: none; }
+  .open { margin-left: 0; width: 100%; justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ---- the new mark, laid over the one baked into the artwork ----
+
+   The artwork is a flat image, so a logo inside it cannot be swapped —
+   it can only be covered. Two things make that invisible rather than
+   obvious:
+
+   The patch under each one is filled with the colour sampled from the
+   pixels immediately around that mark in the artwork itself, so it
+   matches what it replaces instead of being a guess at "dark blue".
+
+   The mark is round, and it is the tight crop where the sphere fills
+   the frame. A circle has no corners to mismatch, and the tight crop
+   means the M is as large as it can be in the pixels available.
+
+   It is served at 512px into slots between 36 and 72px, so it is only
+   ever scaled DOWN. Nothing here upscales it and nothing filters it;
+   that is the whole of not being blurry. */
+.mark {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  z-index: 2;
+}
+.patch {
+  position: absolute;
+  z-index: 1;
+}
+
+</style>
+
+<div class="bar">
+  <div class="seg" role="tablist" aria-label="Screen">
+    <button role="tab" aria-selected="true" data-screen="home">Home</button>
+    <button role="tab" aria-selected="false" data-screen="console">Control console</button>
+  </div>
+  <span class="hint">The RankUp card is live — click it.</span>
+  <a class="open" href="https://claude.ai/artifact/5bG6s4Zm2mUnyYnfyaPdoE">
+    Open RankUp
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>
+  </a>
+</div>
+
+<!-- ============ HOME ============ -->
+<div class="stage" data-screen="home">
+  <img class="shot" src="horizon-home.webp" alt="MTRX Horizon home screen: One Vision. Infinite Possibilities." width="1671" height="941">
+
+  <!-- The supplied artwork's own marks, covered and replaced. -->
+  <div class="patch" style="left:1.90%; top:0.4%; width:6.9%; height:7.5%; background:rgb(1,4,27)"></div>
+  <img class="mark" src="mtrx-mark.png" alt="MTRX" width="512" height="512"
+       style="left:2.15%; top:1.17%; width:3.47%; height:6.16%">
+
+  <img class="patch" src="patch-home.png" alt="" aria-hidden="true" width="98" height="72"
+       style="left:4.55%; top:74.18%; width:5.86%; height:7.65%">
+  <img class="mark" src="mtrx-mark.png" alt="" aria-hidden="true" width="512" height="512"
+       style="left:5.57%; top:74.50%; width:3.83%; height:6.80%">
+
+  <img class="mark" src="mtrx-mark.png" alt="" aria-hidden="true" width="512" height="512"
+       style="left:89.95%; top:1.91%; width:2.15%; height:3.83%">
+
+  <!-- The RankUp platform card. -->
+  <a class="hit" href="https://claude.ai/artifact/5bG6s4Zm2mUnyYnfyaPdoE"
+     style="--glow:#16d47a; left:3.5%; top:49.3%; width:31.2%; height:21.8%"
+     aria-label="Open RankUp">
+    <span class="tip">Open RankUp →</span>
+  </a>
+  <!-- Its Manage button, which people will aim at directly. -->
+  <a class="hit small" href="https://claude.ai/artifact/5bG6s4Zm2mUnyYnfyaPdoE"
+     style="--glow:#16d47a; left:5.0%; top:65.8%; width:7.6%; height:4.4%"
+     aria-label="Manage RankUp">
+  </a>
+  <!-- Explore Our Apps. -->
+  <a class="hit small" href="https://claude.ai/artifact/5bG6s4Zm2mUnyYnfyaPdoE"
+     style="left:3.3%; top:38.4%; width:12.6%; height:5.0%"
+     aria-label="Explore our apps">
+    <span class="tip">Explore our apps →</span>
+  </a>
+  <!-- The two platforms that are not built yet say so instead of going nowhere. -->
+  <button class="hit" type="button" data-soon="CyberLogix"
+     style="--glow:#4aa3ff; left:35.6%; top:49.3%; width:29.6%; height:21.8%">
+    <span class="tip">CyberLogix — not built yet</span>
+  </button>
+  <button class="hit" type="button" data-soon="OmniArmor"
+     style="--glow:#c084fc; left:65.8%; top:49.3%; width:30.6%; height:21.8%">
+    <span class="tip">OmniArmor — not built yet</span>
+  </button>
+  <!-- The console, reachable from the artwork's own nav. -->
+  <button class="hit small" type="button" data-screen-go="console"
+     style="left:40.0%; top:2.3%; width:5.3%; height:3.6%">
+    <span class="tip">Control console</span>
+  </button>
+</div>
+
+<!-- ============ CONTROL CONSOLE ============ -->
+<div class="stage" data-screen="console" hidden>
+  <img class="shot" src="horizon-console.webp" alt="MTRX Horizon control console with platform list and live metrics" width="1671" height="941">
+
+  <div class="patch" style="left:1.90%; top:0.3%; width:6.3%; height:7.3%; background:rgb(1,3,23)"></div>
+  <img class="mark" src="mtrx-mark.png" alt="MTRX" width="512" height="512"
+       style="left:2.15%; top:1.06%; width:3.35%; height:5.95%">
+
+  <img class="patch" src="patch-con.png" alt="" aria-hidden="true" width="64" height="52"
+       style="left:3.83%; top:62.49%; width:3.83%; height:5.53%">
+  <img class="mark" src="mtrx-mark.png" alt="" aria-hidden="true" width="512" height="512"
+       style="left:4.37%; top:62.91%; width:2.63%; height:4.68%">
+
+  <img class="mark" src="mtrx-mark.png" alt="" aria-hidden="true" width="512" height="512"
+       style="left:89.89%; top:1.81%; width:2.03%; height:3.83%">
+
+  <!-- The RankUp row in OUR PLATFORMS. -->
+  <a class="hit" href="https://claude.ai/artifact/5bG6s4Zm2mUnyYnfyaPdoE"
+     style="--glow:#16d47a; left:12.7%; top:46.3%; width:23.4%; height:7.4%"
+     aria-label="Open RankUp">
+    <span class="tip">Open RankUp →</span>
+  </a>
+  <!-- Launch App, top of Quick Actions. -->
+  <a class="hit" href="https://claude.ai/artifact/5bG6s4Zm2mUnyYnfyaPdoE"
+     style="left:82.8%; top:46.8%; width:15.4%; height:4.6%"
+     aria-label="Launch RankUp">
+    <span class="tip">Launch RankUp →</span>
+  </a>
+  <!-- RankUp 2.0 in Recent Projects. -->
+  <a class="hit" href="https://claude.ai/artifact/5bG6s4Zm2mUnyYnfyaPdoE"
+     style="--glow:#16d47a; left:56.3%; top:81.4%; width:21.2%; height:3.6%"
+     aria-label="Open RankUp">
+    <span class="tip">RankUp 2.0 →</span>
+  </a>
+  <button class="hit small" type="button" data-screen-go="home"
+     style="left:30.8%; top:2.4%; width:4.2%; height:3.6%">
+    <span class="tip">Home</span>
+  </button>
+</div>
+
+<p id="say" role="status" aria-live="polite"
+   style="max-width:1671px;margin:14px auto 30px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));color:#6d7fa6;font-size:12px">
+  The artwork is exactly as supplied. RankUp opens in a new tab.
+</p>
+
+<script>
+(function () {
+  var stages = [].slice.call(document.querySelectorAll('.stage'));
+  var tabs = [].slice.call(document.querySelectorAll('.seg button'));
+  var say = document.getElementById('say');
+  var ALLOWED = ['home', 'console'];
+
+  function show(screen) {
+    if (ALLOWED.indexOf(screen) < 0) screen = 'home';
+    stages.forEach(function (s) { s.hidden = s.getAttribute('data-screen') !== screen; });
+    tabs.forEach(function (t) {
+      t.setAttribute('aria-selected', String(t.getAttribute('data-screen') === screen));
+    });
+    try { history.replaceState(null, '', '#' + screen); } catch (e) { /* the hash is a nicety */ }
+    window.scrollTo({ top: 0 });
+  }
+
+  document.addEventListener('click', function (e) {
+    var tab = e.target.closest('[data-screen]');
+    if (tab && tab.tagName === 'BUTTON') { show(tab.getAttribute('data-screen')); return; }
+
+    var go = e.target.closest('[data-screen-go]');
+    if (go) { show(go.getAttribute('data-screen-go')); return; }
+
+    var soon = e.target.closest('[data-soon]');
+    if (soon) {
+      say.textContent = soon.getAttribute('data-soon') + ' is in the design but not built yet. RankUp is the one you can open.';
+    }
+  });
+
+  var start = (location.hash || '').replace('#', '');
+  show(ALLOWED.indexOf(start) >= 0 ? start : 'home');
+})();
+</script>
