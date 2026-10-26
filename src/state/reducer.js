@@ -461,6 +461,17 @@ export function reducer(state, action) {
         { type: 'theme_changed', kidId: action.kidId, meta: { themeId: action.themeId } },
       )
 
+    /*
+     * A chapter of the theme's story has been watched on this device. Local
+     * only, like bestTimes: the mapper never sends it up, and a pull keeps
+     * it. For the dragon it also marks where the next replay starts.
+     */
+    case 'SEE_STORY':
+      return mapKid(state, action.kidId, (k) => ({
+        ...k,
+        storySeen: { ...(k.storySeen || {}), [action.chapter]: action.at ?? Date.now() },
+      }))
+
     case 'SET_KID_COSMETIC':
       return mapKid(state, action.kidId, (k) => ({
         ...k,

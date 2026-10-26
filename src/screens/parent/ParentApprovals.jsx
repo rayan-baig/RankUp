@@ -5,6 +5,7 @@ import { VERDICT, VERDICT_META } from '../../lib/aiVerify.js'
 import { calcReward } from '../../lib/xp.js'
 import { relativeTime, formatDuration } from '../../lib/dates.js'
 import { resolveKidTheme } from '../../data/kidThemes.js'
+import { storyProgress } from '../../lib/dragonFight.js'
 import { levelFromXp } from '../../lib/xp.js'
 import { isElite } from '../../state/reducer.js'
 import { Screen, Card, Button, SectionTitle, EmptyState, Banner, Chip, TextInput, Modal } from '../../components/ui.jsx'
@@ -54,7 +55,7 @@ export default function ParentApprovals() {
         const quest = state.quests.find((q) => q.id === sub.questId)
         const kid = state.kids.find((k) => k.id === sub.kidId)
         if (!quest || !kid) return null
-        const theme = resolveKidTheme(kid.themeId, levelFromXp(kid.xp).level)
+        const theme = resolveKidTheme(kid.themeId, levelFromXp(kid.xp).level, storyProgress(state, kid))
         const reward = calcReward(quest, { elite: isElite(state), streak: kid.streak.count, onTime: sub.onTime !== false })
         const photo = sub.photoId ? getPhoto(sub.photoId) : null
         const report = sub.report

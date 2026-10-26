@@ -24,6 +24,8 @@ Legend: ✅ genuinely works · 🟡 works but only on this device · ❌ looks r
 | 5-tier avatar that evolves | ✅ | Tap it — it reacts |
 | A world that changes as you level | ✅ | Every theme has four worlds at levels 10/25/50/100, each with its own palette, sky and line of story |
 | Block Craft level evolutions | ✅ | Nine forms, not five: Overworld, then The Nether Portal (125), Nether Rise (175), The End (250), The Dragon (399). Boarling companion from 125, Ender from 250 |
+| Block Craft story and battles | ✅ | A battle scene per chapter (raid, portal, Nether, End, dragon, Hero's Return). Glitch arrivals at the portal and the End. Worlds stay secret until reached |
+| Dragon boss fight | ✅ | Health bars for the child and the dragon. Approved chores hit by difficulty; chores sent back, 48 idle hours and random specials hit back. Worked out from synced chores, nothing stored. Hero's Return opens when it falls |
 | 10 parent dashboard themes | ✅ | Cosmetic only, by design |
 | Timer / "race the clock" quests | ✅ | Best times are recorded per quest |
 | Test-score quests | ✅ | 80%+ earns a bonus |

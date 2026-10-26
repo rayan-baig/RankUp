@@ -68,7 +68,13 @@ const run = (cmd, args, opts = {}) => {
 
 // --- 1. build, with nothing behind it ---------------------------------------
 console.log('· building the app in its no-backend mode')
-run('npx', ['vite', 'build', '--outDir', DIST], {
+/*
+ * `--base ./` because a preview is opened from inside somebody else's
+ * folder (the MTRX Horizon demo puts it under rankup/). Built for the site
+ * root, the pictures the bundle imports asked for /assets/... and came back
+ * missing, so every avatar was a broken image.
+ */
+run('npx', ['vite', 'build', '--outDir', DIST, '--base', './'], {
   env: {
     ...process.env,
     VITE_SUPABASE_URL: '',

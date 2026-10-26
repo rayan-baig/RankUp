@@ -4,6 +4,7 @@ import { activeLockout, guildsAllowedByPlan, overdriveActive } from './state/red
 import { useRoute, navigate } from './lib/router.js'
 import { applyTheme } from './lib/applyTheme.js'
 import { resolveKidTheme } from './data/kidThemes.js'
+import { storyProgress } from './lib/dragonFight.js'
 import { resolveParentTheme } from './data/parentThemes.js'
 import { levelFromXp } from './lib/xp.js'
 
@@ -25,6 +26,8 @@ import KidShop from './screens/kid/KidShop.jsx'
 import KidMarket from './screens/kid/KidMarket.jsx'
 import KidArcade from './screens/kid/KidArcade.jsx'
 import KidProfile from './screens/kid/KidProfile.jsx'
+import KidStory from './screens/kid/KidStory.jsx'
+import KidDragon from './screens/kid/KidDragon.jsx'
 import KidPairing from './screens/kid/KidPairing.jsx'
 import ParentDashboard from './screens/parent/ParentDashboard.jsx'
 import ParentApprovals from './screens/parent/ParentApprovals.jsx'
@@ -102,8 +105,10 @@ export default function App() {
 
   const activeKid = state.kids.find((k) => k.id === state.session.kidId) || state.kids[0] || null
   const kidTheme = useMemo(
-    () => (activeKid ? resolveKidTheme(activeKid.themeId, levelFromXp(activeKid.xp).level) : null),
-    [activeKid],
+    () => (activeKid
+      ? resolveKidTheme(activeKid.themeId, levelFromXp(activeKid.xp).level, storyProgress(state, activeKid))
+      : null),
+    [activeKid, state.submissions, state.quests],
   )
   const parentTheme = useMemo(() => resolveParentTheme(state.family.parentThemeId), [state.family.parentThemeId])
   const pendingTheme = state.pendingPairing
@@ -232,7 +237,9 @@ export default function App() {
   }
 
   const pending = pendingSubmissions(state).length
-  const glitch = Boolean(kidTheme?.evolution?.glitchIntro)
+  // The arrival glitch keeps tearing the screen until the child has watched
+  // the chapter that explains it.
+  const glitch = Boolean(kidTheme?.evolution?.glitchIntro && !activeKid?.storySeen?.[kidTheme.evolution.chapter])
 
   return (
     <>
@@ -296,6 +303,8 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route === '/kid/market') return <KidMarket />
   if (route === '/kid/arcade') return <KidArcade />
   if (route === '/kid/profile') return <KidProfile />
+  if (route.startsWith('/kid/story/')) return <KidStory chapter={route.replace('/kid/story/', '')} />
+  if (route === '/kid/dragon') return <KidDragon />
 
   if (route === '/parent') return <ParentDashboard />
   if (route === '/parent/approvals') return <ParentApprovals />

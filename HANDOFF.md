@@ -431,6 +431,47 @@ really are different drawings, because there the worlds *are* the story:
 Overworld → The Nether Portal (125) → Nether Rise (175) → The End (250) →
 The Dragon (399).
 
+### The Block Craft story, battles and the dragon fight
+
+Block Craft is told as a story: *raiders hit your village every night, you
+are sick and tired of it, and you fight back.* Each chapter is a short
+pixel-art battle (`src/lib/battleEngine.js`, drawn on a canvas, no React in
+the loop):
+
+| Chapter | Opens at | Scene |
+|---|---|---|
+| Raid Night | level 1 | raiders at the village gate |
+| The Nether Portal | 125 | through the portal — **glitch** arrival |
+| Nether Rise | 175 | the raiders' fortress |
+| The End | 250 | shadow walkers — **glitch** arrival |
+| The Dragon | 399 | the boss fight, powered by chores |
+| Hero's Return | **when the dragon is beaten** | the village cheers you home |
+
+- **Secret until reached.** No screen names a world before the child gets
+  there: the chip says only "Secret world at level N" or "Beat the dragon to
+  find out what comes next". `/kid/story/<chapter>` for a chapter not
+  reached shows the home screen. `storyChapters()` in `kidThemes.js` only
+  ever returns chapters reached.
+- **Watching.** A "New chapter" card on the kid home screen opens
+  `/kid/story/<chapter>`; the level-up overlay has "Watch the battle". The
+  arrival glitch keeps tearing the background until that chapter is watched.
+  Watched chapters are `kid.storySeen` — local to the device, never synced.
+- **The dragon fight** (`src/lib/dragonFight.js`, `/kid/dragon`). Dragon
+  1,000 health, child 100. An approved chore is a hit: easy 40, medium 80,
+  hard 150, boss 300. A chore sent back: the dragon hits for 15. 48 hours
+  with no approval: 25. About one day in four, a special attack (Wing Storm
+  10, Void Breath 20, Tail Quake 15). At zero health the child rests in the
+  village: health back to 100, the dragon heals 100, **nothing earned is
+  lost.**
+- **Nothing about the fight is stored.** It is worked out from the synced
+  chores plus the clock, so every device agrees and there is no database
+  change. Specials use a hash of the child's id and the date, not
+  `Math.random`, for the same reason. The dragon screen replays what
+  happened since the child last looked and ends on the real numbers.
+- Tests: `tests/dragon.mjs` (the arithmetic) and `tests/battles.mjs` (every
+  scene plays and is won, the replay lands on the fight's numbers, chapters
+  stay secret). Both run in `npm run test:awards`.
+
 All **75 palettes** (15 themes × base + 4 worlds) pass contrast floors, checked
 in `tests/themes.mjs`. Light themes stay light at every stage — an earlier
 "Pale Cream" world put dark night artwork behind dark-on-light text.
@@ -440,6 +481,8 @@ in `tests/themes.mjs`. Light themes stay light at every stage — an earlier
 | Thing | File |
 |---|---|
 | Theme data, worlds, stories | `src/data/kidThemes.js` |
+| Battle scenes / dragon fight | `src/lib/battleEngine.js`, `src/lib/dragonFight.js` |
+| Story and dragon screens | `src/screens/kid/KidStory.jsx`, `src/screens/kid/KidDragon.jsx` |
 | Scenes + the shared Sky | `src/components/ThemeBackground.jsx` (19 scenes) |
 | Aurora, dust, vignette | `src/components/Atmosphere.jsx` |
 | Avatar and its forms | `src/components/Avatar.jsx`, `src/lib/avatarTiers.js` |

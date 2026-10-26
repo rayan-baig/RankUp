@@ -66,6 +66,7 @@ export const kids = {
     lastLoginBonus: row.last_login_bonus || null,
     // Local-only, never sent: keep whatever this device already had.
     bestTimes: existing.bestTimes || {},
+    storySeen: existing.storySeen || {},
     pairedDeviceAt: existing.pairedDeviceAt ?? null,
     createdAt: ms(row.created_at) || existing.createdAt || Date.now(),
     rev: row.rev,

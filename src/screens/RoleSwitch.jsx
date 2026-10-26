@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useApp } from '../state/AppContext.jsx'
 import { resolveKidTheme } from '../data/kidThemes.js'
+import { storyProgress } from '../lib/dragonFight.js'
 import { levelFromXp } from '../lib/xp.js'
 import Avatar from '../components/Avatar.jsx'
 import { Card, Button, TextInput, Modal } from '../components/ui.jsx'
@@ -63,7 +64,7 @@ export default function RoleSwitch() {
       <div className="space-y-2.5 mb-5">
         {state.kids.map((kid) => {
           const { level } = levelFromXp(kid.xp)
-          const theme = resolveKidTheme(kid.themeId, level)
+          const theme = resolveKidTheme(kid.themeId, level, storyProgress(state, kid))
           return (
             <button
               key={kid.id}

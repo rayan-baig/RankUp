@@ -3,6 +3,7 @@ import { useApp, useElite, pendingSubmissions } from '../../state/AppContext.jsx
 import { levelFromXp, formatXp } from '../../lib/xp.js'
 import { lastSevenDays, relativeTime } from '../../lib/dates.js'
 import { resolveKidTheme } from '../../data/kidThemes.js'
+import { storyProgress } from '../../lib/dragonFight.js'
 import { findGame } from '../../data/minigames.js'
 import { MARKET_SKINS } from '../../data/marketSkins.js'
 import { activeLockout } from '../../state/reducer.js'
@@ -73,7 +74,7 @@ export default function ParentDashboard() {
       ) : (
         state.kids.map((kid) => {
           const { level, progress } = levelFromXp(kid.xp)
-          const theme = resolveKidTheme(kid.themeId, level)
+          const theme = resolveKidTheme(kid.themeId, level, storyProgress(state, kid))
           const lock = activeLockout(kid)
           const kidPending = pending.filter((s) => s.kidId === kid.id).length
           const active = state.quests.filter((q) => q.kidId === kid.id && (q.status === 'assigned' || q.status === 'redo')).length

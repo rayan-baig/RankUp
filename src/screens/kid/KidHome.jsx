@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
 import { levelFromXp, formatXp, xpToNext } from '../../lib/xp.js'
-import { nextEvolution } from '../../data/kidThemes.js'
+import { nextEvolution, storyChapters } from '../../data/kidThemes.js'
+import { storyProgress, dragonFight, DRAGON_HP, HERO_HP } from '../../lib/dragonFight.js'
 import { isMarketOpen } from '../../data/marketSkins.js'
 import { dayKey, lastSevenDays } from '../../lib/dates.js'
 import Avatar, { avatarTier, nextTierLevel, tiersFor } from '../../components/Avatar.jsx'
@@ -25,7 +26,16 @@ export default function KidHome() {
   const { level, intoLevel, needed, progress } = levelFromXp(kid.xp)
   const tier = avatarTier(level, theme)
   const nextTier = nextTierLevel(level, theme)
-  const evolution = nextEvolution(kid.themeId, level)
+  const story = storyProgress(state, kid)
+  const evolution = nextEvolution(kid.themeId, level, story)
+  /* Themes told as a story (Block Craft): the newest chapter not yet
+     watched, and the dragon fight while it is on. */
+  const chapters = storyChapters(kid.themeId, level, story)
+  const unwatched = chapters.filter((c) => c.chapter !== 'dragon' && !kid.storySeen?.[c.chapter])
+  const newChapter = unwatched[unwatched.length - 1] || null
+  const fight = dragonFight(state, kid)
+  const fightOn = fight.active && !fight.defeatedAt
+  const fightNews = fightOn ? fight.events.filter((e) => e.at > (kid.storySeen?.dragon || 0)).length : 0
   const quests = state.quests.filter((q) => q.kidId === kid.id)
   const active = quests.filter((q) => q.status === 'assigned' || q.status === 'redo')
   const waiting = quests.filter((q) => q.status === 'submitted')
@@ -103,9 +113,12 @@ export default function KidHome() {
         <div className="flex flex-wrap gap-1.5 mt-3">
             <Chip tone="var(--accent)">Form {tier} / {tiersFor(theme).length}</Chip>
             {nextTier && <Chip>Next form at level {nextTier}</Chip>}
+            {/* When, never what: a world nobody has reached is a secret. */}
             {evolution && (
               <Chip tone="var(--accent-2)">
-                {evolution.label} unlocks at {evolution.level}
+                {evolution.requires === 'dragonDefeated'
+                  ? '🔒 Beat the dragon to find out what comes next'
+                  : `🔒 Secret world at level ${evolution.level}`}
               </Chip>
             )}
         </div>
@@ -115,6 +128,64 @@ export default function KidHome() {
           </p>
         )}
       </Card>
+
+      {/* The story: a new chapter to watch, or the fight that is on. */}
+      {newChapter && (
+        <button
+          type="button"
+          onClick={() => navigate(`/kid/story/${newChapter.chapter}`)}
+          className="card w-full mb-3 p-4 flex items-center gap-3 text-left transition-transform active:scale-[0.98] anim-pop"
+          style={{ borderColor: 'var(--accent)', boxShadow: '0 0 22px -10px var(--accent)' }}
+        >
+          <span className="text-2xl shrink-0" aria-hidden="true">🎬</span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[10px] uppercase tracking-wider" style={{ color: 'var(--accent)' }}>New chapter</span>
+            <span className="block font-semibold text-sm truncate">{newChapter.label}</span>
+            <span className="block text-xs text-muted">Watch the battle.</span>
+          </span>
+          <span aria-hidden="true" className="text-muted">▶</span>
+        </button>
+      )}
+      {fightOn && (
+        <button
+          type="button"
+          onClick={() => navigate('/kid/dragon')}
+          className="card w-full mb-3 p-4 text-left transition-transform active:scale-[0.98]"
+          style={{ borderColor: '#c94bff' }}
+        >
+          <span className="flex items-center gap-3 mb-2">
+            <span className="text-2xl shrink-0" aria-hidden="true">🐉</span>
+            <span className="flex-1 min-w-0">
+              <span className="block font-semibold text-sm">The dragon fight</span>
+              <span className="block text-xs text-muted">
+                {fightNews ? `${fightNews} new ${fightNews === 1 ? 'move' : 'moves'} to watch.` : 'Every chore you finish is a hit.'}
+              </span>
+            </span>
+            <span aria-hidden="true" className="text-muted">›</span>
+          </span>
+          <span className="grid grid-cols-2 gap-3 text-[11px]">
+            <span>
+              <span className="block mb-1">You · {fight.hero}</span>
+              <ProgressBar value={fight.hero} max={HERO_HP} height={7} tone="#5ad85a" label="Your health" />
+            </span>
+            <span>
+              <span className="block mb-1">Dragon · {fight.dragon}</span>
+              <ProgressBar value={fight.dragon} max={DRAGON_HP} height={7} tone="#c94bff" label="The dragon's health" />
+            </span>
+          </span>
+        </button>
+      )}
+      {!newChapter && !fightOn && chapters.length > 0 && (
+        <button
+          type="button"
+          onClick={() => navigate(`/kid/story/${chapters.filter((c) => c.chapter !== 'dragon').pop().chapter}`)}
+          className="card w-full mb-3 p-3 flex items-center gap-3 text-left transition-transform active:scale-[0.98]"
+        >
+          <span className="text-xl shrink-0" aria-hidden="true">📖</span>
+          <span className="flex-1 min-w-0 text-sm">Your story so far</span>
+          <span className="text-xs text-muted">Watch again ▶</span>
+        </button>
+      )}
 
       {/* The one you are on, with how far through it you are. */}
       {active.length > 0 && (

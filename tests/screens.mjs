@@ -22,6 +22,7 @@ const PARENT_ROUTES = [
 ]
 const KID_ROUTES = [
   '/kid', '/kid/quests', '/kid/shop', '/kid/market', '/kid/arcade', '/kid/guild', '/kid/profile',
+  '/kid/story/raid', '/kid/dragon',
 ]
 const OPEN_ROUTES = ['/legal/privacy', '/legal/terms', '/switch']
 

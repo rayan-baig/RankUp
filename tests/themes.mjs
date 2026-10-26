@@ -57,12 +57,14 @@ let worst = { ratio: Infinity, where: '' }
 for (const theme of KID_THEMES) {
   // Level 1, then one level past each evolution threshold, which is where an
   // override has just taken effect.
-  const levels = [1]
-  for (const e of theme.evolutions || []) levels.push(e.level)
+  // A world that also needs a story milestone (Block Craft's last, opened
+  // by beating the dragon) is checked with that milestone met.
+  const levels = [[1, null]]
+  for (const e of theme.evolutions || []) levels.push([e.level, e.requires ? { [e.requires]: true } : null])
   let bad = []
 
-  for (const level of levels) {
-    const t = resolveKidTheme(theme.id, level)
+  for (const [level, progress] of levels) {
+    const t = resolveKidTheme(theme.id, level, progress)
     const c = t.colors
     const checks = [
       ['ink on bg', c.ink, c.bg, BODY],
@@ -108,7 +110,7 @@ console.log('\n=== Evolutions keep what they do not override ===')
 for (const theme of KID_THEMES.filter((t) => t.evolutions?.length)) {
   const broken = []
   for (const e of theme.evolutions) {
-    const t = resolveKidTheme(theme.id, e.level)
+    const t = resolveKidTheme(theme.id, e.level, e.requires ? { [e.requires]: true } : null)
     if (t.name !== theme.name) broken.push(`${e.level} renamed the theme`)
     if (t.currency?.name !== theme.currency.name) broken.push(`${e.level} changed the currency`)
     for (const key of ['bg', 'surface', 'ink', 'accent']) {

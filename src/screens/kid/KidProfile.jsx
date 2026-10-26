@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
 import { levelFromXp, formatXp } from '../../lib/xp.js'
 import { KID_THEME_MAP, nextEvolution } from '../../data/kidThemes.js'
+import { storyProgress } from '../../lib/dragonFight.js'
 import { PROFILE_FRAMES, DROP_SELECTORS } from '../../state/initialState.js'
 import Avatar, { avatarTier, tiersFor } from '../../components/Avatar.jsx'
 import ThemePicker from '../../components/ThemePicker.jsx'
@@ -37,7 +38,7 @@ export default function KidProfile() {
   if (!kid) return null
   const { level } = levelFromXp(kid.xp)
   const tier = avatarTier(level, theme)
-  const evolution = nextEvolution(kid.themeId, level)
+  const evolution = nextEvolution(kid.themeId, level, storyProgress(state, kid))
 
   // A kid's own device holds no PIN — the parent's PIN lives on the parent's
   // phone. Without this guard an empty box would match the empty stored value
@@ -175,14 +176,14 @@ export default function KidProfile() {
       {evolution && (
         <Card className="mb-3" style={{ borderColor: 'var(--accent-2)' }}>
           <SectionTitle>What happens next</SectionTitle>
+          {/* Not even its name. Worlds are secrets until they are reached:
+              knowing that something is coming is the hook, and finding out
+              what it is belongs to the moment you get there. */}
           <p className="text-sm">
-            Reach level {evolution.level} and {KID_THEME_MAP[kid.themeId].name} changes into{' '}
-            <strong style={{ color: 'var(--accent-2)' }}>{evolution.label}</strong>
-            {evolution.companion ? ' — and something joins you.' : '.'}
+            {evolution.requires === 'dragonDefeated'
+              ? <>🔒 Something is waiting on the other side of this fight. Beat the dragon to find out what.</>
+              : <>🔒 Reach level <strong style={{ color: 'var(--accent-2)' }}>{evolution.level}</strong> and {KID_THEME_MAP[kid.themeId].name} changes into somewhere new. Where is a secret until you get there.</>}
           </p>
-          {/* Deliberately not the next world's story text: knowing the name
-              of what is coming is the hook, being told what happens in it
-              is the spoiler. */}
         </Card>
       )}
 

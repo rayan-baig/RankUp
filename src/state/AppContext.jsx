@@ -9,6 +9,7 @@ import { enqueue as enqueueOp } from '../lib/sync/outbox.js'
 import { transport } from '../lib/sync/transport.js'
 import { NOTICES, notifyLocally, notifyRemote, getPrefs as notificationPrefs } from '../lib/notifications.js'
 import { resolveKidTheme } from '../data/kidThemes.js'
+import { storyProgress } from '../lib/dragonFight.js'
 import { resolveParentTheme } from '../data/parentThemes.js'
 import { levelFromXp } from '../lib/xp.js'
 import { dayOf } from '../lib/recurrence.js'
@@ -398,10 +399,11 @@ export function useKid(kidId) {
 }
 
 export function useKidTheme(kidId) {
+  const { state } = useApp()
   const kid = useKid(kidId)
   if (!kid) return resolveKidTheme(undefined, 1)
   const { level } = levelFromXp(kid.xp)
-  return resolveKidTheme(kid.themeId, level)
+  return resolveKidTheme(kid.themeId, level, storyProgress(state, kid))
 }
 
 export function useParentTheme() {
