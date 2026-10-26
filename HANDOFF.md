@@ -435,8 +435,11 @@ The Dragon (399).
 
 Block Craft is told as a story: *raiders hit your village every night, you
 are sick and tired of it, and you fight back.* Each chapter is a short
-pixel-art battle (`src/lib/battleEngine.js`, drawn on a canvas, no React in
-the loop):
+animated battle drawn on a canvas, no React in the loop. The fight is in
+`src/lib/battleEngine.js`; the look is in `src/lib/battleArt.js`: smooth,
+lit, cartoon-style block characters drawn at the screen's real pixels, so
+it is sharp on any phone (it was pixel art until the owner asked for
+something less pixelated):
 
 | Chapter | Opens at | Scene |
 |---|---|---|

@@ -1,14 +1,15 @@
 /**
- * The Block Craft battle scenes: one short pixel-art fight per chapter of
- * the story, drawn on a canvas.
+ * The Block Craft battle scenes: one short fight per chapter of the story,
+ * drawn on a canvas.
  *
  * No React in here on purpose. A scene is a little game loop — sixty frames
- * a second of moving sprites — and running that through React state would
- * re-render the whole screen every frame. The component in
+ * a second of moving characters — and running that through React state
+ * would re-render the whole screen every frame. The component in
  * components/BattleScene.jsx owns the canvas and hands it to this file.
  *
- * Everything is drawn at 256×144 into a buffer and scaled up with the
- * pixels kept sharp, so it looks like the blocks it is about at any size.
+ * This file decides where everyone is and what happens; lib/battleArt.js
+ * paints it. The fight runs in its own 256 × 144 units and is drawn at the
+ * real size of the screen, so it is sharp on any phone.
  *
  * The dragon chapter is different from the rest: it does not play a made-up
  * fight. It is handed the real fight from lib/dragonFight.js and replays
@@ -17,9 +18,7 @@
  * exactly the numbers that fight worked out.
  */
 
-const W = 256
-const H = 144
-const GROUND = 118
+import { makeArt, W, H, GROUND } from './battleArt.js'
 
 /** What each chapter looks like. The words for it live in data/kidThemes.js. */
 export const SCENES = {
@@ -35,6 +34,8 @@ const BOSS_MAX = 1000
 const HERO_MAX = 100
 /** How the dragon moves for each kind of attack in the real fight. */
 const MOVE = { sentBack: 'breath', idle: 'dive', wings: 'wings', breath: 'breath', quake: 'quake' }
+/** Drawn at up to this many real pixels across; more costs battery for nothing. */
+const MAX_WIDTH = 1600
 
 /**
  * Start a scene on `canvas`.
@@ -46,199 +47,39 @@ const MOVE = { sentBack: 'breath', idle: 'dive', wings: 'wings', breath: 'breath
  *   onWon          called once when the fight is won (or the replay is over)
  *   onEvent        dragon chapter: called as each replayed event lands
  *   manual         do not start a loop; the caller drives it with step()
- *   makeBuffer     for tests: how to make the off-screen canvas
+ *   makeBuffer     for tests: how to make the off-screen canvases
  *
- * Returns { destroy, replay, step, snapshot }.
+ * The canvas's own width and height are the real pixels to draw; set them
+ * (and call redraw) when it changes size.
+ *
+ * Returns { destroy, replay, redraw, step, snapshot }.
  */
 export function createBattle(canvas, opts = {}) {
   const scene = SCENES[opts.chapter] || SCENES.raid
   const ctx = canvas.getContext('2d')
-  const buf = (opts.makeBuffer || (() => document.createElement('canvas')))()
-  buf.width = W
-  buf.height = H
+  const makeBuffer = opts.makeBuffer || (() => document.createElement('canvas'))
+  // Two layers off screen: the still parts of the world, painted once per
+  // size, and the frame being built.
+  const bg = makeBuffer()
+  const buf = makeBuffer()
+  const bgc = bg.getContext('2d')
   const g = buf.getContext('2d')
+  const art = makeArt(g)
+  const bgArt = makeArt(bgc)
+  let k = 0
 
-  /* ---------------------------------------------------------- drawing helpers */
-  const R = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(Math.round(x), Math.round(y), w, h) }
   let seed = 7
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 }
-  /* Characters are drawn at twice size, anchored on their own feet, so the
-     fight reads at a glance instead of being a row of ants. */
-  function big(x, y, fn, s = 2) { g.save(); g.translate(x, y); g.scale(s, s); g.translate(-x, -y); fn(); g.restore() }
 
-  function sky(world, t) {
-    const grads = {
-      village: ['#06101f', '#14284a'], nether: ['#2a0505', '#6b1408'],
-      end: ['#05020c', '#1c1033'], dawn: ['#2b2a6b', '#ff9a5a'],
-    }[world]
-    const gr = g.createLinearGradient(0, 0, 0, GROUND)
-    gr.addColorStop(0, grads[0]); gr.addColorStop(1, grads[1])
-    g.fillStyle = gr; g.fillRect(0, 0, W, H)
-    if (world === 'village') {
-      R(206, 16, 14, 14, '#f4f1d0'); R(208, 18, 4, 4, '#dcd8b0') // a square moon
-      for (let i = 0; i < 26; i++) R((i * 53) % W, (i * 29) % 70, 1, 1, i % 3 ? '#9fb7e0' : '#fff')
-    }
-    if (world === 'end') {
-      for (let i = 0; i < 60; i++) {
-        const tw = (Math.sin(t * 2 + i) + 1) / 2
-        R((i * 97) % W, (i * 41) % 100, 1, 1, `rgba(220,200,255,${0.3 + tw * 0.7})`)
-      }
-    }
-    if (world === 'nether') {
-      for (let i = 0; i < 14; i++) { // drifting ash
-        const y = (i * 37 + t * 10) % GROUND
-        const x = (i * 71 + Math.sin(t + i) * 6) % W
-        R(x, GROUND - y, 1, 1, '#ffb08a')
-      }
-    }
-    if (world === 'dawn') { R(30, 30, 18, 18, '#ffe08a'); R(26, 34, 26, 10, 'rgba(255,224,138,.35)') }
-  }
-
-  function groundRow(world) {
-    const top = { village: '#5ad85a', nether: '#8f2e1d', end: '#e8e0a8', dawn: '#6fe06f' }[world]
-    const dirt = { village: '#7a5232', nether: '#5c1a12', end: '#cfc68c', dawn: '#8a6038' }[world]
-    for (let x = 0; x < W; x += 8) {
-      R(x, GROUND, 8, 3, top); R(x, GROUND + 3, 8, H - GROUND - 3, dirt)
-      R(x, GROUND + 3, 1, H, 'rgba(0,0,0,.18)')
-      if ((x / 8) % 3 === 0) R(x + 3, GROUND + 9, 2, 2, 'rgba(0,0,0,.2)')
-    }
-  }
-
-  function house(x, w, h, wall, roof, lit) {
-    R(x, GROUND - h, w, h, wall)
-    for (let i = 0; i < 4; i++) R(x - 2 + i * 2, GROUND - h - 2 - i * 2, w + 4 - i * 4, 2, roof)
-    R(x + w / 2 - 2, GROUND - 8, 4, 8, '#3b2414')
-    R(x + 3, GROUND - h + 4, 4, 4, lit ? '#ffd36b' : '#1a1a2a')
-  }
-
-  function portal(x, t) {
-    R(x, GROUND - 40, 4, 40, '#1a0f2e'); R(x + 24, GROUND - 40, 4, 40, '#1a0f2e')
-    R(x, GROUND - 44, 28, 4, '#1a0f2e')
-    for (let y = 0; y < 40; y += 2) {
-      for (let i = 0; i < 20; i += 2) {
-        const v = Math.sin(t * 6 + y * 0.4 + i * 0.7)
-        R(x + 4 + i, GROUND - 40 + y, 2, 2, v > 0.3 ? '#b06bff' : v > -0.4 ? '#7a2cd6' : '#4b1a8f')
-      }
-    }
-  }
-
-  function backdrop(t) {
-    sky(scene.world, t)
-    if (scene.world === 'village' || scene.world === 'dawn') {
-      house(18, 26, 22, '#a8743f', '#6b3f1f', true)
-      house(56, 22, 18, '#b88a52', '#5a3418', scene.world === 'dawn')
-      house(214, 30, 26, '#a8743f', '#6b3f1f', true)
-      R(100, GROUND - 30, 6, 30, '#6b4a2a'); R(92, GROUND - 42, 22, 14, '#2f8f3a') // a tree
-    }
-    if (scene.world === 'nether') {
-      R(0, GROUND - 46, 40, 46, '#3d0a12'); R(6, GROUND - 56, 10, 10, '#3d0a12'); R(26, GROUND - 52, 10, 6, '#3d0a12')
-      R(200, GROUND - 60, 56, 60, '#2a0608')
-      for (let i = 0; i < 4; i++) R(206 + i * 12, GROUND - 52, 5, 7, '#ff8a3d')
-      const glow = 0.5 + Math.sin(t * 3) * 0.2
-      g.fillStyle = `rgba(255,120,40,${glow * 0.35})`; g.fillRect(0, GROUND - 6, W, 6)
-    }
-    if (scene.world === 'end') {
-      [[30, 54], [70, 40], [210, 60]].forEach(([x, h], i) => {
-        R(x, GROUND - h, 10, h, '#140c24'); R(x + 2, GROUND - h - 4, 6, 4, '#d6b4ff')
-        const p = (Math.sin(t * 3 + i) + 1) / 2
-        g.fillStyle = `rgba(214,180,255,${0.15 + p * 0.25})`; g.fillRect(x - 3, GROUND - h - 8, 16, 12)
-      })
-    }
-    groundRow(scene.world)
-    if (scene.portal) portal(36, t)
-  }
-
-  /* ---------------------------------------------------------- characters */
-  function drawHero(h, t) {
-    const x = h.x
-    const y = GROUND + h.jump
-    const f = h.face
-    const step = h.moving ? Math.sin(t * 14) * 2 : 0
-    const flash = h.hurt > 0 && Math.floor(h.hurt * 30) % 2 === 0
-    const skin = flash ? '#fff' : '#e0a878'
-    R(x - 3, y - 6, 2, 6 + Math.min(0, step), '#3b5bdb'); R(x + 1, y - 6, 2, 6 - Math.max(0, step), '#3b5bdb')
-    R(x - 3, y - 13, 6, 7, flash ? '#fff' : '#1fa3a3')
-    R(x - 3, y - 19, 6, 6, skin); R(x - 3, y - 20, 6, 2, '#5b3a1e')
-    R(x + (f > 0 ? 1 : -2), y - 17, 1, 1, '#1b1b2b')
-    // The sword arm.
-    g.save(); g.translate(x + f * 2, y - 11)
-    const swing = h.swing > 0 ? (1 - h.swing / 0.25) : 0
-    const a = f > 0 ? (-1.9 + swing * 2.6) : (Math.PI + 1.9 - swing * 2.6)
-    g.rotate(h.raise ? -Math.PI / 2 : a)
-    g.fillStyle = '#e0a878'; g.fillRect(0, -1, 3, 2)
-    g.fillStyle = '#6b4a2a'; g.fillRect(3, -1, 2, 2)
-    g.fillStyle = '#8ff0ff'; g.fillRect(5, -1, 9, 2); g.fillStyle = '#d8fbff'; g.fillRect(5, -1, 9, 1)
-    g.restore()
-    if (h.swing > 0.05) { // the slash
-      g.strokeStyle = `rgba(200,250,255,${h.swing * 3})`; g.lineWidth = 1
-      g.beginPath(); g.arc(x + f * 2, y - 11, 14, f > 0 ? -1.2 : Math.PI - 0.6, f > 0 ? 0.6 : Math.PI + 1.2); g.stroke()
-    }
-  }
-
-  function raider(e, t, brute) {
-    const s = brute ? 1.5 : 1
-    const x = e.x
-    const y = GROUND
-    const c = (col) => (e.hit > 0 ? '#fff' : col)
-    const step = e.moving ? Math.sin(t * 12 + e.x) * 2 : 0
-    R(x - 3 * s, y - 6 * s, 2 * s, 6 * s + step, c('#2b2f36')); R(x + 1 * s, y - 6 * s, 2 * s, 6 * s - step, c('#2b2f36'))
-    R(x - 3 * s, y - 14 * s, 6 * s, 8 * s, c('#3a3f47'))
-    R(x - 3 * s, y - 20 * s, 6 * s, 6 * s, c('#9aa0a6'))
-    R(x - 3 * s, y - 18 * s, 6 * s, 1, c('#2b2f36')) // the frown
-    R(x - 2 * s, y - 17 * s, 1, 1, '#000'); R(x - 0.5 * s, y - 15 * s, 2, 2, c('#7d848c'))
-    const lift = e.attack > 0 ? -6 : 0
-    R(x - 6 * s, y - 15 * s + lift, 2, 9 * s, '#6b4a2a'); R(x - 8 * s, y - 15 * s + lift, 4 * s, 4 * s, '#b9c0c8') // the axe
-  }
-
-  function spirit(e, t) {
-    const x = e.x
-    const y = e.anchor + Math.sin(t * 3 + e.x) * 3
-    for (let i = 0; i < 4; i++) {
-      const a = t * 4 + i * Math.PI / 2
-      R(x + Math.cos(a) * 7 - 1, y + Math.sin(a) * 4 + 4, 2, 4, '#ff9a2a')
-    }
-    g.fillStyle = 'rgba(255,170,40,.25)'; g.fillRect(x - 7, y - 7, 14, 16)
-    R(x - 3, y - 4, 6, 8, e.hit > 0 ? '#fff' : '#ffd23d'); R(x - 2, y - 2, 1, 1, '#3b1a00'); R(x + 1, y - 2, 1, 1, '#3b1a00')
-  }
-
-  function shadowWalker(e) {
-    if (e.blink > 0 && Math.floor(e.blink * 20) % 2) return
-    const x = e.x
-    const y = GROUND
-    const col = e.hit > 0 ? '#fff' : '#0c0816'
-    R(x - 1, y - 14, 1, 14, col); R(x + 1, y - 14, 1, 14, col)
-    R(x - 2, y - 26, 5, 12, col); R(x - 3, y - 25, 1, 12, col); R(x + 3, y - 25, 1, 12, col)
-    R(x - 2, y - 31, 5, 5, col); R(x - 2, y - 29, 2, 1, '#d06bff'); R(x + 1, y - 29, 2, 1, '#d06bff')
-  }
-
-  function drawDragon(e, t) {
-    const x = e.x
-    const y = e.y
-    const flap = Math.sin(t * 6) * 10
-    // Lighter than the night behind it, with a rim, or it vanishes into the sky.
-    const col = e.hit > 0 ? '#fff' : '#3a1a5c'
-    const rim = e.hit > 0 ? '#fff' : '#8a5ad6'
-    g.fillStyle = col
-    g.strokeStyle = rim; g.lineWidth = 1
-    g.beginPath(); g.moveTo(x - 6, y); g.lineTo(x - 30, y - 6 - flap); g.lineTo(x - 18, y + 2); g.fill(); g.stroke()
-    g.beginPath(); g.moveTo(x + 6, y); g.lineTo(x + 30, y - 6 - flap); g.lineTo(x + 18, y + 2); g.fill(); g.stroke()
-    R(x - 16, y - 4, 32, 1, rim)
-    R(x - 16 * e.face, y - 3, 32, 7, col)
-    R(x + 16 * e.face - (e.face > 0 ? 0 : 8), y - 6, 8, 7, col)
-    R(x + 18 * e.face - (e.face > 0 ? -2 : 4), y - 4, 2, 1, '#ff4dff')
-    for (let i = 0; i < 4; i++) R(x - 22 * e.face - i * 4 * e.face, y + Math.sin(t * 5 + i) * 2, 4, 3, col)
-    if (e.breath > 0) {
-      for (let i = 0; i < 12; i++) {
-        const d = i * 4 + (1 - e.breath) * 10
-        R(x + (22 + d) * e.face, y + d * 0.6 + rnd() * 3, 3, 3, i % 2 ? '#c26bff' : '#ff7bff')
-      }
-    }
-  }
-
-  function villager(v, t) {
-    const y = GROUND - Math.max(0, Math.sin(t * 6 + v.p) * 6)
-    R(v.x - 3, y - 14, 6, 14, v.c); R(v.x - 3, y - 20, 6, 6, '#c98f5c'); R(v.x - 1, y - 16, 2, 3, '#a86b3c')
-    R(v.x - 4, y - 12, 1, 4, '#c98f5c'); R(v.x + 3, y - 12, 1, 4, '#c98f5c')
+  /** Match the layers to the canvas; repaint the still world if it changed. */
+  function fit() {
+    const cw = Math.min(MAX_WIDTH, canvas.width || W * 2)
+    const scale = cw / W
+    if (scale === k) return
+    k = scale
+    for (const c of [bg, buf]) { c.width = Math.round(W * k); c.height = Math.round(H * k) }
+    bgc.setTransform(k, 0, 0, k, 0, 0)
+    bgArt.staticWorld(scene.world)
   }
 
   /* ---------------------------------------------------------- particles */
@@ -250,12 +91,9 @@ export function createBattle(canvas, opts = {}) {
       parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 20, life, max: life, c: cols[i % cols.length] })
     }
   }
-  function drawParts(dt) {
+  function moveParts(dt) {
     parts = parts.filter((p) => (p.life -= dt) > 0)
-    for (const p of parts) {
-      p.vy += 80 * dt; p.x += p.vx * dt; p.y += p.vy * dt
-      g.globalAlpha = Math.max(0, p.life / p.max); R(p.x, p.y, 2, 2, p.c); g.globalAlpha = 1
-    }
+    for (const p of parts) { p.vy += 80 * dt; p.x += p.vx * dt; p.y += p.vy * dt }
   }
 
   /* ---------------------------------------------------------- the scene */
@@ -466,73 +304,67 @@ export function createBattle(canvas, opts = {}) {
     })
   }
 
-  function bar(x, y, w, frac, shown, col, label) {
-    R(x - 1, y - 1, w + 2, 7, '#000'); R(x, y, w, 5, '#2a2a3a')
-    R(x, y, Math.round(w * shown), 5, '#ffffff'); R(x, y, Math.round(w * frac), 5, col)
-    R(x, y, Math.round(w * frac), 1, 'rgba(255,255,255,.35)')
-    g.font = 'bold 7px monospace'; g.textAlign = 'left'; g.fillStyle = '#fff'; g.fillText(label, x, y - 2)
-  }
-
+  /* ---------------------------------------------------------- drawing */
   function renderBoss() {
     const b = boss
-    if (!b.dead || b.y < H) big(b.x, b.y, () => drawDragon(b, T), 1.6)
-    bar(8, 12, 76, b.php / HERO_MAX, b.pshown / HERO_MAX, '#5ad85a', `YOU  ${Math.round(b.pshown)}/${HERO_MAX}`)
-    bar(100, 12, 148, b.hp / BOSS_MAX, b.shown / BOSS_MAX, '#c94bff', `THE DRAGON  ${Math.round(b.shown)}/${BOSS_MAX}`)
-    g.textAlign = 'center'
-    for (const p of pops) {
-      g.globalAlpha = Math.min(1, p.life * 2); g.font = 'bold 10px monospace'
-      g.fillStyle = '#000'; g.fillText(p.text, p.x + 1, p.y - (1.2 - p.life) * 16 + 1)
-      g.fillStyle = p.col; g.fillText(p.text, p.x, p.y - (1.2 - p.life) * 16); g.globalAlpha = 1
-    }
-    if (b.banner) {
-      g.font = 'bold 12px monospace'; g.fillStyle = '#000'; g.fillText(b.banner.text, 129, 37)
-      g.fillStyle = '#ffd36b'; g.fillText(b.banner.text, 128, 36)
-    }
+    if (!b.dead || b.y < H + 30) art.dragon(b, T)
+    art.bar(8, 13, 76, b.php / HERO_MAX, b.pshown / HERO_MAX, '#5ad85a', `YOU  ${Math.round(b.pshown)} / ${HERO_MAX}`)
+    art.bar(100, 13, 148, b.hp / BOSS_MAX, b.shown / BOSS_MAX, '#c94bff', `THE DRAGON  ${Math.round(b.shown)} / ${BOSS_MAX}`)
+    for (const p of pops) art.pop(p)
+    if (b.banner) art.banner(b.banner.text)
   }
 
   /* The arrival glitch: torn rows, split colour, static, then the world. */
   function glitch(t) {
     const strength = t < 0.9 ? 1 : 1 - (t - 0.9) / 0.3
+    const bw = buf.width
     for (let i = 0; i < 9; i++) {
-      const y = Math.floor(rnd() * H)
-      const h = 2 + Math.floor(rnd() * 12)
-      const off = Math.round((rnd() - 0.5) * 40 * strength)
-      ctx.drawImage(buf, 0, y, W, h, off, y, W, h)
+      const y = Math.floor(rnd() * H) * k
+      const h = (2 + Math.floor(rnd() * 12)) * k
+      const off = Math.round((rnd() - 0.5) * 40 * strength * k)
+      ctx.drawImage(buf, 0, y, bw, h, off, y, bw, h)
     }
     ctx.globalCompositeOperation = 'lighter'
-    ctx.globalAlpha = 0.35 * strength; ctx.drawImage(buf, 3, 0); ctx.globalAlpha = 1
+    ctx.globalAlpha = 0.35 * strength; ctx.drawImage(buf, 3 * k, 0); ctx.globalAlpha = 1
     ctx.globalCompositeOperation = 'source-over'
     for (let i = 0; i < 40 * strength; i++) {
       ctx.fillStyle = ['#ff00ff', '#00ffff', '#ffffff', '#000000'][i % 4]
-      ctx.fillRect(Math.floor(rnd() * W), Math.floor(rnd() * H), 1 + Math.floor(rnd() * 8), 1)
+      ctx.fillRect(Math.floor(rnd() * W) * k, Math.floor(rnd() * H) * k, (1 + Math.floor(rnd() * 8)) * k, k)
     }
-    if (t < 0.15 || (t > 0.45 && t < 0.52)) { ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fillRect(0, 0, W, H) }
+    if (t < 0.15 || (t > 0.45 && t < 0.52)) { ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fillRect(0, 0, bw, buf.height) }
   }
 
   function render(dt) {
-    backdrop(T)
+    fit()
+    moveParts(dt)
+    g.setTransform(1, 0, 0, 1, 0, 0)
+    g.drawImage(bg, 0, 0)
+    g.setTransform(k, 0, 0, k, 0, 0)
+    art.liveWorld(scene.world, T, scene.portal ? 36 : null)
     if (scene.celebrate) {
-      villagers.forEach((v) => big(v.x, GROUND, () => villager(v, T)))
-      R(98, 34, 60, 14, '#2a1a0c'); g.fillStyle = '#ffd36b'; g.font = 'bold 9px monospace'; g.textAlign = 'center'; g.fillText('HERO!', 128, 44)
-      R(97, 34, 1, 40, '#6b4a2a'); R(158, 34, 1, 40, '#6b4a2a')
+      art.sign(T)
+      villagers.forEach((v) => art.villager(v, T))
     }
     for (const f of foes) {
       if (f.dead || T < f.delay) continue
-      if (f.type === 'raider') big(f.x, GROUND, () => raider(f, T, false))
-      if (f.type === 'brute') big(f.x, GROUND, () => raider(f, T, true))
-      if (f.type === 'spirit') big(f.x, f.anchor, () => spirit(f, T))
-      if (f.type === 'shadow') big(f.x, GROUND, () => shadowWalker(f))
+      const face = hero.x < f.x ? -1 : 1
+      if (f.type === 'raider') art.raider(f, T, face, false)
+      if (f.type === 'brute') art.raider(f, T, face, true)
+      if (f.type === 'spirit') art.spirit(f, T)
+      if (f.type === 'shadow') art.shadowWalker(f, T, face)
     }
-    for (const b of bolts) { R(b.x - 1, b.y - 1, 3, 3, '#ff9a2a'); R(b.x, b.y, 1, 1, '#fff2a0') }
-    big(hero.x, GROUND + hero.jump, () => drawHero(hero, T))
-    drawParts(dt)
+    for (const b of bolts) art.bolt(b)
+    art.hero(hero, T)
+    art.particles(parts)
     if (boss) renderBoss()
+    art.vignette()
 
-    ctx.imageSmoothingEnabled = false
-    ctx.clearRect(0, 0, W, H)
-    const sx = shake > 0 ? Math.round((rnd() - 0.5) * 4) : 0
-    const sy = shake > 0 ? Math.round((rnd() - 0.5) * 3) : 0
-    ctx.drawImage(buf, sx, sy)
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.fillStyle = '#000'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    const sx = shake > 0 ? (rnd() - 0.5) * 4 * k : 0
+    const sy = shake > 0 ? (rnd() - 0.5) * 3 * k : 0
+    ctx.drawImage(buf, sx, sy, canvas.width, canvas.height)
     if (scene.glitch && T < 1.2) glitch(T)
   }
 
@@ -561,7 +393,7 @@ export function createBattle(canvas, opts = {}) {
    * drawn. A child who gets motion sick still sees who won.
    */
   function stillFrame() {
-    for (let i = 0; i < 30 * 40 && !(won && T - wonAt > 0.7); i++) update(1 / 30)
+    for (let i = 0; i < 30 * 40 && !(won && T - wonAt > 0.7); i++) { update(1 / 30); moveParts(1 / 30) }
     parts = []; pops = []; shake = 0; T = Math.max(T, 2)
     if (boss) { boss.shown = boss.hp; boss.pshown = boss.php; boss.banner = null }
     render(0)
@@ -586,6 +418,8 @@ export function createBattle(canvas, opts = {}) {
   return {
     step,
     replay() { stop(); stopped = false; start() },
+    /** After the canvas changed size: a still frame has to be painted again. */
+    redraw() { if (opts.reducedMotion) render(0) },
     destroy: stop,
     /** For tests: what the bars say and whether the fight is over. */
     snapshot: () => ({
