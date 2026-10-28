@@ -13,6 +13,7 @@ import SyncBadge from '../../components/SyncBadge.jsx'
 import { navigate } from '../../lib/router.js'
 import InstallPrompt from '../../components/InstallPrompt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
+import { useKidSchool } from './KidSchool.jsx'
 
 export default function KidHome() {
   const { state, dispatch } = useApp()
@@ -20,6 +21,7 @@ export default function KidHome() {
   const theme = useKidTheme()
   const elite = useElite()
   const [levelPop, setLevelPop] = useState(false)
+  const school = useKidSchool(kid)
 
   if (!kid) return null
 
@@ -184,6 +186,27 @@ export default function KidHome() {
           <span className="text-xl shrink-0" aria-hidden="true">📖</span>
           <span className="flex-1 min-w-0 text-sm">Your story so far</span>
           <span className="text-xs text-muted">Watch again ▶</span>
+        </button>
+      )}
+
+      {school && (
+        <button
+          type="button"
+          onClick={() => navigate('/kid/school')}
+          className="card w-full mb-3 p-3 flex items-center gap-3 text-left transition-transform active:scale-[0.98]"
+        >
+          <span className="text-2xl shrink-0" aria-hidden="true">{school.stars?.some((s) => s.you) ? '🌟' : '🏫'}</span>
+          <span className="flex-1 min-w-0">
+            <span className="block font-semibold text-sm truncate">{school.name}</span>
+            <span className="block text-xs text-muted">
+              {school.stars?.some((s) => s.you)
+                ? 'You are a School Star!'
+                : school.ranked && school.district_rank
+                  ? `#${school.district_rank} in the district. Your chores count!`
+                  : 'Your chores count for your school.'}
+            </span>
+          </span>
+          <span aria-hidden="true" className="text-muted">›</span>
         </button>
       )}
 

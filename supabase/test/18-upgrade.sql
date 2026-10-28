@@ -122,6 +122,9 @@ begin
      -- policies on purpose; see the notes in guilds.sql and alliances.sql.
      and t.tablename not in ('guilds','guild_members','guild_messages',
                              'alliances','alliance_members','alliance_results',
+                             'schools','school_staff','school_members','school_rivalries',
+                             'school_month_scores','school_awards','school_rivalry_results',
+                             'school_top_students',
                              'pairing_codes','pairing_claim_attempts',
                              'reminder_schedules','digest_sends','job_runs',
                              'crash_reports','billing_events','push_subscriptions',

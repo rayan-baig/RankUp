@@ -10,7 +10,9 @@ import { humanError } from '../lib/errors.js'
  * to sign in to, and the app runs entirely on the device. A kid's phone never
  * sees this screen: it has no account and joins the parent's with a pairing code.
  */
-export default function SignIn({ onDone, onBack }) {
+export default function SignIn({ onDone, onBack, who = 'parent' }) {
+  // The School League signs teachers and principals in through the same door.
+  const school = who === 'school'
   const [mode, setMode] = useState('signup')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -45,10 +47,12 @@ export default function SignIn({ onDone, onBack }) {
       <div className="text-center mb-6">
         <div className="text-4xl mb-2" aria-hidden="true">🔐</div>
         <h1 className="font-display text-2xl font-extrabold">
-          {mode === 'signup' ? 'Create your parent account' : 'Sign in'}
+          {mode === 'signup' ? (school ? 'Create your school account' : 'Create your parent account') : 'Sign in'}
         </h1>
         <p className="text-sm text-muted mt-1">
-          This is the account your kids' devices connect to.
+          {school
+            ? 'Use your school email. Your school is checked before it joins a league.'
+            : "This is the account your kids' devices connect to."}
         </p>
       </div>
 
@@ -60,7 +64,7 @@ export default function SignIn({ onDone, onBack }) {
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
+            placeholder={school ? 'you@yourschool.edu' : 'you@example.com'}
             autoFocus
           />
         </Field>
@@ -89,12 +93,12 @@ export default function SignIn({ onDone, onBack }) {
         </button>
       </Card>
 
-      <div className="mt-4">
+      {!school && <div className="mt-4">
         <Banner tone="info" icon="🔒" title="This is a grown-up's account">
           Kids never make one. Their phone joins yours with a six-digit code, and you stay in
           control of it.
         </Banner>
-      </div>
+      </div>}
 
       <Button variant="ghost" className="w-full mt-4" onClick={onBack}>Back</Button>
     </div>

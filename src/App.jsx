@@ -28,6 +28,7 @@ import KidArcade from './screens/kid/KidArcade.jsx'
 import KidProfile from './screens/kid/KidProfile.jsx'
 import KidStory from './screens/kid/KidStory.jsx'
 import KidDragon from './screens/kid/KidDragon.jsx'
+import KidSchool from './screens/kid/KidSchool.jsx'
 import KidPairing from './screens/kid/KidPairing.jsx'
 import ParentDashboard from './screens/parent/ParentDashboard.jsx'
 import ParentApprovals from './screens/parent/ParentApprovals.jsx'
@@ -36,6 +37,8 @@ import ParentKids from './screens/parent/ParentKids.jsx'
 import ParentBlueprint from './screens/parent/ParentBlueprint.jsx'
 import ParentOverride from './screens/parent/ParentOverride.jsx'
 import ParentAlliance from './screens/parent/ParentAlliance.jsx'
+import ParentSchool from './screens/parent/ParentSchool.jsx'
+import SchoolPortal from './screens/SchoolPortal.jsx'
 import { guildsEnabled } from './lib/guilds.js'
 import LegalDoc from './screens/LegalDoc.jsx'
 import ParentGuilds from './screens/parent/ParentGuilds.jsx'
@@ -141,7 +144,7 @@ export default function App() {
 
   // Route guards.
   useEffect(() => {
-    if (route.startsWith('/legal/')) return
+    if (route.startsWith('/legal/') || route === '/school') return
     if (!state.onboarded && route !== '/welcome') {
       navigate('/welcome')
       return
@@ -177,6 +180,20 @@ export default function App() {
       <>
         <ParentBackground theme={parentTheme} />
         <LegalDoc which={route.endsWith('terms') ? 'terms' : 'privacy'} />
+      </>
+    )
+  }
+
+  // The School League's door for teachers and principals. No family needed:
+  // a principal should never be walked through setting up a household.
+  if (route === '/school') {
+    return (
+      <>
+        <ParentBackground theme={parentTheme} />
+        <DemoBanner />
+        <ScreenBoundary key={route} route={route}>
+          <SchoolPortal />
+        </ScreenBoundary>
       </>
     )
   }
@@ -305,6 +322,7 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route === '/kid/profile') return <KidProfile />
   if (route.startsWith('/kid/story/')) return <KidStory chapter={route.replace('/kid/story/', '')} />
   if (route === '/kid/dragon') return <KidDragon />
+  if (route === '/kid/school') return <KidSchool />
 
   if (route === '/parent') return <ParentDashboard />
   if (route === '/parent/approvals') return <ParentApprovals />
@@ -313,6 +331,7 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route === '/parent/blueprint') return <ParentBlueprint initialKidId={queryParam(fullPath, 'kid') || activeKid?.id} />
   if (route === '/parent/override') return <ParentOverride />
   if (route === '/parent/alliance') return <ParentAlliance />
+  if (route === '/parent/school') return <ParentSchool />
   if (route === '/parent/guilds') return guildsEnabled() ? <ParentGuilds /> : <ParentDashboard />
   if (route === '/parent/pair') return <ParentPairKid />
   if (route === '/parent/plan') return <ParentPlan />

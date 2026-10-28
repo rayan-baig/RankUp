@@ -14,7 +14,7 @@ this order, or `psql -f` it.
 
 ```
 schema.sql  sync.sql  guilds.sql  notifications.sql  consent.sql  billing.sql
-alliances.sql  reminders.sql  digests.sql  retention.sql  crashes.sql  health.sql
+alliances.sql  schools.sql  reminders.sql  digests.sql  retention.sql  crashes.sql  health.sql
 ```
 
 Every one of them is safe to run again over a live database, and that IS the upgrade

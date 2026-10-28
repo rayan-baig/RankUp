@@ -221,7 +221,7 @@ Block Craft at 125 becomes **The Nether Portal**; at 250, **The End**; at 399,
                               ▼
 ┌────────────────────────────────────────────────────────────┐
 │ SUPABASE / POSTGRES                                         │
-│  32 tables · 108 SECURITY DEFINER functions · 36 RLS policies│
+│  40 tables · 136 SECURITY DEFINER functions · 36 RLS policies│
 │  All writes go through functions. No table is writable      │
 │  directly by a client.                                      │
 └────────────────────────────────────────────────────────────┘
@@ -299,17 +299,19 @@ it is the one they can see.
 
 ## 6. Database
 
-16 SQL files in `supabase/`, applied in the order `docs/BACKEND.md` gives.
+17 SQL files in `supabase/`, applied in the order `docs/BACKEND.md` gives.
 
-**32 tables:** `families · parents · kids · quests · submissions · rewards ·
+**40 tables:** `families · parents · kids · quests · submissions · rewards ·
 redemptions · notes · events · overrides · allowance_entries · family_goals ·
 guilds · guild_members · guild_messages · alliances · alliance_members ·
 alliance_results · pairing_codes · pairing_claim_attempts · parent_invites ·
 adult_invite_attempts · parental_consents · consent_notices · push_subscriptions ·
 reminder_schedules · digest_sends · billing_events · referrals · crash_reports ·
-deletions · job_runs`
+deletions · job_runs · schools · school_staff · school_members ·
+school_rivalries · school_month_scores · school_awards · school_rivalry_results ·
+school_top_students`
 
-**108 SECURITY DEFINER functions.** The important ones:
+**136 SECURITY DEFINER functions.** The important ones:
 
 | Function | Guards |
 |---|---|
@@ -341,6 +343,7 @@ another's rows. There are tests that attempt exactly that and assert failure.
 | `/kid/arcade` | `KidArcade.jsx` | 24 games, daily featured, shelves, tokens |
 | `/kid/shop` | `KidShop.jsx` | Rewards catalogue, redemption |
 | `/kid/market` | `KidMarket.jsx` | Sunday Market — cosmetic skins, flash tickets |
+| `/kid/school` | `KidSchool.jsx` | The child's school: place in the district, rivals, and whether they are a School Star |
 | `/kid/profile` | `KidProfile.jsx` | Forms, badges, **the theme's storyline**, customisation |
 | — | `KidPairing.jsx`, `KidDeviceSetup.jsx`, `LockoutScreen.jsx` | Pairing and the Elite lockout |
 
@@ -357,8 +360,24 @@ another's rows. There are tests that attempt exactly that and assert failure.
 | `/parent/blueprint` | `ParentBlueprint.jsx` | Elite: weekly behaviour charts from real history |
 | `/parent/override` | `ParentOverride.jsx` | Elite: Consequence Engine — currency tax, lockout, lockdown |
 | `/parent/alliance` | `ParentAlliance.jsx` | Elite: ten-family monthly contest, 20% off for the winner |
+| `/parent/school` | `ParentSchool.jsx` | School League: join a child's school with its code, choose whether their first name may show, see the league |
 | `/parent/guilds` | `ParentGuilds.jsx` | Approve guild joins, moderate reported messages |
 | `/parent/pair` | `ParentPairKid.jsx` | Type the child's six-digit code |
+
+### Schools (`src/screens/SchoolPortal.jsx`, no family needed)
+
+| Route | File | What it does |
+|---|---|---|
+| `/school` | `SchoolPortal.jsx` | What it is and the price by size; a teacher or principal signs the school up, then manages codes, rivals and School Stars |
+
+The School League lives in `supabase/schools.sql` and `src/lib/schools.js`.
+Schools pay by size ($29 up to 300 students, $59 up to 800, $99 up to 1,500,
+$149 above; a year is ten months; 30 days free). A school's score is approved
+chores per student, at most eight a day each, averaged, so size does not win.
+`settle_school_month` closes a month: District Champion (needs two ranked
+schools), rivalry results and each school's top ten. A school sees no child's
+name until the operator has run `verify_school`, and then only first names a
+parent agreed to.
 
 ---
 

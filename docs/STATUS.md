@@ -106,6 +106,19 @@ phones. Everything else in this table is real.
 
 ---
 
+## The School League — 🟡 built, not yet charging
+
+| Thing | Status | Notes |
+|---|---|---|
+| School sign-up, priced by size | ✅ | `/school`. Anyone can sign a school up; it starts on a 30-day trial |
+| Join codes for parents and staff | ✅ | Only a parent can put a child in a school |
+| District league | ✅ | Average per student, at most 8 chores a day each, from approved chores only |
+| Rival schools | ✅ | Challenge, accept, decline, end; monthly results kept |
+| School Stars (top ten) | ✅ | The admin checks the list before families see it. First names only with a parent's yes |
+| Checking a school is real | 🟡 by hand | Run `select verify_school('<school id>', true);` in the SQL editor. Until then the school is in no league and sees no names |
+| Closing each month | 🟡 not scheduled | `settle_school_month(month)` does it all and is safe to run twice. It needs a monthly job like the alliance one |
+| Charging schools, and the Champion's free month | ❌ next | No Stripe yet: every school stays on its trial. The free month is recorded in `school_awards` but nothing applies it |
+
 ## Knowing it is working, without watching it
 
 | Thing | Where |

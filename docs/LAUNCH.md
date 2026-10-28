@@ -50,6 +50,7 @@ In the Supabase SQL editor, run these **in order**:
 - [ ] `supabase/consent.sql`
 - [ ] `supabase/billing.sql`
 - [ ] `supabase/alliances.sql`
+- [ ] `supabase/schools.sql`
 - [ ] `supabase/reminders.sql`
 - [ ] `supabase/digests.sql`
 - [ ] `supabase/retention.sql`

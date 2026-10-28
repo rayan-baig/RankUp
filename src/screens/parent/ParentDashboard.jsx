@@ -152,6 +152,21 @@ export default function ParentDashboard() {
         ))}
       </div>
 
+      {/* Not an Elite tool: the school pays for the league, so every family
+          whose school plays can join it, on any plan. */}
+      <button
+        type="button"
+        onClick={() => navigate('/parent/school')}
+        className="card w-full mb-3 p-3 flex items-center gap-3 text-left transition-transform active:scale-[0.98]"
+      >
+        <span className="text-2xl shrink-0" aria-hidden="true">🏫</span>
+        <span className="flex-1 min-w-0">
+          <span className="block font-semibold text-sm">School League</span>
+          <span className="block text-xs text-muted">Chores count for your child’s school. Best school in the district wins.</span>
+        </span>
+        <span aria-hidden="true" className="text-muted">›</span>
+      </button>
+
       {!elite && (
         <Banner tone="info" icon="⚡" title="Elite Pass — $15.99/mo" action={<Button className="px-3 py-2 min-h-0 text-xs shrink-0" onClick={() => navigate('/parent/plan')}>See it</Button>}>
           Adds the Consequence Engine, Behaviour Blueprints, Parent Alliances, 10-player guilds and a permanent 1.5× XP boost for kids.
