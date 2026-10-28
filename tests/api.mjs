@@ -11,6 +11,7 @@
  * Needs the Cloudflare stack up:  supabase/test/up.sh --cf
  */
 import pg from 'pg'
+import Stripe from 'stripe'
 
 const BASE = process.env.API_BASE || 'http://localhost:8788'
 const CRON = 'test-cron-secret'
@@ -60,6 +61,10 @@ console.log('\n=== Nothing works without a token ===')
 ok('a push with no token is refused', (await post('/api/send-push', { familyId: FAMILY, role: 'parent', kind: 'reminder' })).status === 401)
 ok('a photo check with no token is refused', (await post('/api/verify-photo', { imageDataUrl: 'x' })).status === 401)
 ok('a checkout with no token is refused', (await post('/api/create-checkout', { tier: 'standard' })).status === 401)
+ok('a school checkout with no token is refused', (await post('/api/school-checkout', { cycle: 'month' })).status === 401)
+const parentAsSchool = await post('/api/school-checkout', { cycle: 'month' }, PARENT)
+ok('a parent CANNOT start a school’s checkout', parentAsSchool.status === 403 || parentAsSchool.status === 503,
+  `status ${parentAsSchool.status}`)
 
 console.log('\n=== A stranger cannot buzz somebody else’s phone ===')
 const outsiderPush = await post('/api/send-push', { familyId: FAMILY, role: 'parent', kind: 'reminder' }, OUTSIDER)
@@ -84,7 +89,7 @@ ok('a malformed image is refused', badImage.status === 400, `status ${badImage.s
 ok('and it cost the family nothing', after === before, `used ${before} → ${after}`)
 
 console.log('\n=== The scheduled jobs are not open to the public ===')
-for (const job of ['run-retention', 'send-reminders', 'send-digests', 'settle-alliances']) {
+for (const job of ['run-retention', 'send-reminders', 'send-digests', 'settle-alliances', 'settle-schools']) {
   const open = await fetch(`${BASE}/api/${job}`, { method: 'POST' })
   ok(`${job} refuses a caller with no secret`, open.status === 401 || open.status === 403, `status ${open.status}`)
   const withSecret = await fetch(`${BASE}/api/${job}`, {
@@ -107,6 +112,42 @@ const forgedPayment = await post('/api/stripe-webhook',
   { type: 'customer.subscription.updated', data: { object: { id: 'sub_fake', status: 'active' } } })
 ok('a webhook with no signature is rejected', forgedPayment.status === 400 || forgedPayment.status === 503,
   `status ${forgedPayment.status}`)
+
+console.log('\n=== A signed Stripe event reaches the right customer ===')
+// Signed with the same test secret up.sh gives the runtime, so these go all the
+// way through signature checking to the database.
+const signer = new Stripe('sk_test_routing_only')
+const signed = async (event) => {
+  const payload = JSON.stringify(event)
+  const header = signer.webhooks.generateTestHeaderString({ payload, secret: 'whsec_test_local_only' })
+  return fetch(`${BASE}/api/stripe-webhook`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'stripe-signature': header }, body: payload,
+  })
+}
+const SCHOOL = 'a0000000-0000-4000-8000-0000000005c1'
+await db.query(
+  `insert into schools (id, name, district, district_key, student_count, size_band, status)
+   values ($1, 'API School', 'API District', 'api district', 400, 'medium', 'trial')
+   on conflict (id) do update set status = 'trial', stripe_customer_id = null`, [SCHOOL])
+const schoolPaid = await signed({
+  id: `evt_api_school_${Date.now()}`, type: 'customer.subscription.updated',
+  data: { object: { id: 'sub_api_school', object: 'subscription', status: 'active',
+                    customer: 'cus_api_school', metadata: { school_id: SCHOOL } } },
+})
+const schoolRow = (await db.query('select status, stripe_customer_id from schools where id = $1', [SCHOOL])).rows[0]
+ok('a school’s paid subscription is accepted', schoolPaid.status === 200, `status ${schoolPaid.status}`)
+ok('and switches that school on', schoolRow.status === 'active' && schoolRow.stripe_customer_id === 'cus_api_school',
+  JSON.stringify(schoolRow))
+const familyPaid = await signed({
+  id: `evt_api_family_${Date.now()}`, type: 'customer.subscription.updated',
+  data: { object: { id: 'sub_api_family', object: 'subscription', status: 'active',
+                    customer: 'cus_api_family', metadata: { family_id: OTHER_FAMILY, tier: 'standard' } } },
+})
+const familyRow = (await db.query('select subscription_status from families where id = $1', [OTHER_FAMILY])).rows[0]
+ok('a family’s still goes to the family', familyPaid.status === 200 && familyRow.subscription_status === 'active',
+  `status ${familyPaid.status}, ${JSON.stringify(familyRow)}`)
+ok('and touches no school', (await db.query(
+  "select count(*)::int as n from schools where stripe_customer_id = 'cus_api_family'")).rows[0].n === 0)
 
 console.log('\n=== A route that does not exist is a 404, not a stack trace ===')
 const missing = await fetch(`${BASE}/api/not-a-real-endpoint`, { method: 'POST' })

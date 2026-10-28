@@ -14,6 +14,7 @@ import { transport, getSession } from './sync/transport.js'
 
 const CHECKOUT_URL = import.meta.env?.VITE_CHECKOUT_URL || '/api/create-checkout'
 const PORTAL_URL = import.meta.env?.VITE_PORTAL_URL || '/api/billing-portal'
+const SCHOOL_CHECKOUT_URL = import.meta.env?.VITE_SCHOOL_CHECKOUT_URL || '/api/school-checkout'
 const STRIPE_ENABLED = String(import.meta.env?.VITE_STRIPE_ENABLED || '') === 'true'
 
 /** Is real billing switched on? */
@@ -105,6 +106,23 @@ export async function buyFlashTickets(packId = DEFAULT_FLASH_PACK.id) {
   return result
 }
 
+/**
+ * A school's plan. The size band, and so the price, is decided on the server
+ * from the school's own record; this only says monthly or yearly.
+ */
+export async function startSchoolCheckout(cycle = 'month') {
+  const result = await post(SCHOOL_CHECKOUT_URL, { cycle: cycle === 'year' ? 'year' : 'month' })
+  if (result.ok && result.url) window.location.href = result.url
+  return result
+}
+
+/** The school's card, invoices and cancelling, on Stripe's own pages. */
+export async function openSchoolBillingPortal() {
+  const result = await post(PORTAL_URL, { for: 'school' })
+  if (result.ok && result.url) window.location.href = result.url
+  return result
+}
+
 /** Send them to Stripe's portal to cancel, change card or get invoices. */
 export async function openBillingPortal() {
   const result = await post(PORTAL_URL, {})
@@ -129,6 +147,8 @@ export const BILLING_ERRORS = {
   no_customer: 'No billing account found for this family.',
   checkout_failed: 'Stripe could not start the checkout. Please try again.',
   portal_failed: 'Could not open the billing portal. Please try again.',
+  not_school_admin: 'Only the school’s admin can manage its plan.',
+  suspended: 'This school is suspended. Contact us to sort it out.',
 }
 
 export function billingError(reason) {

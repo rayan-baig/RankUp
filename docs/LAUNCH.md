@@ -78,6 +78,7 @@ or point any external scheduler at them. Do not assume Pages will run them.
 | `/api/send-digests` | hourly | The Sunday digest never goes out |
 | `/api/run-retention` | daily | **Children's photos are never deleted** |
 | `/api/settle-alliances` | monthly | Nobody is ever paid their discount |
+| `/api/settle-schools` | monthly | No District Champion, no School Stars, no free month |
 
 The hourly one looks wasteful and is not: the database decides whose Sunday
 evening it actually is, so an hourly run is what makes a digest arrive at six
@@ -110,6 +111,7 @@ schedule was never set up at all.
 | every 10–15 min | `/api/send-reminders` | reminder times are saved and never delivered |
 | daily | `/api/run-retention` | see below |
 | monthly | `/api/settle-alliances` | families see a leaderboard and never get the discount |
+| monthly | `/api/settle-schools` | schools never get their Champion, Stars or free month |
 
 **Retention is the one that costs money.** Four tables grow forever and are only
 ever read over a short recent window — undecided submissions keep their photo,

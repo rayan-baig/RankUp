@@ -118,6 +118,7 @@ create table if not exists school_awards (
   applied_at   timestamptz,
   primary key (district_key, month_key)
 );
+alter table school_awards add column if not exists stripe_coupon text;
 
 create table if not exists school_rivalry_results (
   rivalry_id       uuid not null references school_rivalries(id) on delete cascade,
@@ -574,6 +575,7 @@ begin
       'status', v_s.status,
       'trial_ends_at', v_s.trial_ends_at,
       'student_count', v_s.student_count,
+      'has_customer', v_s.stripe_customer_id is not null,
       'price', school_price_quote(v_s.student_count),
       'join_code', v_s.join_code,
       -- Only the admin hands out the staff code.
@@ -819,7 +821,7 @@ begin
   )
   select coalesce(jsonb_agg(jsonb_build_object(
            'school_id', i.school_id, 'name', s.name, 'score', i.score,
-           'stripe_customer_id', s.stripe_customer_id)), '[]'::jsonb)
+           'district_key', s.district_key)), '[]'::jsonb)
     into v_awards
     from inserted i join schools s on s.id = i.school_id;
 
@@ -836,13 +838,43 @@ begin
   return jsonb_build_object('ok', true, 'month', v_key, 'champions', v_awards);
 end $$;
 
-/** Billing gave the Champion its free month. */
-create or replace function mark_school_award_applied(p_district_key text, p_month_key text)
+/**
+ * Every Champion whose free month has not been given yet, with what billing
+ * needs to give it. Asked for separately from settlement, so a month whose
+ * reward failed to apply is tried again on the next run rather than being
+ * decided once and then forgotten.
+ */
+create or replace function unapplied_school_awards()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'district_key', a.district_key, 'month_key', a.month_key,
+           'school_id', s.id, 'name', s.name, 'status', s.status,
+           'stripe_customer_id', s.stripe_customer_id,
+           'stripe_subscription_id', s.stripe_subscription_id)
+           order by a.month_key, a.district_key), '[]'::jsonb)
+    from school_awards a join schools s on s.id = a.school_id
+   where a.applied_at is null;
+$$;
+
+/**
+ * Billing gave the Champion its free month: a coupon on a paying school, or
+ * thirty more days of trial on one that has not paid yet (`p_coupon` null).
+ */
+drop function if exists mark_school_award_applied(text, text);
+create or replace function mark_school_award_applied(p_district_key text, p_month_key text,
+                                                     p_coupon text default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_school uuid;
 begin
-  update school_awards set applied_at = now()
-   where district_key = p_district_key and month_key = p_month_key and applied_at is null;
-  return jsonb_build_object('ok', found);
+  update school_awards set applied_at = now(), stripe_coupon = p_coupon
+   where district_key = p_district_key and month_key = p_month_key and applied_at is null
+  returning school_id into v_school;
+  if v_school is null then return jsonb_build_object('ok', false); end if;
+  if p_coupon is null then
+    update schools set trial_ends_at = greatest(trial_ends_at, now()) + interval '30 days'
+     where id = v_school and status = 'trial';
+  end if;
+  return jsonb_build_object('ok', true);
 end $$;
 
 /** The operator, having checked the school is real. Or not: false un-checks it. */
@@ -902,6 +934,126 @@ revoke execute on function school_card(uuid, text) from public, anon, authentica
 -- Real awards and the operator's switches: the monthly job and the operator
 -- hold the service role; nobody else reaches these.
 revoke execute on function settle_school_month(date) from public, anon, authenticated;
-revoke execute on function mark_school_award_applied(text, text) from public, anon, authenticated;
+revoke execute on function mark_school_award_applied(text, text, text) from public, anon, authenticated;
+revoke execute on function unapplied_school_awards() from public, anon, authenticated;
 revoke execute on function verify_school(uuid, boolean) from public, anon, authenticated;
 revoke execute on function set_school_status(uuid, text) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Paying. A school's plan, like a family's, is written by Stripe's webhook
+-- and by nothing else; the browser only ever asks to start a checkout.
+-- ---------------------------------------------------------------------------
+
+-- School payments are kept with every other Stripe event, so Charity Week's
+-- total is the company's real takings, schools included.
+alter table billing_events add column if not exists school_id uuid references schools(id) on delete set null;
+
+/**
+ * What a school's checkout needs, for the admin asking. The size band comes
+ * from here, not from the request, so a school cannot pick a cheaper price
+ * than its size.
+ */
+create or replace function school_checkout_info()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  v_me school_staff := current_school_staff();
+  v_s  schools;
+begin
+  if v_me.user_id is null or v_me.role <> 'admin' then
+    return jsonb_build_object('ok', false, 'reason', 'not_school_admin');
+  end if;
+  select * into v_s from schools where id = v_me.school_id;
+  if v_s.status = 'suspended' then return jsonb_build_object('ok', false, 'reason', 'suspended'); end if;
+  return jsonb_build_object('ok', true, 'school_id', v_s.id, 'name', v_s.name,
+                            'band', v_s.size_band, 'status', v_s.status,
+                            'trial_ends_at', v_s.trial_ends_at,
+                            'has_customer', v_s.stripe_customer_id is not null);
+end $$;
+
+create or replace function attach_school_customer(p_school_id uuid, p_customer_id text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  -- Never swaps one customer for another: that would move a school's billing
+  -- onto somebody else's card record.
+  update schools set stripe_customer_id = p_customer_id
+   where id = p_school_id and (stripe_customer_id is null or stripe_customer_id = p_customer_id);
+  return jsonb_build_object('ok', found);
+end $$;
+
+create or replace function school_for_customer(p_customer_id text)
+returns uuid language sql stable security definer set search_path = public as $$
+  select id from schools where stripe_customer_id = p_customer_id limit 1;
+$$;
+
+create or replace function stripe_customer_for_school(p_school_id uuid)
+returns text language sql stable security definer set search_path = public as $$
+  select stripe_customer_id from schools where id = p_school_id;
+$$;
+
+/**
+ * Apply what Stripe says about a school's subscription.
+ *
+ * Idempotent on the event id, because Stripe retries. A suspension is the
+ * operator's decision and no payment event lifts it. A failing card keeps the
+ * school playing while Stripe retries it; only a subscription that has really
+ * ended takes the school out of the league, and then back to whatever is
+ * left of its free trial rather than straight to nothing.
+ */
+create or replace function apply_school_subscription(p_school_id uuid, p_status text,
+                                                     p_customer_id text default null,
+                                                     p_subscription_id text default null,
+                                                     p_stripe_event text default null,
+                                                     p_payload jsonb default '{}'::jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_s   schools;
+  v_new text;
+begin
+  select * into v_s from schools where id = p_school_id for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_school'); end if;
+
+  if p_stripe_event is not null then
+    insert into billing_events (school_id, stripe_event, type, payload)
+    values (p_school_id, p_stripe_event, 'school:' || coalesce(p_status, '?'), p_payload)
+    on conflict (stripe_event) do nothing;
+    if not found then return jsonb_build_object('ok', true, 'duplicate', true); end if;
+  end if;
+
+  if v_s.status = 'suspended' then
+    return jsonb_build_object('ok', true, 'status', 'suspended');
+  end if;
+
+  v_new := case
+    when p_status in ('active', 'trialing', 'past_due') then 'active'
+    when p_status in ('canceled', 'unpaid', 'incomplete_expired')
+      then case when v_s.trial_ends_at > now() then 'trial' else 'lapsed' end
+    -- 'incomplete' and anything new: no change until Stripe says more.
+    else v_s.status
+  end;
+
+  update schools
+     set status = v_new,
+         stripe_customer_id = coalesce(stripe_customer_id, p_customer_id),
+         stripe_subscription_id = case when v_new = 'active' then coalesce(p_subscription_id, stripe_subscription_id)
+                                       else stripe_subscription_id end
+   where id = p_school_id;
+  return jsonb_build_object('ok', true, 'status', v_new);
+end $$;
+
+/** A school's invoice was paid: recorded with its amount, once. */
+create or replace function record_school_payment(p_school_id uuid, p_stripe_event text,
+                                                 p_amount_pence int, p_currency text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  insert into billing_events (school_id, stripe_event, type, payload, amount_pence, currency)
+  values (p_school_id, p_stripe_event, 'school:invoice_paid', '{}'::jsonb, p_amount_pence, upper(p_currency))
+  on conflict (stripe_event) do nothing;
+  return jsonb_build_object('ok', true, 'recorded', found);
+end $$;
+
+grant execute on function school_checkout_info() to authenticated;
+revoke execute on function attach_school_customer(uuid, text) from public, anon, authenticated;
+revoke execute on function school_for_customer(text) from public, anon, authenticated;
+revoke execute on function stripe_customer_for_school(uuid) from public, anon, authenticated;
+revoke execute on function apply_school_subscription(uuid, text, text, text, text, jsonb) from public, anon, authenticated;
+revoke execute on function record_school_payment(uuid, text, int, text) from public, anon, authenticated;

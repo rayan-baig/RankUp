@@ -420,3 +420,91 @@ begin
 end $$;
 
 reset role;
+
+-- ---------- paying ----------
+set role app_user;
+do $$
+declare r jsonb;
+begin
+  perform become('5c111111-0000-0000-0000-0000000000a1');
+  perform ok('a teacher CANNOT start the school''s checkout',
+    (school_checkout_info()->>'reason') = 'not_school_admin');
+  perform become('5c111111-0000-0000-0000-00000000000a');
+  r := school_checkout_info();
+  perform ok('the admin can, and the size band comes from the school, not the request',
+    (r->>'ok')::boolean and (r->>'band') = 'medium' and not (r->>'has_customer')::boolean);
+
+  begin
+    perform apply_school_subscription((r->>'school_id')::uuid, 'active');
+    perform ok('a browser CANNOT mark its school as paid', false);
+  exception when insufficient_privilege then
+    perform ok('a browser CANNOT mark its school as paid', true);
+  end;
+  begin
+    perform unapplied_school_awards();
+    perform ok('nor see what free months are owed', false);
+  exception when insufficient_privilege then
+    perform ok('nor see what free months are owed', true);
+  end;
+end $$;
+reset role;
+
+do $$
+declare
+  a uuid := (select id from schools where name = 'Oakridge Elementary');
+  b uuid := (select id from schools where name = 'Pine Hill School');
+  r jsonb;
+  before timestamptz;
+begin
+  -- Separate statements: a stable function in the same expression would read
+  -- the table as it was before the write next to it.
+  r := attach_school_customer(a, 'cus_school_a');
+  perform ok('checkout links the school to its Stripe customer',
+    (r->>'ok')::boolean and school_for_customer('cus_school_a') = a);
+  perform ok('and never swaps it for somebody else''s',
+    not (attach_school_customer(a, 'cus_someone_else')->>'ok')::boolean
+    and stripe_customer_for_school(a) = 'cus_school_a');
+
+  perform ok('a paid subscription makes the school active',
+    (apply_school_subscription(a, 'active', 'cus_school_a', 'sub_a', 'evt_school_1')->>'status') = 'active');
+  perform ok('the same Stripe event twice is applied once',
+    (apply_school_subscription(a, 'canceled', null, null, 'evt_school_1')->>'duplicate')::boolean
+    and (select status from schools where id = a) = 'active');
+  perform ok('a failing card keeps the school playing while Stripe retries',
+    (apply_school_subscription(a, 'past_due', null, null, 'evt_school_2')->>'status') = 'active');
+  perform ok('a cancelled plan with trial days left goes back to the trial',
+    (apply_school_subscription(a, 'canceled', null, null, 'evt_school_3')->>'status') = 'trial');
+  update schools set trial_ends_at = now() - interval '1 day' where id = a;
+  r := apply_school_subscription(a, 'canceled', null, null, 'evt_school_4');
+  perform ok('and with none left, the school sits the league out',
+    (r->>'status') = 'lapsed' and not school_is_live(a));
+  r := apply_school_subscription(a, 'active', null, null, 'evt_school_5');
+  perform ok('paying again brings it back', (r->>'status') = 'active' and school_is_live(a));
+
+  perform set_school_status(b, 'suspended');
+  perform ok('no payment lifts the operator''s suspension',
+    (apply_school_subscription(b, 'active', 'cus_school_b', 'sub_b', 'evt_school_6')->>'status') = 'suspended');
+  perform set_school_status(b, 'trial');
+
+  perform record_school_payment(a, 'evt_school_pay_1', 5900, 'usd');
+  perform record_school_payment(a, 'evt_school_pay_1', 5900, 'usd');
+  perform ok('a school''s invoice is recorded once, with its amount',
+    (select count(*) from billing_events where school_id = a and amount_pence = 5900) = 1);
+
+  -- The free month.
+  r := unapplied_school_awards();
+  perform ok('the Champion''s free month is waiting to be given',
+    jsonb_array_length(r) = 1 and (r->0->>'school_id')::uuid = a
+    and (r->0->>'stripe_customer_id') = 'cus_school_a');
+  perform ok('a paying Champion gets it as a coupon',
+    (mark_school_award_applied(r->0->>'district_key', r->0->>'month_key', 'coupon_free_month')->>'ok')::boolean);
+  perform ok('and it is no longer owed', jsonb_array_length(unapplied_school_awards()) = 0);
+  perform ok('and it cannot be given twice',
+    not (mark_school_award_applied(r->0->>'district_key', r->0->>'month_key', 'coupon_again')->>'ok')::boolean);
+
+  insert into school_awards (district_key, month_key, school_id, score) values ('north valley', '2000-01', b, 1);
+  select trial_ends_at into before from schools where id = b;
+  perform mark_school_award_applied('north valley', '2000-01', null);
+  perform ok('a Champion still on its trial gets thirty more free days instead',
+    (select trial_ends_at from schools where id = b) >= before + interval '29 days');
+end $$;

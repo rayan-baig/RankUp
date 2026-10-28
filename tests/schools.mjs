@@ -11,6 +11,7 @@
  */
 import pg from 'pg'
 import { schoolPrice, SCHOOL_PRICES, dollars, monthLabel, demoMySchools } from '../src/lib/schools.js'
+import { schoolPriceId, schoolTrialEnd, championReward, schoolIdOf, SCHOOL_PRICE_ENV } from '../api/_shared/schoolBilling.js'
 
 let fails = 0
 const ok = (label, cond, detail = '') => {
@@ -36,6 +37,29 @@ ok('a child in the look-around sees only themselves',
   kidView.children.length === 1 && kidView.children[0].kid_id === 'n')
 ok('a parent sees their child as "yours", not as "you"',
   parentView.children[0].school.stars.some((s) => s.yours && !s.you))
+
+console.log('\n=== Charging a school ===')
+const env = { STRIPE_PRICE_SCHOOL_MEDIUM: 'price_m', STRIPE_PRICE_SCHOOL_MEDIUM_YEAR: 'price_my' }
+ok('a medium school is charged the medium price', schoolPriceId('medium', 'month', env) === 'price_m')
+ok('yearly is its own price', schoolPriceId('medium', 'year', env) === 'price_my')
+ok('anything that is not "year" is monthly', schoolPriceId('medium', 'weekly', env) === 'price_m')
+ok('a band with no price set gets nothing, not a cheaper one', schoolPriceId('large', 'month', env) === '')
+ok('a made-up band gets nothing', schoolPriceId('tiny', 'month', env) === '')
+ok('every band has a monthly and a yearly price to set',
+  SCHOOL_PRICES.every((p) => SCHOOL_PRICE_ENV.month[p.band] && SCHOOL_PRICE_ENV.year[p.band]))
+const now = Date.UTC(2026, 9, 10)
+ok('paying early keeps the rest of the free trial',
+  schoolTrialEnd(new Date(now + 20 * 86400000).toISOString(), now) === Math.floor((now + 20 * 86400000) / 1000))
+ok('a trial with under two days left is not carried (Stripe refuses it)',
+  schoolTrialEnd(new Date(now + 86400000).toISOString(), now) === undefined)
+ok('nor is one already over', schoolTrialEnd(new Date(now - 86400000).toISOString(), now) === undefined)
+ok('a paying Champion gets a coupon', championReward({ status: 'active', stripe_customer_id: 'cus_1' }) === 'coupon')
+ok('a Champion on its trial gets more trial', championReward({ status: 'trial' }) === 'extend_trial')
+ok('a Champion whose plan ended waits', championReward({ status: 'lapsed', stripe_customer_id: 'cus_1' }) === 'wait')
+ok('a school subscription is told apart from a family one',
+  schoolIdOf({ metadata: { school_id: 's1' } }) === 's1' && schoolIdOf({ metadata: { family_id: 'f1' } }) === null)
+ok('including on an invoice, where Stripe nests it',
+  schoolIdOf({ subscription_details: { metadata: { school_id: 's2' } } }) === 's2')
 
 console.log('\n=== The app and the database agree ===')
 const client = new pg.Client({

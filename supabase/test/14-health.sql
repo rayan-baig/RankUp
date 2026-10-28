@@ -45,7 +45,7 @@ begin
   perform ok('a job that has never run says so, rather than "stale"',
     (v->'jobs'->'send-reminders'->>'state') = 'never_run');
   perform ok('every job is reported, not just the ones with rows',
-    (select count(*) from jsonb_object_keys(v->'jobs')) = 4);
+    (select count(*) from jsonb_object_keys(v->'jobs')) = 5);
 end $$;
 
 -- ---------- a healthy system ----------
@@ -56,6 +56,7 @@ begin
   perform record_job_run('run-retention', true);
   perform record_job_run('send-digests', true);
   perform record_job_run('settle-alliances', true);
+  perform record_job_run('settle-schools', true);
   v := health_snapshot();
   perform ok('with all of them just run, health is ok', (v->>'ok')::boolean);
   perform ok('and each reads as ok', (v->'jobs'->'run-retention'->>'state') = 'ok');

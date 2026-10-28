@@ -9,6 +9,7 @@ import {
 import { Screen, Card, Button, SectionTitle, Banner, Field, TextInput, Modal, Chip, DemoTag } from '../components/ui.jsx'
 import { SchoolHeadline, LeagueTable, RivalryList, StarList } from '../components/SchoolParts.jsx'
 import SignIn from './SignIn.jsx'
+import { billingLive, billingError, startSchoolCheckout, openSchoolBillingPortal } from '../lib/billing.js'
 
 /**
  * The School League, for a school.
@@ -244,6 +245,15 @@ function Dashboard({ school, league, demo, onChange }) {
     onChange()
   }
 
+  // Off to Stripe's own page. Card details never come near RankUp.
+  const pay = async (start) => {
+    if (demo) { setNotice('This is a sample school, so there is nothing to pay. A real school goes to Stripe here.'); return }
+    setBusy(true)
+    const res = await start()
+    setBusy(false)
+    if (!res.ok) setError(billingError(res.reason))
+  }
+
   const search = async (q) => {
     setQuery(q)
     if (demo) {
@@ -255,6 +265,7 @@ function Dashboard({ school, league, demo, onChange }) {
     if (res.ok) setFound(res.schools)
   }
 
+  const justPaid = typeof window !== 'undefined' && window.location.hash.includes('checkout=success')
   const trialDays = school.status === 'trial'
     ? Math.max(0, Math.ceil((new Date(school.trial_ends_at) - Date.now()) / 86400000)) : null
   const unpublished = (school.stars || []).some((s) => !s.published)
@@ -268,6 +279,11 @@ function Dashboard({ school, league, demo, onChange }) {
       )}
       {error && <Banner tone="warn" icon="⚠️" title="Not right now" className="mb-3">{error}</Banner>}
       {notice && <Banner tone="good" icon="✅" title="Done" className="mb-3">{notice}</Banner>}
+      {justPaid && (
+        <Banner tone="good" icon="🎉" title="Thank you" className="mb-3">
+          Your plan starts as soon as Stripe confirms it, usually within a minute.
+        </Banner>
+      )}
 
       <SchoolHeadline school={school} demo={demo} />
 
@@ -339,12 +355,37 @@ function Dashboard({ school, league, demo, onChange }) {
         <p className="text-sm">
           {school.price?.label}, {dollars(school.price?.monthly_cents || 0)} a month
           {trialDays !== null && <> · <Chip tone="var(--accent)">{trialDays} days of free trial left</Chip></>}
+          {school.status === 'active' && <> · <Chip tone="var(--good)">Paid</Chip></>}
           {school.status === 'lapsed' && <> · <Chip tone="var(--warn)">Ended</Chip></>}
         </p>
         <p className="text-xs text-muted mt-1">
           Priced for {school.student_count} students. Paying for the year costs ten months.
           The District Champion’s next month is free.
         </p>
+        {admin && (demo || billingLive()) && (
+          school.status === 'active' && school.has_customer ? (
+            <Button variant="soft" className="w-full mt-3" disabled={busy}
+                    onClick={() => pay(() => openSchoolBillingPortal())}>
+              Card, invoices and cancelling
+            </Button>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <Button className="py-2 min-h-0 text-sm" disabled={busy} onClick={() => pay(() => startSchoolCheckout('month'))}>
+                  {dollars(school.price?.monthly_cents || 0)} a month
+                </Button>
+                <Button variant="soft" className="py-2 min-h-0 text-sm" disabled={busy} onClick={() => pay(() => startSchoolCheckout('year'))}>
+                  {dollars(school.price?.yearly_cents || 0)} a year
+                </Button>
+              </div>
+              {trialDays > 0 && (
+                <p className="text-xs text-muted mt-2">
+                  Nothing is charged until your free trial ends, in {trialDays} days.
+                </p>
+              )}
+            </>
+          )
+        )}
       </Card>
 
       <Card flat className="mb-3">

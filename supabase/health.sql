@@ -79,7 +79,8 @@ begin
             -- room for a scheduler that ran late. Anything tighter would report
             -- a perfectly healthy job as dead every Saturday.
             ('send-digests',     interval '9 days'),
-            ('settle-alliances', interval '45 days')
+            ('settle-alliances', interval '45 days'),
+            ('settle-schools',   interval '45 days')
          ) as j(job, stale_after)
     left join job_runs r on r.job = j.job;
 

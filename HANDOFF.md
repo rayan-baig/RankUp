@@ -221,7 +221,7 @@ Block Craft at 125 becomes **The Nether Portal**; at 250, **The End**; at 399,
                               ▼
 ┌────────────────────────────────────────────────────────────┐
 │ SUPABASE / POSTGRES                                         │
-│  40 tables · 136 SECURITY DEFINER functions · 36 RLS policies│
+│  40 tables · 143 SECURITY DEFINER functions · 36 RLS policies│
 │  All writes go through functions. No table is writable      │
 │  directly by a client.                                      │
 └────────────────────────────────────────────────────────────┘
@@ -232,6 +232,7 @@ Block Craft at 125 becomes **The Nether Portal**; at 250, **The End**; at 399,
 │  verify-photo · create-checkout · billing-portal            │
 │  stripe-webhook · send-push · send-reminders                │
 │  send-digests · settle-alliances · run-retention · health   │
+│  school-checkout · settle-schools                           │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -311,7 +312,7 @@ deletions · job_runs · schools · school_staff · school_members ·
 school_rivalries · school_month_scores · school_awards · school_rivalry_results ·
 school_top_students`
 
-**136 SECURITY DEFINER functions.** The important ones:
+**143 SECURITY DEFINER functions.** The important ones:
 
 | Function | Guards |
 |---|---|
@@ -378,6 +379,13 @@ chores per student, at most eight a day each, averaged, so size does not win.
 schools), rivalry results and each school's top ten. A school sees no child's
 name until the operator has run `verify_school`, and then only first names a
 parent agreed to.
+
+Schools pay through `api/school-checkout.js` (price picked from the school's
+size, never from the request); the existing Stripe webhook switches a school
+on and off by the `school_id` on its subscription. `api/settle-schools.js` runs
+monthly: it closes the month and gives each Champion its free month (a coupon
+if it pays, thirty more trial days if not). Setup is in
+[docs/PAYMENTS.md](docs/PAYMENTS.md#the-school-league).
 
 ---
 

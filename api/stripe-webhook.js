@@ -21,6 +21,7 @@
  */
 
 import { makeStripe, verifyWebhook } from './_shared/stripe.js'
+import { schoolIdOf } from './_shared/schoolBilling.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -95,6 +96,28 @@ function tierFor(subscription) {
   return claimed === 'elite' || claimed === 'standard' ? claimed : 'starter'
 }
 
+/**
+ * The school this object belongs to, if it is a school's.
+ *
+ * Asked before the family question on every event: a school's subscription
+ * carries no family id, and the family fallbacks would otherwise go looking
+ * for one and, at best, find nothing.
+ */
+async function schoolIdFor(object) {
+  const direct = schoolIdOf(object)
+  if (direct) return direct
+  const customerId = typeof object?.customer === 'string' ? object.customer : object?.customer?.id
+  if (!customerId) return null
+  try {
+    return (await serviceRpc('school_for_customer', { p_customer_id: customerId })) || null
+  } catch (err) {
+    // A database without schools.sql yet has no such function (404). That
+    // must not stop families being billed; anything else is retried.
+    if (String(err.message).endsWith(': 404')) return null
+    throw err
+  }
+}
+
 async function familyIdFor(object, stripe) {
   const direct = object?.metadata?.family_id || object?.client_reference_id
   if (direct) return direct
@@ -134,6 +157,37 @@ export default async function handler(req, res) {
 
   try {
     const object = event.data.object
+
+    // ---- schools: their own plans, never a family's tier ----
+    const schoolId = await schoolIdFor(object)
+    if (schoolId) {
+      const customerId = typeof object.customer === 'string' ? object.customer : object.customer?.id
+      if (event.type === 'checkout.session.completed') {
+        if (customerId) await serviceRpc('attach_school_customer', { p_school_id: schoolId, p_customer_id: customerId })
+      } else if (event.type.startsWith('customer.subscription.')) {
+        await serviceRpc('apply_school_subscription', {
+          p_school_id: schoolId,
+          p_status: event.type === 'customer.subscription.deleted' ? 'canceled' : object.status,
+          p_customer_id: customerId || null,
+          p_subscription_id: object.id,
+          p_stripe_event: event.id,
+          p_payload: { type: event.type },
+        })
+      } else if (event.type === 'invoice.paid' || event.type === 'invoice.payment_succeeded') {
+        const paid = Number(object.amount_paid ?? object.amount_due ?? 0)
+        if (paid > 0) {
+          await serviceRpc('record_school_payment', {
+            p_school_id: schoolId,
+            p_stripe_event: event.id,
+            p_amount_pence: paid,
+            p_currency: String(object.currency || 'usd'),
+          })
+        }
+      }
+      // A failed card needs nothing here: Stripe retries it, and the
+      // subscription events that follow say whether the plan survived.
+      return res.status(200).json({ received: true, school: true })
+    }
 
     if (event.type === 'checkout.session.completed') {
       const familyId = object.metadata?.family_id || object.client_reference_id

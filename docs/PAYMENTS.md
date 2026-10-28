@@ -153,6 +153,47 @@ being marked paid, so an unpaid winner is visible instead of silently lost.
 
 ---
 
+## The School League
+
+Schools pay by size. In Stripe, make one product, "RankUp School League", with
+eight recurring prices, and put their ids in the `STRIPE_PRICE_SCHOOL_*`
+variables (see `.env.example`):
+
+| Size | Students | Monthly | Yearly |
+|---|---|---|---|
+| small | up to 300 | $29 | $290 |
+| medium | 301–800 | $59 | $590 |
+| large | 801–1,500 | $99 | $990 |
+| xl | 1,501+ | $149 | $1,490 |
+
+The same numbers are in `supabase/schools.sql` and `src/lib/schools.js`, and
+`tests/schools.mjs` fails if those two disagree. If you change a price, change
+it in Stripe too.
+
+- **Checkout** is `api/school-checkout.js`. Only a school's admin can start it,
+  and the price is picked from the school's own size, never from the request.
+  Days left on the 30-day free trial carry onto the card.
+- **The webhook** you already have handles schools as well. A school's events
+  carry `school_id`; they switch the school on and off and never touch a
+  family's plan. A failing card keeps the school playing while Stripe retries.
+- **Each month**, schedule `api/settle-schools.js` the same way as the alliance
+  job (it is in `vercel.json`, a day after the month ends):
+
+  ```
+  POST https://your-site/api/settle-schools
+  Authorization: Bearer <CRON_SECRET>
+  ```
+
+  It closes the month (District Champions, rivalry results, School Stars) and
+  gives each Champion its free month: a one-use 100% coupon if it pays, thirty
+  more trial days if it is still on its trial. A free month that could not be
+  given stays owed and is tried again next run. It never gives one twice.
+- **Checking schools are real** is still by hand: in the SQL editor,
+  `select verify_school('<school id>', true);`. Until then a school is in no
+  league and sees no child's name.
+
+---
+
 ## Still to do
 
 **Before charging a single real family**, confirm all of:

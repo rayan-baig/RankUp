@@ -106,7 +106,7 @@ phones. Everything else in this table is real.
 
 ---
 
-## The School League — 🟡 built, not yet charging
+## The School League — ✅ built, charging once Stripe is connected
 
 | Thing | Status | Notes |
 |---|---|---|
@@ -116,8 +116,8 @@ phones. Everything else in this table is real.
 | Rival schools | ✅ | Challenge, accept, decline, end; monthly results kept |
 | School Stars (top ten) | ✅ | The admin checks the list before families see it. First names only with a parent's yes |
 | Checking a school is real | 🟡 by hand | Run `select verify_school('<school id>', true);` in the SQL editor. Until then the school is in no league and sees no names |
-| Closing each month | 🟡 not scheduled | `settle_school_month(month)` does it all and is safe to run twice. It needs a monthly job like the alliance one |
-| Charging schools, and the Champion's free month | ❌ next | No Stripe yet: every school stays on its trial. The free month is recorded in `school_awards` but nothing applies it |
+| Charging schools | ✅ built, off until Stripe is connected | `api/school-checkout.js`, priced by the school's size. Needs the eight `STRIPE_PRICE_SCHOOL_*` prices — [PAYMENTS.md](PAYMENTS.md#the-school-league) |
+| Closing each month, and the Champion's free month | ✅ built — **you have to schedule it** | `api/settle-schools.js`, monthly. Safe to run twice; a free month that failed is retried next run |
 
 ## Knowing it is working, without watching it
 
