@@ -165,7 +165,7 @@ export function RivalryList({ rivalries = [], actions = null }) {
 }
 
 /** The School Stars: the top ten for a finished month. */
-export function StarList({ stars = [], monthKey, staff = false, leaveOut = [], onToggle = null }) {
+export function StarList({ stars = [], monthKey, staff = false, leaveOut = [], onToggle = null, onRemove = null }) {
   return (
     <>
       <SectionTitle>School Stars · {monthLabel(monthKey)}</SectionTitle>
@@ -200,6 +200,13 @@ export function StarList({ stars = [], monthKey, staff = false, leaveOut = [], o
                 <button type="button" className="text-[11px] underline text-muted shrink-0"
                         onClick={() => onToggle(s.rank)}>
                   {out ? 'Put back' : 'Leave out'}
+                </button>
+              )}
+              {staff && onRemove && (
+                <button type="button" className="text-[11px] underline shrink-0" style={{ color: 'var(--bad)' }}
+                        aria-label={`Remove the student in place ${s.rank} from the school`}
+                        onClick={() => onRemove(s)}>
+                  Remove
                 </button>
               )}
             </div>

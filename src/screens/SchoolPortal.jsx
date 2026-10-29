@@ -231,6 +231,9 @@ function Dashboard({ school, league, demo, onChange }) {
   const [notice, setNotice] = useState('')
   const [leaveOut, setLeaveOut] = useState([])
   const [finding, setFinding] = useState(false)
+  const [removing, setRemoving] = useState(null)
+  const [resizing, setResizing] = useState(false)
+  const [size, setSize] = useState(String(school.student_count || ''))
   const [query, setQuery] = useState('')
   const [found, setFound] = useState([])
 
@@ -338,7 +341,8 @@ function Dashboard({ school, league, demo, onChange }) {
 
       <StarList stars={school.stars} monthKey={school.stars_month} staff
                 leaveOut={leaveOut}
-                onToggle={admin ? (rank) => setLeaveOut((l) => (l.includes(rank) ? l.filter((x) => x !== rank) : [...l, rank])) : null} />
+                onToggle={admin ? (rank) => setLeaveOut((l) => (l.includes(rank) ? l.filter((x) => x !== rank) : [...l, rank])) : null}
+                onRemove={admin ? setRemoving : null} />
       {admin && unpublished && (
         <Button className="w-full mb-3" disabled={busy}
                 onClick={() => act(() => schools.publishStars(school.stars_month, leaveOut), 'Families can now see this month’s Stars.')}>
@@ -361,6 +365,14 @@ function Dashboard({ school, league, demo, onChange }) {
         <p className="text-xs text-muted mt-1">
           Priced for {school.student_count} students. Paying for the year costs ten months.
           The District Champion’s next month is free.
+          {admin && !(school.status === 'active' && school.has_customer) && (
+            <>
+              {' '}
+              <button type="button" className="underline" onClick={() => { setSize(String(school.student_count)); setResizing(true) }}>
+                Wrong number of students?
+              </button>
+            </>
+          )}
         </p>
         {admin && (demo || billingLive()) && (
           school.status === 'active' && school.has_customer ? (
@@ -397,6 +409,53 @@ function Dashboard({ school, league, demo, onChange }) {
           </div>
         ))}
       </Card>
+
+      <Modal
+        open={Boolean(removing)}
+        onClose={() => setRemoving(null)}
+        title="Remove this student?"
+        footer={
+          <>
+            <Button variant="ghost" className="flex-1" onClick={() => setRemoving(null)}>Keep them</Button>
+            <Button variant="danger" className="flex-1" disabled={busy}
+                    onClick={() => { const s = removing; setRemoving(null); act(() => schools.removeStar(school.stars_month, s.rank), 'Removed from the school.') }}>
+              Remove
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm">
+          Place {removing?.rank} ({removing?.name}, {removing?.score} points) will be taken out of your
+          school and off every Stars list. Do this only if they are not one of your students.
+        </p>
+        <p className="text-xs text-muted mt-2">
+          Their family can join again with your parents’ code. If the code has got out, make new codes too.
+        </p>
+      </Modal>
+
+      <Modal
+        open={resizing}
+        onClose={() => setResizing(false)}
+        title="Number of students"
+        footer={
+          <>
+            <Button variant="ghost" className="flex-1" onClick={() => setResizing(false)}>Cancel</Button>
+            <Button className="flex-1" disabled={busy || !schoolPrice(size)}
+                    onClick={() => { setResizing(false); act(() => schools.updateSize(size), 'School size updated.') }}>
+              Save
+            </Button>
+          </>
+        }
+      >
+        <TextInput type="number" inputMode="numeric" min={1} max={20000} value={size}
+                   onChange={(e) => setSize(e.target.value)} aria-label="Number of students" />
+        {schoolPrice(size) && (
+          <p className="text-sm mt-2">
+            {schoolPrice(size).label}: {dollars(schoolPrice(size).monthlyCents)} a month.
+          </p>
+        )}
+        <p className="text-xs text-muted mt-2">Your whole school, not just the students who have joined.</p>
+      </Modal>
 
       <Modal
         open={finding}

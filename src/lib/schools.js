@@ -76,6 +76,8 @@ export const SCHOOL_ERRORS = {
   already_rivals: 'You already have a rivalry with that school.',
   no_such_challenge: 'That challenge has already been answered.',
   nothing_to_publish: 'There is no list for that month yet.',
+  no_such_place: 'That place is already empty.',
+  paying_contact_us: 'Your plan is being paid, so the price is on your card. Contact us to change your school’s size.',
   not_your_school: 'That league belongs to a school you are not part of.',
 }
 
@@ -109,6 +111,8 @@ export const schools = {
   challenge: (schoolId) => call('challenge_school', { p_rival_id: schoolId }),
   answer: (rivalryId, accept) => call('answer_challenge', { p_rivalry_id: rivalryId, p_accept: accept }),
   endRivalry: (rivalryId) => call('end_rivalry', { p_rivalry_id: rivalryId }),
+  removeStar: (monthKey, rank) => call('remove_school_star', { p_month_key: monthKey, p_rank: rank }),
+  updateSize: (students) => call('update_school_size', { p_students: Number(students) }),
   publishStars: (monthKey, leaveOut = []) =>
     call('publish_top_students', { p_month_key: monthKey, p_leave_out: leaveOut }),
 

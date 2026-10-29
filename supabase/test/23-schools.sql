@@ -572,3 +572,44 @@ begin
   perform ok('and lifting one that is not suspended does nothing',
     not (unsuspend_school(b)->>'ok')::boolean);
 end $$;
+
+-- ---------- looking after the school ----------
+set role app_user;
+do $$
+declare last_key text := to_char(now() - interval '1 month', 'YYYY-MM');
+begin
+  perform become('5c111111-0000-0000-0000-0000000000a1');
+  perform ok('a teacher CANNOT remove a student',
+    (remove_school_star(last_key, 3)->>'reason') = 'not_school_admin');
+  perform ok('nor change the school''s size', (update_school_size(100)->>'reason') = 'not_school_admin');
+
+  perform become('5c111111-0000-0000-0000-00000000000a');
+  perform ok('a place that does not exist cannot be removed',
+    (remove_school_star(last_key, 9)->>'reason') = 'no_such_place');
+  perform ok('the admin removes the student in third place', (remove_school_star(last_key, 3)->>'ok')::boolean);
+  perform ok('who leaves the Stars list', jsonb_array_length(school_overview()->'school'->'stars') = 3
+    and not exists (select 1 from jsonb_array_elements(school_overview()->'school'->'stars') e where (e->>'rank')::int = 3));
+
+  -- A paying school cannot drop its own price with a button.
+  perform ok('a paying school cannot change its size, and so its price, itself',
+    (update_school_size(100)->>'reason') = 'paying_contact_us');
+end $$;
+reset role;
+
+do $$
+begin
+  perform ok('the removed student is off the roll',
+    (select count(*) from school_members m join schools s on s.id = m.school_id
+      where s.name = 'Oakridge Elementary') = 3);
+end $$;
+
+update schools set status = 'trial', stripe_subscription_id = null where name = 'Oakridge Elementary';
+set role app_user;
+do $$
+begin
+  perform become('5c111111-0000-0000-0000-00000000000a');
+  perform ok('a school not yet paying can correct its size, and is quoted the new price',
+    (update_school_size(1200)->'price'->>'band') = 'large');
+  perform ok('which the checkout then charges', (school_checkout_info()->>'band') = 'large');
+end $$;
+reset role;

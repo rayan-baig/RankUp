@@ -1126,3 +1126,63 @@ end $$;
 
 revoke execute on function operator_schools() from public, anon, authenticated;
 revoke execute on function unsuspend_school(uuid) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Looking after the school.
+-- ---------------------------------------------------------------------------
+
+/**
+ * Take a student off the school's roll, from their place in the Stars.
+ *
+ * A school never sees a list of its students, so the only children it can
+ * point at are the ones in its top ten, which is where a made-up or wrong
+ * student does harm. Admin only. Their family is not told who removed them;
+ * they simply find their child is no longer in the school, and can join again
+ * only with the code (which the admin can change).
+ */
+create or replace function remove_school_star(p_month_key text, p_rank int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_me  school_staff := current_school_staff();
+  v_kid uuid;
+begin
+  if v_me.user_id is null or v_me.role <> 'admin' then
+    return jsonb_build_object('ok', false, 'reason', 'not_school_admin');
+  end if;
+  select kid_id into v_kid from school_top_students
+   where school_id = v_me.school_id and month_key = p_month_key and rank = p_rank;
+  if v_kid is null then return jsonb_build_object('ok', false, 'reason', 'no_such_place'); end if;
+
+  delete from school_members where kid_id = v_kid and school_id = v_me.school_id;
+  -- Every month's list, so they are not left on old ones either. Their place
+  -- stays empty rather than everyone below moving up after the fact.
+  delete from school_top_students where kid_id = v_kid and school_id = v_me.school_id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+/**
+ * Correct the school's size, which sets its price. Not while a plan is being
+ * paid: the price on the card would no longer match, so that is a change made
+ * with us rather than with a button.
+ */
+create or replace function update_school_size(p_students int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_me school_staff := current_school_staff();
+begin
+  if v_me.user_id is null or v_me.role <> 'admin' then
+    return jsonb_build_object('ok', false, 'reason', 'not_school_admin');
+  end if;
+  if p_students is null or p_students < 1 or p_students > 20000 then
+    return jsonb_build_object('ok', false, 'reason', 'bad_size');
+  end if;
+  if exists (select 1 from schools where id = v_me.school_id and stripe_subscription_id is not null
+                                     and status = 'active') then
+    return jsonb_build_object('ok', false, 'reason', 'paying_contact_us');
+  end if;
+  update schools set student_count = p_students, size_band = school_size_band(p_students)
+   where id = v_me.school_id;
+  return jsonb_build_object('ok', true, 'price', school_price_quote(p_students));
+end $$;
+
+grant execute on function remove_school_star(text, int) to authenticated;
+grant execute on function update_school_size(int) to authenticated;
