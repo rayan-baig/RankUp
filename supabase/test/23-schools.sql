@@ -508,3 +508,38 @@ begin
   perform ok('a Champion still on its trial gets thirty more free days instead',
     (select trial_ends_at from schools where id = b) >= before + interval '29 days');
 end $$;
+
+-- ---------- a family's data rights cover the school too ----------
+set role app_user;
+do $$
+declare r jsonb;
+begin
+  perform become('5c111111-0000-0000-0000-000000000002');
+  r := export_family_data()->'school_league';
+  perform ok('downloading my data includes each child''s school',
+    jsonb_array_length(r) = 5 and (r->0->>'school') = 'Pine Hill School'
+    and (r->0->>'first_name_shown_to_school')::boolean);
+  begin
+    perform export_family_school_data('5c222222-0000-0000-0000-000000000001');
+    perform ok('nobody can export another family''s school data directly', false);
+  exception when insufficient_privilege then
+    perform ok('nobody can export another family''s school data directly', true);
+  end;
+end $$;
+reset role;
+
+set role app_user;
+do $$
+begin
+  perform become('5c111111-0000-0000-0000-000000000002');
+  perform ok('a parent can delete their account', (delete_family_account('DELETE')->>'ok')::boolean);
+end $$;
+reset role;
+do $$
+begin
+  perform ok('deleting the account takes the children out of their school',
+    not exists (select 1 from school_members where family_id = '5c222222-0000-0000-0000-000000000002'));
+  perform ok('and off every School Stars list',
+    not exists (select 1 from school_top_students t join kids k on k.id = t.kid_id
+                 where k.family_id = '5c222222-0000-0000-0000-000000000002'));
+end $$;

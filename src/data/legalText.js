@@ -13,7 +13,14 @@
  */
 
 export const CONSENT_VERSION = '2026-01'
-export const LAST_UPDATED = 'January 2026'
+export const LAST_UPDATED = 'October 2026'
+/*
+ * The policy and terms were updated for the School League. The consent notice
+ * itself is unchanged (still CONSENT_VERSION above): joining a school is a
+ * separate, explicit choice a parent makes on the School League screen, which
+ * says there exactly what the school will see, in the same way a guild needs
+ * a parent's yes before a child joins one.
+ */
 
 /** Fill these in before you publish anything. */
 export const OPERATOR = {
@@ -101,6 +108,16 @@ export const PRIVACY_POLICY = {
       ],
     },
     {
+      heading: 'The School League, if you join it',
+      body: [
+        'If your child\'s school takes part, you can add your child to it with a code the school gives you. Only a parent can do this; a school can never add a child.',
+        'Your child\'s approved chores then count towards the school\'s monthly score. The school, and other schools, see the school\'s total and its average per student, never your child\'s chores, photographs or anything else.',
+        'Each month the school sees its ten highest-scoring students. A child is shown there by first name only if you turned that on; otherwise they appear as "A student". You can change this at any time, and taking your child out of the school removes them from every list, past months included.',
+        'A school sees no names at all until we have checked that it is a real school. Schools never see a list of their students, and nothing about any child is shown to another school.',
+        'For school staff we collect the name and email address they sign in with, and the school\'s name, district, town and size.',
+      ],
+    },
+    {
       heading: 'How long we keep it',
       body: [
         'Chore photographs: until you have reviewed them, plus a retention window you choose in Settings (30 days by default, or as little as one day).',
@@ -111,6 +128,7 @@ export const PRIVACY_POLICY = {
       heading: 'Who we share it with',
       body: [
         'Nobody, except the services that make the app work: Supabase (hosting and database), Anthropic (the AI photo check, only if you turn it on), Stripe (payments, only if you subscribe), and a push notification service if you enable notifications.',
+        'If you add your child to a school\'s league, that school sees what is described under "The School League" above, and nothing more.',
         'We do not sell data. We do not share it for advertising. We show children no advertising.',
       ],
     },
@@ -127,6 +145,7 @@ export const PRIVACY_POLICY = {
         'Download everything we hold: Settings → Download my data.',
         'Delete everything: Settings → Delete account.',
         'Turn off the AI photo check, notifications, or guilds independently. The app works without any of them.',
+        'Take your child out of a school\'s league, or stop their first name being shown to the school, from the School League screen.',
       ],
     },
     {
@@ -176,6 +195,16 @@ export const TERMS = {
       body: [
         'Do not use RankUp to harass, harm or deceive anyone, and do not attempt to access another family\'s data.',
         'Guild chat is for children. We may remove content and suspend accounts that put children at risk.',
+      ],
+    },
+    {
+      heading: 'Schools',
+      body: [
+        'Whoever signs a school up must work there and be allowed to sign it up. We check every school before it joins a league, and we may suspend one that is not genuine or that misuses the league.',
+        'A school\'s plan is priced by its number of students: $29 a month up to 300, $59 up to 800, $99 up to 1,500, and $149 above that. A year costs ten months. The first 30 days are free, and nothing is charged until they end.',
+        'A school can cancel at any time from its School League page. Its plan runs to the end of the period paid for. If a payment keeps failing, or the plan ends, the school stops being ranked until it is renewed.',
+        'Each month the best school in each district is named District Champion and its next month is free (or, during the free trial, the trial is extended by 30 days). This needs at least two ranked schools in the district.',
+        'Any prize a school gives its students is the school\'s own. A school must not use the league to identify, contact or single out any child outside the school\'s normal care of its students.',
       ],
     },
     {

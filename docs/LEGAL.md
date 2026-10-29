@@ -101,3 +101,26 @@ If a photo is deleted the moment it has been reviewed, an enormous amount of ris
 disappears — you cannot leak what you do not store. The app would lose a history view
 that nobody has asked for. That trade seems obviously worth it, and it is much easier to
 build that way from the start than to retrofit.
+
+---
+
+## The School League: questions to add for the lawyer
+
+The School League shows a school some information about children whose parents
+chose to join it. The in-app privacy policy and terms describe it (see
+`src/data/legalText.js`). Ask specifically:
+
+- **Disclosure to a third party.** A school sees its monthly top ten, with a
+  child's first name only where the parent switched that on. Is the parent's
+  explicit choice on the School League screen enough consent for that under
+  COPPA, or should the main consent notice (`CONSENT_VERSION`) be reissued to
+  cover it? Changing that version asks every parent to consent again.
+- **FERPA and state student-privacy laws.** RankUp is not given records by the
+  school; parents bring the data. Confirm that this keeps RankUp outside FERPA,
+  and check states with their own student-data laws (for example California's
+  SOPIPA), since schools may ask you to sign a data agreement anyway.
+- **School contracts.** Many districts require a data processing agreement
+  before staff can use a service. Have a standard one ready.
+- **Who may sign a school up.** The terms say the person must work there and be
+  allowed to. You check each school by hand before it joins a league; decide
+  what evidence you accept.

@@ -1057,3 +1057,30 @@ revoke execute on function school_for_customer(text) from public, anon, authenti
 revoke execute on function stripe_customer_for_school(uuid) from public, anon, authenticated;
 revoke execute on function apply_school_subscription(uuid, text, text, text, text, jsonb) from public, anon, authenticated;
 revoke execute on function record_school_payment(uuid, text, int, text) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- A family's right to see what is held. Called by export_family_data in
+-- consent.sql; each child's school, whether their name may show, and every
+-- School Stars place they have had. Deleting the family deletes all of it:
+-- school_members and school_top_students both cascade from kids.
+-- ---------------------------------------------------------------------------
+create or replace function export_family_school_data(p_family uuid)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'child', k.name,
+           'school', s.name, 'district', s.district, 'city', s.city,
+           'joined_at', m.joined_at,
+           'first_name_shown_to_school', m.show_name,
+           'school_stars', coalesce((
+             select jsonb_agg(jsonb_build_object('month', t.month_key, 'place', t.rank,
+                                                 'points', t.score, 'published', t.published)
+                              order by t.month_key)
+               from school_top_students t where t.kid_id = k.id), '[]'::jsonb))
+           order by k.name), '[]'::jsonb)
+    from school_members m
+    join kids k on k.id = m.kid_id
+    join schools s on s.id = m.school_id
+   where m.family_id = p_family;
+$$;
+
+revoke execute on function export_family_school_data(uuid) from public, anon, authenticated;

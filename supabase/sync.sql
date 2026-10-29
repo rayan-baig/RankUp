@@ -78,8 +78,15 @@ create policy deletions_read on deletions
 create or replace function record_deletion() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
-  insert into deletions (family_id, table_name, row_id)
-  values (old.family_id, tg_table_name, old.id);
+  -- When the whole family is being deleted, its rows go with it by cascade and
+  -- there is no device left to tell. Writing a tombstone then pointed at a
+  -- family that no longer existed, the foreign key refused it, and the refusal
+  -- aborted the deletion: "Delete account" failed for every family with a
+  -- child in it. Only a family that still exists needs to hear about a row.
+  if exists (select 1 from families where id = old.family_id) then
+    insert into deletions (family_id, table_name, row_id)
+    values (old.family_id, tg_table_name, old.id);
+  end if;
   return old;
 end $$;
 

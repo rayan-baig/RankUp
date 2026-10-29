@@ -171,12 +171,21 @@ create trigger kids_require_consent
 create or replace function export_family_data()
 returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_family uuid;
+declare
+  v_family uuid;
+  v_school jsonb;
 begin
   select family_id into v_family from parents where user_id = auth.uid();
   if v_family is null then raise exception 'only a parent can export'; end if;
 
+  -- The School League lives in schools.sql, applied after this file, so it is
+  -- asked for by name only when it exists. A database without it still exports.
+  if to_regprocedure('public.export_family_school_data(uuid)') is not null then
+    execute 'select public.export_family_school_data($1)' into v_school using v_family;
+  end if;
+
   return jsonb_build_object(
+    'school_league', coalesce(v_school, '[]'::jsonb),
     'exported_at', now(),
     'family',      (select to_jsonb(f) from families f where f.id = v_family),
     'parents',     coalesce((select jsonb_agg(to_jsonb(p)) from parents p where p.family_id = v_family), '[]'::jsonb),
