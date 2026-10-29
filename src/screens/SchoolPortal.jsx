@@ -402,12 +402,21 @@ function Dashboard({ school, league, demo, onChange }) {
 
       <Card flat className="mb-3">
         <SectionTitle>Staff</SectionTitle>
-        {(school.staff || []).map((s) => (
-          <div key={s.name} className="flex items-center justify-between text-sm py-1">
+        {(school.staff || []).map((s, i) => (
+          <div key={`${s.name}-${i}`} className="flex items-center justify-between text-sm py-1">
             <span>{s.name}{s.you ? ' (you)' : ''}</span>
             <span className="text-xs text-muted">{s.role === 'admin' ? 'Admin' : 'Teacher'}</span>
           </div>
         ))}
+        <button type="button" className="w-full text-xs underline text-muted mt-2" disabled={busy}
+                onClick={() => {
+                  const message = admin
+                    ? 'Leave this school’s staff? The teacher who has been here longest becomes the admin.'
+                    : 'Leave this school’s staff?'
+                  if (demo || window.confirm(message)) act(() => schools.leaveStaff(), 'You have left the school’s staff.')
+                }}>
+          Leave this school’s staff
+        </button>
       </Card>
 
       <Modal

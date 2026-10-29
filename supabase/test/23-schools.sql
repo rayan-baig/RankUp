@@ -613,3 +613,20 @@ begin
   perform ok('which the checkout then charges', (school_checkout_info()->>'band') = 'large');
 end $$;
 reset role;
+
+-- ---------- leaving the staff ----------
+set role app_user;
+do $$
+begin
+  perform become('5c111111-0000-0000-0000-00000000000c');
+  perform ok('the only member of staff cannot leave a school with nobody in charge',
+    (leave_school_staff()->>'reason') = 'last_staff');
+
+  perform become('5c111111-0000-0000-0000-00000000000a');
+  perform ok('an admin can leave when there is a teacher to hand over to', (leave_school_staff()->>'ok')::boolean);
+  perform ok('and is no longer staff', (school_overview()->'school') = 'null'::jsonb);
+
+  perform become('5c111111-0000-0000-0000-0000000000a1');
+  perform ok('the teacher is now the admin', (school_overview()->'school'->>'role') = 'admin');
+end $$;
+reset role;

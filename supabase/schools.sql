@@ -1186,3 +1186,29 @@ end $$;
 
 grant execute on function remove_school_star(text, int) to authenticated;
 grant execute on function update_school_size(int) to authenticated;
+
+/**
+ * Leave the school's staff. A teacher simply goes. An admin hands the school
+ * to the teacher who has been there longest, so it is never left with nobody
+ * in charge; the last member of staff cannot leave that way at all, because a
+ * school with no staff cannot be looked after or cancelled.
+ */
+create or replace function leave_school_staff()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_me   school_staff := current_school_staff();
+  v_next uuid;
+begin
+  if v_me.user_id is null then return jsonb_build_object('ok', false, 'reason', 'not_school_staff'); end if;
+  if v_me.role = 'admin' then
+    select user_id into v_next from school_staff
+     where school_id = v_me.school_id and user_id <> v_me.user_id
+     order by joined_at, user_id limit 1;
+    if v_next is null then return jsonb_build_object('ok', false, 'reason', 'last_staff'); end if;
+    update school_staff set role = 'admin' where user_id = v_next;
+  end if;
+  delete from school_staff where user_id = v_me.user_id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+grant execute on function leave_school_staff() to authenticated;
