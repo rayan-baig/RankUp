@@ -658,6 +658,8 @@ begin
                                            'city', s.city, 'score', a.score)
                    from school_awards a join schools s on s.id = a.school_id
                   where a.district_key = v_s.district_key
+                    -- Not a school we have since un-checked or suspended.
+                    and s.verified and s.status <> 'suspended'
                   order by a.month_key desc limit 1));
 end $$;
 

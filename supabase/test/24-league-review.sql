@@ -293,3 +293,16 @@ begin
     and exists (select 1 from parental_consents where family_id = '6d222222-0000-0000-0000-000000000001'
                                                   and revoked_at is null));
 end $$;
+
+-- ---------- a suspended school is nobody's champion ----------
+insert into school_awards (district_key, month_key, school_id, score)
+select 'review district', '2099-01', id, 99 from schools where name = 'Other One';
+update schools set status = 'suspended' where name = 'Other One';
+set role app_user;
+do $$
+begin
+  perform become('6d111111-0000-0000-0000-00000000000b');
+  perform ok('a suspended school is not shown as the district''s champion',
+    coalesce(school_league()->'champion'->>'name', '') <> 'Other One');
+end $$;
+reset role;

@@ -119,6 +119,17 @@ phones. Everything else in this table is real.
 | Charging schools | ✅ built, off until Stripe is connected | `api/school-checkout.js`, priced by the school's size. Needs the eight `STRIPE_PRICE_SCHOOL_*` prices — [PAYMENTS.md](PAYMENTS.md#the-school-league) |
 | Closing each month, and the Champion's free month | ✅ built — **you have to schedule it** | `api/settle-schools.js`, monthly. Safe to run twice; a free month that failed is retried next run |
 
+Known limits, decided rather than missed (from the October 2026 review):
+
+- **Membership is counted when the month is closed**, not on its last day. A
+  family taking a child out on the 31st changes that school's average.
+- **Five students can be one family.** The minimum counts children, not
+  households. Requiring several families would stop one family making a
+  school rankable; it would also slow a new school's start.
+- **The 8-a-day cap is by approval day.** A parent who approves a week's
+  chores in one go counts at most 8 that day. Counting by when the child
+  submitted would fix that; it would also let a child's backlog count later.
+
 ## Knowing it is working, without watching it
 
 | Thing | Where |
