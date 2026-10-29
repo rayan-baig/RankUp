@@ -274,7 +274,9 @@ returns table (school_id uuid, name text, city text, score numeric,
                students int, ranked boolean)
 language sql stable security definer set search_path = public as $$
   select s.id, s.name, s.city, ms.score, ms.students,
-         (s.verified and ms.students >= school_min_students()) as ranked
+         -- The included school is shown even when it cannot be ranked (not yet
+         -- checked, or its plan has ended), so it is marked as such here.
+         (s.verified and school_is_live(s.id) and ms.students >= school_min_students()) as ranked
     from schools s
     cross join lateral school_month_score(s.id, p_month) ms
    where s.district_key = p_district_key
@@ -540,10 +542,12 @@ declare
   v_score numeric;
   v_kids  int;
   v_out   jsonb;
+  v_ranked boolean;
 begin
   select * into v_s from schools where id = p_school;
   if not found then return null; end if;
   select score, students into v_score, v_kids from school_month_score(p_school, v_month);
+  v_ranked := v_s.verified and school_is_live(p_school) and v_kids >= school_min_students();
 
   select count(*) filter (where ranked),
          (select count(*) + 1 from school_district_table(v_s.district_key, v_month) o
@@ -559,8 +563,12 @@ begin
     'score', v_score,
     'students', v_kids,
     'min_students', school_min_students(),
-    'ranked', v_s.verified and v_kids >= school_min_students(),
-    'district_rank', case when v_s.verified and v_kids >= school_min_students() then v_rank end,
+    -- The school's own id, so a family with children in two schools can ask
+    -- for the right league. Only ever given to someone already connected to
+    -- this school, and only useful to them.
+    'school_id', p_school,
+    'ranked', v_ranked,
+    'district_rank', case when v_ranked then v_rank end,
     'district_schools', v_count,
     'rivalries', school_rivalry_list(p_school),
     'stars', school_stars(p_school, v_last, p_as = 'staff'),
@@ -582,7 +590,9 @@ begin
       'staff_code', case when v_me.role = 'admin' then v_s.staff_code end,
       'sharing_names', (select count(*) from school_members where school_id = p_school and show_name),
       'staff', (select jsonb_agg(jsonb_build_object('name', st.name, 'role', st.role,
-                                                    'you', st.user_id = auth.uid())
+                                                    'you', st.user_id = auth.uid(),
+                                                    -- What remove_school_staff takes. Admins only.
+                                                    'ref', case when v_me.role = 'admin' then st.user_id end)
                                  order by st.role, st.name)
                   from school_staff st where st.school_id = p_school),
       'challenges_in', (select count(*) from school_rivalries
@@ -718,6 +728,13 @@ begin
   if v_me.user_id is null or v_me.role <> 'admin' then
     return jsonb_build_object('ok', false, 'reason', 'not_school_admin');
   end if;
+  -- The same three-at-a-time limit as challenging, or a school could be
+  -- pulled into any number of rivalries by being asked.
+  if p_accept and (select count(*) from school_rivalries
+                    where (challenger_id = v_me.school_id or rival_id = v_me.school_id)
+                      and status = 'active') >= 3 then
+    return jsonb_build_object('ok', false, 'reason', 'too_many_rivals');
+  end if;
   update school_rivalries
      set status = case when p_accept then 'active' else 'declined' end, answered_at = now()
    where id = p_rivalry_id and rival_id = v_me.school_id and status = 'pending';
@@ -777,17 +794,25 @@ declare
   v_month date := date_trunc('month', p_month)::date;
   v_key   text := to_char(date_trunc('month', p_month), 'YYYY-MM');
   v_awards jsonb;
+  v_new    uuid[];
 begin
   if v_month + interval '1 month' > now() then
     return jsonb_build_object('ok', false, 'reason', 'month_not_over');
   end if;
 
-  insert into school_month_scores (school_id, month_key, score, students, ranked)
-  select s.id, v_key, ms.score, ms.students,
-         s.verified and ms.students >= school_min_students()
-    from schools s cross join lateral school_month_score(s.id, v_month) ms
-   where school_is_live(s.id)
-  on conflict (school_id, month_key) do nothing;
+  -- The schools closed by THIS run. Everything per school below is written
+  -- only for them, so a second run cannot top up a Stars list that has had a
+  -- child taken off it since (which put the same child on it twice).
+  with closed as (
+    insert into school_month_scores (school_id, month_key, score, students, ranked)
+    select s.id, v_key, ms.score, ms.students,
+           s.verified and ms.students >= school_min_students()
+      from schools s cross join lateral school_month_score(s.id, v_month) ms
+     where school_is_live(s.id)
+    on conflict (school_id, month_key) do nothing
+    returning school_id
+  )
+  select coalesce(array_agg(school_id), '{}') into v_new from closed;
 
   -- Top ten per school, by points; ties go to whoever joined first.
   insert into school_top_students (school_id, month_key, rank, kid_id, score)
@@ -797,7 +822,7 @@ begin
       from schools s
       cross join lateral school_kid_points(s.id, v_month) p
       join school_members m on m.kid_id = p.kid_id
-     where school_is_live(s.id) and p.points > 0
+     where s.id = any (v_new) and p.points > 0
   ) x where rn <= 10
   on conflict (school_id, month_key, rank) do nothing;
 
@@ -833,6 +858,9 @@ begin
     join school_month_scores a on a.school_id = r.challenger_id and a.month_key = v_key
     join school_month_scores b on b.school_id = r.rival_id and b.month_key = v_key
    where r.status = 'active' and r.answered_at < v_month + interval '1 month'
+     -- Both sides need enough students for an average to mean anything;
+     -- otherwise one keen child beats a whole school. No result that month.
+     and a.ranked and b.ranked
   on conflict (rivalry_id, month_key) do nothing;
 
   return jsonb_build_object('ok', true, 'month', v_key, 'champions', v_awards);
@@ -850,7 +878,10 @@ returns jsonb language sql stable security definer set search_path = public as $
            'district_key', a.district_key, 'month_key', a.month_key,
            'school_id', s.id, 'name', s.name, 'status', s.status,
            'stripe_customer_id', s.stripe_customer_id,
-           'stripe_subscription_id', s.stripe_subscription_id)
+           'stripe_subscription_id', s.stripe_subscription_id,
+           -- A month at the school's own price, whatever its billing cycle: on
+           -- a yearly plan a "100% off the next invoice" would be a free year.
+           'monthly_cents', (school_price_quote(s.student_count)->>'monthly_cents')::int)
            order by a.month_key, a.district_key), '[]'::jsonb)
     from school_awards a join schools s on s.id = a.school_id
    where a.applied_at is null;
@@ -964,6 +995,10 @@ begin
   end if;
   select * into v_s from schools where id = v_me.school_id;
   if v_s.status = 'suspended' then return jsonb_build_object('ok', false, 'reason', 'suspended'); end if;
+  -- Paying already: a second checkout would start a second subscription.
+  if v_s.status = 'active' and v_s.stripe_subscription_id is not null then
+    return jsonb_build_object('ok', false, 'reason', 'already_paying');
+  end if;
   return jsonb_build_object('ok', true, 'school_id', v_s.id, 'name', v_s.name,
                             'band', v_s.size_band, 'status', v_s.status,
                             'trial_ends_at', v_s.trial_ends_at,
@@ -1023,6 +1058,15 @@ begin
     return jsonb_build_object('ok', true, 'status', 'suspended');
   end if;
 
+  -- News about a subscription that is not the school's current one (an old
+  -- plan being cancelled after a new one started) changes nothing. A new
+  -- subscription that is active replaces the old one.
+  if p_subscription_id is not null and v_s.stripe_subscription_id is not null
+     and p_subscription_id <> v_s.stripe_subscription_id
+     and p_status not in ('active', 'trialing') then
+    return jsonb_build_object('ok', true, 'status', v_s.status, 'ignored', 'not_current_subscription');
+  end if;
+
   v_new := case
     when p_status in ('active', 'trialing', 'past_due') then 'active'
     when p_status in ('canceled', 'unpaid', 'incomplete_expired')
@@ -1033,8 +1077,14 @@ begin
 
   update schools
      set status = v_new,
-         stripe_customer_id = coalesce(stripe_customer_id, p_customer_id),
+         -- The customer that is actually paying wins, so the billing portal
+         -- opens the account with the live subscription in it.
+         stripe_customer_id = case when v_new = 'active' then coalesce(p_customer_id, stripe_customer_id)
+                                   else coalesce(stripe_customer_id, p_customer_id) end,
+         -- Cleared when the plan ends, so nothing later mistakes an old,
+         -- cancelled subscription for a paying one.
          stripe_subscription_id = case when v_new = 'active' then coalesce(p_subscription_id, stripe_subscription_id)
+                                       when p_status in ('canceled', 'unpaid', 'incomplete_expired') then null
                                        else stripe_subscription_id end
    where id = p_school_id;
   return jsonb_build_object('ok', true, 'status', v_new);
@@ -1179,6 +1229,14 @@ begin
                                      and status = 'active') then
     return jsonb_build_object('ok', false, 'reason', 'paying_contact_us');
   end if;
+  -- Once we have checked a school, its size has been checked too. Going up is
+  -- always fine; going down to a cheaper band is a conversation with us.
+  if exists (select 1 from schools
+              where id = v_me.school_id and verified
+                and (school_price_quote(p_students)->>'monthly_cents')::int
+                    < (school_price_quote(student_count)->>'monthly_cents')::int) then
+    return jsonb_build_object('ok', false, 'reason', 'smaller_contact_us');
+  end if;
   update schools set student_count = p_students, size_band = school_size_band(p_students)
    where id = v_me.school_id;
   return jsonb_build_object('ok', true, 'price', school_price_quote(p_students));
@@ -1212,3 +1270,23 @@ begin
 end $$;
 
 grant execute on function leave_school_staff() to authenticated;
+
+/**
+ * The admin removes a member of staff: someone who has left, or someone who
+ * got hold of the staff code who should not have. Make new codes as well, or
+ * they can simply join again.
+ */
+create or replace function remove_school_staff(p_ref uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_me school_staff := current_school_staff();
+begin
+  if v_me.user_id is null or v_me.role <> 'admin' then
+    return jsonb_build_object('ok', false, 'reason', 'not_school_admin');
+  end if;
+  if p_ref = v_me.user_id then return jsonb_build_object('ok', false, 'reason', 'not_yourself'); end if;
+  delete from school_staff where user_id = p_ref and school_id = v_me.school_id;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'not_on_staff'); end if;
+  return jsonb_build_object('ok', true);
+end $$;
+
+grant execute on function remove_school_staff(uuid) to authenticated;

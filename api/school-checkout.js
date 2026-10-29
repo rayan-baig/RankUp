@@ -11,6 +11,27 @@ import { schoolCycle, schoolPriceId, schoolTrialEnd } from './_shared/schoolBill
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+
+/**
+ * The Stripe customer the school already has, if any. Read with the service
+ * key so the id never goes to the browser. Reusing it keeps one school on one
+ * customer: a fresh one per checkout left the billing portal opening an old
+ * account while the live subscription sat on a new one.
+ */
+async function existingCustomer(schoolId) {
+  if (!SERVICE_KEY) return null
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/stripe_customer_for_school`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+      body: JSON.stringify({ p_school_id: schoolId }),
+    })
+    return res.ok ? (await res.json()) || null : null
+  } catch {
+    return null
+  }
+}
 
 /** Which school, according to the caller's own token. Admins only. */
 async function callerSchool(token) {
@@ -70,9 +91,11 @@ export default async function handler(req, res) {
 
   const metadata = { school_id: school.school_id, band: school.band, cycle, kind: 'school' }
   const trialEnd = schoolTrialEnd(school.trial_ends_at)
+  const customer = school.has_customer ? await existingCustomer(school.school_id) : null
   try {
     const session = await makeStripe(STRIPE_SECRET).checkout.sessions.create({
       mode: 'subscription',
+      ...(customer ? { customer } : {}),
       line_items: [{ price, quantity: 1 }],
       client_reference_id: school.school_id,
       metadata,

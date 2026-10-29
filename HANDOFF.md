@@ -383,8 +383,8 @@ names a parent agreed to.
 Schools pay through `api/school-checkout.js` (price picked from the school's
 size, never from the request); the existing Stripe webhook switches a school
 on and off by the `school_id` on its subscription. `api/settle-schools.js` runs
-monthly: it closes the month and gives each Champion its free month (a coupon
-if it pays, thirty more trial days if not). Setup is in
+monthly: it closes the month and gives each Champion its free month (a month's
+credit if it pays, thirty more trial days if not). Setup is in
 [docs/PAYMENTS.md](docs/PAYMENTS.md#the-school-league).
 
 ---

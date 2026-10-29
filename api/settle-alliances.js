@@ -109,15 +109,31 @@ export default async function handler(req, res) {
       continue
     }
     try {
+      /*
+       * The discount goes on the family's subscription, for its next invoice.
+       *
+       * It used to go on the customer (`customers.update({ coupon })`), which
+       * the Stripe API this SDK speaks no longer accepts: every award would
+       * have failed. Any discount already on the subscription (a promotion
+       * code they signed up with) is kept alongside it.
+       */
+      const subs = await stripe.subscriptions.list({ customer: award.stripe_customer_id, status: 'active', limit: 1 })
+      const sub = subs.data[0]
+      if (!sub) {
+        failed.push({ alliance_id: award.alliance_id, reason: 'no_active_subscription' })
+        continue
+      }
       // A fresh coupon per award, redeemable once, so a coupon id that leaked
-      // could not be reused by anyone else.
+      // could not be reused. Keyed on the award, so a retried run reuses it.
       const coupon = await stripe.coupons.create({
         percent_off: DISCOUNT_PERCENT,
         duration: 'once',
         max_redemptions: 1,
         name: `Alliance winner ${month.slice(0, 7)}`,
-      })
-      await stripe.customers.update(award.stripe_customer_id, { coupon: coupon.id })
+      }, { idempotencyKey: `alliance-coupon:${award.alliance_id}:${month}` })
+      const kept = (sub.discounts || []).map((d) => ({ discount: typeof d === 'string' ? d : d.id }))
+      await stripe.subscriptions.update(sub.id, { discounts: [...kept, { coupon: coupon.id }] },
+        { idempotencyKey: `alliance-discount:${award.alliance_id}:${month}` })
       await serviceRpc('mark_alliance_award_applied', {
         p_alliance_id: award.alliance_id,
         p_month: month,

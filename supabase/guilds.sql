@@ -64,7 +64,9 @@ returns boolean language sql stable security definer set search_path = public as
     select 1 from kids k
      where k.id = p_kid_id
        and (k.user_id = auth.uid()
-            or exists (select 1 from parents p where p.user_id = auth.uid() and p.family_id = k.family_id))
+            -- A parent, not a supporter: guild decisions are a parent's.
+            or exists (select 1 from parents p where p.user_id = auth.uid() and p.family_id = k.family_id
+                                                 and p.role = 'parent'))
   );
 $$;
 
@@ -84,7 +86,8 @@ begin
   select * into v_kid from kids where id = p_kid_id;
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
 
-  if not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id) then
+  if not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id
+                                         and role = 'parent') then
     raise exception 'a parent has to create the guild';
   end if;
 
@@ -212,10 +215,12 @@ begin
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_request'); end if;
   select * into v_guild from guilds where id = p_guild_id;
 
+  -- Parents, not supporters: letting a child into a guild is a consent
+  -- decision about who they talk to.
   v_is_own_parent := exists (
-    select 1 from parents where user_id = auth.uid() and family_id = v_member.family_id);
+    select 1 from parents where user_id = auth.uid() and family_id = v_member.family_id and role = 'parent');
   v_is_owner_parent := exists (
-    select 1 from parents where user_id = auth.uid() and family_id = v_guild.owner_family_id);
+    select 1 from parents where user_id = auth.uid() and family_id = v_guild.owner_family_id and role = 'parent');
 
   if not (v_is_own_parent or v_is_owner_parent) then
     raise exception 'only a parent on one side of this request can approve it';
@@ -253,7 +258,8 @@ begin
   select * into v_guild from guilds where id = p_guild_id;
 
   if not may_act_for_kid(p_kid_id)
-     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_guild.owner_family_id) then
+     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_guild.owner_family_id
+                                             and role = 'parent') then
     raise exception 'not allowed';
   end if;
 

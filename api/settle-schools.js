@@ -65,19 +65,32 @@ export default async function handler(req, res) {
           p_district_key: award.district_key, p_month_key: award.month_key, p_coupon: null,
         })
         rewarded.push({ school: award.name, month: award.month_key, as: 'trial_days' })
-      } else if (how === 'coupon' && stripe) {
-        // A fresh one-use coupon per award, so a leaked id is worth nothing.
-        const coupon = await stripe.coupons.create({
-          percent_off: 100,
-          duration: 'once',
-          max_redemptions: 1,
-          name: `District Champion ${award.month_key}`,
-        })
-        await stripe.customers.update(award.stripe_customer_id, { coupon: coupon.id })
+      } else if (how === 'coupon' && stripe && award.monthly_cents > 0) {
+        /*
+         * One month at the school's own price, as credit on its account.
+         *
+         * Credit rather than "100% off the next invoice": on a yearly plan the
+         * next invoice is a year, and a month is what was won. It comes off
+         * whatever the school is billed next, monthly or yearly.
+         *
+         * The idempotency key names the award, so if this run dies after
+         * Stripe has the credit but before it is marked given, the next run's
+         * attempt is the same request and Stripe gives it once.
+         */
+        const credit = await stripe.customers.createBalanceTransaction(
+          award.stripe_customer_id,
+          {
+            amount: -award.monthly_cents,
+            currency: 'usd',
+            description: `District Champion, ${award.month_key}: one month free`,
+            metadata: { district_key: award.district_key, month_key: award.month_key },
+          },
+          { idempotencyKey: `school-champion:${award.district_key}:${award.month_key}` },
+        )
         await serviceRpc('mark_school_award_applied', {
-          p_district_key: award.district_key, p_month_key: award.month_key, p_coupon: coupon.id,
+          p_district_key: award.district_key, p_month_key: award.month_key, p_coupon: credit.id,
         })
-        rewarded.push({ school: award.name, month: award.month_key, as: 'coupon' })
+        rewarded.push({ school: award.name, month: award.month_key, as: 'credit' })
       } else {
         waiting.push({ school: award.name, month: award.month_key, reason: stripe ? 'plan_not_active' : 'stripe_not_configured' })
       }

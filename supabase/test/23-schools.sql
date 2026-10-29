@@ -478,7 +478,7 @@ begin
   r := apply_school_subscription(a, 'canceled', null, null, 'evt_school_4');
   perform ok('and with none left, the school sits the league out',
     (r->>'status') = 'lapsed' and not school_is_live(a));
-  r := apply_school_subscription(a, 'active', null, null, 'evt_school_5');
+  r := apply_school_subscription(a, 'active', null, 'sub_a2', 'evt_school_5');
   perform ok('paying again brings it back', (r->>'status') = 'active' and school_is_live(a));
 
   perform set_school_status(b, 'suspended');
@@ -630,3 +630,31 @@ begin
   perform ok('the teacher is now the admin', (school_overview()->'school'->>'role') = 'admin');
 end $$;
 reset role;
+
+-- ---------- a parent cannot approve or back-date by hand ----------
+-- The update policy lets a parent's browser write their own submissions; the
+-- verdict and its date must still only come from the functions.
+insert into kids (id, family_id, name) values
+  ('5c444441-0000-0000-0000-0000000000a9', '5c222222-0000-0000-0000-000000000001', 'Backdate Test');
+insert into quests (id, family_id, kid_id, title) values
+  ('5c555551-0000-0000-0000-0000000000a9', '5c222222-0000-0000-0000-000000000001',
+   '5c444441-0000-0000-0000-0000000000a9', 'Pretend chore');
+insert into submissions (id, family_id, quest_id, kid_id, status)
+select gen_random_uuid(), '5c222222-0000-0000-0000-000000000001', '5c555551-0000-0000-0000-0000000000a9',
+       '5c444441-0000-0000-0000-0000000000a9', 'pending'
+  from generate_series(1, 30);
+set role app_user;
+do $$
+begin
+  perform become('5c111111-0000-0000-0000-000000000001');
+  update submissions
+     set status = 'approved', decided_at = now() - (random() * interval '28 days'), awarded_xp = 999
+   where kid_id = '5c444441-0000-0000-0000-0000000000a9';
+end $$;
+reset role;
+do $$
+begin
+  perform ok('a parent''s plain UPDATE cannot approve, date or pay a submission',
+    not exists (select 1 from submissions where kid_id = '5c444441-0000-0000-0000-0000000000a9'
+                 and (status <> 'pending' or decided_at is not null or awarded_xp is not null)));
+end $$;

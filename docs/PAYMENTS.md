@@ -185,8 +185,9 @@ it in Stripe too.
   ```
 
   It closes the month (District Champions, rivalry results, School Stars) and
-  gives each Champion its free month: a one-use 100% coupon if it pays, thirty
-  more trial days if it is still on its trial. A free month that could not be
+  gives each Champion its free month: one month's price as credit on its
+  Stripe account if it pays (so a yearly plan gets a month off, not a year),
+  thirty more trial days if it is still on its trial. A free month that could not be
   given stays owed and is tried again next run. It never gives one twice.
 - **Checking schools are real**: open `https://your-site/#/operator` and type
   your `OPERATOR_SECRET`. New schools are listed first, with who signed each up

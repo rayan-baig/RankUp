@@ -22,6 +22,22 @@ export const SCHOOL_PRICE_ENV = {
   },
 }
 
+/**
+ * The configured prices, read by name. Spelled out rather than looked up
+ * through the table above so that tests/config.mjs can see every one of them
+ * is used, and flag one that is documented but never read.
+ */
+const fromProcess = () => ({
+  STRIPE_PRICE_SCHOOL_SMALL: process.env.STRIPE_PRICE_SCHOOL_SMALL,
+  STRIPE_PRICE_SCHOOL_MEDIUM: process.env.STRIPE_PRICE_SCHOOL_MEDIUM,
+  STRIPE_PRICE_SCHOOL_LARGE: process.env.STRIPE_PRICE_SCHOOL_LARGE,
+  STRIPE_PRICE_SCHOOL_XL: process.env.STRIPE_PRICE_SCHOOL_XL,
+  STRIPE_PRICE_SCHOOL_SMALL_YEAR: process.env.STRIPE_PRICE_SCHOOL_SMALL_YEAR,
+  STRIPE_PRICE_SCHOOL_MEDIUM_YEAR: process.env.STRIPE_PRICE_SCHOOL_MEDIUM_YEAR,
+  STRIPE_PRICE_SCHOOL_LARGE_YEAR: process.env.STRIPE_PRICE_SCHOOL_LARGE_YEAR,
+  STRIPE_PRICE_SCHOOL_XL_YEAR: process.env.STRIPE_PRICE_SCHOOL_XL_YEAR,
+})
+
 /** Anything that is not the word "year" is a month. */
 export const schoolCycle = (value) => (value === 'year' ? 'year' : 'month')
 
@@ -29,7 +45,7 @@ export const schoolCycle = (value) => (value === 'year' ? 'year' : 'month')
  * The price id for a school's band. The band comes from the database, so a
  * school cannot ask for a smaller school's price. Empty when not configured.
  */
-export function schoolPriceId(band, cycle, env = process.env) {
+export function schoolPriceId(band, cycle, env = fromProcess()) {
   const name = SCHOOL_PRICE_ENV[schoolCycle(cycle)]?.[band]
   return (name && env[name]) || ''
 }
@@ -51,6 +67,9 @@ export function schoolTrialEnd(trialEndsAt, now = Date.now()) {
 /** Whether a Stripe object belongs to a school rather than a family. */
 export function schoolIdOf(object) {
   return object?.metadata?.school_id
+    // An invoice carries its subscription's metadata here (Stripe API 2025
+    // onwards), and at the top level on older API versions.
+    || object?.parent?.subscription_details?.metadata?.school_id
     || object?.subscription_details?.metadata?.school_id
     || null
 }
@@ -58,7 +77,7 @@ export function schoolIdOf(object) {
 /**
  * What to do with a Champion's free month.
  *
- * A paying school gets a coupon for one free month on its next invoice. A
+ * A paying school gets one month's price as credit on its account. A
  * school still on its trial gets thirty more days of trial instead. Anything
  * else (a plan that has ended) waits: the award stays owed and is tried again
  * next month, rather than vanishing.

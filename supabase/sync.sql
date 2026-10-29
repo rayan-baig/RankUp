@@ -383,7 +383,8 @@ begin
   if not found then return jsonb_build_object('ok', false, 'reason', 'not_found'); end if;
   if v_sub.status <> 'pending' then return jsonb_build_object('ok', false, 'reason', 'decided'); end if;
 
-  if not exists (select 1 from parents where user_id = auth.uid() and family_id = v_sub.family_id) then
+  if not exists (select 1 from parents where user_id = auth.uid() and family_id = v_sub.family_id
+                                         and role = 'parent') then
     raise exception 'only a parent in this family can send work back';
   end if;
 

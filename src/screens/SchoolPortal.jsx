@@ -405,7 +405,19 @@ function Dashboard({ school, league, demo, onChange }) {
         {(school.staff || []).map((s, i) => (
           <div key={`${s.name}-${i}`} className="flex items-center justify-between text-sm py-1">
             <span>{s.name}{s.you ? ' (you)' : ''}</span>
-            <span className="text-xs text-muted">{s.role === 'admin' ? 'Admin' : 'Teacher'}</span>
+            <span className="text-xs text-muted flex items-center gap-2">
+              {s.role === 'admin' ? 'Admin' : 'Teacher'}
+              {admin && !s.you && (s.ref || demo) && (
+                <button type="button" className="underline" style={{ color: 'var(--bad)' }} disabled={busy}
+                        onClick={() => {
+                          if (demo || window.confirm(`Remove ${s.name} from the staff? If the staff code got out, make new codes too.`)) {
+                            act(() => schools.removeStaff(s.ref), `${s.name} is no longer on the staff.`)
+                          }
+                        }}>
+                  Remove
+                </button>
+              )}
+            </span>
           </div>
         ))}
         <button type="button" className="w-full text-xs underline text-muted mt-2" disabled={busy}

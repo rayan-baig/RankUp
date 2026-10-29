@@ -1305,3 +1305,38 @@ alter table submissions drop constraint if exists submissions_sticker_check;
 alter table submissions drop constraint if exists submissions_sticker_values;
 alter table submissions add constraint submissions_sticker_values
   check (sticker in ('proud','spotless','fast','effort','kind','above','funny','thanks'));
+
+/*
+ * A submission's verdict, and when it was given, belong to the functions that
+ * give it: approve_submission and reject_submission, which stamp the time
+ * themselves. The update policy above lets a parent's browser write any column
+ * of their own submissions, so without this a parent could approve their own
+ * family's work with a plain UPDATE, skip the function, and back-date it to
+ * any day they liked. The Alliance discount and the School League both count
+ * approvals by that date, so that was a way to buy a prize.
+ *
+ * The browser's copy of these columns is simply ignored rather than refused:
+ * a device syncing an old copy of a row must not get stuck on an error.
+ * Functions run as their owner and pass straight through.
+ */
+create or replace function guard_submission_verdict() returns trigger
+language plpgsql as $$
+begin
+  -- Anyone but the table's owner (whom every function runs as), the service
+  -- role, or a superuser. Asked this way round rather than "is it a browser
+  -- role", because on Supabase the owner is itself a member of the browser
+  -- roles and would otherwise be blocked from approving anything.
+  if current_user <> (select tableowner from pg_tables where schemaname = 'public' and tablename = 'submissions')
+     and current_user <> 'service_role'
+     and not (select rolsuper from pg_roles where rolname = current_user) then
+    new.status        := old.status;
+    new.decided_at    := old.decided_at;
+    new.awarded_xp    := old.awarded_xp;
+    new.awarded_coins := old.awarded_coins;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists submissions_guard_verdict on submissions;
+create trigger submissions_guard_verdict before update on submissions
+  for each row execute function guard_submission_verdict();

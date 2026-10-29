@@ -95,7 +95,8 @@ language plpgsql security definer set search_path = public as $$
 declare
   v_parent parents;
 begin
-  select * into v_parent from parents where user_id = auth.uid();
+  -- A parent, not a supporter: consent for a child is a parent's to give.
+  select * into v_parent from parents where user_id = auth.uid() and role = 'parent';
   if not found then raise exception 'only a parent can give consent'; end if;
   if length(trim(p_signed_name)) < 2 then
     return jsonb_build_object('ok', false, 'reason', 'signature_required');
@@ -126,7 +127,9 @@ declare
   v_parent parents;
   v_kids int;
 begin
-  select * into v_parent from parents where user_id = auth.uid();
+  -- A parent, not a supporter. Withdrawing consent deletes every child in the
+  -- family; a grandparent with read-only access must not be able to do that.
+  select * into v_parent from parents where user_id = auth.uid() and role = 'parent';
   if not found then raise exception 'only a parent can withdraw consent'; end if;
 
   update parental_consents
@@ -175,7 +178,9 @@ declare
   v_family uuid;
   v_school jsonb;
 begin
-  select family_id into v_family from parents where user_id = auth.uid();
+  -- A parent, not a supporter: a grandparent who can look in has no right to
+  -- download the whole household's records.
+  select family_id into v_family from parents where user_id = auth.uid() and role = 'parent';
   if v_family is null then raise exception 'only a parent can export'; end if;
 
   -- The School League lives in schools.sql, applied after this file, so it is
@@ -207,7 +212,9 @@ returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare v_family uuid;
 begin
-  select family_id into v_family from parents where user_id = auth.uid();
+  -- A parent, not a supporter. Without the role check a grandparent with
+  -- read-only access could delete the entire family, children and all.
+  select family_id into v_family from parents where user_id = auth.uid() and role = 'parent';
   if v_family is null then raise exception 'only a parent can delete the account'; end if;
   if p_confirm <> 'DELETE' then
     return jsonb_build_object('ok', false, 'reason', 'confirmation_required');

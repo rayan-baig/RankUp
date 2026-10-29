@@ -51,7 +51,7 @@ export default function KidSchool() {
   useEffect(() => {
     if (!school) return
     if (demo) setLeague(DEMO_LEAGUE)
-    else schools.league().then((res) => res.ok && setLeague(res))
+    else schools.league(school.school_id).then((res) => res.ok && setLeague(res))
   }, [school, demo])
 
   if (school === undefined) {

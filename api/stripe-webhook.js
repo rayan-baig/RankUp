@@ -178,7 +178,10 @@ export default async function handler(req, res) {
         if (paid > 0) {
           await serviceRpc('record_school_payment', {
             p_school_id: schoolId,
-            p_stripe_event: event.id,
+            // The invoice, not the event: Stripe sends both invoice.paid and
+            // invoice.payment_succeeded for one payment, and each has its own
+            // event id, so keying on the event counted every invoice twice.
+            p_stripe_event: `invoice:${object.id}`,
             p_amount_pence: paid,
             p_currency: String(object.currency || 'usd'),
           })
@@ -230,8 +233,10 @@ export default async function handler(req, res) {
         p_tier: tierFor(object),
         p_customer_id: typeof object.customer === 'string' ? object.customer : null,
         p_subscription_id: object.id,
-        p_period_end: object.current_period_end
-          ? new Date(object.current_period_end * 1000).toISOString()
+        // On the subscription in older Stripe API versions, on its item since
+        // 2025. Reading only the old place left this empty for every family.
+        p_period_end: (object.current_period_end || object.items?.data?.[0]?.current_period_end)
+          ? new Date((object.current_period_end || object.items.data[0].current_period_end) * 1000).toISOString()
           : null,
         p_stripe_event: event.id,
         p_payload: { type: event.type },
@@ -253,7 +258,9 @@ export default async function handler(req, res) {
       if (familyId && paid > 0) {
         await serviceRpc('record_payment', {
           p_family_id: familyId,
-          p_stripe_event: event.id,
+          // Keyed on the invoice for the same reason as a school's: one
+          // payment arrives as two events.
+          p_stripe_event: `invoice:${object.id}`,
           p_type: event.type,
           // Stripe already works in minor units, which is the same unit this
           // app stores money in everywhere. No conversion, nothing to round.

@@ -35,13 +35,13 @@ export default function ParentSchool() {
 
   useEffect(() => { refresh() }, [refresh])
 
-  const showLeague = async (kidId) => {
+  const showLeague = async (kidId, schoolId) => {
     if (open === kidId) { setOpen(null); return }
     setOpen(kidId)
     if (league[kidId]) return
-    // The league call takes the school, not the child; the database checks it
-    // is a school this family has a child in. The first one is the default.
-    const res = demo ? DEMO_LEAGUE : await schools.league()
+    // The league call takes the child's school; the database checks it is a
+    // school this family has a child in.
+    const res = demo ? DEMO_LEAGUE : await schools.league(schoolId)
     if (res.ok) setLeague((l) => ({ ...l, [kidId]: res }))
     else setError(schoolError(res.reason))
   }
@@ -135,7 +135,7 @@ export default function ParentSchool() {
               </Card>
               <RivalryList rivalries={c.school.rivalries} />
               <StarList stars={c.school.stars} monthKey={c.school.stars_month} />
-              <Button variant="soft" className="w-full mb-2" onClick={() => showLeague(c.kid_id)}>
+              <Button variant="soft" className="w-full mb-2" onClick={() => showLeague(c.kid_id, c.school.school_id)}>
                 {open === c.kid_id ? 'Hide the district league' : 'See the district league'}
               </Button>
               {open === c.kid_id && league[c.kid_id] && <LeagueTable league={league[c.kid_id]} demo={demo} />}

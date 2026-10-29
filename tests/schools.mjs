@@ -58,7 +58,9 @@ ok('a Champion on its trial gets more trial', championReward({ status: 'trial' }
 ok('a Champion whose plan ended waits', championReward({ status: 'lapsed', stripe_customer_id: 'cus_1' }) === 'wait')
 ok('a school subscription is told apart from a family one',
   schoolIdOf({ metadata: { school_id: 's1' } }) === 's1' && schoolIdOf({ metadata: { family_id: 'f1' } }) === null)
-ok('including on an invoice, where Stripe nests it',
+ok('including on an invoice, where Stripe nests it now',
+  schoolIdOf({ parent: { subscription_details: { metadata: { school_id: 's3' } } } }) === 's3')
+ok('and where older API versions put it',
   schoolIdOf({ subscription_details: { metadata: { school_id: 's2' } } }) === 's2')
 
 console.log('\n=== The app and the database agree ===')
