@@ -72,6 +72,7 @@ if [ "${1:-}" = "--cf" ]; then
     --binding SUPABASE_URL=http://localhost:54321 \
     --binding SUPABASE_SERVICE_ROLE_KEY=service-role-key \
     --binding CRON_SECRET=test-cron-secret \
+    --binding OPERATOR_SECRET=test-operator-secret \
     --binding STRIPE_SECRET_KEY=sk_test_routing_only \
     --binding STRIPE_WEBHOOK_SECRET=whsec_test_local_only \
     --binding ANTHROPIC_API_KEY=sk-ant-test-routing-only \

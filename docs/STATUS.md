@@ -115,7 +115,7 @@ phones. Everything else in this table is real.
 | District league | ✅ | Average per student, at most 8 chores a day each, from approved chores only |
 | Rival schools | ✅ | Challenge, accept, decline, end; monthly results kept |
 | School Stars (top ten) | ✅ | The admin checks the list before families see it. First names only with a parent's yes |
-| Checking a school is real | 🟡 by hand | Run `select verify_school('<school id>', true);` in the SQL editor. Until then the school is in no league and sees no names |
+| Checking a school is real | ✅ | `/#/operator` with your `OPERATOR_SECRET`: verify, suspend, lift a suspension. Until verified a school is in no league and sees no names |
 | Charging schools | ✅ built, off until Stripe is connected | `api/school-checkout.js`, priced by the school's size. Needs the eight `STRIPE_PRICE_SCHOOL_*` prices — [PAYMENTS.md](PAYMENTS.md#the-school-league) |
 | Closing each month, and the Champion's free month | ✅ built — **you have to schedule it** | `api/settle-schools.js`, monthly. Safe to run twice; a free month that failed is retried next run |
 

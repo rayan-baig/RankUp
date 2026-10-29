@@ -40,6 +40,9 @@ export function schoolPrice(students) {
   }
 }
 
+/** "North Valley" → "North Valley district", but never "… District district". */
+export const districtLabel = (d) => (/\bdistrict$/i.test(String(d || '').trim()) ? d : `${d} district`)
+
 export const dollars = (cents) => `$${(cents / 100).toFixed(cents % 100 ? 2 : 0)}`
 
 /** "2026-09" → "September 2026". */

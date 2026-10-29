@@ -1,5 +1,5 @@
 import { Card, Chip, SectionTitle, ProgressBar, DemoTag } from './ui.jsx'
-import { monthLabel } from '../lib/schools.js'
+import { monthLabel, districtLabel } from '../lib/schools.js'
 
 /*
  * The pieces of the School League that the staff page, the parent page and
@@ -22,7 +22,7 @@ export function SchoolHeadline({ school, demo = false }) {
             {demo && <DemoTag />}
           </div>
           <p className="text-xs text-muted">
-            {[school.city, `${school.district} district`].filter(Boolean).join(' · ')}
+            {[school.city, districtLabel(school.district)].filter(Boolean).join(' · ')}
           </p>
         </div>
       </div>

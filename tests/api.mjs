@@ -149,6 +149,31 @@ ok('a family’s still goes to the family', familyPaid.status === 200 && familyR
 ok('and touches no school', (await db.query(
   "select count(*)::int as n from schools where stripe_customer_id = 'cus_api_family'")).rows[0].n === 0)
 
+console.log('\n=== Only the operator can check schools ===')
+const operator = (key, body) => fetch(`${BASE}/api/operator-schools`, {
+  method: body ? 'POST' : 'GET',
+  headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
+  ...(body ? { body: JSON.stringify(body) } : {}),
+})
+ok('nobody without the key sees the schools', (await operator(null)).status === 401)
+ok('not even with the scheduler’s key', (await operator(CRON)).status === 401)
+ok('a signed-in parent’s token is not the key', (await operator(PARENT)).status === 401)
+const listed = await (await operator('test-operator-secret')).json()
+ok('the operator sees every school, with who signed it up',
+  listed.ok && listed.schools.some((s) => s.id === SCHOOL && Array.isArray(s.staff)))
+const verified = await operator('test-operator-secret', { action: 'verify', school_id: SCHOOL })
+ok('and can verify one', verified.status === 200 &&
+  (await db.query('select verified from schools where id = $1', [SCHOOL])).rows[0].verified === true)
+await operator('test-operator-secret', { action: 'suspend', school_id: SCHOOL })
+ok('or suspend it', (await db.query('select status from schools where id = $1', [SCHOOL])).rows[0].status === 'suspended')
+await operator('test-operator-secret', { action: 'unsuspend', school_id: SCHOOL })
+ok('and lifting it puts the paying school back to active',
+  (await db.query('select status from schools where id = $1', [SCHOOL])).rows[0].status === 'active')
+ok('an unknown action is refused',
+  (await operator('test-operator-secret', { action: 'delete', school_id: SCHOOL })).status === 400)
+ok('as is a school that does not exist',
+  (await operator('test-operator-secret', { action: 'verify', school_id: '00000000-0000-4000-8000-000000000000' })).status === 404)
+
 console.log('\n=== A route that does not exist is a 404, not a stack trace ===')
 const missing = await fetch(`${BASE}/api/not-a-real-endpoint`, { method: 'POST' })
 ok('an unknown endpoint is a plain 404', missing.status === 404, `status ${missing.status}`)

@@ -543,3 +543,32 @@ begin
     not exists (select 1 from school_top_students t join kids k on k.id = t.kid_id
                  where k.family_id = '5c222222-0000-0000-0000-000000000002'));
 end $$;
+
+-- ---------- the operator's switches are not for browsers ----------
+set role app_user;
+do $$
+begin
+  perform become('5c111111-0000-0000-0000-00000000000a');
+  begin
+    perform operator_schools();
+    perform ok('a school admin CANNOT list every school and who runs it', false);
+  exception when insufficient_privilege then
+    perform ok('a school admin CANNOT list every school and who runs it', true);
+  end;
+  begin
+    perform unsuspend_school((select null::uuid));
+    perform ok('nor lift a suspension', false);
+  exception when insufficient_privilege then
+    perform ok('nor lift a suspension', true);
+  end;
+end $$;
+reset role;
+do $$
+declare b uuid := (select id from schools where name = 'Pine Hill School');
+begin
+  perform set_school_status(b, 'suspended');
+  perform ok('lifting a suspension on an unpaid school in its trial goes back to the trial',
+    (unsuspend_school(b)->>'status') = 'trial');
+  perform ok('and lifting one that is not suspended does nothing',
+    not (unsuspend_school(b)->>'ok')::boolean);
+end $$;

@@ -188,9 +188,10 @@ it in Stripe too.
   gives each Champion its free month: a one-use 100% coupon if it pays, thirty
   more trial days if it is still on its trial. A free month that could not be
   given stays owed and is tried again next run. It never gives one twice.
-- **Checking schools are real** is still by hand: in the SQL editor,
-  `select verify_school('<school id>', true);`. Until then a school is in no
-  league and sees no child's name.
+- **Checking schools are real**: open `https://your-site/#/operator` and type
+  your `OPERATOR_SECRET`. New schools are listed first, with who signed each up
+  and their email; verify, un-verify, suspend or lift a suspension there.
+  Until a school is verified it is in no league and sees no child's name.
 
 ---
 

@@ -232,7 +232,7 @@ Block Craft at 125 becomes **The Nether Portal**; at 250, **The End**; at 399,
 │  verify-photo · create-checkout · billing-portal            │
 │  stripe-webhook · send-push · send-reminders                │
 │  send-digests · settle-alliances · run-retention · health   │
-│  school-checkout · settle-schools                           │
+│  school-checkout · settle-schools · operator-schools        │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -377,8 +377,8 @@ $149 above; a year is ten months; 30 days free). A school's score is approved
 chores per student, at most eight a day each, averaged, so size does not win.
 `settle_school_month` closes a month: District Champion (needs two ranked
 schools), rivalry results and each school's top ten. A school sees no child's
-name until the operator has run `verify_school`, and then only first names a
-parent agreed to.
+name until the operator has verified it on `/#/operator`, and then only first
+names a parent agreed to.
 
 Schools pay through `api/school-checkout.js` (price picked from the school's
 size, never from the request); the existing Stripe webhook switches a school

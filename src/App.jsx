@@ -39,6 +39,7 @@ import ParentOverride from './screens/parent/ParentOverride.jsx'
 import ParentAlliance from './screens/parent/ParentAlliance.jsx'
 import ParentSchool from './screens/parent/ParentSchool.jsx'
 import SchoolPortal from './screens/SchoolPortal.jsx'
+import OperatorSchools from './screens/OperatorSchools.jsx'
 import { guildsEnabled } from './lib/guilds.js'
 import LegalDoc from './screens/LegalDoc.jsx'
 import ParentGuilds from './screens/parent/ParentGuilds.jsx'
@@ -144,7 +145,7 @@ export default function App() {
 
   // Route guards.
   useEffect(() => {
-    if (route.startsWith('/legal/') || route === '/school') return
+    if (route.startsWith('/legal/') || route === '/school' || route === '/operator') return
     if (!state.onboarded && route !== '/welcome') {
       navigate('/welcome')
       return
@@ -186,6 +187,19 @@ export default function App() {
 
   // The School League's door for teachers and principals. No family needed:
   // a principal should never be walked through setting up a household.
+  // Whoever runs RankUp, checking schools are real. Not linked from the app;
+  // the page asks for the operator key and the server checks it every time.
+  if (route === '/operator') {
+    return (
+      <>
+        <ParentBackground theme={parentTheme} />
+        <ScreenBoundary key={route} route={route}>
+          <OperatorSchools />
+        </ScreenBoundary>
+      </>
+    )
+  }
+
   if (route === '/school') {
     return (
       <>

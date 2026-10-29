@@ -31,6 +31,7 @@ const ROUTES = {
   'send-reminders': () => import('../../api/send-reminders.js'),
   'settle-alliances': () => import('../../api/settle-alliances.js'),
   'settle-schools': () => import('../../api/settle-schools.js'),
+  'operator-schools': () => import('../../api/operator-schools.js'),
   'school-checkout': () => import('../../api/school-checkout.js'),
   'stripe-webhook': () => import('../../api/stripe-webhook.js'),
   'verify-photo': () => import('../../api/verify-photo.js'),

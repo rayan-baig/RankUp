@@ -1084,3 +1084,45 @@ returns jsonb language sql stable security definer set search_path = public as $
 $$;
 
 revoke execute on function export_family_school_data(uuid) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- The operator's view: every school waiting to be checked, and the switches.
+-- Reached only by api/operator-schools.js with the service role, behind its
+-- own secret. Includes who signed each school up, and their sign-in email,
+-- because that is what checking a school is real mostly comes down to.
+-- ---------------------------------------------------------------------------
+create or replace function operator_schools()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', s.id, 'name', s.name, 'district', s.district, 'city', s.city,
+           'student_count', s.student_count, 'size_band', s.size_band,
+           'status', s.status, 'verified', s.verified,
+           'trial_ends_at', s.trial_ends_at, 'created_at', s.created_at,
+           'paying', s.stripe_subscription_id is not null,
+           'students_joined', (select count(*) from school_members m where m.school_id = s.id),
+           'staff', (select coalesce(jsonb_agg(jsonb_build_object(
+                              'name', st.name, 'role', st.role, 'email', u.email)
+                              order by st.role, st.name), '[]'::jsonb)
+                       from school_staff st left join auth.users u on u.id = st.user_id
+                      where st.school_id = s.id))
+           -- Waiting to be checked first, newest first within that.
+           order by s.verified, s.created_at desc), '[]'::jsonb)
+    from schools s;
+$$;
+
+/** Lift a suspension, back to whatever the school's plan says it should be. */
+create or replace function unsuspend_school(p_school_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_status text;
+begin
+  update schools
+     set status = case when stripe_subscription_id is not null then 'active'
+                       when trial_ends_at > now() then 'trial'
+                       else 'lapsed' end
+   where id = p_school_id and status = 'suspended'
+  returning status into v_status;
+  return jsonb_build_object('ok', v_status is not null, 'status', v_status);
+end $$;
+
+revoke execute on function operator_schools() from public, anon, authenticated;
+revoke execute on function unsuspend_school(uuid) from public, anon, authenticated;
