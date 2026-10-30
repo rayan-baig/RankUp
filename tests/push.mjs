@@ -135,6 +135,16 @@ ok('a send that failed for a reason that is not the phone’s is not counted aga
   byEndpoint[DEAD] === 0, JSON.stringify(byEndpoint))
 ok('and the phone that received it is untouched', byEndpoint[LIVE] === 0)
 
+console.log('\n=== A family cannot flood a phone ===')
+await db.query(`insert into push_sends (family_id) select $1 from generate_series(1, 60)`, [FAMILY])
+const flood = await fetch(`${BASE}/api/send-push`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${PARENT}` },
+  body: JSON.stringify({ familyId: FAMILY, role: 'parent', kind: 'submission', args: ['Ava', 'Again'] }),
+})
+ok('the sixty-first notice in an hour is refused', flood.status === 429, `status ${flood.status}`)
+await db.query('delete from push_sends where family_id = $1', [FAMILY])
+
 await db.query('delete from push_subscriptions where family_id = $1', [FAMILY])
 server.close()
 await db.end()

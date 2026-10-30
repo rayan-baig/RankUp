@@ -106,3 +106,34 @@ grant execute on function delete_push_subscription(text) to anon, authenticated;
 -- key, may call them.
 revoke execute on function push_targets(uuid, text, uuid) from public;
 revoke execute on function record_push_failure(text, boolean) from public;
+
+/*
+ * How many notices a family's devices may send through send-push in an hour.
+ *
+ * Every notice a child's device sends is one the parent's phone shows, and
+ * nothing stopped a stuck loop, or a child who has found the button, sending
+ * hundreds. Sixty an hour is far beyond a real family's chores and still a
+ * ceiling. The send endpoint calls this with the service key before sending.
+ */
+create table if not exists push_sends (
+  family_id uuid not null references families(id) on delete cascade,
+  sent_at   timestamptz not null default now()
+);
+create index if not exists push_sends_family_time on push_sends (family_id, sent_at);
+alter table push_sends enable row level security;
+revoke all on push_sends from public, anon, authenticated;
+
+create or replace function claim_push_send(p_family_id uuid, p_per_hour int default 60)
+returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  delete from push_sends where sent_at < now() - interval '1 hour';
+  -- Counted and inserted under a lock on the family, so a burst of parallel
+  -- requests cannot all see room for one more.
+  perform 1 from families where id = p_family_id for update;
+  if (select count(*) from push_sends where family_id = p_family_id) >= p_per_hour then
+    return false;
+  end if;
+  insert into push_sends (family_id) values (p_family_id);
+  return true;
+end $$;
+revoke execute on function claim_push_send(uuid, int) from public, anon, authenticated;

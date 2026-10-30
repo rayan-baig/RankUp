@@ -166,6 +166,18 @@ export default async function handler(req, res) {
     if (!parent) return res.status(403).json({ error: 'Only a parent can send that.' })
   }
 
+  // A ceiling per family per hour, kept in the database so every instance
+  // shares it. A stuck loop, or a child who has found the button, would
+  // otherwise put hundreds of notices on a parent's phone.
+  let allowed = true
+  try {
+    allowed = await rpc('claim_push_send', { p_family_id: familyId }, SERVICE_KEY)
+  } catch (err) {
+    // Not able to count is not a reason to stop a real notice.
+    console.error('[send-push] could not count sends:', err.message)
+  }
+  if (allowed === false) return res.status(429).json({ error: 'too_many_notices' })
+
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
 
   let targets
