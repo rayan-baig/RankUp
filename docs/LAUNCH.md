@@ -271,7 +271,7 @@ Be honest about these when you launch.
 | | Why |
 |---|---|
 | **Reminders with the app closed** | They fire while RankUp is open. Background ones need a scheduled server job. |
-| **Background push, proven** | The code is written and its logic is sound, but no real push message has ever been delivered — no push service was reachable during development. It now sends with `fetch`, because the old way (Node's `https`) does not exist on Cloudflare and every push failed there. Test it on two phones. |
+| **Background push, on a real phone** | Proven end to end against a stand-in push service (`tests/push.mjs`): the production build sends it, the signature verifies, and it decrypts with the phone's keys. It sends with `fetch`, because Node's `https` does not exist on Cloudflare and every push failed there before. A real phone's push service is the one step not yet tried. |
 | **Guilds** | Built and tested, but switched OFF by default. Turn them on with `VITE_GUILDS_ENABLED=true` once you are ready for kid-to-kid contact and the moderation it implies. |
 
 ## Running the tests

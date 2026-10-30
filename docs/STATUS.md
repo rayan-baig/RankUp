@@ -95,7 +95,7 @@ none was ever taken.
 | **Parent Alliance leaderboard** | ✅ real now — real families, real invite codes, scores counted server-side from approved submissions | — |
 | **Sync after pairing** | ✅ real now — quests, submissions, approvals and XP all travel the link | — |
 | **Reminders while the app is closed** | ✅ built — reminder times are saved to the account with the family's own time zone, and `api/send-reminders.js` delivers them. **You have to schedule it** — [docs/NOTIFICATIONS.md](NOTIFICATIONS.md) | — |
-| **Background push delivery** | Written and wired, but never actually delivered a message — no push service is reachable from the sandbox | Test on two real phones |
+| **Background push delivery** | ✅ proven end to end against a stand-in push service (`tests/push.mjs`): sent from the production build under workerd, VAPID signature verified, body decrypted with the phone's keys. A real phone's push service is the one step not exercised | Try it on one real phone |
 | **Subscriptions** | ✅ built — off until you connect your own Stripe account | [docs/PAYMENTS.md](PAYMENTS.md) |
 | **The 20% Discount Tournament** | ✅ built — `api/settle-alliances.js` decides each month's winner and gives a real Stripe account credit. **You have to schedule it**; nothing pays out until you do — [docs/PAYMENTS.md](PAYMENTS.md) | — |
 

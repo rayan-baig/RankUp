@@ -121,6 +121,17 @@ const server = http.createServer(async (req, res) => {
       // PostgREST hands back JSON. A raw driver hands back a composite type as
       // the string "(123456,...)", which every caller would then have to parse.
       // to_jsonb() makes this harness behave the way the real thing does.
+      // A function that returns a set comes back from PostgREST as an array of
+      // rows. Selecting it like a scalar returned only the first row, as a bare
+      // object, and callers that map over the array (send-push over its
+      // targets) then failed in tests that had any phone registered at all.
+      const retset = await pool.query('select bool_or(proretset) as s from pg_proc where proname = $1', [fn])
+      if (retset.rows[0]?.s) {
+        const rows = await withUser(userId, (c) => c.query(
+          `select coalesce(jsonb_agg(to_jsonb(t.*)), '[]'::jsonb) as result from ${fn}(${args}) t`, values), { service })
+        return send(res, 200, rows.rows[0]?.result ?? [])
+      }
+
       let out
       try {
         out = await withUser(userId, (c) => c.query(`select to_jsonb(${fn}(${args})) as result`, values), { service })
