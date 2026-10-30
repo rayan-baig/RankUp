@@ -149,6 +149,7 @@ export const BILLING_ERRORS = {
   portal_failed: 'Could not open the billing portal. Please try again.',
   not_school_admin: 'Only the school’s admin can manage its plan.',
   suspended: 'This school is suspended. Contact us to sort it out.',
+  already_subscribed: 'You already have a plan. Change it from “Manage billing, cancel, or update card”, where Stripe swaps it over without charging you twice.',
   already_paying: 'Your school is already paying. Use “Card, invoices and cancelling” to change the plan.',
 }
 
