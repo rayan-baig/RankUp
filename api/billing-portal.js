@@ -31,7 +31,7 @@ function safeOrigin(candidate) {
   }
 }
 
-async function schoolPortal(req, res, token, body) {
+async function schoolPortal(req, res, token) {
   try {
     const infoRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/school_checkout_info`, {
       method: 'POST',
@@ -50,7 +50,7 @@ async function schoolPortal(req, res, token, body) {
     const customerId = await customerRes.json()
     if (!customerId) return res.status(400).json({ error: 'no_customer' })
 
-    const origin = safeOrigin(body?.origin || req.headers.origin || '')
+    const origin = safeOrigin(req.headers.origin || '')
     if (!origin) {
       return res.status(503).json({
         error: 'not_configured',
@@ -64,7 +64,7 @@ async function schoolPortal(req, res, token, body) {
     return res.status(200).json({ url: portal.url })
   } catch (err) {
     console.error('[billing-portal:school]', err.message)
-    return res.status(502).json({ error: 'portal_failed', message: err.message })
+    return res.status(502).json({ error: 'portal_failed' })
   }
 }
 
@@ -84,7 +84,7 @@ export default async function handler(req, res) {
   // A school's admin managing the school's card. Same shape as a family's:
   // the caller's token says which school, and the customer id never leaves
   // the server.
-  if (body?.for === 'school') return schoolPortal(req, res, token, body)
+  if (body?.for === 'school') return schoolPortal(req, res, token)
 
   try {
     // billing_status runs as the caller, so it can only ever describe their own
@@ -113,7 +113,7 @@ export default async function handler(req, res) {
     const customerId = await customerRes.json()
     if (!customerId) return res.status(400).json({ error: 'no_customer' })
 
-    const origin = safeOrigin(body?.origin || req.headers.origin || '')
+    const origin = safeOrigin(req.headers.origin || '')
     // Same as create-checkout: with no origin there is no absolute URL to
     // return to, and Stripe's rejection of a relative one told the parent
     // nothing useful.
@@ -133,6 +133,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ url: portal.url })
   } catch (err) {
     console.error('[billing-portal]', err.message)
-    return res.status(502).json({ error: 'portal_failed', message: err.message })
+    return res.status(502).json({ error: 'portal_failed' })
   }
 }

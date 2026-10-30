@@ -523,7 +523,9 @@ create policy family_update on families
 
 drop policy if exists parents_read on parents;
 create policy parents_read on parents
-  for select using (family_id = current_family_id());
+  -- Parents only. A child's device has no use for the adults' rows, which
+  -- hold their email addresses.
+  for select using (family_id = current_family_id() and is_parent());
 /*
  * An adult may edit their own row, and nobody else's.
  *
@@ -547,7 +549,9 @@ create policy parents_write on parents
 -- approve_submission function below, which runs with elevated rights.
 drop policy if exists kids_read on kids;
 create policy kids_read on kids
-  for select using (family_id = current_family_id());
+  -- A parent sees every child; a child sees only themselves. A brother's row
+  -- holds his accessibility notes, which are for his parents and nobody else.
+  for select using (family_id = current_family_id() and (is_parent() or id = current_kid_id()));
 drop policy if exists kids_parent_write on kids;
 create policy kids_parent_write on kids
   for all using (family_id = current_family_id() and is_parent())
@@ -573,14 +577,10 @@ create policy submissions_read on submissions
     family_id = current_family_id()
     and (is_parent() or kid_id = current_kid_id())
   );
+-- No insert policy: a submission is made by submit_quest. A direct insert
+-- named any quest, including a sibling's or another family's, and was paid
+-- at that quest's value on approval.
 drop policy if exists submissions_kid_insert on submissions;
-create policy submissions_kid_insert on submissions
-  for insert with check (
-    family_id = current_family_id()
-    and kid_id = current_kid_id()
-    and status = 'pending'
-    and awarded_xp is null
-  );
 drop policy if exists submissions_parent_update on submissions;
 create policy submissions_parent_update on submissions
   for update using (family_id = current_family_id() and is_parent());
@@ -596,9 +596,9 @@ create policy rewards_parent_write on rewards
 drop policy if exists redemptions_read on redemptions;
 create policy redemptions_read on redemptions
   for select using (family_id = current_family_id());
+-- No insert policy: a redemption is made by redeem_reward, which charges for
+-- it. A direct insert let a child take any reward at a cost of nothing.
 drop policy if exists redemptions_kid_insert on redemptions;
-create policy redemptions_kid_insert on redemptions
-  for insert with check (family_id = current_family_id() and kid_id = current_kid_id());
 drop policy if exists redemptions_parent_update on redemptions;
 create policy redemptions_parent_update on redemptions
   for update using (family_id = current_family_id() and is_parent());
@@ -609,12 +609,18 @@ create policy notes_read on notes
     family_id = current_family_id()
     and (is_parent() or kid_id = current_kid_id())
   );
+-- A parent writes as a parent; a child writes only as themselves. The check
+-- used to be the family alone, so a child could post "you are grounded - Mum"
+-- to a sibling, or rewrite a note their parent had sent.
 drop policy if exists notes_insert on notes;
 create policy notes_insert on notes
-  for insert with check (family_id = current_family_id());
+  for insert with check (
+    family_id = current_family_id()
+    and ((is_parent() and author = 'parent')
+         or (author = 'kid' and kid_id = current_kid_id())));
 drop policy if exists notes_update on notes;
 create policy notes_update on notes
-  for update using (family_id = current_family_id());
+  for update using (family_id = current_family_id() and (is_parent() or kid_id = current_kid_id()));
 
 drop policy if exists goals_read on family_goals;
 create policy goals_read on family_goals
@@ -709,9 +715,10 @@ create policy events_read on events
     family_id = current_family_id()
     and (is_parent() or kid_id = current_kid_id())
   );
+-- No insert policy: every event is written by a function. A direct insert let
+-- a child forge "quest approved" with any XP, which other families' children
+-- then saw in the guild roster.
 drop policy if exists events_insert on events;
-create policy events_insert on events
-  for insert with check (family_id = current_family_id());
 
 -- ---------------------------------------------------------------------------
 -- Approving a submission
@@ -856,13 +863,25 @@ declare
   v_xp int;
   v_coins int;
 begin
-  select * into v_sub from submissions where id = p_submission_id;
+  -- Locked, as reject_submission does: two approvals of the same chore at the
+  -- same moment both read it as pending without this, and paid twice.
+  select * into v_sub from submissions where id = p_submission_id for update;
   if not found then raise exception 'submission not found'; end if;
   if v_sub.status <> 'pending' then raise exception 'submission already decided'; end if;
 
+  -- A parent, not a supporter: approving pays the child.
   select id into v_parent from parents
-   where user_id = auth.uid() and family_id = v_sub.family_id;
+   where user_id = auth.uid() and family_id = v_sub.family_id and role = 'parent';
   if v_parent is null then raise exception 'only a parent in this family can approve'; end if;
+
+  -- The chore must be this child's, in this family. Without this a submission
+  -- pointing at a sibling's (or another family's) quest was paid at that
+  -- quest's value and marked that quest approved.
+  if not exists (select 1 from quests q
+                  where q.id = v_sub.quest_id and q.family_id = v_sub.family_id
+                    and q.kid_id = v_sub.kid_id) then
+    raise exception 'that chore is not this child''s';
+  end if;
 
   -- What it is worth is decided here, not by the request.
   --
@@ -1008,6 +1027,13 @@ begin
   if p_kid_user_id is null or p_kid_user_id is distinct from auth.uid() then
     raise exception 'a device must publish its own code';
   end if;
+  -- Only a new device. An adult already in a family (a supporter, say) could
+  -- otherwise pair their own sign-in onto a child's profile and read the whole
+  -- household as that child.
+  if exists (select 1 from parents where user_id = auth.uid())
+     or exists (select 1 from kids where user_id = auth.uid()) then
+    raise exception 'this device already belongs to someone';
+  end if;
   -- Keep the table small and stop dead codes blocking new ones.
   delete from pairing_codes where expires_at < now() - interval '1 hour';
 
@@ -1133,7 +1159,7 @@ begin
 
   -- The caller must be a parent in the family they claim to be acting for.
   if not exists (
-    select 1 from parents where user_id = auth.uid() and family_id = p_family_id
+    select 1 from parents where user_id = auth.uid() and family_id = p_family_id and role = 'parent'
   ) then
     raise exception 'not a parent of this family';
   end if;
@@ -1239,7 +1265,10 @@ $$;
 grant execute on function create_pairing_code(text, text, text, int, uuid) to anon, authenticated;
 grant execute on function read_pairing_code(text) to anon, authenticated;
 grant execute on function revoke_pairing_code(text) to anon, authenticated;
-grant execute on function record_pairing_attempt(text) to anon, authenticated;
+-- Not granted. Nothing in the app calls it (claim_pairing_code records its own
+-- attempts), and granted to anon it let anyone, signed in or not, burn a live
+-- code's five tries and block a real parent from pairing.
+revoke execute on function record_pairing_attempt(text) from public, anon, authenticated;
 grant execute on function claim_pairing_code(text, uuid, text) to authenticated;
 
 
@@ -1340,3 +1369,58 @@ end $$;
 drop trigger if exists submissions_guard_verdict on submissions;
 create trigger submissions_guard_verdict before update on submissions
   for each row execute function guard_submission_verdict();
+
+/*
+ * A child's balances belong to the functions that move them.
+ *
+ * kids_parent_write lets a parent's browser write their children's rows,
+ * which it needs for names, themes and lockouts. Without this it could also
+ * write XP, coins, tokens, streaks and bought skins straight in, and other
+ * families' children saw the result in the guild roster. A browser's copy of
+ * these is ignored rather than refused, so a device syncing an old copy of a
+ * row does not get stuck. Same owner test as guard_submission_verdict.
+ */
+create or replace function guard_kid_balances() returns trigger
+language plpgsql as $$
+begin
+  if current_user = (select tableowner from pg_tables where schemaname = 'public' and tablename = 'kids')
+     or current_user = 'service_role'
+     or (select rolsuper from pg_roles where rolname = current_user) then
+    return new;
+  end if;
+  if tg_op = 'INSERT' then
+    -- A new child starts with nothing, whatever the request says.
+    new.xp := 0; new.coins := 0;
+    new.streak_count := 0; new.streak_last_day := null; new.streak_freezes := 1;
+    new.play_tokens := 0; new.game_day := null; new.game_coins_today := 0;
+    new.best_scores := '{}'::jsonb; new.skins := '[]'::jsonb; new.last_login_bonus := null;
+  else
+    new.xp := old.xp; new.coins := old.coins;
+    new.streak_count := old.streak_count; new.streak_last_day := old.streak_last_day;
+    new.streak_freezes := old.streak_freezes;
+    new.play_tokens := old.play_tokens; new.game_day := old.game_day;
+    new.game_coins_today := old.game_coins_today; new.best_scores := old.best_scores;
+    new.skins := old.skins; new.last_login_bonus := old.last_login_bonus;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists kids_guard_balances on kids;
+create trigger kids_guard_balances before insert or update on kids
+  for each row execute function guard_kid_balances();
+
+/** A child may mark a parent's note read, and change nothing else about it. */
+create or replace function guard_note_edits() returns trigger
+language plpgsql as $$
+begin
+  if old.author = 'parent' and not is_parent()
+     and current_user <> (select tableowner from pg_tables where schemaname = 'public' and tablename = 'notes') then
+    new.body := old.body; new.author := old.author; new.kid_id := old.kid_id;
+    new.family_id := old.family_id;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists notes_guard_edits on notes;
+create trigger notes_guard_edits before update on notes
+  for each row execute function guard_note_edits();

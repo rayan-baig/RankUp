@@ -149,6 +149,40 @@ ok('a family’s still goes to the family', familyPaid.status === 200 && familyR
 ok('and touches no school', (await db.query(
   "select count(*)::int as n from schools where stripe_customer_id = 'cus_api_family'")).rows[0].n === 0)
 
+console.log('\n=== A family already paying, and Stripe news out of order ===')
+await db.query(
+  `update families set tier = 'elite', subscription_status = 'active', stripe_subscription_id = 'sub_api_live',
+          stripe_customer_id = 'cus_api_live', billing_event_at = now() where id = $1`, [FAMILY])
+const second = await post('/api/create-checkout', { tier: 'standard' }, PARENT)
+ok('a family already paying cannot start a second subscription', second.status === 409, `status ${second.status}`)
+const lateFailure = await signed({
+  id: `evt_api_fail_${Date.now()}`, type: 'invoice.payment_failed', created: Math.floor(Date.now() / 1000) - 3600,
+  data: { object: { id: 'in_api_1', object: 'invoice', customer: 'cus_api_live', metadata: { family_id: FAMILY } } },
+})
+ok('a late "payment failed" is accepted', lateFailure.status === 200, `status ${lateFailure.status}`)
+ok('and does not downgrade a family that has paid',
+  (await db.query('select tier from families where id = $1', [FAMILY])).rows[0].tier === 'elite')
+const oldCancel = await signed({
+  id: `evt_api_oldcancel_${Date.now()}`, type: 'customer.subscription.deleted', created: Math.floor(Date.now() / 1000),
+  data: { object: { id: 'sub_api_old', object: 'subscription', status: 'canceled', customer: 'cus_api_live',
+                    metadata: { family_id: FAMILY, tier: 'standard' } } },
+})
+ok('an old plan being cancelled leaves the family on the plan they pay for',
+  oldCancel.status === 200 && (await db.query('select tier from families where id = $1', [FAMILY])).rows[0].tier === 'elite')
+const ticketsBefore = (await db.query('select flash_tickets from families where id = $1', [FAMILY])).rows[0].flash_tickets
+for (const type of ['checkout.session.completed', 'checkout.session.async_payment_succeeded']) {
+  // eslint-disable-next-line no-await-in-loop
+  await signed({
+    id: `evt_api_${type}_${Date.now()}`, type,
+    data: { object: { id: 'cs_api_bank_debit', object: 'checkout.session', customer: 'cus_api_live',
+                      payment_status: type.endsWith('completed') ? 'unpaid' : 'paid', amount_total: 499, currency: 'usd',
+                      metadata: { family_id: FAMILY, product: 'flash_5', ticket_count: '5' } } },
+  })
+}
+const ticketsAfter = (await db.query('select flash_tickets from families where id = $1', [FAMILY])).rows[0].flash_tickets
+ok('Flash Tickets paid by a payment that clears later are credited, once',
+  ticketsAfter === ticketsBefore + 5, `${ticketsBefore} -> ${ticketsAfter}`)
+
 console.log('\n=== Only the operator can check schools ===')
 const operator = (key, body) => fetch(`${BASE}/api/operator-schools`, {
   method: body ? 'POST' : 'GET',

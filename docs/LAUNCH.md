@@ -58,7 +58,7 @@ In the Supabase SQL editor, run these **in order**:
 - [ ] `supabase/health.sql`
 - [ ] Create a **private** Storage bucket called `proof-photos`.
 
-## 2b. Schedule the four jobs — none of them are optional
+## 2b. Schedule the jobs — none of them are optional
 
 Set `CRON_SECRET` to a long random string. Each job is one HTTP request with
 `Authorization: Bearer <CRON_SECRET>`; they accept GET or POST, because
@@ -69,7 +69,7 @@ itself once `CRON_SECRET` is set in the project — there is nothing else to do.
 
 **On Cloudflare Pages there is no scheduler.** Pages Functions have no
 `scheduled` handler, so these will never fire on their own. Either deploy a
-small Worker with a Cron Trigger that `fetch`es the three URLs with the header,
+small Worker with a Cron Trigger that `fetch`es the job URLs below with the header,
 or point any external scheduler at them. Do not assume Pages will run them.
 
 | Job | How often | What breaks without it |
@@ -270,9 +270,8 @@ Be honest about these when you launch.
 
 | | Why |
 |---|---|
-| **The 20% Discount Tournament** | The leaderboard is sample data. Awarding the prize means applying Stripe coupons to ten subscriptions from a monthly job. |
 | **Reminders with the app closed** | They fire while RankUp is open. Background ones need a scheduled server job. |
-| **Background push, proven** | The code is written and its logic is sound, but no real push message has ever been delivered — no push service was reachable during development. Test it on two phones. |
+| **Background push, proven** | The code is written and its logic is sound, but no real push message has ever been delivered — no push service was reachable during development. It now sends with `fetch`, because the old way (Node's `https`) does not exist on Cloudflare and every push failed there. Test it on two phones. |
 | **Guilds** | Built and tested, but switched OFF by default. Turn them on with `VITE_GUILDS_ENABLED=true` once you are ready for kid-to-kid contact and the moderation it implies. |
 
 ## Running the tests

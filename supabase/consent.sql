@@ -69,7 +69,8 @@ create policy consent_notices_read on consent_notices for select using (true);
 drop policy if exists parental_consents_read on parental_consents;
 drop policy if exists parental_consents_read on parental_consents;
 create policy parental_consents_read on parental_consents
-  for select using (family_id = current_family_id());
+  -- Parents only: the consent holds the parent's signed name.
+  for select using (family_id = current_family_id() and is_parent());
 
 /** Does this family have consent that has not been withdrawn? */
 create or replace function has_valid_consent(p_family_id uuid)

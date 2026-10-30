@@ -101,9 +101,9 @@ function extractJson(text) {
 
 function buildUserContent({ mediaType, data }, quest) {
   const lines = [
-    `Chore title: ${quest.questTitle || '(not given)'}`,
-    quest.questDescription ? `Details: ${quest.questDescription}` : null,
-    quest.doneMeans ? `The parent says "done" means: ${quest.doneMeans}` : null,
+    `Chore title: ${clip(quest.questTitle) || '(not given)'}`,
+    clip(quest.questDescription) ? `Details: ${clip(quest.questDescription)}` : null,
+    clip(quest.doneMeans) ? `The parent says "done" means: ${clip(quest.doneMeans)}` : null,
     quest.adaptive ? 'This is an ADAPTIVE task written for this specific child\'s abilities. Judge "done" loosely.' : null,
     'Assess the photo and reply with the JSON object described in your instructions.',
   ].filter(Boolean)
@@ -115,6 +115,15 @@ function buildUserContent({ mediaType, data }, quest) {
 }
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
+
+/**
+ * A chore's words, cut to a sensible length. They go into the prompt, which is
+ * paid for by the token: uncapped, one request could carry a two-million
+ * character "title" and cost a hundred times what a check is meant to.
+ */
+function clip(value, max = 200) {
+  return typeof value === 'string' ? value.slice(0, max) : ''
+}
 
 /**
  * Claim one check against the caller's monthly allowance.
@@ -140,13 +149,19 @@ async function claimCheck(token) {
   }
 }
 
-/** Hands a claimed check back when it was spent on a call that never ran. */
-async function refundCheck(token) {
+/**
+ * Hands a claimed check back when it was spent on a call that never ran.
+ *
+ * Needs the claim's receipt, which only this endpoint ever sees: a refund that
+ * anyone could call would let the monthly cap be skipped for ever.
+ */
+async function refundCheck(token, claimId) {
+  if (!claimId) return
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/rpc/refund_photo_check`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: token, Authorization: `Bearer ${token}` },
-      body: '{}',
+      body: JSON.stringify({ p_claim_id: claimId }),
     })
   } catch {
     // A refund that cannot be recorded is not worth failing the response over.
@@ -243,7 +258,8 @@ export default async function handler(req, res) {
 
     const parsed = extractJson(text)
     if (!parsed) {
-      await refundCheck(token)
+      // Not refunded: the call ran and was paid for. A refund here was a way
+      // to get checks for nothing, by steering the reply off its format.
       return res.status(502).json({ error: 'unreadable_response', message: 'The AI reply could not be parsed.' })
     }
 
@@ -259,12 +275,12 @@ export default async function handler(req, res) {
       ...servedBy(message),
     })
   } catch (err) {
-    // The check was claimed before the image was even parsed, so a failure here
-    // has cost the family one of their two hundred for nothing.
-    await refundCheck(token)
-    const status = err?.status && err.status >= 400 && err.status < 600 ? err.status : 502
-    console.error('[verify-photo]', err?.message || err)
-    return res.status(status).json({ error: 'upstream_error', message: err?.message || 'Photo check failed.' })
+    // The call failed, so nothing was paid for: the family gets the check back.
+    await refundCheck(token, claim.claim_id)
+    // The upstream's own message and status stay in the log. Passed through,
+    // they told the browser about this deployment's key and account.
+    console.error('[verify-photo]', err?.status, err?.message || err)
+    return res.status(502).json({ error: 'upstream_error', message: 'Photo check failed.' })
   }
 }
 

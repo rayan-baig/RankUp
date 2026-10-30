@@ -295,3 +295,21 @@ revoke execute on function alliance_score(uuid, date) from public;
 -- are reachable only by the service role the monthly job runs as.
 revoke execute on function settle_alliances(date) from public;
 revoke execute on function mark_alliance_award_applied(uuid, date, text) from public;
+
+/**
+ * Every alliance prize decided but not yet given, with what billing needs.
+ *
+ * settle_alliances returns only the awards it has just decided, so a prize
+ * that failed to apply (a Stripe error, a run cut short) was never tried
+ * again. The monthly job reads this instead, so it is.
+ */
+create or replace function unapplied_alliance_awards()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'alliance_id', r.alliance_id, 'month_key', r.month_key,
+           'family_id', r.winning_family_id,
+           'stripe_customer_id', f.stripe_customer_id) order by r.month_key), '[]'::jsonb)
+    from alliance_results r join families f on f.id = r.winning_family_id
+   where r.applied_at is null and r.winning_family_id is not null;
+$$;
+revoke execute on function unapplied_alliance_awards() from public, anon, authenticated;

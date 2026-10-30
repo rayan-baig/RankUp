@@ -19,6 +19,7 @@
 
 import { recordRun, secretMatches, makeServiceRpc } from './_shared/job.js'
 import webpush from 'web-push'
+import { sendPush, failureFor } from './_shared/push.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -120,7 +121,7 @@ export default async function handler(req, res) {
 
     const wire = JSON.stringify(digestMessage(d))
     const results = await Promise.allSettled(
-      targets.map((t) => webpush.sendNotification({ endpoint: t.endpoint, keys: t.keys }, wire)),
+      targets.map((t) => sendPush({ endpoint: t.endpoint, keys: t.keys }, wire)),
     )
 
     // Marked sent even when every push failed, exactly as send-reminders does.
@@ -135,9 +136,9 @@ export default async function handler(req, res) {
     await Promise.allSettled(
       results.map((result, i) => {
         if (result.status === 'fulfilled') return null
-        const status = result.reason?.statusCode
-        const gone = status === 404 || status === 410
-        return serviceRpc('record_push_failure', { p_endpoint: targets[i].endpoint, p_gone: gone })
+        const failure = failureFor(result.reason)
+        if (!failure) return null
+        return serviceRpc('record_push_failure', { p_endpoint: targets[i].endpoint, p_gone: failure.gone })
       }),
     )
 

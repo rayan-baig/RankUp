@@ -15,6 +15,7 @@
  */
 
 import webpush from 'web-push'
+import { sendPush, failureFor } from './_shared/push.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -73,8 +74,21 @@ const NOTICES = {
   }),
 }
 
-/** One line, bounded. A name or a quest title, never a paragraph. */
-const clean = (value) => String(value ?? '').replace(/[\r\n]+/g, ' ').trim().slice(0, 60)
+/**
+ * One line, bounded. A name or a quest title, never a paragraph, and never a
+ * phone number or a link: those were how a value could make a notice read like
+ * a message from somebody else ("Bank: card locked, call 0800 ...").
+ */
+const clean = (value) => String(value ?? '')
+  .replace(/[\r\n]+/g, ' ')
+  .replace(/https?:\/\/\S+|www\.\S+/gi, '')
+  .replace(/[+()\d][\d\s().-]{6,}\d/g, '')
+  .replace(/\s{2,}/g, ' ')
+  .trim()
+  .slice(0, 40)
+
+/** Telling a child their work was approved or sent back is a parent's to do. */
+const PARENT_ONLY = new Set(['approved', 'rejected'])
 
 function configured() {
   return Boolean(SUPABASE_URL && SERVICE_KEY && VAPID_PUBLIC && VAPID_PRIVATE)
@@ -144,6 +158,13 @@ export default async function handler(req, res) {
   if (!(await callerBelongsToFamily(token, familyId))) {
     return res.status(403).json({ error: 'Not your family.' })
   }
+  // A child's device could send a sibling "Approved! 🎉" for work nobody had
+  // looked at. The database says whether the caller is a parent.
+  if (PARENT_ONLY.has(kind)) {
+    let parent = false
+    try { parent = Boolean(await rpc('is_parent', {}, token)) } catch { parent = false }
+    if (!parent) return res.status(403).json({ error: 'Only a parent can send that.' })
+  }
 
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
 
@@ -159,7 +180,7 @@ export default async function handler(req, res) {
 
   const results = await Promise.allSettled(
     (targets || []).map((t) =>
-      webpush.sendNotification({ endpoint: t.endpoint, keys: t.keys }, wire),
+      sendPush({ endpoint: t.endpoint, keys: t.keys }, wire),
     ),
   )
 
@@ -168,9 +189,9 @@ export default async function handler(req, res) {
   await Promise.allSettled(
     results.map((result, i) => {
       if (result.status === 'fulfilled') return null
-      const status = result.reason?.statusCode
-      const gone = status === 404 || status === 410
-      return rpc('record_push_failure', { p_endpoint: targets[i].endpoint, p_gone: gone }, SERVICE_KEY)
+      const failure = failureFor(result.reason)
+      if (!failure) return null
+      return rpc('record_push_failure', { p_endpoint: targets[i].endpoint, p_gone: failure.gone }, SERVICE_KEY)
     }),
   )
 

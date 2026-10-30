@@ -121,8 +121,9 @@ longer than feels comfortable.
 ## The 20% Discount Tournament — one thing you must schedule
 
 Parent Alliances are real: `supabase/alliances.sql` counts each member family's
-approved quests for the month, and `api/settle-alliances.js` gives the winner a
-20% Stripe coupon. **Nothing pays out until you schedule that endpoint**, so
+approved quests for the month, and `api/settle-alliances.js` gives the winner
+20% of one month's price as credit on their Stripe account (worked out from
+their own subscription, so a yearly plan gets 20% of a month, not of a year). **Nothing pays out until you schedule that endpoint**, so
 until you do, families will see a leaderboard and never see a discount.
 
 Set `CRON_SECRET` to a long random string, then call it once a month:
@@ -140,15 +141,19 @@ gone, and it accepts `{"month":"YYYY-MM-01"}` to catch up a missed one.
 Three properties make it safe to retry, and they are covered by
 `supabase/test/10-alliances.sql`:
 
-- **It cannot pay twice.** The award row's key is (alliance, month), and the
-  function returns only rows it actually inserted. A second run issues nothing.
+- **It cannot pay twice.** The award row's key is (alliance, month), and each
+  credit is sent to Stripe with an idempotency key naming the award, so even a
+  run that dies half way and is run again gives each prize once.
+- **It does not forget.** Each run gives every prize still owed
+  (`unapplied_alliance_awards`), not only the month it has just decided, so a
+  prize Stripe refused last time is tried again.
 - **It cannot be called by a customer.** `settle_alliances` is revoked from
   `public`, so even a leaked user token cannot reach it, and the endpoint needs
   the shared secret on top.
 - **It cannot be steered.** The winner is computed from approved submissions in
   the database. The request body names a month and nothing else.
 
-If Stripe rejects a coupon, that award stays `applied_at = null` rather than
+If Stripe refuses a credit, that award stays `applied_at = null` rather than
 being marked paid, so an unpaid winner is visible instead of silently lost.
 
 ---

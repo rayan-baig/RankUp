@@ -38,6 +38,11 @@ alter table billing_events enable row level security;
  * without a uniqueness check a retry could downgrade a family that had already
  * resubscribed.
  */
+-- When the newest Stripe event applied to this family was created. Stripe does
+-- not deliver events in order, and retries any it did not hear back from.
+alter table families add column if not exists billing_event_at timestamptz;
+
+drop function if exists apply_subscription_change(uuid, text, text, text, text, timestamptz, text, jsonb);
 create or replace function apply_subscription_change(
   p_family_id uuid,
   p_status text,
@@ -46,10 +51,13 @@ create or replace function apply_subscription_change(
   p_subscription_id text default null,
   p_period_end timestamptz default null,
   p_stripe_event text default null,
-  p_payload jsonb default '{}'::jsonb
+  p_payload jsonb default '{}'::jsonb,
+  p_event_created timestamptz default null
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_tier text;
+declare
+  v_tier text;
+  v_fam  families;
 begin
   if p_stripe_event is not null then
     begin
@@ -67,6 +75,24 @@ begin
     end;
   end if;
 
+  select * into v_fam from families where id = p_family_id for update;
+
+  -- News about a subscription that is not the family's current one (an old
+  -- plan being cancelled after a new one started) changes nothing. Before
+  -- this, the old plan's cancellation dropped a paying Elite family to
+  -- Starter.
+  if p_subscription_id is not null and v_fam.stripe_subscription_id is not null
+     and p_subscription_id <> v_fam.stripe_subscription_id
+     and p_status not in ('active', 'trialing') then
+    return jsonb_build_object('ok', true, 'ignored', 'not_current_subscription', 'tier', v_fam.tier);
+  end if;
+  -- And news older than what has already been applied is out of date: a late
+  -- "payment failed" must not undo the payment that came after it.
+  if p_event_created is not null and v_fam.billing_event_at is not null
+     and p_event_created < v_fam.billing_event_at then
+    return jsonb_build_object('ok', true, 'ignored', 'out_of_date', 'tier', v_fam.tier);
+  end if;
+
   -- Fail closed: an unpaid subscription drops to the cheapest plan, never to a
   -- plan it did not pay for. An unrecognised tier name is treated the same way.
   v_tier := case
@@ -80,7 +106,11 @@ begin
      set tier = v_tier,
          subscription_status = p_status,
          stripe_customer_id = coalesce(p_customer_id, stripe_customer_id),
-         stripe_subscription_id = coalesce(p_subscription_id, stripe_subscription_id),
+         -- Forgotten once the plan has ended, so a new subscription is
+         -- accepted as the current one.
+         stripe_subscription_id = case when p_status in ('canceled', 'unpaid', 'incomplete_expired') then null
+                                       else coalesce(p_subscription_id, stripe_subscription_id) end,
+         billing_event_at = greatest(billing_event_at, p_event_created),
          subscription_renews_at = p_period_end,
          subscription_ends_at = case when p_status in ('canceled', 'unpaid') then p_period_end else null end
    where id = p_family_id;
@@ -139,13 +169,44 @@ create trigger kids_enforce_limit before insert on kids
  * The request no longer spends one on a malformed image: the endpoint parses
  * the picture first, which costs nothing and needs no permission.
  */
-create or replace function refund_photo_check()
+/*
+ * Every claimed check gets a receipt, and a refund needs the receipt.
+ *
+ * The refund used to take nothing at all: any signed-in device could call it
+ * straight after a check that DID run and get the check back, so the monthly
+ * cap (which is what stops a family running up the AI bill) could be skipped
+ * for ever. The receipt id goes from claim_photo_check to the server endpoint
+ * and is never shown to the browser, so only the endpoint can hand back a
+ * check, only once, and only for a call that failed.
+ */
+create table if not exists photo_check_claims (
+  id          uuid primary key default gen_random_uuid(),
+  family_id   uuid not null references families(id) on delete cascade,
+  claimed_at  timestamptz not null default now(),
+  refunded_at timestamptz
+);
+alter table photo_check_claims enable row level security;
+revoke all on photo_check_claims from public, anon, authenticated;
+
+drop function if exists refund_photo_check();
+create or replace function refund_photo_check(p_claim_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_month date := date_trunc('month', current_date)::date;
+declare
+  v_month  date := date_trunc('month', current_date)::date;
+  v_family uuid;
 begin
+  update photo_check_claims
+     set refunded_at = now()
+   where id = p_claim_id
+     and family_id = current_family_id()
+     and refunded_at is null
+     and claimed_at > now() - interval '10 minutes'
+  returning family_id into v_family;
+  if v_family is null then return; end if;
+
   update families
      set ai_checks_used = greatest(0, ai_checks_used - 1)
-   where id = current_family_id()
+   where id = v_family
      and ai_checks_month = v_month
      and ai_checks_used > 0;
 end $$;
@@ -158,6 +219,7 @@ declare
   v_month  date := date_trunc('month', current_date)::date;
   v_used   int;
   v_cap    int := 200;
+  v_claim  uuid;
 begin
   select f.* into v_family from families f where f.id = current_family_id() for update;
   if not found then
@@ -179,7 +241,10 @@ begin
          ai_checks_used  = v_used + 1
    where id = v_family.id;
 
-  return jsonb_build_object('ok', true, 'used', v_used + 1, 'cap', v_cap);
+  delete from photo_check_claims where claimed_at < now() - interval '1 day';
+  insert into photo_check_claims (family_id) values (v_family.id) returning id into v_claim;
+
+  return jsonb_build_object('ok', true, 'used', v_used + 1, 'cap', v_cap, 'claim_id', v_claim);
 end $$;
 
 grant execute on function claim_photo_check() to authenticated;
@@ -251,7 +316,7 @@ begin
 
   -- The caller must be this child, or a parent in their family.
   if not exists (select 1 from kids where id = p_kid_id and user_id = auth.uid())
-     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id) then
+     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id and role = 'parent') then
     raise exception 'not allowed to buy for this child';
   end if;
 
@@ -360,9 +425,11 @@ returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 declare v_family families;
 begin
+  -- A parent's, not a supporter's: checkout and the billing portal both start
+  -- from this, and a supporter must not be able to cancel the family's plan.
   select f.* into v_family from families f
     join parents p on p.family_id = f.id
-   where p.user_id = auth.uid();
+   where p.user_id = auth.uid() and p.role = 'parent';
   if not found then return jsonb_build_object('ok', false); end if;
 
   return jsonb_build_object(
@@ -373,7 +440,10 @@ begin
     'renews_at', v_family.subscription_renews_at,
     'ends_at', v_family.subscription_ends_at,
     'discount_percent', v_family.billing_discount_percent,
-    'has_customer', v_family.stripe_customer_id is not null
+    'has_customer', v_family.stripe_customer_id is not null,
+    -- Checkout carries what is left of the in-app trial onto the card.
+    'trial_ends_at', v_family.trial_ends_at,
+    'has_subscription', v_family.stripe_subscription_id is not null
   );
 end $$;
 
@@ -403,8 +473,9 @@ grant execute on function lock_billing_columns() to postgres;
 -- Written by the webhook only. Postgres grants EXECUTE to PUBLIC on a new
 -- function automatically, so these must be revoked from PUBLIC, not just from
 -- anon and authenticated.
-revoke execute on function apply_subscription_change(uuid, text, text, text, text, timestamptz, text, jsonb) from public;
+revoke execute on function apply_subscription_change(uuid, text, text, text, text, timestamptz, text, jsonb, timestamptz) from public;
 revoke execute on function family_for_customer(text) from public;
 revoke execute on function stripe_customer_for_family(uuid) from public;
 revoke execute on function attach_stripe_customer(uuid, text) from public;
-grant execute on function refund_photo_check() to anon, authenticated;
+revoke execute on function refund_photo_check(uuid) from public, anon;
+grant execute on function refund_photo_check(uuid) to authenticated;

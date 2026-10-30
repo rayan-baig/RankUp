@@ -120,6 +120,7 @@ async function schoolIdFor(object) {
 
 async function familyIdFor(object, stripe) {
   const direct = object?.metadata?.family_id || object?.client_reference_id
+    || object?.parent?.subscription_details?.metadata?.family_id
   if (direct) return direct
   const customerId = typeof object?.customer === 'string' ? object.customer : object?.customer?.id
   if (!customerId) return null
@@ -192,7 +193,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ received: true, school: true })
     }
 
-    if (event.type === 'checkout.session.completed') {
+    if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
       const familyId = object.metadata?.family_id || object.client_reference_id
       const customerId = typeof object.customer === 'string' ? object.customer : object.customer?.id
       if (familyId && customerId) {
@@ -202,12 +203,17 @@ export default async function handler(req, res) {
        * A Flash Ticket pack is a one-off payment, so there is no subscription
        * event coming after this one — this is where it gets credited. Guarded
        * on payment_status because a session can complete unpaid.
+       *
+       * A payment that clears later (a bank debit, say) completes unpaid and
+       * arrives as async_payment_succeeded, which used to be ignored: the
+       * family paid and got nothing. Keyed on the session rather than the
+       * event, so whichever of the two arrives paid credits once.
        */
       if (String(object.metadata?.product || '').startsWith('flash_') && object.payment_status === 'paid' && familyId) {
         await serviceRpc('credit_flash_tickets', {
           p_family_id: familyId,
           p_count: Number(object.metadata?.ticket_count) || 3,
-          p_stripe_event: event.id,
+          p_stripe_event: `checkout:${object.id}`,
           p_payload: {
             type: event.type,
             amount_pence: Number(object.amount_total || 0) || null,
@@ -240,6 +246,9 @@ export default async function handler(req, res) {
           : null,
         p_stripe_event: event.id,
         p_payload: { type: event.type },
+        // Stripe does not deliver in order. Older news than the family's
+        // latest is ignored by the database.
+        p_event_created: event.created ? new Date(event.created * 1000).toISOString() : null,
       })
       return res.status(200).json({ received: true })
     }
@@ -271,19 +280,12 @@ export default async function handler(req, res) {
       return res.status(200).json({ received: true })
     }
 
-    if (event.type === 'invoice.payment_failed') {
-      const familyId = await familyIdFor(object, stripe)
-      if (familyId) {
-        await serviceRpc('apply_subscription_change', {
-          p_family_id: familyId,
-          p_status: 'past_due',
-          p_tier: 'standard',
-          p_stripe_event: event.id,
-          p_payload: { type: event.type },
-        })
-      }
-      return res.status(200).json({ received: true })
-    }
+    /*
+     * invoice.payment_failed needs nothing here. The subscription's own
+     * customer.subscription.updated says past_due when it matters, with a time
+     * the database can order. Acting on this one as well downgraded families
+     * who had already paid, when it arrived late or was retried.
+     */
 
     return res.status(200).json({ received: true, ignored: event.type })
   } catch (err) {

@@ -388,7 +388,8 @@ returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare v_family uuid;
 begin
-  select family_id into v_family from parents where user_id = auth.uid();
+  -- Parents only. A supporter reads the family through supporter_view.
+  select family_id into v_family from parents where user_id = auth.uid() and role = 'parent';
   if v_family is null then return '[]'::jsonb; end if;
 
   return coalesce((
@@ -412,7 +413,8 @@ returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare v_family uuid;
 begin
-  select family_id into v_family from parents where user_id = auth.uid();
+  -- Parents only. A supporter reads the family through supporter_view.
+  select family_id into v_family from parents where user_id = auth.uid() and role = 'parent';
   if v_family is null then return '[]'::jsonb; end if;
 
   return coalesce((

@@ -60,6 +60,15 @@ begin
   if p_role not in ('parent', 'kid') then
     return jsonb_build_object('ok', false, 'reason', 'bad_role');
   end if;
+  -- The parents' reminders are the parents' to change, and a child changes
+  -- only their own. A child's device could otherwise wipe the parents'
+  -- reminders, every sibling's, and the family's time zone with them.
+  if p_role = 'parent' and not is_parent() then
+    return jsonb_build_object('ok', false, 'reason', 'not_a_parent');
+  end if;
+  if p_role = 'kid' and not is_parent() and p_kid_id is distinct from current_kid_id() then
+    return jsonb_build_object('ok', false, 'reason', 'not_your_kid');
+  end if;
   -- An unknown zone would make every due check throw, so it is refused here,
   -- once, rather than breaking the job for everybody later.
   if not exists (select 1 from pg_timezone_names where name = v_tz) then

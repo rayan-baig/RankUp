@@ -81,7 +81,7 @@ export default async function handler(req, res) {
   const price = schoolPriceId(school.band, cycle)
   if (!price) return res.status(503).json({ error: 'not_configured', message: `No ${cycle} price for a ${school.band} school.` })
 
-  const origin = safeOrigin(body?.origin || req.headers.origin || '')
+  const origin = safeOrigin(req.headers.origin || '')
   if (!origin) {
     return res.status(503).json({
       error: 'not_configured',
@@ -110,6 +110,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ url: session.url })
   } catch (err) {
     console.error('[school-checkout]', err.message)
-    return res.status(502).json({ error: 'checkout_failed', message: err.message })
+    return res.status(502).json({ error: 'checkout_failed' })
   }
 }

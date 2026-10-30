@@ -97,7 +97,7 @@ none was ever taken.
 | **Reminders while the app is closed** | ✅ built — reminder times are saved to the account with the family's own time zone, and `api/send-reminders.js` delivers them. **You have to schedule it** — [docs/NOTIFICATIONS.md](NOTIFICATIONS.md) | — |
 | **Background push delivery** | Written and wired, but never actually delivered a message — no push service is reachable from the sandbox | Test on two real phones |
 | **Subscriptions** | ✅ built — off until you connect your own Stripe account | [docs/PAYMENTS.md](PAYMENTS.md) |
-| **The 20% Discount Tournament** | ✅ built — `api/settle-alliances.js` decides each month's winner and applies a real Stripe coupon. **You have to schedule it**; nothing pays out until you do — [docs/PAYMENTS.md](PAYMENTS.md) | — |
+| **The 20% Discount Tournament** | ✅ built — `api/settle-alliances.js` decides each month's winner and gives a real Stripe account credit. **You have to schedule it**; nothing pays out until you do — [docs/PAYMENTS.md](PAYMENTS.md) | — |
 
 One row is left, and it is the honest one: background push has been written,
 wired and reviewed, but has never delivered a single message, because no push

@@ -243,7 +243,7 @@ begin
 
   -- The caller must be this kid, or a parent in the family.
   if not exists (select 1 from kids where id = p_kid_id and user_id = auth.uid())
-     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_family) then
+     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_family and role = 'parent') then
     raise exception 'not allowed to submit for this kid';
   end if;
 
@@ -310,7 +310,7 @@ begin
 
   -- This child, or a parent in their family. Nobody else.
   if not exists (select 1 from kids where id = p_kid_id and user_id = auth.uid())
-     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id) then
+     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id and role = 'parent') then
     raise exception 'not allowed to play for this child';
   end if;
 
@@ -421,7 +421,7 @@ begin
   -- child's balance anyway. A profile with no device must be the hardest to
   -- touch, not the easiest.
   if not exists (select 1 from kids k where k.id = p_kid_id and k.user_id = auth.uid())
-     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id) then
+     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id and role = 'parent') then
     raise exception 'not allowed';
   end if;
 
@@ -430,7 +430,9 @@ begin
   end if;
 
   update kids
-     set coins = coins + greatest(0, least(p_coins, 50)), last_login_bonus = current_date
+     -- Always five. The amount used to come from the request (capped at 50),
+     -- so a child's device could ask for ten times the bonus.
+     set coins = coins + 5, last_login_bonus = current_date
    where id = p_kid_id;
   return jsonb_build_object('ok', true);
 end $$;
@@ -552,7 +554,7 @@ begin
   -- profile that was never paired has user_id null, and so does an anonymous
   -- caller, so `is distinct from` would have let a stranger dress them up.
   if not exists (select 1 from kids k where k.id = p_kid_id and k.user_id = auth.uid())
-     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id) then
+     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id and role = 'parent') then
     raise exception 'not allowed';
   end if;
 
@@ -596,7 +598,7 @@ begin
 
   -- NULL-safe: see claim_login_bonus.
   if not exists (select 1 from kids k where k.id = p_kid_id and k.user_id = auth.uid())
-     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id) then
+     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id and role = 'parent') then
     raise exception 'not allowed';
   end if;
 
@@ -644,7 +646,7 @@ begin
   -- child's balance anyway. A profile with no device must be the hardest to
   -- touch, not the easiest.
   if not exists (select 1 from kids k where k.id = p_kid_id and k.user_id = auth.uid())
-     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id) then
+     and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id and role = 'parent') then
     raise exception 'not allowed';
   end if;
   if v_kid.coins < v_reward.cost then
@@ -669,7 +671,7 @@ declare
 begin
   select * into v_kid from kids where id = p_kid_id for update;
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
-  if not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id) then
+  if not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id and role = 'parent') then
     raise exception 'only a parent in this family can apply a tax';
   end if;
 
@@ -703,6 +705,11 @@ declare
   v_family families;
 begin
   if auth.uid() is null then raise exception 'must be signed in'; end if;
+  -- A child's device is not a parent. Without this a child could start a
+  -- family of their own and become its parent, with a fresh Elite trial.
+  if exists (select 1 from kids where user_id = auth.uid()) then
+    return jsonb_build_object('ok', false, 'reason', 'child_device');
+  end if;
   if exists (select 1 from parents where user_id = auth.uid()) then
     return jsonb_build_object(
       'ok', false, 'reason', 'already_in_family',
