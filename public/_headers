@@ -1,3 +1,6 @@
+# The Content-Security-Policy is not here: it is written into the built page
+# by vite.config.js, which knows the Supabase address the build talks to.
+#
 # Cloudflare Pages reads this at deploy time. It mirrors the headers block in
 # vercel.json, so the site is equally locked down on either host.
 /*
