@@ -341,11 +341,16 @@ end $$;
 revoke execute on function keep_rpc_receipt(uuid, uuid, text, jsonb) from public, anon, authenticated;
 
 drop function if exists play_minigame(uuid, text, int);
+-- Gained p_tz; the old signature has to go or the two would sit side by side.
+drop function if exists play_minigame(uuid, text, int, uuid);
 create or replace function play_minigame(
   p_kid_id uuid,
   p_game   text,
   p_score  int,
-  p_request_id uuid default null
+  p_request_id uuid default null,
+  -- The phone's time zone: the daily cap resets on the family's day, which
+  -- is the day the phone shows. See family_today.
+  p_tz text default null
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -356,6 +361,7 @@ declare
   v_today  int;
   v_best   int;
   v_prior  jsonb;
+  v_day    date;
 begin
   select * into v_kid from kids where id = p_kid_id for update;
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
@@ -397,8 +403,9 @@ begin
   -- stops "I scored 4 billion" from being worth anything.
   v_score := greatest(0, least(100, coalesce(p_score, 0)));
 
-  -- Reset the day's tally when the date rolls over.
-  v_today := case when v_kid.game_day = current_date then v_kid.game_coins_today else 0 end;
+  -- Reset the day's tally when the family's date rolls over.
+  v_day   := family_today(v_kid.family_id, p_tz);
+  v_today := case when v_kid.game_day >= v_day then v_kid.game_coins_today else 0 end;
 
   v_wanted := greatest(1, least(5, round(v_score / 20.0)::int));
   v_paid   := greatest(0, least(v_wanted, 15 - v_today));
@@ -408,7 +415,7 @@ begin
   update kids
      set play_tokens      = play_tokens - 1,
          coins            = coins + v_paid,
-         game_day         = current_date,
+         game_day         = greatest(v_day, coalesce(v_kid.game_day, v_day)),
          game_coins_today = v_today + v_paid,
          best_scores      = coalesce(best_scores, '{}'::jsonb) || jsonb_build_object(p_game, v_best)
    where id = p_kid_id;
@@ -425,7 +432,7 @@ begin
   ));
 end $$;
 
-grant execute on function play_minigame(uuid, text, int, uuid) to authenticated;
+grant execute on function play_minigame(uuid, text, int, uuid, text) to authenticated;
 
 /** The parent sends work back to be redone. */
 create or replace function reject_submission(
@@ -462,10 +469,14 @@ begin
 end $$;
 
 /** The daily login bonus. Server-side so it genuinely cannot be claimed twice. */
-create or replace function claim_login_bonus(p_kid_id uuid, p_coins int default 5)
+-- Gained p_tz, the phone's time zone: see family_today.
+drop function if exists claim_login_bonus(uuid, int);
+create or replace function claim_login_bonus(p_kid_id uuid, p_coins int default 5, p_tz text default null)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_kid kids;
+declare
+  v_kid kids;
+  v_day date;
 begin
   select * into v_kid from kids where id = p_kid_id for update;
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
@@ -481,14 +492,17 @@ begin
     raise exception 'not allowed';
   end if;
 
-  if v_kid.last_login_bonus = current_date then
+  -- The family's day, which is the day the phone offers the bonus on. Later
+  -- than today only happens when a zone changes, and still counts as claimed.
+  v_day := family_today(v_kid.family_id, p_tz);
+  if v_kid.last_login_bonus >= v_day then
     return jsonb_build_object('ok', false, 'reason', 'already_claimed');
   end if;
 
   update kids
      -- Always five. The amount used to come from the request (capped at 50),
      -- so a child's device could ask for ten times the bonus.
-     set coins = coins + 5, last_login_bonus = current_date
+     set coins = coins + 5, last_login_bonus = v_day
    where id = p_kid_id;
   return jsonb_build_object('ok', true);
 end $$;
@@ -668,10 +682,14 @@ grant execute on function set_kid_look(uuid, text, text, text, text, int) to aut
  * and the streak broke on the next pull, about eight seconds after the child
  * thought they had saved it.
  */
-create or replace function use_streak_freeze(p_kid_id uuid)
+-- Gained p_tz, the phone's time zone: see family_today.
+drop function if exists use_streak_freeze(uuid);
+create or replace function use_streak_freeze(p_kid_id uuid, p_tz text default null)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_kid kids;
+declare
+  v_kid kids;
+  v_day date;
 begin
   select * into v_kid from kids where id = p_kid_id for update;
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
@@ -687,19 +705,20 @@ begin
   end if;
   -- Already counted for today. Spending a token would buy nothing, and two
   -- taps on a slow connection must not cost two.
-  if v_kid.streak_last_day = current_date then
+  v_day := family_today(v_kid.family_id, p_tz);
+  if v_kid.streak_last_day >= v_day then
     return jsonb_build_object('ok', false, 'reason', 'already_safe');
   end if;
 
   update kids
      set streak_freezes = streak_freezes - 1,
-         streak_last_day = current_date
+         streak_last_day = v_day
    where id = p_kid_id;
 
   return jsonb_build_object('ok', true, 'freezes_left', v_kid.streak_freezes - 1);
 end $$;
 
-grant execute on function use_streak_freeze(uuid) to authenticated;
+grant execute on function use_streak_freeze(uuid, text) to authenticated;
 
 /** Spending currency on a reward. Checks the balance where it cannot be faked. */
 create or replace function redeem_reward(p_redemption_id uuid, p_reward_id uuid, p_kid_id uuid)
@@ -776,7 +795,7 @@ end $$;
 
 grant execute on function submit_quest(uuid, uuid, uuid, jsonb) to anon, authenticated;
 grant execute on function reject_submission(uuid, text) to authenticated;
-grant execute on function claim_login_bonus(uuid, int) to anon, authenticated;
+grant execute on function claim_login_bonus(uuid, int, text) to anon, authenticated;
 grant execute on function redeem_reward(uuid, uuid, uuid) to anon, authenticated;
 grant execute on function apply_currency_tax(uuid, int, uuid) to authenticated;
 

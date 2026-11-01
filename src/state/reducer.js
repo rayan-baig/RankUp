@@ -1,5 +1,5 @@
 import { uid } from '../lib/id.js'
-import { dayKey, daysBetween } from '../lib/dates.js'
+import { dayKey, daysBetween, deviceZone } from '../lib/dates.js'
 import { calcReward, levelFromXp, testScoreBonus } from '../lib/xp.js'
 import { createInitialState, TIERS, makeKid } from './initialState.js'
 import { findSkin, isMarketOpen, ticketCost } from '../data/marketSkins.js'
@@ -53,7 +53,8 @@ function logEvent(state, event) {
 /** Advance a kid's streak for a completion recorded today. */
 function bumpStreak(streak) {
   const today = dayKey()
-  if (streak.lastDay === today) return streak
+  // Later than today happens when a zone changes; it is not a broken streak.
+  if (streak.lastDay && streak.lastDay >= today) return streak
   if (!streak.lastDay) return { ...streak, count: 1, lastDay: today }
   const gap = daysBetween(streak.lastDay, today)
   if (gap === 1) return { ...streak, count: streak.count + 1, lastDay: today }
@@ -594,19 +595,20 @@ export function reducer(state, action) {
       const unlimited = Boolean(state.demo)
       if (!kid || (!unlimited && (kid.playTokens || 0) < 1)) return state
       const today = dayKey()
-      const earned = kid.gameDay === today ? kid.gameCoinsToday || 0 : 0
+      // A day later than today (a zone change) is still today's tally.
+      const earned = kid.gameDay && kid.gameDay >= today ? kid.gameCoinsToday || 0 : 0
       const coins = Math.max(0, Math.min(action.coins || 0, DAILY_COIN_CAP - earned))
       const score = Math.max(0, Math.min(100, Math.round(action.score || 0)))
       const next = mapKid(state, kid.id, (k) => ({
         ...k,
         playTokens: unlimited ? k.playTokens : k.playTokens - 1,
         coins: k.coins + coins,
-        gameDay: today,
+        gameDay: kid.gameDay && kid.gameDay > today ? kid.gameDay : today,
         gameCoinsToday: earned + coins,
         bestScores: { ...(k.bestScores || {}), [action.game]: Math.max((k.bestScores || {})[action.game] || 0, score) },
       }))
       return logEvent(queueRpc(next, 'play_minigame', {
-        p_kid_id: kid.id, p_game: action.game, p_score: score,
+        p_kid_id: kid.id, p_game: action.game, p_score: score, p_tz: deviceZone(),
       }), { type: 'minigame_played', kidId: kid.id, meta: { game: action.game, score, coins } })
     }
 
@@ -866,6 +868,8 @@ export function reducer(state, action) {
         p_coins: coins,
         p_note: action.note || '',
         p_sticker: STICKER_MAP[action.sticker] ? action.sticker : null,
+        // The streak moves on the family's day, not the server's.
+        p_tz: deviceZone(),
       })
 
       next = queueNotice(next, {
@@ -1240,10 +1244,14 @@ export function reducer(state, action) {
     case 'CLAIM_LOGIN_BONUS': {
       const kid = state.kids.find((k) => k.id === action.kidId)
       const today = dayKey()
-      if (!kid || kid.lastLoginBonus === today) return state
+      // A day later than today (a zone change) still counts as claimed.
+      if (!kid || (kid.lastLoginBonus && kid.lastLoginBonus >= today)) return state
       const coins = 5
       let next = mapKid(state, kid.id, (k) => ({ ...k, coins: k.coins + coins, lastLoginBonus: today }))
-      next = queueRpc(next, 'claim_login_bonus', { p_kid_id: kid.id, p_coins: coins })
+      // The zone, so the server stamps the claim with this phone's day rather
+      // than UTC's. With UTC, a bonus claimed on a US evening came back dated
+      // tomorrow and the phone offered it again.
+      next = queueRpc(next, 'claim_login_bonus', { p_kid_id: kid.id, p_coins: coins, p_tz: deviceZone() })
       return logEvent(next, { type: 'login_bonus', kidId: kid.id, meta: { coins } })
     }
 
@@ -1260,12 +1268,12 @@ export function reducer(state, action) {
     case 'USE_STREAK_FREEZE': {
       const kid = state.kids.find((k) => k.id === action.kidId)
       if (!kid || kid.streak.freezeTokens < 1) return state
-      if (kid.streak.lastDay === dayKey()) return state
+      if (kid.streak.lastDay && kid.streak.lastDay >= dayKey()) return state
       const next = mapKid(state, kid.id, (k) => ({
         ...k,
         streak: { ...k.streak, freezeTokens: k.streak.freezeTokens - 1, lastDay: dayKey() },
       }))
-      return logEvent(queueRpc(next, 'use_streak_freeze', { p_kid_id: kid.id }),
+      return logEvent(queueRpc(next, 'use_streak_freeze', { p_kid_id: kid.id, p_tz: deviceZone() }),
         { type: 'streak_freeze', kidId: kid.id })
     }
 

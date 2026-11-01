@@ -96,7 +96,7 @@ export default function KidArcade() {
   // The demo is a shop window: it should not run out of tokens two games in.
   const unlimited = Boolean(state.demo)
   const tokens = unlimited ? Infinity : kid.playTokens || 0
-  const earnedToday = kid.gameDay === dayKey() ? kid.gameCoinsToday || 0 : 0
+  const earnedToday = kid.gameDay && kid.gameDay >= dayKey() ? kid.gameCoinsToday || 0 : 0
   const capped = earnedToday >= DAILY_COIN_CAP
   const bests = kid.bestScores || {}
 

@@ -840,6 +840,50 @@ end $$;
 
 revoke execute on function award_for_submission(uuid) from public;
 
+/*
+ * Where a family lives. Also added by digests.sql; here as well because
+ * family_today needs it and schema.sql has to work on its own.
+ */
+alter table families add column if not exists timezone text not null default 'UTC';
+
+/**
+ * "Today", for this family: the date their phones are showing.
+ *
+ * The phone decides whether the daily bonus can be claimed, whether the
+ * arcade's cap has reset and whether a streak carried on, all by its own local
+ * date. This used to be current_date, which is UTC, so for a family west of
+ * UTC every evening (east of it every morning) the two were a day apart: a
+ * claimed bonus came back dated tomorrow and the phone offered it again, and a
+ * child doing a chore every evening lost their streak when one approval fell
+ * either side of UTC midnight.
+ *
+ * The calling phone may say which zone it is in, which is best: that is the
+ * very zone its own date comes from. Otherwise the family's saved zone, then
+ * UTC. Any real zone is within a day of UTC, so a changed or tampered zone can
+ * move a day by one at most, never mint a second one in the same place.
+ */
+create or replace function family_today(p_family_id uuid, p_tz text default null)
+returns date
+language plpgsql stable security definer set search_path = public as $$
+declare v_saved text;
+begin
+  select timezone into v_saved from families where id = p_family_id;
+  if nullif(trim(p_tz), '') is not null then
+    begin
+      return (now() at time zone trim(p_tz))::date;
+    exception when others then
+      null;  -- not a zone Postgres knows; fall through to the saved one
+    end;
+  end if;
+  begin
+    return (now() at time zone coalesce(nullif(v_saved, ''), 'UTC'))::date;
+  exception when others then
+    return (now() at time zone 'UTC')::date;
+  end;
+end $$;
+
+revoke execute on function family_today(uuid, text) from public;
+
 -- The signature gained p_sticker, and `create or replace` only replaces an
 -- EXACT match — so on a database that already has the four-argument version,
 -- both would exist side by side and PostgREST would happily route a
@@ -847,13 +891,17 @@ revoke execute on function award_for_submission(uuid) from public;
 -- caller's p_xp. Dropping it explicitly is what makes this file safe to re-run
 -- over a live deployment.
 drop function if exists approve_submission(uuid, int, int, text);
+-- And again when it gained p_tz, for the same reason.
+drop function if exists approve_submission(uuid, int, int, text, text);
 
 create or replace function approve_submission(
   p_submission_id uuid,
   p_xp int,
   p_coins int,
   p_note text default '',
-  p_sticker text default null
+  p_sticker text default null,
+  -- The approving phone's time zone, so the streak counts the family's days.
+  p_tz text default null
 ) returns void
 language plpgsql security definer set search_path = public as $$
 declare
@@ -862,6 +910,7 @@ declare
   v_award jsonb;
   v_xp int;
   v_coins int;
+  v_today date;
 begin
   -- Locked, as reject_submission does: two approvals of the same chore at the
   -- same moment both read it as pending without this, and paid twice.
@@ -890,6 +939,7 @@ begin
   -- phone running older code still works; they are ignored. See
   -- award_for_submission.
   v_award := award_for_submission(p_submission_id);
+  v_today := family_today(v_sub.family_id, p_tz);
   v_xp    := coalesce((v_award->>'xp')::int, 0);
   v_coins := coalesce((v_award->>'coins')::int, 0);
 
@@ -922,11 +972,13 @@ begin
          -- One arcade token per approved chore, capped so they cannot be hoarded.
          play_tokens = least(play_tokens + 1, 5),
          streak_count = case
-           when streak_last_day = current_date then streak_count
-           when streak_last_day = current_date - 1 then streak_count + 1
+           -- Later than today happens once, when a zone changes (or for a
+           -- day recorded in UTC by an older version): not a broken streak.
+           when streak_last_day >= v_today then streak_count
+           when streak_last_day = v_today - 1 then streak_count + 1
            else 1
          end,
-         streak_last_day = current_date
+         streak_last_day = v_today
    where id = v_sub.kid_id;
 
   insert into events (family_id, kid_id, type, meta)

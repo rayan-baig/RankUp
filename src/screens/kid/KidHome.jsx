@@ -41,7 +41,8 @@ export default function KidHome() {
   const quests = state.quests.filter((q) => q.kidId === kid.id)
   const active = quests.filter((q) => q.status === 'assigned' || q.status === 'redo')
   const waiting = quests.filter((q) => q.status === 'submitted')
-  const bonusAvailable = kid.lastLoginBonus !== dayKey()
+  // A day later than today (the server's, after a zone change) counts as claimed.
+  const bonusAvailable = !kid.lastLoginBonus || kid.lastLoginBonus < dayKey()
 
   const weekXp = useMemo(() => {
     const week = new Set(lastSevenDays())

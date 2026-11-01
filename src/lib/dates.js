@@ -7,6 +7,15 @@ export function dayKey(date = new Date()) {
   return `${d.getFullYear()}-${m}-${day}`
 }
 
+/**
+ * The phone's own time zone, sent with every server call whose answer depends
+ * on the date (the daily bonus, the arcade's cap, a streak), so the server
+ * counts the same day this phone does. See family_today in supabase/schema.sql.
+ */
+export function deviceZone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null } catch { return null }
+}
+
 export function addDays(date, n) {
   const d = new Date(date instanceof Date ? date.getTime() : new Date(date).getTime())
   d.setDate(d.getDate() + n)
