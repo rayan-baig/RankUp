@@ -39,14 +39,24 @@ export default function ParentPairKid() {
     // If this family already has a profile with that name, pairing joins it
     // rather than making a second one, and the kid's device needs to hear
     // which profile it landed on.
-    const existing = state.kids.find(
+    //
+    // With a server, the server has already decided, and its answer is the
+    // one the child's phone uses: it joins a same-name profile only if that
+    // profile has no phone yet. Swapping in a local name match here sent
+    // "Assign a quest" to a profile the new phone cannot see.
+    const existing = syncAdapter.isReal ? null : state.kids.find(
       (k) => k.name.trim().toLowerCase() === result.kid.name.trim().toLowerCase(),
     )
     const kid = { ...result.kid, id: existing?.id || result.kid.id }
     await syncAdapter.attachKid?.(value, kid.id)
 
-    dispatch({ type: 'ADOPT_PAIRED_KID', kid })
-    setLinked(kid)
+    // Another profile of the same name kept its own phone, so this phone got
+    // a profile of its own. Said on the confirmation, not discovered later.
+    const namesake = state.kids.find(
+      (k) => k.id !== kid.id && k.name.trim().toLowerCase() === kid.name.trim().toLowerCase(),
+    )
+    dispatch({ type: 'ADOPT_PAIRED_KID', kid, byId: syncAdapter.isReal })
+    setLinked({ ...kid, namesake: Boolean(namesake) })
     setCode('')
   }
 
@@ -60,6 +70,15 @@ export default function ParentPairKid() {
             Their device is now part of {state.family.name || 'your family'}. Quests you assign will
             show up there.
           </p>
+          {linked.namesake && (
+            <div className="text-left mb-6">
+              <Banner tone="warn" icon="📱" title={`This is a new profile for ${linked.name}`}>
+                {linked.name} already has a profile linked to another phone, and that one keeps its
+                XP and quests. To carry on with it on this phone instead, unlink the old phone
+                below before linking a new one.
+              </Banner>
+            </div>
+          )}
           <div className="flex gap-2">
             <Button variant="soft" className="flex-1" onClick={() => setLinked(null)}>
               Link another

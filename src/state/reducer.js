@@ -356,9 +356,12 @@ export function reducer(state, action) {
      */
     case 'ADOPT_PAIRED_KID': {
       const { kid: paired } = action
-      const existing = state.kids.find(
+      // byId: the server chose the profile, so only that profile is "this
+      // child". Matching by name as well marked a different, older profile
+      // as the one with the phone.
+      const existing = state.kids.find((k) => k.id === paired.id) || (action.byId ? null : state.kids.find(
         (k) => k.name.trim().toLowerCase() === paired.name.trim().toLowerCase(),
-      )
+      ))
       if (existing) {
         const next = mapKid(state, existing.id, (k) => ({
           ...k,

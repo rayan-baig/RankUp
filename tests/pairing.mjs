@@ -158,6 +158,46 @@ await kid.screenshot({ path: `${SHOT_DIR}/pairing-kid-profile.png` })
   ? pass('the theme lock cannot be opened with an empty PIN on a kid device')
   : fail('the theme lock holds on a kid device', 'PIN prompt still offered')
 
+/*
+ * A second phone for a child who already has one — a new phone, or the same
+ * phone once the app is added to the home screen, which starts with empty
+ * storage. The database keeps a profile with a device for that device and
+ * makes the new phone its own profile; the parent's phone used to swap in the
+ * old profile's id by name, so "Assign a quest" sent chores to a profile the
+ * new phone cannot see.
+ */
+console.log('\n=== A second phone for the same name gets the profile it was linked to ===')
+const kid2 = await ctx.newPage(); track(kid2, 'kid2')
+await kid2.goto(`${BASE}?device=kid2`, { waitUntil: 'networkidle' })
+await kid2.waitForTimeout(500)
+await kid2.getByRole('button', { name: /I'm a kid/ }).click()
+await kid2.waitForTimeout(400)
+await kid2.locator('input[placeholder="e.g. Ava"]').fill('Ava')
+await kid2.getByRole('button', { name: 'Continue' }).click()
+await kid2.waitForTimeout(400)
+await kid2.getByRole('button', { name: /Sugar Rush/ }).first().click()
+await kid2.waitForTimeout(300)
+await kid2.getByRole('button', { name: 'Get my code' }).click()
+await kid2.waitForTimeout(1500)
+const code3 = await kid2.evaluate(() => JSON.parse(localStorage.getItem('rankup.state.v1.kid2'))?.pendingPairing?.code)
+await parent.bringToFront()
+await parent.evaluate(() => { window.location.hash = '/parent/pair' })
+await parent.waitForTimeout(700)
+await typeCode(code3)
+await parent.waitForTimeout(800)
+await kid2.waitForTimeout(4000)
+;(await parent.getByText(/This is a new profile for Ava/).count()) > 0
+  ? pass('the parent is told this phone has a profile of its own, and why')
+  : fail('the parent is told about the second profile', 'no explanation on the confirmation')
+const phoneKid = await kid2.evaluate(() => JSON.parse(localStorage.getItem('rankup.state.v1.kid2'))?.device?.linkedKidId)
+await parent.getByRole('button', { name: 'Assign a quest' }).click()
+await parent.waitForTimeout(500)
+const assignTo = await parent.evaluate(() => location.hash)
+phoneKid && assignTo.includes(phoneKid)
+  ? pass('"Assign a quest" goes to the profile the new phone is using')
+  : fail('"Assign a quest" goes to the new phone\'s profile', `phone uses ${phoneKid}, parent assigns to ${assignTo}`)
+await kid2.close()
+
 /**
  * A code is six digits, so the only thing standing between a stranger and
  * someone else's child is how many guesses they get. The counter on a code
