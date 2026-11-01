@@ -136,7 +136,7 @@ export function removeOps(ids) {
  * `retryable` is the whole point of this function: see MAX_ATTEMPTS above. A
  * retryable failure sets a time to try again rather than spending a life.
  */
-export function recordFailure(id, { retryable = false } = {}) {
+export function recordFailure(id, { retryable = false, auth = false } = {}) {
   const ops = readOutbox()
   const op = ops.find((o) => o.id === id)
   if (!op) return { dead: false }
@@ -146,10 +146,12 @@ export function recordFailure(id, { retryable = false } = {}) {
   delete op.sending
   let dead
   if (retryable) {
-    op.firstFailedAt = op.firstFailedAt || Date.now()
+    // Waiting for somebody to sign in again is not the write failing: it
+    // must not count towards the day after which the write is given up.
+    if (!auth) op.firstFailedAt = op.firstFailedAt || Date.now()
     const wait = Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.min(op.attempts - 1, 10))
     op.nextAttemptAt = Date.now() + wait
-    dead = Date.now() - op.firstFailedAt >= GIVE_UP_AFTER_MS
+    dead = Boolean(op.firstFailedAt) && Date.now() - op.firstFailedAt >= GIVE_UP_AFTER_MS
     if (dead) {
       console.warn(
         `[RankUp] Giving up on ${op.type} ${op.table || op.fn} after a day of failing to reach the server.`,

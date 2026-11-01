@@ -10,10 +10,10 @@ import { humanError } from '../lib/errors.js'
  * to sign in to, and the app runs entirely on the device. A kid's phone never
  * sees this screen: it has no account and joins the parent's with a pairing code.
  */
-export default function SignIn({ onDone, onBack, who = 'parent' }) {
+export default function SignIn({ onDone, onBack, who = 'parent', startWith = 'signup' }) {
   // The School League signs teachers and principals in through the same door.
   const school = who === 'school'
-  const [mode, setMode] = useState('signup')
+  const [mode, setMode] = useState(startWith)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)

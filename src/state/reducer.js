@@ -223,6 +223,8 @@ export function reducer(state, action) {
         const byId = new Map((next[key] || []).map((item) => [item.id, item]))
         for (const row of incoming) {
           if (pending.has(`${table}:${row.id}`) && byId.has(row.id)) continue
+          // Deleted here, delete not yet sent: a pull must not bring it back.
+          if (pending.has(`delete:${table}:${row.id}`)) continue
           byId.set(row.id, mapper.fromRow(row, byId.get(row.id) || {}))
         }
         next = { ...next, [key]: [...byId.values()] }
@@ -957,8 +959,15 @@ export function reducer(state, action) {
       return { ...state, pendingLevelUp: null }
 
     /** The provider has moved these into the outbox; `keep` are the ones it could not. */
-    case 'DRAIN_SYNC_QUEUE':
-      return { ...state, syncQueue: action.keep?.length ? action.keep : [] }
+    case 'DRAIN_SYNC_QUEUE': {
+      const keep = action.keep || []
+      // Nothing could be saved: leave the state alone. A new array here made
+      // the provider try again at once, hundreds of times a second, while
+      // storage was full; the timed RETRY_SYNC_QUEUE does the retrying.
+      const queue = state.syncQueue || []
+      if (keep.length && keep.length === queue.length && keep.every((item, i) => item === queue[i])) return state
+      return { ...state, syncQueue: keep }
+    }
 
     /** Try the ones storage refused again. A new array is what makes the provider look. */
     case 'RETRY_SYNC_QUEUE':
@@ -973,10 +982,15 @@ export function reducer(state, action) {
      * real status).
      */
     case 'RPC_REFUSED': {
-      const { fn, args = {} } = action
+      const { fn, args = {}, reason } = action
+      // "Already done" is not a refusal: the thing happened, perhaps on the
+      // first try whose answer was lost. The fresh pull shows it.
+      if (['already_claimed', 'already_safe', 'already_pending', 'repeat'].includes(reason)) return state
       let next = state
-      let message = 'Something you did could not be saved, so it has been undone.'
-      if (fn === 'submit_quest') {
+      let message = 'Something you did was not accepted by the server, so this phone is being brought up to date.'
+      if (reason === 'decided') {
+        message = 'That submission had already been decided on another device.'
+      } else if (fn === 'submit_quest') {
         const quest = state.quests.find((q) => q.id === args.p_quest_id)
         next = {
           ...next,

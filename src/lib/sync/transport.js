@@ -53,8 +53,11 @@ export async function freshAccessToken() {
 
 /** Supabase sends expires_in (seconds from now); keep the moment it expires. */
 function withExpiry(session) {
-  if (!session || session.expires_at || !session.expires_in) return session
-  return { ...session, expires_at: Math.floor(Date.now() / 1000) + Number(session.expires_in) }
+  if (!session || !session.expires_in || session.expiry_counted) return session
+  // Counted from this phone's clock, not the server's expires_at: a phone
+  // whose clock is an hour fast would otherwise think every token had already
+  // run out and renew before every request.
+  return { ...session, expires_at: Math.floor(Date.now() / 1000) + Number(session.expires_in), expiry_counted: true }
 }
 
 /**
@@ -91,6 +94,9 @@ async function refreshSession({ force = false } = {}) {
           body: JSON.stringify({ refresh_token: session.refresh_token }),
         })
         const body = await res.json().catch(() => null)
+        // Signed out, or signed in as somebody else, while this was in flight:
+        // the answer belongs to a session that no longer exists.
+        if (getSession()?.refresh_token !== session.refresh_token) return getSession()
         if (res.ok && body?.access_token) {
           // Keep the user if the answer leaves it out: currentUserId reads it.
           setSession({ ...body, user: body.user || session.user })
@@ -98,7 +104,8 @@ async function refreshSession({ force = false } = {}) {
           return getSession()
         }
         // The refresh token itself was refused: only signing in again helps.
-        if (res.status >= 400 && res.status < 500) signInNeeded = true
+        // Not 429 (asked too often) or anything else passing.
+        if (res.status === 400 || res.status === 401) signInNeeded = true
         return null
       } catch {
         return null // offline; try again on the next request
@@ -258,6 +265,7 @@ export const transport = {
       body: JSON.stringify({ email, password }),
     })
     setSession(session)
+    signInNeeded = false
     return session
   },
 

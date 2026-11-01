@@ -195,3 +195,20 @@ begin
 end $$;
 
 reset role;
+
+-- ---------- a retried submission is recognised, not refused ----------
+insert into quests (id, family_id, kid_id, title) values
+  ('7f555555-0000-0000-0000-0000000000a2', '7f222222-0000-0000-0000-00000000000a',
+   '7f444444-0000-0000-0000-0000000000a1', 'Tidy up');
+set role app_user;
+do $$
+begin
+  perform become('7f111111-0000-0000-0000-00000000000a');
+  perform ok('the first send is accepted',
+    (submit_quest('7f666666-0000-0000-0000-0000000000a1', '7f555555-0000-0000-0000-0000000000a2', '7f444444-0000-0000-0000-0000000000a1')->>'ok')::boolean);
+  perform ok('the same send again is a repeat, not "not open"',
+    (submit_quest('7f666666-0000-0000-0000-0000000000a1', '7f555555-0000-0000-0000-0000000000a2', '7f444444-0000-0000-0000-0000000000a1')->>'repeat')::boolean);
+  perform ok('and there is still one submission',
+    (select count(*) from submissions where quest_id = '7f555555-0000-0000-0000-0000000000a2') = 1);
+end $$;
+reset role;

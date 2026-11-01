@@ -52,7 +52,13 @@ sweep === 0
 // The promise on the button is that the account and anything synced are
 // untouched. That is a question about the server, not about localStorage.
 const { default: pg } = await import('pg')
-const client = new pg.Client({ host: '/tmp', port: 55432, user: 'postgres', database: 'rankup_test' })
+const client = new pg.Client({
+  host: process.env.PGHOST || '/tmp',
+  port: Number(process.env.PGPORT || 55432),
+  user: process.env.PGUSER || 'postgres',
+  password: process.env.PGPASSWORD || undefined,
+  database: process.env.PGDATABASE || 'rankup_test',
+})
 await client.connect()
 const survived = await client.query(
   `select (select count(*) from kids)   as kids,

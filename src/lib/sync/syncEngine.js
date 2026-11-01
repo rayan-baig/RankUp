@@ -228,7 +228,10 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare }) {
           // struggling server also stopped the device PULLING, so a phone that
           // could not send stopped receiving too, and sat there showing stale
           // chores until the outbox happened to clear.
-          recordFailure(op.id, { retryable: true })
+          const { dead } = recordFailure(op.id, { retryable: true, auth: Boolean(err.auth) })
+          // Given up after a day. Pulls skipped this row while it waited, so
+          // fetch everything again rather than keep a copy the server never had.
+          if (dead && op.type !== 'rpc') resetCursor()
           return { sent, error: err }
         }
         // A rejected write is not going to start working. Drop it rather than
@@ -237,6 +240,10 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare }) {
         const { dead } = recordFailure(op.id)
         if (!dead) removeOps([op.id])
         if (op.type === 'rpc') onRefused?.({ fn: op.fn, args: op.args, reason: err.message || null })
+        // A refused row change: the server kept its own copy, and pulls
+        // skipped this row while the change was waiting. Fetch everything
+        // again so this phone shows what the server actually has.
+        else resetCursor()
       }
     }
     return { sent }

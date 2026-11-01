@@ -202,5 +202,55 @@ await fresh.rpc('anything', {})
 ok('a token about to run out is renewed before it is used', seen[0]?.[0]?.includes('refresh_token'), JSON.stringify(seen))
 globalThis.fetch = realFetch
 
+
+console.log('\n=== Second review: a deleted row stays deleted while its delete waits ===')
+reset()
+state = { ...base(), rewards: [{ id: 'rw-9', name: 'Film night', cost: 30 }] }
+recordDelivered(state, { rewards: [{ id: 'rw-9', family_id: FAMILY, name: 'Film night', cost: 30 }] })
+const deletedHere = { ...state, rewards: [] }
+queueChanges(deletedHere, {})
+const waiting = pendingRows(readOutbox())
+const back = reducer(deletedHere, { type: 'MERGE_SNAPSHOT', snapshot: { rewards: [{ id: 'rw-9', family_id: FAMILY, name: 'Film night', cost: 30 }] }, pending: [...waiting] })
+ok('a pull does not bring it back', !back.rewards.some((r) => r.id === 'rw-9'))
+recordDelivered(deletedHere, { rewards: [{ id: 'rw-9', family_id: FAMILY, name: 'Film night', cost: 30 }] }, { skip: waiting })
+queueChanges(back, {})
+ok('and nothing re-creates it on the server', !readOutbox().some((o) => o.table === 'rewards' && o.type !== 'delete'), JSON.stringify(readOutbox()))
+
+console.log('\n=== Second review: storage refusing everything does not spin ===')
+const q = [{ fn: 'record_gift', args: {} }]
+const s1 = { ...base(), syncQueue: q }
+ok('draining nothing leaves the state as it was (no re-run)', reducer(s1, { type: 'DRAIN_SYNC_QUEUE', keep: [q[0]] }) === s1)
+
+console.log('\n=== Second review: a new row the server never got is sent whole again ===')
+reset()
+state = { ...base(), rewards: [{ id: 'rw-new', name: 'Pizza', cost: 10 }] }
+queueChanges(state, {})
+clearOutbox()                                  // its insert was refused, or given up on
+state = { ...state, rewards: [{ id: 'rw-new', name: 'Pizza', cost: 12 }] }
+queueChanges(state, {})
+ok('the next change goes as a whole row, which creates it', readOutbox()[0]?.type === 'upsert', JSON.stringify(readOutbox()))
+clearOutbox()
+recordDelivered(state, { rewards: [{ id: 'rw-new', family_id: FAMILY, name: 'Pizza', cost: 12 }] })
+state = { ...state, rewards: [{ id: 'rw-new', name: 'Pizza', cost: 15 }] }
+queueChanges(state, {})
+ok('once the server has shown it back, changes are patches again', readOutbox()[0]?.type === 'patch', JSON.stringify(readOutbox()))
+
+console.log('\n=== Second review: "already done" is not shown as a refusal ===')
+const calm = base()
+ok('an already-claimed bonus changes nothing and says nothing',
+  reducer(calm, { type: 'RPC_REFUSED', fn: 'claim_login_bonus', reason: 'already_claimed' }) === calm)
+ok('a decision made on another phone is described as that',
+  /another device/.test(reducer(calm, { type: 'RPC_REFUSED', fn: 'approve_submission', reason: 'decided' }).syncNotice?.message || ''))
+
+console.log('\n=== Second review: waiting for a sign-in never gives a write up ===')
+reset()
+const { recordFailure: fail2 } = await import('../src/lib/sync/outbox.js')
+const realNow2 = Date.now
+const parked = enqueue({ type: 'rpc', fn: 'record_gift', args: {} })
+Date.now = () => realNow2() + 3 * 24 * 3600 * 1000
+const verdict = fail2(parked.id, { retryable: true, auth: true })
+Date.now = realNow2
+ok('three days of 401s and it is still queued', !verdict.dead && readOutbox().length === 1)
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL CHECKS PASSED')
 process.exit(fails ? 1 : 0)

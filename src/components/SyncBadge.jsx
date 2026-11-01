@@ -1,4 +1,7 @@
+import { useState } from 'react'
 import { useApp, useSync } from '../state/AppContext.jsx'
+import { transport, getSession, setSession } from '../lib/sync/transport.js'
+import SignIn from '../screens/SignIn.jsx'
 import { SYNC_STATUS } from '../lib/sync/syncEngine.js'
 
 /**
@@ -13,6 +16,45 @@ export default function SyncBadge({ className = '' }) {
   const { status, pending, error, syncNow, configured } = useSync()
   const { state, dispatch } = useApp()
   const notice = state.syncNotice
+  const [signingIn, setSigningIn] = useState(false)
+  const [wrongAccount, setWrongAccount] = useState(false)
+  const needsSignIn = /sign in again/i.test(error || '')
+
+  /*
+   * Signing in again, in place.
+   *
+   * The sign-in screen used to be reachable only while setting up, so a
+   * parent whose sign-in had expired had no way back short of wiping the
+   * phone, which wiped the changes waiting to be sent with it. This keeps
+   * everything: only the sign-in is replaced, and it must be the same
+   * account, or this family's changes would be sent as somebody else.
+   */
+  if (signingIn) {
+    const before = getSession()
+    return (
+      <div className="fixed inset-0 z-50 overflow-y-auto" style={{ background: 'var(--bg)' }}>
+        {wrongAccount && (
+          <p className="text-center text-sm px-5 pt-6" role="alert" style={{ color: 'var(--bad)' }}>
+            That is a different account. Sign in with the one this family uses.
+          </p>
+        )}
+        <SignIn
+          startWith="signin"
+          onBack={() => setSigningIn(false)}
+          onDone={(session) => {
+            if (before?.user?.id && session?.user?.id !== before.user.id) {
+              setSession(before)
+              setWrongAccount(true)
+              return
+            }
+            setWrongAccount(false)
+            setSigningIn(false)
+            syncNow()
+          }}
+        />
+      </div>
+    )
+  }
 
   if (!configured) {
     return (
@@ -58,7 +100,7 @@ export default function SyncBadge({ className = '' }) {
   return (
     <button
       type="button"
-      onClick={syncNow}
+      onClick={needsSignIn && state.device?.role !== 'kid' && transport.isConfigured() ? () => setSigningIn(true) : syncNow}
       className={`inline-flex items-center gap-1.5 text-[11px] ${className}`}
       style={{ color: 'var(--ink-muted)' }}
       title={error || 'Tap to sync now'}

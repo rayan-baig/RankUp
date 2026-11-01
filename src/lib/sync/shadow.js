@@ -205,6 +205,11 @@ export function queueChanges(state, { photoFor, role } = {}) {
       const serialised = JSON.stringify(row)
       const known = shadow[shadowId]
       if (known === serialised) continue
+      // A row this device created, that the server has not yet sent back,
+      // may never have arrived (its insert refused, or given up on after a
+      // day). Changes to it go whole, so they create it rather than patch
+      // nothing: a patch of a missing row "succeeds" and changes nothing.
+      const unconfirmed = shadow[`?${shadowId}`]
       // A row the server already has is sent as the columns that changed,
       // never the whole row. The whole row overwrote, column by column, what
       // another parent had changed meanwhile: renaming a child on one phone
@@ -212,7 +217,7 @@ export function queueChanges(state, { photoFor, role } = {}) {
       // marking a note read sent an insert-or-update, which row level security
       // refuses for a note the child did not write; an update is allowed.
       let op = { type: 'upsert', table, row }
-      if (known) {
+      if (known && !unconfirmed) {
         const before = JSON.parse(known)
         const changed = { id: row.id }
         for (const [column, value] of Object.entries(row)) {
@@ -227,6 +232,7 @@ export function queueChanges(state, { photoFor, role } = {}) {
       // full quota, which this app hits routinely because photos live there.
       if (!enqueue(op)) continue
       shadow[shadowId] = serialised
+      if (op.type === 'upsert') shadow[`?${shadowId}`] = true
       queued += 1
     }
 
@@ -236,6 +242,7 @@ export function queueChanges(state, { photoFor, role } = {}) {
       const id = shadowId.slice(table.length + 1)
       if (!enqueue({ type: 'delete', table, id })) continue
       delete shadow[shadowId]
+      delete shadow[`?${shadowId}`]
       queued += 1
     }
     void snapshotKey
@@ -259,7 +266,9 @@ export function pendingRows(ops) {
   const pending = new Set()
   for (const op of ops) {
     if ((op.type === 'upsert' || op.type === 'patch') && op.row?.id) pending.add(`${op.table}:${op.row.id}`)
-    else if (op.type === 'delete') pending.add(`${op.table}:${op.id}`)
+    // A delete is marked twice: as a row with a change waiting, and as a
+    // delete, so a pull cannot bring the row back while the delete waits.
+    else if (op.type === 'delete') { pending.add(`${op.table}:${op.id}`); pending.add(`delete:${op.table}:${op.id}`) }
     // A child's own look travels by function rather than as a row.
     else if (op.type === 'rpc' && op.fn === 'set_kid_look' && op.args?.p_kid_id) pending.add(`kids:${op.args.p_kid_id}`)
   }
@@ -297,6 +306,7 @@ export function recordDelivered(state, snapshot, { photoFor, skip = new Set() } 
           : mapper.toRow(item, familyId),
       )
       shadow[`${table}:${item.id}`] = JSON.stringify(row)
+      delete shadow[`?${table}:${item.id}`]   // the server has it
       if (table === 'kids' && item.id === state.device?.linkedKidId) {
         shadow[`kids-look:${item.id}`] = JSON.stringify(lookOf(item, familyId))
       }
@@ -304,7 +314,10 @@ export function recordDelivered(state, snapshot, { photoFor, skip = new Set() } 
   }
   // Gone on the server: nothing left to send a delete for.
   for (const deletion of snapshot.deletions || []) {
-    if (deletion?.table_name && deletion?.row_id) delete shadow[`${deletion.table_name}:${deletion.row_id}`]
+    if (deletion?.table_name && deletion?.row_id) {
+      delete shadow[`${deletion.table_name}:${deletion.row_id}`]
+      delete shadow[`?${deletion.table_name}:${deletion.row_id}`]
+    }
   }
   writeShadow(shadow)
 }

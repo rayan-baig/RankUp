@@ -250,6 +250,12 @@ begin
   if v_quest.kid_id <> p_kid_id then
     return jsonb_build_object('ok', false, 'reason', 'wrong_kid');
   end if;
+  -- Sent again because the phone never heard back: the submission is
+  -- already here. Answering "not open" made the phone undo a submission
+  -- that had in fact arrived.
+  if exists (select 1 from submissions where id = p_submission_id and kid_id = p_kid_id and quest_id = p_quest_id) then
+    return jsonb_build_object('ok', true, 'repeat', true);
+  end if;
   if v_quest.status not in ('assigned', 'redo') then
     return jsonb_build_object('ok', false, 'reason', 'not_open');
   end if;
@@ -557,10 +563,13 @@ begin
    * and last_reset_on still lets it come back only once per day.
    */
   v_tz := coalesce(nullif(p_tz, ''), (select timezone from families where id = v_family), 'UTC');
-  if not exists (select 1 from pg_timezone_names where name = v_tz) then
-    v_tz := 'UTC';
-  end if;
-  v_today := (now() at time zone v_tz)::date;
+  begin
+    v_today := (now() at time zone v_tz)::date;
+  exception when others then
+    -- Not a zone Postgres knows. (Looking it up in pg_timezone_names first
+    -- read the whole time zone database on every call.)
+    v_today := (now() at time zone 'UTC')::date;
+  end;
 
   with due as (
     select q.id from quests q

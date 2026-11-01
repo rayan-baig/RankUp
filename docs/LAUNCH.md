@@ -44,6 +44,10 @@ this.
 
 In the Supabase SQL editor, run these **in order**:
 
+**Upgrading later: always run the files again *before* deploying the new app.** A
+newer app calls functions the older database does not have yet, and those calls are
+refused (games, gifts and purchases would show as not accepted).
+
 (The same order the tests use, in `supabase/test/run.sh`. Leaving one out
 breaks that feature for every family: co-parents, the allowance pot,
 charity and referrals each live in their own file.)
