@@ -252,6 +252,27 @@ export function reducer(state, action) {
         }
       }
 
+      /*
+       * A level reached by sync, celebrated on the child's own phone.
+       *
+       * The overlay was only ever raised by APPROVE_SUBMISSION, on the phone
+       * where the parent tapped Accept, so a child with their own phone never
+       * saw a single level-up. Only a row this phone had already been sent
+       * counts: the first pull after pairing brings every level the child
+       * already had, and that is not news.
+       */
+      const mine = state.device?.role === 'kid' ? state.device.linkedKidId : null
+      const was = mine && state.kids.find((k) => k.id === mine)
+      const now = mine && next.kids.find((k) => k.id === mine)
+      if (was && now && was.rev != null) {
+        const from = levelFromXp(was.xp).level
+        const to = levelFromXp(now.xp).level
+        if (to > from) {
+          const held = state.pendingLevelUp?.kidId === mine ? state.pendingLevelUp : null
+          next = { ...next, pendingLevelUp: { kidId: mine, from: held ? Math.min(held.from, from) : from, to } }
+        }
+      }
+
       return { ...next, lastSyncedAt: Date.now() }
     }
 

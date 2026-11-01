@@ -252,5 +252,32 @@ const verdict = fail2(parked.id, { retryable: true, auth: true })
 Date.now = realNow2
 ok('three days of 401s and it is still queued', !verdict.dead && readOutbox().length === 1)
 
+/*
+ * The level-up celebration is "the moment the whole loop is built around", and
+ * it was only ever raised by APPROVE_SUBMISSION — on the phone where the parent
+ * tapped Accept. On the child's own phone the XP arrived by sync and nothing
+ * celebrated it: a paired child never saw a single level-up.
+ */
+console.log('\n=== A level reached by sync is celebrated on the child\'s own phone ===')
+{
+  const kidPhone = (xp) => {
+    const s = base()
+    return { ...s, device: { ...s.device, role: 'kid', linkedKidId: AVA },
+      kids: s.kids.map((k) => ({ ...k, xp, rev: 5 })), pendingLevelUp: null }
+  }
+  const after = reducer(kidPhone(70), { type: 'MERGE_SNAPSHOT', snapshot: { kids: [serverKid({ xp: 120, rev: 9 })] } })
+  ok('crossing a level on the child\'s phone shows the level-up',
+    after.pendingLevelUp?.kidId === AVA && after.pendingLevelUp.from === 1 && after.pendingLevelUp.to === 2,
+    JSON.stringify(after.pendingLevelUp))
+  const same = reducer(kidPhone(10), { type: 'MERGE_SNAPSHOT', snapshot: { kids: [serverKid({ xp: 40, rev: 9 })] } })
+  ok('XP inside the same level shows nothing', !same.pendingLevelUp)
+  const fresh = { ...kidPhone(0), kids: kidPhone(0).kids.map((k) => ({ ...k, rev: undefined })) }
+  const paired = reducer(fresh, { type: 'MERGE_SNAPSHOT', snapshot: { kids: [serverKid({ xp: 5000, rev: 9 })] } })
+  ok('the first pull after pairing is not mistaken for a level-up', !paired.pendingLevelUp, JSON.stringify(paired.pendingLevelUp))
+  const parentPhone = { ...base(), kids: base().kids.map((k) => ({ ...k, xp: 70, rev: 5 })), pendingLevelUp: null }
+  const onParent = reducer(parentPhone, { type: 'MERGE_SNAPSHOT', snapshot: { kids: [serverKid({ xp: 120, rev: 9 })] } })
+  ok('a parent\'s phone is not interrupted by a level reached elsewhere', !onParent.pendingLevelUp)
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL CHECKS PASSED')
 process.exit(fails ? 1 : 0)
