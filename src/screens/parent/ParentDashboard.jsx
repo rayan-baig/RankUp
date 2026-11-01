@@ -17,9 +17,13 @@ import CharityWeek from '../../components/CharityWeek.jsx'
 import InstallPrompt from '../../components/InstallPrompt.jsx'
 
 export default function ParentDashboard() {
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
   const elite = useElite()
   const pending = pendingSubmissions(state)
+  // Rewards a child has spent their currency on and is waiting to be given.
+  // These were only listed inside the collapsed rewards panel in Settings, so
+  // a parent had no way of knowing a child was waiting.
+  const owed = (state.redemptions || []).filter((r) => r.status === 'requested')
 
   // Chores come from the synced submissions, so a co-parent's approvals and a
   // child's "I did it!" from their own phone are here too, not only what was
@@ -67,6 +71,27 @@ export default function ParentDashboard() {
             </div>
             <Button className="px-3 py-2 min-h-0 text-sm" onClick={() => navigate('/parent/approvals')}>Review</Button>
           </div>
+        </Card>
+      )}
+
+      {owed.length > 0 && (
+        <Card className="mb-3" style={{ borderColor: 'var(--accent-2)' }}>
+          <div className="font-semibold text-sm mb-1">
+            🎁 {owed.length === 1 ? '1 reward' : `${owed.length} rewards`} to hand over
+          </div>
+          {owed.map((r) => (
+            <div key={r.id} className="flex items-center gap-2 py-1.5">
+              <span className="flex-1 min-w-0 text-sm truncate">
+                {state.kids.find((k) => k.id === r.kidId)?.name || 'Your kid'}: {r.name}
+              </span>
+              <Button
+                className="px-3 py-1.5 min-h-0 text-xs shrink-0"
+                onClick={() => dispatch({ type: 'FULFIL_REDEMPTION', redemptionId: r.id })}
+              >
+                Mark given
+              </Button>
+            </div>
+          ))}
         </Card>
       )}
 
