@@ -7,7 +7,7 @@ import { createSyncEngine, SYNC_STATUS, resetCursor } from '../lib/sync/syncEngi
 import { queueChanges, recordDelivered, pendingRows } from '../lib/sync/shadow.js'
 import { enqueue as enqueueOp, readOutbox } from '../lib/sync/outbox.js'
 import { transport } from '../lib/sync/transport.js'
-import { NOTICES, notifyLocally, notifyRemote, getPrefs as notificationPrefs } from '../lib/notifications.js'
+import { NOTICES, notifyLocally, notifyRemote, remindersToFire, getPrefs as notificationPrefs } from '../lib/notifications.js'
 import { resolveKidTheme } from '../data/kidThemes.js'
 import { storyProgress } from '../lib/dragonFight.js'
 import { resolveParentTheme } from '../data/parentThemes.js'
@@ -284,26 +284,14 @@ const syncs = (state) =>
     const FIRED_KEY = 'rankup.reminders.fired.v1'
     const check = () => {
       if (!notificationPrefs().enabled) return
-      const now = new Date()
-      const today = now.toISOString().slice(0, 10)
-      const minutes = now.getHours() * 60 + now.getMinutes()
       let fired = {}
       try { fired = JSON.parse(localStorage.getItem(FIRED_KEY) || '{}') } catch { fired = {} }
-
-      let changed = false
-      for (const reminder of state.settings.reminders || []) {
-        if (!reminder.on) continue
-        const [h, m] = (reminder.time || '00:00').split(':').map(Number)
-        const due = h * 60 + m
-        // Fire if the time has passed today, but not if it is hours stale —
-        // opening the app at 9pm should not replay the morning reminder.
-        if (minutes < due || minutes - due > 90) continue
-        if (fired[reminder.id] === today) continue
-        notifyLocally(NOTICES.reminder(reminder.label))
-        fired[reminder.id] = today
-        changed = true
+      // See remindersToFire: once a day, on this phone's own date.
+      const result = remindersToFire(state.settings.reminders, new Date(), fired)
+      result.due.forEach((reminder) => notifyLocally(NOTICES.reminder(reminder.label)))
+      if (result.due.length) {
+        try { localStorage.setItem(FIRED_KEY, JSON.stringify(result.fired)) } catch { /* storage full: worst case, a repeat */ }
       }
-      if (changed) localStorage.setItem(FIRED_KEY, JSON.stringify(fired))
     }
 
     check()

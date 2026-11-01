@@ -17,6 +17,7 @@
  */
 
 import { transport, freshAccessToken } from './sync/transport.js'
+import { dayKey } from './dates.js'
 
 const VAPID_PUBLIC_KEY = import.meta.env?.VITE_VAPID_PUBLIC_KEY || ''
 const PREF_KEY = 'rankup.notifications.v1'
@@ -195,6 +196,32 @@ export async function notifyRemote({ familyId, role, kidId, kind, args }) {
   } catch (err) {
     return { ok: false, reason: err.message }
   }
+}
+
+/**
+ * Which in-app reminders are due now, and the record of what has fired.
+ *
+ * Each fires once a day, at or after its time but not more than ninety
+ * minutes late (opening the app at 9pm should not replay the morning one).
+ * "Fired today" is kept under the LOCAL date: it was the UTC date, read
+ * against local hours, so a reminder within ninety minutes before UTC
+ * midnight fired at its time and then again once UTC's date turned.
+ */
+export function remindersToFire(reminders, now = new Date(), fired = {}) {
+  const today = dayKey(now)
+  const minutes = now.getHours() * 60 + now.getMinutes()
+  const next = { ...fired }
+  const due = []
+  for (const reminder of reminders || []) {
+    if (!reminder.on) continue
+    const [h, m] = (reminder.time || '00:00').split(':').map(Number)
+    const at = h * 60 + m
+    if (minutes < at || minutes - at > 90) continue
+    if (next[reminder.id] === today) continue
+    due.push(reminder)
+    next[reminder.id] = today
+  }
+  return { due, fired: next }
 }
 
 /** The wording for each thing worth interrupting someone about. */
