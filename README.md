@@ -25,9 +25,7 @@ npm run dev     # starts the app
 Open the address it prints (usually `http://localhost:5173`).
 
 To test on your actual phone, use the "Network" address it prints — your phone must be
-on the same wifi. **The camera will not work over that plain `http://` address**; browsers
-only allow camera access on `https://` or on `localhost`. Deploy it (below) to test the
-camera on a real phone.
+on the same wifi.
 
 Other commands:
 
@@ -69,7 +67,7 @@ src/
   lib/             game rules (XP, levels), storage, routing
   lib/sync/        device pairing — the local and Supabase backends
   state/           the single store: what the app knows and how it changes
-  components/      reusable pieces (buttons, cards, avatar, camera, charts)
+  components/      reusable pieces (buttons, cards, avatar, charts)
   screens/         one file per screen, split into kid/ and parent/
 api/
 supabase/

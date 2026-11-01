@@ -1,10 +1,8 @@
 # Linking a kid's device
 
 A kid's phone shows a **six-digit code**. The parent types it into their own
-phone. That is the whole pairing flow, and it is built and working.
-
-What is *not* built yet is the sync that follows it. Read the last section
-before you show this to anyone — the difference matters.
+phone. That is the whole pairing flow, and it is built and working, as is the
+sync that follows it (with Supabase configured).
 
 ---
 
@@ -85,10 +83,15 @@ five-attempt limit, one-time use, "New code", the parent's entry screen and its
 error messages, the link itself, and the fact that a kid's device has no Parent
 Mode. `tests/pairing.mjs` drives it as two separate devices and checks all of it.
 
-**Not working yet:** the sync *after* pairing. Pairing establishes the link.
-Sharing quests, approvals and XP across the link is the next job, and it needs
-the database. Today a paired kid device knows who it is and which family it
-belongs to, and that is where it stops.
+**Also working, with Supabase:** the sync *after* pairing. Quests, submissions,
+approvals, XP and rewards travel between the parent's and the child's phones,
+offline-first through an outbox; `tests/sync.mjs` drives it end to end.
+
+**A second phone for the same child.** A profile that already has a phone keeps
+it: pairing another phone under the same name makes a new profile, and the
+parent's confirmation says so. To move a child to a new phone (including the
+same phone after "Add to Home Screen", which starts with empty storage),
+unlink the old phone first, then link the new one.
 
 There are two backends behind the same interface:
 
