@@ -13,8 +13,9 @@ setting two environment variables.
 this order, or `psql -f` it.
 
 ```
-schema.sql  sync.sql  guilds.sql  notifications.sql  consent.sql  billing.sql
-alliances.sql  schools.sql  reminders.sql  digests.sql  retention.sql  crashes.sql  health.sql
+schema.sql  sync.sql  coparents.sql  allowance.sql  guilds.sql  notifications.sql
+consent.sql  billing.sql  charity.sql  alliances.sql  schools.sql  reminders.sql
+digests.sql  referrals.sql  retention.sql  crashes.sql  health.sql
 ```
 
 Every one of them is safe to run again over a live database, and that IS the upgrade
@@ -22,7 +23,7 @@ procedure — there is no migration tool and no version table. A column added la
 appears as an explicit `alter table ... add column if not exists` at the end of
 `schema.sql`, so an existing database catches up without being rebuilt.
 
-`supabase/test/run.sh` applies all twelve files twice, over a database with rows in it,
+`supabase/test/run.sh` applies all seventeen files twice, over a database with rows in it,
 and `supabase/test/18-upgrade.sql` then checks that the data survived and that the later
 columns and constraints really arrived. So "safe to re-run" is a tested claim rather
 than an intention.

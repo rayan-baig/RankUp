@@ -53,20 +53,11 @@ deliberately fake**. Which is which is written down in
 **[docs/STATUS.md](docs/STATUS.md)** — read that file before demoing, so you never
 accidentally promise something that does not exist.
 
-The three biggest gaps, in one line each:
-
-1. **No accounts, and sync is half done.** A kid's device can now be linked to a parent
-   with a six-digit code, and that flow is real and tested. But nothing yet flows across
-   the link — quests and XP still live on each device separately.
-   → [docs/SYNC.md](docs/SYNC.md)
-2. **No real payments.** Switching between Standard and Elite flips feature flags. No
-   card, no charge. → [docs/PAYMENTS.md](docs/PAYMENTS.md)
-3. **The Parent Alliance is still sample data.** Guilds and sync are real now; the
-   tournament is not, because its prize is a discount on a bill that does not exist.
-
-And one thing you must not skip: this is a kids' app, so **COPPA and the app-store
-family policies apply before you collect one real child's data or take one real
-payment**. → [docs/LEGAL.md](docs/LEGAL.md)
+What is real now: accounts, two-device sync, payments through Stripe, the School
+League, push notifications. What still needs a person rather than code before real
+families use it (the operator's legal details, a lawyer on children's data, a real-phone
+test of notifications) is listed in **[docs/LAUNCH.md](docs/LAUNCH.md)**, which is the
+checklist to follow to go live.
 
 ---
 
@@ -97,9 +88,10 @@ the rest of the app.
 
 ## Deploying it
 
-Push this repository to GitHub, then connect it to [Vercel](https://vercel.com) or
-[Netlify](https://netlify.com). Both detect Vite automatically and deploy on every
-push. Step-by-step: [docs/DEPLOY.md](docs/DEPLOY.md).
+To go live for real families, follow **[docs/LAUNCH.md](docs/LAUNCH.md)** from the
+top: accounts, database, settings, scheduled jobs, legal. Cloudflare Pages is the
+recommended host there. [docs/DEPLOY.md](docs/DEPLOY.md) covers a quick preview deploy
+only.
 
 ---
 

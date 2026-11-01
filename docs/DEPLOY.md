@@ -1,5 +1,9 @@
 # Getting RankUp online
 
+> **This page is for a quick preview.** To launch for real families (database,
+> payments, scheduled jobs, legal), follow [LAUNCH.md](LAUNCH.md) instead; it
+> recommends Cloudflare Pages.
+
 You need it deployed for two reasons beyond sharing it: **the camera only works on
 `https://`**, and the AI photo check needs a server to hold the API key.
 

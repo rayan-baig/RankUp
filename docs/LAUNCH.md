@@ -12,10 +12,11 @@ this.
 ## 1. Create the accounts (about an hour)
 
 - [ ] **Supabase** — [supabase.com](https://supabase.com), new project, pick a
-      region near your users. **Stay on the free tier.** It covers 500MB of
-      database and 50,000 monthly users; you will not outgrow it for a long
-      time, and upgrading before something actually breaks is $25/month spent on
-      nothing.
+      region near your users. The free tier is enough while you build and
+      test (500MB of database, 50,000 monthly users). **Before real families
+      use it, move to the paid plan** (about $25/month): the free plan does not
+      keep backups you can count on, and losing the database loses every
+      family. See docs/BACKUPS.md.
 - [ ] **A host.** Two are configured and the same `/api` handlers run on either:
       - **Cloudflare Pages** — free, and its free tier permits commercial use.
         Config is `wrangler.toml`; the Node handlers run through
@@ -43,16 +44,24 @@ this.
 
 In the Supabase SQL editor, run these **in order**:
 
+(The same order the tests use, in `supabase/test/run.sh`. Leaving one out
+breaks that feature for every family: co-parents, the allowance pot,
+charity and referrals each live in their own file.)
+
 - [ ] `supabase/schema.sql`
 - [ ] `supabase/sync.sql`
+- [ ] `supabase/coparents.sql`
+- [ ] `supabase/allowance.sql`
 - [ ] `supabase/guilds.sql`
 - [ ] `supabase/notifications.sql`
 - [ ] `supabase/consent.sql`
 - [ ] `supabase/billing.sql`
+- [ ] `supabase/charity.sql`
 - [ ] `supabase/alliances.sql`
 - [ ] `supabase/schools.sql`
 - [ ] `supabase/reminders.sql`
 - [ ] `supabase/digests.sql`
+- [ ] `supabase/referrals.sql`
 - [ ] `supabase/retention.sql`
 - [ ] `supabase/crashes.sql`
 - [ ] `supabase/health.sql`
@@ -126,12 +135,17 @@ longer than you need them, which matters more than the bill.
 - [ ] `npx web-push generate-vapid-keys` → the two VAPID values
 - [ ] Supabase → Settings → API → the project URL, the **anon** key, and the
       **service role** key
-- [ ] Stripe → three **monthly** prices ($4.99 Starter, $9.99 Standard, $15.99
-      Elite) plus three **one-off** Flash Ticket prices ($2.99 / 2, $5.99 / 5,
-      $11.99 / 12) → six price ids, as `STRIPE_PRICE_STARTER`,
-      `_STANDARD`, `_ELITE`, `_FLASH_2`, `_FLASH_5`, `_FLASH_12`. There is no
-      annual plan; do not create one without also changing
-      `api/create-checkout.js`.
+- [ ] Stripe → the family plans and the ticket packs:
+      - Starter is **free**: no Stripe price.
+      - Standard: $9.99 a month **and** $99.90 a year → `STRIPE_PRICE_STANDARD`,
+        `STRIPE_PRICE_STANDARD_YEAR`.
+      - Elite: $15.99 a month **and** $159.90 a year → `STRIPE_PRICE_ELITE`,
+        `STRIPE_PRICE_ELITE_YEAR`.
+      - Three **one-off** Flash Ticket prices ($2.99 / 2, $5.99 / 5,
+        $11.99 / 12) → `STRIPE_PRICE_FLASH_2`, `_FLASH_5`, `_FLASH_12`.
+      - School League: eight prices, see docs/PAYMENTS.md.
+      All the yearly ids must be set if you sell yearly: a missing one means
+      a family who just paid for a year is put back on the free plan.
 
       The three ticket packs exist because Stripe's flat 30c is 10% of a $2.99
       sale and 2.5% of an $11.99 one. They are sized against the shop, not

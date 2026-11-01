@@ -68,10 +68,13 @@ https://your-domain.com/api/stripe-webhook
 Subscribe it to:
 
 - `checkout.session.completed`
+- `checkout.session.async_payment_succeeded` (bank payments that clear later)
 - `customer.subscription.created`
 - `customer.subscription.updated`
 - `customer.subscription.deleted`
-- `invoice.payment_failed`
+- `invoice.paid` and `invoice.payment_succeeded` (record each renewal's money)
+- `invoice.payment_failed` (received and deliberately ignored: the
+  subscription's own status change is what moves the plan)
 
 Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
 
