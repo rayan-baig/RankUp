@@ -107,6 +107,16 @@ ok('but tells it nothing about the inside',
 const deep = await (await fetch(`${BASE}/api/health`, { headers: { Authorization: `Bearer ${CRON}` } })).json()
 ok('while the operator sees the jobs', Boolean(deep.jobs), `keys: ${Object.keys(deep).join(', ')}`)
 
+console.log('\n=== The owner\'s console can count families, and nobody else can ===')
+const noKey = await fetch(`${BASE}/api/stats`)
+ok('stats refuse a caller without the key', noKey.status === 401 || noKey.status === 404, `status ${noKey.status}`)
+if (process.env.STATS_KEY_FOR_TEST) {
+  const counted = await fetch(`${BASE}/api/stats`, { headers: { Authorization: `Bearer ${process.env.STATS_KEY_FOR_TEST}` } })
+  const body = await counted.json().catch(() => ({}))
+  ok('and answer the console with two numbers only', counted.status === 200 && Number.isInteger(body.users)
+    && Number.isInteger(body.active_users) && Object.keys(body).length === 2, JSON.stringify(body))
+}
+
 console.log('\n=== An unsigned Stripe event is never acted on ===')
 const forgedPayment = await post('/api/stripe-webhook',
   { type: 'customer.subscription.updated', data: { object: { id: 'sub_fake', status: 'active' } } })

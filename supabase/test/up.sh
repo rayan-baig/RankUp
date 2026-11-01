@@ -73,6 +73,7 @@ if [ "${1:-}" = "--cf" ]; then
     --binding SUPABASE_SERVICE_ROLE_KEY=service-role-key \
     --binding CRON_SECRET=test-cron-secret \
     --binding OPERATOR_SECRET=test-operator-secret \
+    --binding STATS_KEY=test-stats-key \
     --binding STRIPE_SECRET_KEY=sk_test_routing_only \
     --binding STRIPE_WEBHOOK_SECRET=whsec_test_local_only \
     --binding STRIPE_PRICE_STANDARD=price_test_standard_only \

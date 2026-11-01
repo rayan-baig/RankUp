@@ -111,3 +111,18 @@ end $$;
 
 revoke execute on function record_job_run(text, boolean, text) from public;
 revoke execute on function health_snapshot() from public;
+
+/**
+ * Two numbers for the owner's console (MTRX Horizon): how many families,
+ * and how many did anything in the last 30 days. Counts only. Called by
+ * api/stats.js with the service key; nobody else may call it.
+ */
+create or replace function usage_counts()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'families', (select count(*) from families),
+    'active_families', (select count(distinct family_id) from events
+                         where created_at > now() - interval '30 days')
+  )
+$$;
+revoke execute on function usage_counts() from public, anon, authenticated;
