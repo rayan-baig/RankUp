@@ -15,7 +15,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The browser suites alone take over half an hour: 27 of them, each a
+    # real browser driving the real app. Twenty minutes cut them off.
+    timeout-minutes: 75
 
     # The SQL suite needs a real Postgres. Row level security, the security
     # definer functions and the money-handling rules cannot be checked against
