@@ -73,9 +73,9 @@ export default function ParentPairKid() {
           {linked.namesake && (
             <div className="text-left mb-6">
               <Banner tone="warn" icon="📱" title={`This is a new profile for ${linked.name}`}>
-                {linked.name} already has a profile linked to another phone, and that one keeps its
-                XP and quests. To carry on with it on this phone instead, unlink the old phone
-                below before linking a new one.
+                {linked.name} already has a profile on another phone, which keeps its XP and
+                quests; this phone has a new one. To move a child to a new phone, unlink the old
+                phone on this screen first, then link the new one.
               </Banner>
             </div>
           )}
