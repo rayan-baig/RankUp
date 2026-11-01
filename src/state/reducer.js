@@ -1000,7 +1000,9 @@ export function reducer(state, action) {
       if (['already_claimed', 'already_safe', 'already_pending', 'repeat'].includes(reason)) return state
       let next = state
       let message = 'Something you did was not accepted by the server, so this phone is being brought up to date.'
-      if (reason === 'decided') {
+      // reject_submission answers 'decided'; approve_submission raises, and its
+      // words arrive as the reason. Both mean another phone got there first.
+      if (reason === 'decided' || /already decided/.test(reason || '')) {
         message = 'That submission had already been decided on another device.'
       } else if (fn === 'submit_quest') {
         const quest = state.quests.find((q) => q.id === args.p_quest_id)

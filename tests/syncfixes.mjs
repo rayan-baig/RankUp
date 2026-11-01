@@ -241,6 +241,11 @@ ok('an already-claimed bonus changes nothing and says nothing',
   reducer(calm, { type: 'RPC_REFUSED', fn: 'claim_login_bonus', reason: 'already_claimed' }) === calm)
 ok('a decision made on another phone is described as that',
   /another device/.test(reducer(calm, { type: 'RPC_REFUSED', fn: 'approve_submission', reason: 'decided' }).syncNotice?.message || ''))
+// approve_submission raises rather than answering { ok: false }, so what
+// arrives is the database's own words. Two parents accepting the same chore
+// is the ordinary way to get here.
+ok('so is the error approve_submission actually raises',
+  /another device/.test(reducer(calm, { type: 'RPC_REFUSED', fn: 'approve_submission', reason: 'submission already decided' }).syncNotice?.message || ''))
 
 console.log('\n=== Second review: waiting for a sign-in never gives a write up ===')
 reset()
