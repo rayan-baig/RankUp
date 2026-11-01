@@ -30,23 +30,17 @@ throw up surprises. Doing it on the smallest possible slice keeps those surprise
 Rewrite `src/lib/storage.js` properly. Add a loading state on first open, and an error
 state for "that save did not go through". The screens do not change.
 
-### 4. Photos into Supabase Storage
+### 4. Photos: nothing to do
 
-Upload the JPEG, store the URL. Fixes the 5 MB browser quota and the silent dropping of
-old photos.
-
-Make the retention decision here rather than later: consider deleting photos as soon as
-a parent has reviewed them. → [LEGAL.md](LEGAL.md)
+RankUp keeps no photos. A parent who wants proof gets one by message from the child's
+own camera app.
 
 ### 5. Multiple kids on multiple devices
 
 Once one kid syncs, several is mostly repetition — but test the case that actually
 matters: two kids submitting at the same time while a parent approves.
 
-### 6. Turn on the Claude photo check in production
-
-Layer 2 is written and works. Deploy it with a key, watch the cost for a week, and read
-the reports it produces against photos you know the truth about. → [AI-CHECK.md](AI-CHECK.md)
+### 6. (Removed: the AI photo check. RankUp keeps no photos.)
 
 ### 7. Real reminders
 

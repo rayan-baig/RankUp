@@ -22,8 +22,8 @@ than one who knows to check.
 
 | Event | Who is told | Wording |
 |---|---|---|
-| A kid submits photo proof | The parents' devices | "Ava finished a quest — *Make your bed* is waiting for you to review." |
-| A parent approves | That kid's device | "Approved! 🎉 *Make your bed* earned you 45 XP." |
+| A kid taps "I did it!" | The parents' devices | "Ava finished a quest — *Make your bed* is waiting for you to review." |
+| A parent accepts | That kid's device | "Approved! 🎉 *Make your bed* earned you 45 XP." |
 | A parent sends work back | That kid's device | "Sent back to redo. Tap to see why." |
 | A daily reminder falls due | This device | Whatever the reminder is called |
 

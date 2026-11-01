@@ -6,8 +6,7 @@ attorney who knows children's apps before you collect one real child's data or t
 real payment. That does not need to happen before you build — it must happen before you
 launch.
 
-Right now the app collects nothing: everything is in one browser, nothing is transmitted
-(other than a photo to the AI check, if you enable it). That is why development is safe
+Right now the app collects nothing: everything is in one browser, nothing is transmitted. That is why development is safe
 today and launch is not.
 
 ---
@@ -19,9 +18,10 @@ children under 13 that collects personal information. RankUp is squarely directe
 children.
 
 "Personal information" includes more than you would expect: a name, an account
-identifier, a persistent device ID, and **photographs of a child or their home**. The
-core mechanic of this app is children taking photos in their own bedrooms. That is
-about as sensitive as children's data gets.
+identifier, a persistent device ID, and **photographs of a child or their home**.
+RankUp collects no photographs at all: a child who wants to show a parent a finished
+chore sends a picture from their own camera app, by message, outside RankUp. That
+removes the most sensitive kind of children's data from the app entirely.
 
 What COPPA requires, roughly:
 
@@ -42,8 +42,7 @@ Penalties are per-child and large. This is not a "fix it later" area.
 
 | Feature | The question to ask |
 |---|---|
-| Photo proof | How long are children's home photos retained? Who can see them? Are they encrypted at rest? Can a parent delete them all in one action? |
-| AI photo check | Sending a child's photo to a third-party API is a disclosure to a third party. It must be named in the privacy policy and covered by consent. Check the retention terms of whatever API you use. |
+| Photos | None. RankUp never takes, sends or keeps a photo. Say so in the privacy policy. |
 | Guild chat | Kid-to-kid messaging needs consent on **both** sides, plus moderation, reporting and blocking. Consider whether it is worth the risk at all. |
 | Guild rosters | A child's display name visible to children in other families is a disclosure. |
 | Accessibility notes | Notes a parent writes about a child's disability are **health-adjacent data** and are among the most sensitive fields in the app. They should never leave the parent's own account. |
@@ -82,25 +81,21 @@ target-age declaration, and no collection of Android advertising IDs from childr
 ## Practical order of operations
 
 1. **Now (development):** collect nothing real. Use invented names. Do not put a real
-   child's photo into a deployed build.
+   child's details into a deployed build.
 2. **Before a pilot with real families:** privacy policy, terms, a working delete-my-data
    route, and written parental consent — even if it is a paper form for five families
    you know personally.
 3. **Before public launch:** the paid legal consultation, a real verifiable-consent
-   mechanism, a data-retention policy that actually deletes things, and a security review
-   of how photos are stored.
+   mechanism, a data-retention policy that actually deletes things, and a security review.
 4. **Before charging money:** everything in [PAYMENTS.md](PAYMENTS.md), plus confirming
    the purchaser is the parent.
 
 ---
 
-## One product decision worth making early
+## One product decision already made
 
-Ask whether the photos need to be kept at all after a parent has approved a submission.
-If a photo is deleted the moment it has been reviewed, an enormous amount of risk simply
-disappears — you cannot leak what you do not store. The app would lose a history view
-that nobody has asked for. That trade seems obviously worth it, and it is much easier to
-build that way from the start than to retrofit.
+RankUp keeps no photos. You cannot leak what you do not store. A parent who wants proof
+gets a picture from the child's own camera app, by message, and taps Accept in RankUp.
 
 ---
 

@@ -423,7 +423,7 @@ export default function ParentSettings() {
         }
       >
         <p className="text-sm">
-          Deletes every kid, quest, photo and XP total stored in this browser. There is no backup and
+          Deletes every kid, quest and XP total stored in this browser. There is no backup and
           no undo.
         </p>
       </Modal>

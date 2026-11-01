@@ -61,7 +61,7 @@ and the kid's screen replaces the submit controls with a "sent to your parent"
 message once work is in.
 
 All three are needed. Without them a kid could reopen a submitted quest, send a
-second photo, and have a parent approve both — collecting the XP twice for one
+second time, and have a parent accept both — collecting the XP twice for one
 chore. `tests/integrity.mjs` checks this on every run.
 
 ### Streaks
@@ -121,7 +121,6 @@ regardless of theme — a chart has to stay readable and colour-blind safe in al
 |---|---|---|
 | Price | $9.99/mo | $15.99/mo |
 | Quests and kid profiles | Unlimited | Unlimited |
-| AI photo verification | ✓ | ✓ |
 | All 15 kid + 10 parent themes | ✓ | ✓ |
 | Guild size | 5 | **10** (Megacluster) |
 | XP multiplier | ×1 | **×1.5** permanent |

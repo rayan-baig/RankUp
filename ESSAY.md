@@ -199,10 +199,10 @@ on behalf of a child in a different family.
 
 ## The serverless layer
 
-There are ten endpoints, in `api/`, served through a single Cloudflare Pages
+The endpoints live in `api/`, served through a single Cloudflare Pages
 adapter at `functions/api/[[route]].js` or directly on Vercel.
 
-`verify-photo` is the Claude vision call. `create-checkout` and `billing-portal`
+There is no photo endpoint: RankUp keeps no photos. `create-checkout` and `billing-portal`
 are Stripe. `stripe-webhook` is the only thing permitted to change a family's
 tier. `send-push`, `send-reminders` and `send-digests` are the notification
 jobs. `settle-alliances` closes the monthly family contest and awards the
@@ -998,7 +998,7 @@ problems that the development server hid.
 
 The database files are applied in a specific order documented in
 `docs/BACKEND.md`. Payments setup is in `docs/PAYMENTS.md`, push in
-`docs/NOTIFICATIONS.md`, the photo check in `docs/AI-CHECK.md`, deployment in
+`docs/NOTIFICATIONS.md`, deployment in
 `docs/DEPLOY.md`, legal and retention in `docs/LEGAL.md`, and the running
 decision log in `docs/DECISIONS.md`.
 

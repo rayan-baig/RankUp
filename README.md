@@ -2,10 +2,10 @@
 
 Chores turned into a game, so parents stop nagging and kids stop dreading them.
 
-A parent assigns a quest. The kid does it and photographs the result inside the app.
-An AI check flags anything that looks faked — as **advice**, never as a decision. The
-parent approves or sends it back. Approval awards XP and a currency that matches the
-world the kid chose.
+A parent assigns a quest. The kid does it and taps **I did it!** If the parent wants
+proof, the kid sends a photo from their own camera app, by message — RankUp itself
+never takes or keeps photos. The parent taps **Accept** or sends it back. Accepting
+awards XP and a currency that matches the world the kid chose.
 
 RankUp is a **mobile-friendly web app**, not a native iOS/Android app. It runs in a
 phone browser and can be added to the home screen. That choice is deliberate — see
@@ -66,13 +66,12 @@ checklist to follow to go live.
 ```
 src/
   data/            the 15 kid themes, 10 parent themes, quest packs
-  lib/             game rules (XP, levels), the photo checks, storage, routing
+  lib/             game rules (XP, levels), storage, routing
   lib/sync/        device pairing — the local and Supabase backends
   state/           the single store: what the app knows and how it changes
   components/      reusable pieces (buttons, cards, avatar, camera, charts)
   screens/         one file per screen, split into kid/ and parent/
 api/
-  verify-photo.js  the server-side Claude vision call (see docs/AI-CHECK.md)
 supabase/
   schema.sql       the database design, ready for when you wire up a backend
 tests/
@@ -104,7 +103,6 @@ only.
 | [docs/SYNC.md](docs/SYNC.md) | Linking devices, and how data travels between them |
 | [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) | Telling people when something happened |
 | [docs/BACKEND.md](docs/BACKEND.md) | How to add accounts and sync with Supabase |
-| [docs/AI-CHECK.md](docs/AI-CHECK.md) | How photo verification works and how to turn on the Claude layer |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Getting it online |
 | [docs/PAYMENTS.md](docs/PAYMENTS.md) | What subscriptions would actually take |
 | [docs/LEGAL.md](docs/LEGAL.md) | COPPA, Kids Category, Play Families |

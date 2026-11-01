@@ -20,7 +20,7 @@ export const TIERS = {
    * they had seen a chore go round once. A family app lives or dies on the
    * first week, and you cannot have a first week behind a paywall.
    *
-   * Starter still runs the entire loop — assign, photograph, approve, XP,
+   * Starter still runs the entire loop — assign, do it, accept, XP,
    * themes, streaks, the arcade — so what someone loses at the end of a trial
    * is a smaller app, not a locked one. That is what makes the upgrade a
    * choice rather than a ransom.
@@ -32,12 +32,12 @@ export const TIERS = {
     order: 0,
     guildSize: 0,
     xpMultiplier: 1,
-    limits: { maxKids: 1, aiPhotoCheck: false, guilds: false },
+    limits: { maxKids: 1, guilds: false },
     features: [
       'Free, for as long as you like',
       'One child',
       'Unlimited quests and rewards',
-      'Photo proof, reviewed by you',
+      'You accept every finished chore',
       'All 15 kid themes and 10 parent themes',
     ],
   },
@@ -58,10 +58,9 @@ export const TIERS = {
     order: 1,
     guildSize: 5,
     xpMultiplier: 1,
-    limits: { maxKids: Infinity, aiPhotoCheck: true, guilds: true },
+    limits: { maxKids: Infinity, guilds: true },
     features: [
       'Unlimited children',
-      'AI photo verification on every proof',
       '5-player guilds',
       'Everything in Starter',
     ],
@@ -74,7 +73,7 @@ export const TIERS = {
     order: 2,
     guildSize: 10,
     xpMultiplier: 1.5,
-    limits: { maxKids: Infinity, aiPhotoCheck: true, guilds: true },
+    limits: { maxKids: Infinity, guilds: true },
     features: [
       'Everything in Standard',
       'Permanent 1.5× XP boost',
@@ -100,8 +99,7 @@ export const TIER_LADDER = Object.values(TIERS).sort((a, b) => a.order - b.order
 export const PLAN_COMPARISON = [
   { label: 'Children', value: (t) => (t.limits.maxKids === Infinity ? 'Unlimited' : String(t.limits.maxKids)) },
   { label: 'Quests & rewards', value: () => 'Unlimited' },
-  { label: 'Photo proof', value: () => true },
-  { label: 'AI photo check', value: (t) => t.limits.aiPhotoCheck },
+  { label: 'Parent accepts every chore', value: () => true },
   /*
    * Counted, not asserted.
    *

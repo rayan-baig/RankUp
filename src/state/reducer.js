@@ -126,10 +126,6 @@ export function canAddKid(state) {
   return state.kids.length < kidLimit(state)
 }
 
-/** Starter reviews photos by eye. The AI second opinion is what Standard adds. */
-export function aiCheckAllowed(state) {
-  return planOf(state).limits.aiPhotoCheck === true
-}
 
 export function guildsAllowedByPlan(state) {
   return planOf(state).limits.guilds === true
@@ -714,9 +710,10 @@ export function reducer(state, action) {
       const quest = state.quests.find((q) => q.id === action.submission.questId)
       if (alreadyPending || !quest || quest.status === 'approved') return state
 
-      // The image is carried to the server, not kept in state: this device
-      // holds it in its photo store, addressed by photoId.
-      const { photoData, ...fields } = action.submission
+      // No photo, ever: RankUp does not take or keep pictures. A parent who
+      // wants proof gets it from the child's own camera app, by message.
+      const { photoData: _ignored, ...fields } = action.submission
+      void _ignored
       const submission = {
         id: uid('sub'),
         status: 'pending',
@@ -733,8 +730,8 @@ export function reducer(state, action) {
         p_quest_id: submission.questId,
         p_kid_id: submission.kidId,
         p_payload: {
-          photo_data: photoData || null,
-          photo_hash: submission.hash || null,
+          photo_data: null,
+          photo_hash: null,
           capture_source: submission.captureSource || 'none',
           note: submission.note || '',
           test_score: submission.testScore ?? null,

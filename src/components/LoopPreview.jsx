@@ -6,8 +6,8 @@ import { useEffect, useState } from 'react'
  * A first-time visitor will not read four bullet points about how the loop
  * works, and a screenshot of a chore list looks like every other chore list.
  * This runs the loop in front of them in about seven seconds: a chore is
- * assigned, a photo is taken, the app checks it, the parent approves, XP
- * lands. It is the one thing on the front door doing any selling.
+ * assigned, the child taps "I did it!", sends a photo from their own camera
+ * app if the parent wants one, the parent accepts, XP lands. It is the one thing on the front door doing any selling.
  *
  * Deliberately not a video and not an image. A video costs a download, needs
  * re-recording every time a screen changes, and is the first thing to look
@@ -22,9 +22,9 @@ import { useEffect, useState } from 'react'
 
 const BEATS = [
   { label: 'You assign it', ms: 1700 },
-  { label: 'They photograph it', ms: 1900 },
-  { label: 'The app checks the photo', ms: 2100 },
-  { label: 'You approve. They level up.', ms: 2400 },
+  { label: 'They do it', ms: 1900 },
+  { label: 'They show you, in a message', ms: 2100 },
+  { label: 'You accept. They level up.', ms: 2400 },
 ]
 
 export default function LoopPreview() {
@@ -192,55 +192,39 @@ function Assigned({ still }) {
 function Viewfinder({ still }) {
   return (
     <div className="absolute inset-0 grid place-items-center">
-      <svg width="86" height="86" viewBox="0 0 86 86" aria-hidden="true">
-        {[[6, 6, 1, 1], [80, 6, -1, 1], [6, 80, 1, -1], [80, 80, -1, -1]].map(([x, y, dx, dy]) => (
-          <path
-            key={`${x}-${y}`}
-            d={`M ${x} ${y + 18 * dy} L ${x} ${y} L ${x + 18 * dx} ${y}`}
-            fill="none"
-            stroke="var(--accent)"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-          />
-        ))}
-      </svg>
       <span
-        className="absolute rounded-full"
+        className="font-display font-extrabold rounded-full px-4 py-2"
         style={{
-          width: 30, height: 30,
-          border: '3px solid var(--ink)',
+          fontSize: 12,
+          background: 'var(--accent)',
+          color: 'var(--accent-ink, #fff)',
           animation: still ? undefined : 'rankup-pulse 900ms ease-in-out infinite',
         }}
-      />
+      >
+        ✅ I did it!
+      </span>
     </div>
   )
 }
 
+/* The photo travels the way the family already talks: a message, not RankUp. */
 function Checking({ still }) {
   return (
     <div className="absolute inset-0 grid place-items-center px-3">
       <div className="w-full">
         <div
-          className="w-full rounded-full overflow-hidden mb-2"
-          style={{ height: 5, background: 'color-mix(in srgb, var(--ink) 12%, transparent)' }}
+          className="rounded-2xl px-3 py-2 ml-auto"
+          style={{
+            maxWidth: '80%',
+            fontSize: 10,
+            background: 'color-mix(in srgb, var(--accent) 18%, transparent)',
+            animation: still ? undefined : 'rankup-slide-up 380ms 200ms both',
+          }}
         >
-          <div
-            style={{
-              height: '100%',
-              background: 'var(--accent)',
-              width: still ? '100%' : undefined,
-              animation: still ? undefined : 'rankup-sweep 1400ms ease-out both',
-            }}
-          />
+          📷 Ava sent a photo
         </div>
-        <p className="text-center" style={{ fontSize: 10, color: 'var(--ink-muted)' }}>
-          Checking it is a real photo, taken now
-        </p>
-        <p
-          className="text-center font-display font-extrabold mt-1.5"
-          style={{ fontSize: 12, color: 'var(--good)', animation: still ? undefined : 'rankup-pop 400ms 1300ms both' }}
-        >
-          Looks genuine · 94
+        <p className="text-center mt-2" style={{ fontSize: 10, color: 'var(--ink-muted)' }}>
+          From her own camera app. RankUp keeps no photos.
         </p>
       </div>
     </div>

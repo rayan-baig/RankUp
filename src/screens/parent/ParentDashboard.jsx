@@ -30,7 +30,6 @@ export default function ParentDashboard() {
   }, [state.events])
 
   const totalWeekXp = Object.values(weekXp).reduce((a, b) => a + b, 0)
-  const flagged = pending.filter((s) => s.report && s.report.verdict !== 'looks_good')
 
   return (
     <Screen>
@@ -51,13 +50,13 @@ export default function ParentDashboard() {
       {pending.length > 0 && (
         <Card className="mb-3" style={{ borderColor: 'var(--warn)' }}>
           <div className="flex items-center gap-3">
-            <span className="text-2xl" aria-hidden="true">📸</span>
+            <span className="text-2xl" aria-hidden="true">✅</span>
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-sm">
                 {pending.length} {pending.length === 1 ? 'submission' : 'submissions'} waiting
               </div>
               <div className="text-xs text-muted">
-                {flagged.length > 0 ? `${flagged.length} flagged by the photo check` : 'None flagged by the photo check'}
+                Waiting for you to accept
               </div>
             </div>
             <Button className="px-3 py-2 min-h-0 text-sm" onClick={() => navigate('/parent/approvals')}>Review</Button>

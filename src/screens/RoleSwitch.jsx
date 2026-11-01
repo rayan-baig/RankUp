@@ -89,7 +89,7 @@ export default function RoleSwitch() {
       <Card className="text-center">
         <div className="text-2xl mb-1" aria-hidden="true">🔐</div>
         <h2 className="font-display font-bold mb-1">Parent Mode</h2>
-        <p className="text-xs text-muted mb-3">Assign quests, approve photo proof, manage the plan.</p>
+        <p className="text-xs text-muted mb-3">Assign quests, accept finished chores, manage the plan.</p>
         <Button className="w-full" onClick={openParent}>
           {state.demo || !state.family.pin ? 'Open Parent Mode' : 'Enter PIN'}
         </Button>

@@ -127,10 +127,7 @@ export function buildDemoFamily() {
    * One chore waiting, and deliberately the timer one.
    *
    * The review queue is the best screen in the app and an empty one shows
-   * nothing. It has no photo because there is no honest way to produce one: a
-   * drawn placeholder would be flagged by the app's own fake-photo check, and
-   * a stock bedroom would be a photograph of a child's room that nobody
-   * consented to. The timer evidence is real and needs no picture.
+   * nothing. The timer evidence is real and needs no picture.
    */
   const reading = s.quests.find((q) => q.title === 'Read for 20 minutes' && q.kidId === ava.id)
   if (reading) {

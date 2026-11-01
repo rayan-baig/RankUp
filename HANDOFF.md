@@ -229,7 +229,7 @@ Block Craft at 125 becomes **The Nether Portal**; at 250, **The End**; at 399,
                               ▼
 ┌────────────────────────────────────────────────────────────┐
 │ SERVERLESS (api/, served by functions/api/[[route]].js)     │
-│  verify-photo · create-checkout · billing-portal            │
+│  create-checkout · billing-portal                           │
 │  stripe-webhook · send-push · send-reminders                │
 │  send-digests · settle-alliances · run-retention · health   │
 │  school-checkout · settle-schools · operator-schools        │
@@ -573,34 +573,16 @@ and testing the dealer's bust first, each make the suite fail.
 
 ---
 
-## 11. The AI photo check
+## 11. No photos (the AI photo check was removed)
 
-`src/lib/aiVerify.js` + `api/verify-photo.js`. Full write-up in `docs/AI-CHECK.md`.
+RankUp used to take a proof photo, check it on the phone and optionally with an
+AI model. All of that is gone. The kid taps "I did it!"; if the parent wants
+proof, the kid sends a photo from their own camera app, by message; the parent
+taps **Accept** in RankUp. RankUp never takes, sends or keeps a picture.
 
-**It is advisory. It never approves or rejects anything.** Deliberate product
-rule, not a limitation.
-
-**Layer 1 — on device.** Always runs. No key, no upload, no cost. Catches the
-mechanical cheats: a screenshot, a photo of a screen, a re-used photo from an
-earlier submission, a photo taken long before the quest was opened, a thumb over
-the lens. Built on a Laplacian-variance sharpness measure and a dHash for
-duplicate detection (`src/lib/imaging.js`).
-
-**Layer 2 — Claude vision.** Only if `VITE_AI_VERIFY_URL` is set and
-`api/verify-photo.js` is deployed with `ANTHROPIC_API_KEY`. This is the layer
-that answers "does this actually show a made bed?" Defaults to Haiku for cost;
-`AI_VERIFY_MODEL` can raise it.
-
-Three verdicts: `looks_good` ✅ · `needs_review` 👀 · `suspicious` ⚠️
-
-Cost control: checks are rationed per family, require a signed-in caller, and
-`refund_photo_check` returns the quota when a call fails. One commit cut the
-running cost by about three quarters; `docs/AI-CHECK.md` records what a check
-costs so nobody optimises the wrong thing.
-
-`tests/photocheck.mjs` is named *“Does the photo check accuse honest children?”*
-
----
+`photo_data` and `photo_hash` still exist as database columns so old rows and
+old phones keep working, but `submit_quest` always stores null in them, and the
+retention job clears anything an older version left behind.
 
 ## 12. Plans, billing and Charity Week
 
@@ -839,7 +821,7 @@ was actually made in this repo.
 RankUp/
 ├── HANDOFF.md                  ← this file
 ├── README.md
-├── docs/                       AI-CHECK BACKEND DECISIONS DEPLOY GAME-DESIGN
+├── docs/                       BACKEND DECISIONS DEPLOY GAME-DESIGN
 │                               LAUNCH LEGAL NOTIFICATIONS PAYMENTS ROADMAP
 │                               STATUS SYNC
 ├── src/

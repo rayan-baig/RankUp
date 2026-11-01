@@ -53,7 +53,7 @@ export default class ErrorBoundary extends Component {
           <h1 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 8px' }}>Something broke</h1>
           <p style={{ opacity: 0.75, fontSize: 15, lineHeight: 1.5, margin: '0 0 20px' }}>
             Sorry — that is our fault, not yours. <strong>Nothing has been lost.</strong> Your
-            family's quests, photos and XP are all still saved.
+            family's quests and XP are all still saved.
           </p>
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>

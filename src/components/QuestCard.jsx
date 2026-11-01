@@ -99,7 +99,7 @@ export default function QuestCard({ quest, onClick, currency, showStatus = true 
             <span className="chip" style={{ color: diff.color, borderColor: diff.color }}>{diff.label}</span>
             {quest.adaptive && <span className="chip" style={{ color: 'var(--accent-2)', borderColor: 'var(--accent-2)' }}>♿ Adaptive</span>}
             {quest.doubleXp && <span className="chip" style={{ color: 'var(--warn)', borderColor: 'var(--warn)' }}>⚡ 2× XP</span>}
-            {quest.requiresPhoto && <span className="chip">📷 Photo</span>}
+            {quest.requiresPhoto && <span className="chip">📷 Show a parent</span>}
             {quest.timerSeconds > 0 && <span className="chip">⏱ {formatDuration(quest.timerSeconds * 1000)}</span>}
             {quest.testScore && <span className="chip">📊 Score</span>}
             {REPEATS.has(quest.recurrence) && <span className="chip">{REPEAT_CHIP[quest.recurrence]}</span>}

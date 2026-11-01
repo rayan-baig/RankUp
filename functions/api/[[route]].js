@@ -35,7 +35,6 @@ const ROUTES = {
   'operator-schools': () => import('../../api/operator-schools.js'),
   'school-checkout': () => import('../../api/school-checkout.js'),
   'stripe-webhook': () => import('../../api/stripe-webhook.js'),
-  'verify-photo': () => import('../../api/verify-photo.js'),
 }
 
 /**

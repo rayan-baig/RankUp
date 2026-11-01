@@ -34,9 +34,6 @@ export default function TrialBanner() {
       ? `${extra[0]}'s profile would be put on hold`
       : `${extra.length} of your children's profiles would be put on hold`)
   }
-  if (plan.limits.aiPhotoCheck && !paid.limits.aiPhotoCheck) {
-    losing.push('photos would come to you unchecked')
-  }
   /*
    * There is deliberately no line about guilds here.
    *

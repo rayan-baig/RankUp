@@ -93,8 +93,8 @@ export default function JoinFamily({ onBack }) {
       )}
 
       <Card className="text-sm text-muted">
-        You will see the same children, chores and photos they do, and you can
-        approve anything they can. Nothing about their phone changes.
+        You will see the same children and chores they do, and you can
+        accept anything they can. Nothing about their phone changes.
       </Card>
 
       <div className="flex-1" />

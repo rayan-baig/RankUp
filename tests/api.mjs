@@ -45,11 +45,6 @@ await db.query(
   `insert into parents (user_id, family_id, name) values ($1, $3, 'API Parent'), ($2, $4, 'API Outsider')
      on conflict do nothing`, [PARENT, OUTSIDER, FAMILY, OTHER_FAMILY])
 
-const checksUsed = async () => {
-  const r = await db.query('select ai_checks_used from families where id = $1', [FAMILY])
-  return r.rows[0]?.ai_checks_used ?? null
-}
-
 const post = (path, body, token) =>
   fetch(`${BASE}${path}`, {
     method: 'POST',
@@ -59,7 +54,6 @@ const post = (path, body, token) =>
 
 console.log('\n=== Nothing works without a token ===')
 ok('a push with no token is refused', (await post('/api/send-push', { familyId: FAMILY, role: 'parent', kind: 'reminder' })).status === 401)
-ok('a photo check with no token is refused', (await post('/api/verify-photo', { imageDataUrl: 'x' })).status === 401)
 ok('a checkout with no token is refused', (await post('/api/create-checkout', { tier: 'standard' })).status === 401)
 ok('a school checkout with no token is refused', (await post('/api/school-checkout', { cycle: 'month' })).status === 401)
 const parentAsSchool = await post('/api/school-checkout', { cycle: 'month' }, PARENT)
@@ -78,15 +72,9 @@ const forged = await post('/api/send-push',
   { familyId: FAMILY, role: 'parent', kind: 'anything', title: 'Send money', body: 'to this account' }, PARENT)
 ok('an unknown notice kind is refused outright', forged.status === 400, `status ${forged.status}`)
 
-console.log('\n=== A photo that was never looked at does not cost a check ===')
-// The endpoint claimed the allowance and THEN parsed the image, so a picture
-// that was too large or in the wrong format spent one of the family's two
-// hundred and returned 400 without giving it back.
-const before = await checksUsed()
-const badImage = await post('/api/verify-photo', { imageDataUrl: 'data:text/plain;base64,aGVsbG8=' }, PARENT)
-const after = await checksUsed()
-ok('a malformed image is refused', badImage.status === 400, `status ${badImage.status}`)
-ok('and it cost the family nothing', after === before, `used ${before} → ${after}`)
+console.log('\n=== RankUp takes no photos ===')
+const noPhotoCheck = await post('/api/verify-photo', { imageDataUrl: 'x' }, PARENT)
+ok('there is no photo-check address any more', noPhotoCheck.status === 404, `status ${noPhotoCheck.status}`)
 
 console.log('\n=== The scheduled jobs are not open to the public ===')
 for (const job of ['run-retention', 'send-reminders', 'send-digests', 'settle-alliances', 'settle-schools']) {

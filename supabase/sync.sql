@@ -269,7 +269,9 @@ begin
     note, test_score, elapsed_ms, on_time, ai_verdict, ai_score, ai_report, status
   ) values (
     p_submission_id, v_family, p_quest_id, p_kid_id,
-    p_payload->>'photo_hash', p_payload->>'photo_data',
+    -- No photograph is ever stored: RankUp takes none. A phone running an
+    -- older version may still send one, and it is dropped here.
+    null, null,
     coalesce(p_payload->>'capture_source', 'none'),
     coalesce(p_payload->>'note', ''),
     nullif(p_payload->>'test_score', '')::int,

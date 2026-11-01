@@ -77,7 +77,6 @@ if [ "${1:-}" = "--cf" ]; then
     --binding STRIPE_SECRET_KEY=sk_test_routing_only \
     --binding STRIPE_WEBHOOK_SECRET=whsec_test_local_only \
     --binding STRIPE_PRICE_STANDARD=price_test_standard_only \
-    --binding ANTHROPIC_API_KEY=sk-ant-test-routing-only \
     --binding VAPID_PUBLIC_KEY="$VP" \
     --binding VAPID_PRIVATE_KEY="$VS" \
     --binding VAPID_SUBJECT=mailto:test@example.com \

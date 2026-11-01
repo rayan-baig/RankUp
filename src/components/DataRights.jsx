@@ -84,9 +84,9 @@ export default function DataRights() {
           email, no waiting.
         </p>
 
-        <Banner tone="good" icon="📸" title="Photos are not kept">
-          A chore photo is deleted the instant you approve or send it back. We do not store a
-          history of them. Anything you never get round to reviewing is deleted after two weeks.
+        <Banner tone="good" icon="📸" title="No photos, ever">
+          RankUp never takes, sends or keeps a photo. If your child shows you a picture, it comes
+          from their own camera app, by message, and stays there.
         </Banner>
 
         <Button variant="soft" className="w-full mb-2" disabled={busy} onClick={download}>
@@ -132,7 +132,7 @@ export default function DataRights() {
         }
       >
         <p className="text-sm">
-          Withdrawing consent deletes your children's profiles, quests, photos and progress. Your
+          Withdrawing consent deletes your children's profiles, quests and progress. Your
           own account stays, but you will not be able to add a child again without consenting
           afresh.
         </p>
@@ -152,7 +152,7 @@ export default function DataRights() {
         }
       >
         <p className="text-sm mb-3">
-          This removes your account, every child profile, every quest, every photo and all
+          This removes your account, every child profile, every quest and all
           progress. It cannot be undone.
         </p>
         <Field label="Type DELETE to confirm">

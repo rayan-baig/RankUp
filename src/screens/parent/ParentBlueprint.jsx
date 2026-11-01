@@ -201,15 +201,13 @@ export default function ParentBlueprint({ initialKidId }) {
 
           <Banner tone="info" icon="🤖" title="How this is built">
             The charts and the read-out are computed from this family's own activity log on this
-            device. Nothing is sent anywhere. The photo check is the only part of RankUp that talks
-            to an AI service, and only when you have configured a key.
+            device. Nothing is sent anywhere.
           </Banner>
 
           <div className="flex flex-wrap gap-1.5 mt-3">
             <Chip>Level {levelFromXp(kid.xp).level}</Chip>
             <Chip>🔥 {kid.streak.count}-day streak</Chip>
             {report.adaptiveCount > 0 && <Chip tone="var(--accent-2)">♿ {report.adaptiveCount} adaptive completed</Chip>}
-            {report.avgScore != null && <Chip>📷 Avg photo score {report.avgScore}/100</Chip>}
           </div>
         </>
       )}
@@ -244,9 +242,7 @@ function buildReadout(r, kid) {
     else if (r.approvalRate < 60) out.push({ icon: '↩️', text: `Only ${r.approvalRate}% of submissions were approved. That usually means the "what counts as done" wording needs to be more concrete, not that the kid is slacking.` })
   }
 
-  if (r.avgScore != null && r.avgScore < 60) {
-    out.push({ icon: '📷', text: `Photo checks are averaging ${r.avgScore}/100. Blurry or dark photos score low even when the chore is genuinely done — worth showing them how to frame a shot.` })
-  }
+
 
   if (r.byCategory.length === 1) {
     out.push({ icon: '🎯', text: `Everything approved was ${r.byCategory[0].label.toLowerCase()}. Widening the mix keeps the game from getting stale.` })

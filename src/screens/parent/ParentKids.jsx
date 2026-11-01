@@ -63,8 +63,8 @@ export default function ParentKids() {
           title={`${planOf(state).name} covers one child`}
           action={<Button className="px-3 py-2 min-h-0 text-sm" onClick={() => navigate('/parent/plan')}>See plans</Button>}
         >
-          Standard is $5 more a month and adds unlimited children, plus the AI check on every
-          photo. Nothing this child has earned is affected either way.
+          Standard ($9.99 a month) adds unlimited children. Nothing this child has earned is
+          affected either way.
         </Banner>
       )}
 
