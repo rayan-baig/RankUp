@@ -54,6 +54,27 @@ for (const [label, quest, sub, opts] of cases) {
   ok(label, p.xp === shown.xp && p.coins === shown.coins, `shown ${shown.xp}/${shown.coins}, paid ${p.xp}/${p.coins}`)
 }
 
+console.log('\n=== A score is a percentage ===')
+{
+  // 999 typed by mistake paid the top bonus on the phone, and the server
+  // refused it, bouncing the chore.
+  const s0 = createInitialState()
+  const base = {
+    ...s0,
+    family: { ...s0.family, id: 'fam', tier: 'standard' },
+    kids: [{ ...s0.kids?.[0], id: AVA, name: 'Ava', xp: 0, coins: 0, bestTimes: {}, streak: { count: 0, lastDay: null, freezeTokens: 0 } }],
+    quests: [{ id: 'q', kidId: AVA, status: 'open', xp: 30, testScore: true }],
+    submissions: [],
+  }
+  for (const [typed, kept] of [[999, 100], [-5, 0], [86.6, 87]]) {
+    const st = reducer(base, { type: 'SUBMIT_QUEST', submission: { questId: 'q', kidId: AVA, note: '', testScore: typed } })
+    const got = st.submissions[st.submissions.length - 1]?.testScore
+    ok(`a typed ${typed} is kept as ${kept}`, got === kept, `got ${got}`)
+  }
+  const detail = readFileSync(new URL('../src/screens/kid/QuestDetail.jsx', import.meta.url), 'utf8')
+  ok('the send button waits for a score from 0 to 100', /disabled=\{scoreMissing \|\| scoreTooHigh\}/.test(detail))
+}
+
 const screen = readFileSync(new URL('../src/screens/parent/ParentApprovals.jsx', import.meta.url), 'utf8')
 ok('the review screen works its number out with submissionReward', /submissionReward\(/.test(screen))
 

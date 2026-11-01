@@ -75,7 +75,7 @@ export default function QuestDetail({ questId }) {
         questId: quest.id,
         kidId: kid.id,
         note: note.trim(),
-        testScore: quest.testScore ? Number(score) || 0 : null,
+        testScore: quest.testScore ? Math.min(100, Number(score) || 0) : null,
         elapsedMs: quest.timerSeconds ? elapsed : null,
         onTime,
         captureSource: 'none',
@@ -83,6 +83,10 @@ export default function QuestDetail({ questId }) {
     })
     navigate('/kid/quests')
   }
+
+  // A test-score chore needs a score, and a score is a percentage.
+  const scoreMissing = Boolean(quest.testScore) && score === ''
+  const scoreTooHigh = Boolean(quest.testScore) && Number(score) > 100
 
   /* ---------- review before sending ---------- */
   if (mode === 'review' && isOpen) {
@@ -93,7 +97,7 @@ export default function QuestDetail({ questId }) {
         {quest.requiresPhoto && <ShowYourParent />}
 
         {quest.testScore && (
-          <Field label="Your score (%)" hint="80% or higher earns a bonus.">
+          <Field label="Your score (%)" hint={scoreTooHigh ? 'A score is 0 to 100.' : '80% or higher earns a bonus.'}>
             <TextInput value={score} onChange={(e) => setScore(e.target.value.replace(/\D/g, '').slice(0, 3))} inputMode="numeric" placeholder="e.g. 86" />
           </Field>
         )}
@@ -106,7 +110,7 @@ export default function QuestDetail({ questId }) {
           <Button variant="soft" className="flex-1" onClick={() => setMode('detail')}>
             Back
           </Button>
-          <Button className="flex-1" onClick={submit}>Send to parent</Button>
+          <Button className="flex-1" onClick={submit} disabled={scoreMissing || scoreTooHigh}>Send to parent</Button>
         </div>
       </Screen>
     )

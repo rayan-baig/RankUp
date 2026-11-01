@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
 import { levelFromXp, formatXp, xpToNext, liveStreak } from '../../lib/xp.js'
 import { nextEvolution, storyChapters } from '../../data/kidThemes.js'
 import { storyProgress, dragonFight, DRAGON_HP, HERO_HP } from '../../lib/dragonFight.js'
 import { isMarketOpen } from '../../data/marketSkins.js'
-import { dayKey, lastSevenDays } from '../../lib/dates.js'
+import { dayKey } from '../../lib/dates.js'
 import Avatar, { avatarTier, nextTierLevel, tiersFor } from '../../components/Avatar.jsx'
 import QuestCard from '../../components/QuestCard.jsx'
 import { Screen, Card, Button, ProgressBar, Stat, SectionTitle, EmptyState, Banner, Chip } from '../../components/ui.jsx'
@@ -43,13 +43,6 @@ export default function KidHome() {
   const waiting = quests.filter((q) => q.status === 'submitted')
   // A day later than today (the server's, after a zone change) counts as claimed.
   const bonusAvailable = !kid.lastLoginBonus || kid.lastLoginBonus < dayKey()
-
-  const weekXp = useMemo(() => {
-    const week = new Set(lastSevenDays())
-    return state.events
-      .filter((e) => e.kidId === kid.id && e.type === 'quest_approved' && week.has(e.day))
-      .reduce((sum, e) => sum + (e.meta?.xp || 0), 0)
-  }, [state.events, kid.id])
 
   const unreadNotes = state.notes.filter((n) => n.kidId === kid.id && n.from === 'parent' && !n.read)
 

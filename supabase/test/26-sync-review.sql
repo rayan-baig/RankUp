@@ -212,3 +212,21 @@ begin
     (select count(*) from submissions where quest_id = '7f555555-0000-0000-0000-0000000000a2') = 1);
 end $$;
 reset role;
+
+-- ---------- a score is held to 0..100, not refused ----------
+-- 999 typed by mistake broke the table's 0..100 check, so the whole chore
+-- bounced back to the child's phone.
+insert into quests (id, family_id, kid_id, title, test_score) values
+  ('7f555555-0000-0000-0000-0000000000a3', '7f222222-0000-0000-0000-00000000000a',
+   '7f444444-0000-0000-0000-0000000000a1', 'Spelling test', true);
+set role app_user;
+do $$
+begin
+  perform become('7f111111-0000-0000-0000-00000000000a');
+  perform ok('a score of 999 is accepted',
+    (submit_quest('7f666666-0000-0000-0000-0000000000a3', '7f555555-0000-0000-0000-0000000000a3',
+                  '7f444444-0000-0000-0000-0000000000a1', '{"test_score": 999}'::jsonb)->>'ok')::boolean);
+  perform ok('and kept as 100',
+    (select test_score from submissions where id = '7f666666-0000-0000-0000-0000000000a3') = 100);
+end $$;
+reset role;

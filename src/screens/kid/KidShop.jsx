@@ -1,7 +1,7 @@
 import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import { formatXp } from '../../lib/xp.js'
 import { relativeTime } from '../../lib/dates.js'
-import { Screen, Card, Button, SectionTitle, EmptyState, Stat, Chip } from '../../components/ui.jsx'
+import { Screen, Card, Button, SectionTitle, EmptyState, Chip } from '../../components/ui.jsx'
 import HeroArt from '../../components/HeroArt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
 import { isMarketOpen, nextOpeningLabel } from '../../data/marketSkins.js'

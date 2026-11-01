@@ -274,7 +274,9 @@ begin
     null, null,
     coalesce(p_payload->>'capture_source', 'none'),
     coalesce(p_payload->>'note', ''),
-    nullif(p_payload->>'test_score', '')::int,
+    -- A score is a percentage. Held to 0..100 rather than refused, so a
+    -- typo like 999 from an older phone does not bounce the whole chore.
+    least(100, greatest(0, nullif(p_payload->>'test_score', '')::int)),
     nullif(p_payload->>'elapsed_ms', '')::int,
     coalesce((p_payload->>'on_time')::boolean, true),
     p_payload->>'ai_verdict',

@@ -753,6 +753,11 @@ export function reducer(state, action) {
       // wants proof gets it from the child's own camera app, by message.
       const { photoData: _ignored, ...fields } = action.submission
       void _ignored
+      // A score is a percentage: 999 typed by mistake paid the top bonus here
+      // and was refused by the server, bouncing the chore.
+      if (typeof fields.testScore === 'number') {
+        fields.testScore = Math.max(0, Math.min(100, Math.round(fields.testScore)))
+      }
       const submission = {
         id: uid('sub'),
         status: 'pending',

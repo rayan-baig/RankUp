@@ -17,3 +17,18 @@ npm-debug.log*
 # never edited, and half a megabyte of bundled app — not worth versioning.
 dist-demo/
 preview/
+
+# Never commit: secrets, local databases, logs, keys, backups.
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.log
+backups/
+__pycache__/

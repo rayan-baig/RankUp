@@ -194,6 +194,11 @@ check the deploy rather than guess at it.
 
 ## 6. Deploy and check it
 
+**Every update after launch:** run the SQL files again, in the order in
+`docs/BACKEND.md`, *before* the new app build goes live. They are safe to run
+over a live database, and a new app talking to an old database fails on the
+functions that changed.
+
 - [ ] Push to GitHub; Vercel builds automatically.
 - [ ] Open the site on a **real phone**, not a desktop browser.
 - [ ] Add it to the home screen (Share → Add to Home Screen).

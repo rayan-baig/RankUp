@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "RankUp \u2014 chores turned into a game. Mobile-first React web app.",
+  "description": "RankUp — chores turned into a game. Mobile-first React web app.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -16,7 +16,6 @@
     "test:db": "./supabase/test/run.sh"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.120.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "stripe": "^22.6.0",
