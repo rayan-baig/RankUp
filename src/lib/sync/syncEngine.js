@@ -163,7 +163,20 @@ export const SYNC_STATUS = {
   DISABLED: 'disabled',
 }
 
-export function createSyncEngine({ dispatch, onStatus }) {
+/**
+ * Did the server turn this call down?
+ *
+ * Most database functions here answer `{ ok: false, reason }` rather than
+ * raising, and the engine used to count any answer at all as success. So a
+ * submission the server refused (the chore was not open by its clock, or
+ * already had one waiting) left the phone showing "waiting for approval"
+ * for ever, and a refused redemption left the coins looking spent.
+ */
+function refusal(result) {
+  return result && typeof result === 'object' && !Array.isArray(result) && result.ok === false ? result : null
+}
+
+export function createSyncEngine({ dispatch, onStatus, onRefused, prepare }) {
   let running = false
   let timer = null
   let inFlight = false
@@ -189,8 +202,21 @@ export function createSyncEngine({ dispatch, onStatus }) {
     for (const op of ops) {
       try {
         if (op.type === 'upsert') await transport.upsert(op.table, op.row)
+        else if (op.type === 'patch') await transport.patch(op.table, op.row.id, op.row)
         else if (op.type === 'delete') await transport.delete(op.table, op.id)
-        else if (op.type === 'rpc') await transport.rpc(op.fn, op.args)
+        else if (op.type === 'rpc') {
+          // A photo travels by reference in the outbox and is attached here,
+          // at the moment of sending: a second copy of every proof photo in
+          // the outbox is what filled the storage quota.
+          const args = prepare ? await prepare(op) : op.args
+          const refused = refusal(await transport.rpc(op.fn, args))
+          if (refused) {
+            console.warn(`[RankUp] The server turned down ${op.fn}:`, refused.reason || 'no reason given')
+            removeOps([op.id])
+            onRefused?.({ fn: op.fn, args: op.args, reason: refused.reason || null })
+            continue
+          }
+        }
         removeOps([op.id])
         sent += 1
       } catch (err) {
@@ -210,6 +236,7 @@ export function createSyncEngine({ dispatch, onStatus }) {
         console.warn(`[RankUp] Server rejected ${op.type} on ${op.table || op.fn}:`, err.message)
         const { dead } = recordFailure(op.id)
         if (!dead) removeOps([op.id])
+        if (op.type === 'rpc') onRefused?.({ fn: op.fn, args: op.args, reason: err.message || null })
       }
     }
     return { sent }
@@ -254,7 +281,9 @@ export function createSyncEngine({ dispatch, onStatus }) {
       const result = await pull()
       // A send that is waiting its turn again is still an error worth showing,
       // but the pull above ran regardless, so the screen is at least current.
-      if (pushed.error) setStatus(SYNC_STATUS.ERROR, pushed.error.message)
+      if (transport.needsSignIn?.()) {
+        setStatus(SYNC_STATUS.ERROR, 'Your sign-in has expired. Sign in again to keep syncing; nothing waiting has been lost.')
+      } else if (pushed.error) setStatus(SYNC_STATUS.ERROR, pushed.error.message)
       else setStatus(SYNC_STATUS.IDLE)
       return result
     } catch (err) {

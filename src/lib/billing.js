@@ -10,7 +10,7 @@
  * interface as not being a purchase.
  */
 
-import { transport, getSession } from './sync/transport.js'
+import { transport, freshAccessToken } from './sync/transport.js'
 
 const CHECKOUT_URL = import.meta.env?.VITE_CHECKOUT_URL || '/api/create-checkout'
 const PORTAL_URL = import.meta.env?.VITE_PORTAL_URL || '/api/billing-portal'
@@ -23,7 +23,7 @@ export function billingLive() {
 }
 
 async function post(url, body) {
-  const token = getSession()?.access_token
+  const token = await freshAccessToken()
   if (!token) return { ok: false, reason: 'signed_out' }
   try {
     const res = await fetch(url, {

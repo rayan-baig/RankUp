@@ -1,4 +1,4 @@
-import { useSync } from '../state/AppContext.jsx'
+import { useApp, useSync } from '../state/AppContext.jsx'
 import { SYNC_STATUS } from '../lib/sync/syncEngine.js'
 
 /**
@@ -11,6 +11,8 @@ import { SYNC_STATUS } from '../lib/sync/syncEngine.js'
  */
 export default function SyncBadge({ className = '' }) {
   const { status, pending, error, syncNow, configured } = useSync()
+  const { state, dispatch } = useApp()
+  const notice = state.syncNotice
 
   if (!configured) {
     return (
@@ -29,8 +31,29 @@ export default function SyncBadge({ className = '' }) {
     [SYNC_STATUS.IDLE]: { dot: 'var(--good)', text: pending ? `${pending} waiting to send` : 'Up to date' },
     [SYNC_STATUS.SYNCING]: { dot: 'var(--accent)', text: 'Syncing…' },
     [SYNC_STATUS.OFFLINE]: { dot: 'var(--warn)', text: pending ? `Offline · ${pending} waiting` : 'Offline' },
-    [SYNC_STATUS.ERROR]: { dot: 'var(--bad)', text: 'Sync problem' },
+    [SYNC_STATUS.ERROR]: {
+      dot: 'var(--bad)',
+      text: /sign in again/i.test(error || '') ? 'Sign in again to sync' : 'Sync problem',
+    },
   }[status] || { dot: 'var(--ink-muted)', text: '' }
+
+  // Something already shown as done was turned down by the server. Say what,
+  // once; tapping it clears it.
+  if (notice) {
+    return (
+      <button
+        type="button"
+        onClick={() => dispatch({ type: 'CLEAR_SYNC_NOTICE' })}
+        className={`inline-flex items-center gap-1.5 text-[11px] text-left ${className}`}
+        style={{ color: 'var(--ink)' }}
+        title="Tap to dismiss"
+        role="status"
+      >
+        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--warn)' }} aria-hidden="true" />
+        {notice.message}
+      </button>
+    )
+  }
 
   return (
     <button

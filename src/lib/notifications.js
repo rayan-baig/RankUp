@@ -16,7 +16,7 @@
  * which is in force rather than implying background delivery it cannot do.
  */
 
-import { transport, getSession } from './sync/transport.js'
+import { transport, freshAccessToken } from './sync/transport.js'
 
 const VAPID_PUBLIC_KEY = import.meta.env?.VITE_VAPID_PUBLIC_KEY || ''
 const PREF_KEY = 'rankup.notifications.v1'
@@ -181,8 +181,7 @@ const SEND_URL = import.meta.env?.VITE_PUSH_SEND_URL || '/api/send-push'
  */
 export async function notifyRemote({ familyId, role, kidId, kind, args }) {
   if (!pushConfigured() || !familyId) return { ok: false, reason: 'not_configured' }
-  const session = getSession()
-  const token = session?.access_token
+  const token = await freshAccessToken()
   if (!token) return { ok: false, reason: 'signed_out' }
 
   try {

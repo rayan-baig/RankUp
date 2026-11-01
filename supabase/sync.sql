@@ -291,10 +291,53 @@ end $$;
  * The payout rule is mirrored in coinsForScore() in src/data/minigames.js.
  * supabase/test/09-minigames.sql checks the two agree.
  */
+/**
+ * Receipts for calls that move a balance, so a retry is not a second charge.
+ *
+ * A phone that sends a request and never hears back (a tunnel, a closed app,
+ * a reset connection) sends it again; it cannot know whether the first one
+ * landed. Without this, every one of those retries was a second game paid, a
+ * second tax taken, a second payout recorded. Each such call now carries a
+ * request id made on the device when the action happened, and the function
+ * writes its answer here. The same id again returns the same answer and
+ * changes nothing.
+ *
+ * Read and written only by the security-definer functions below.
+ */
+create table if not exists rpc_receipts (
+  id         uuid primary key,
+  kid_id     uuid,
+  fn         text not null,
+  result     jsonb not null,
+  created_at timestamptz not null default now()
+);
+alter table rpc_receipts enable row level security;
+revoke all on rpc_receipts from anon, authenticated;
+
+create or replace function rpc_receipt(p_request_id uuid, p_kid_id uuid)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select result || jsonb_build_object('repeat', true)
+    from rpc_receipts where id = p_request_id and kid_id is not distinct from p_kid_id
+$$;
+revoke execute on function rpc_receipt(uuid, uuid) from public, anon, authenticated;
+
+create or replace function keep_rpc_receipt(p_request_id uuid, p_kid_id uuid, p_fn text, p_result jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if p_request_id is not null then
+    insert into rpc_receipts (id, kid_id, fn, result) values (p_request_id, p_kid_id, p_fn, p_result)
+    on conflict (id) do nothing;
+  end if;
+  return p_result;
+end $$;
+revoke execute on function keep_rpc_receipt(uuid, uuid, text, jsonb) from public, anon, authenticated;
+
+drop function if exists play_minigame(uuid, text, int);
 create or replace function play_minigame(
   p_kid_id uuid,
   p_game   text,
-  p_score  int
+  p_score  int,
+  p_request_id uuid default null
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -304,6 +347,7 @@ declare
   v_paid   int;
   v_today  int;
   v_best   int;
+  v_prior  jsonb;
 begin
   select * into v_kid from kids where id = p_kid_id for update;
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
@@ -313,6 +357,10 @@ begin
      and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id and role = 'parent') then
     raise exception 'not allowed to play for this child';
   end if;
+
+  -- The same game, sent again because the phone never heard the answer.
+  v_prior := rpc_receipt(p_request_id, p_kid_id);
+  if v_prior is not null then return v_prior; end if;
 
   /*
    * The game ids the arcade actually ships. This list and MINIGAMES in
@@ -361,15 +409,15 @@ begin
   values (v_kid.family_id, p_kid_id, 'minigame_played',
           jsonb_build_object('game', p_game, 'score', v_score, 'coins', v_paid));
 
-  return jsonb_build_object(
+  return keep_rpc_receipt(p_request_id, p_kid_id, 'play_minigame', jsonb_build_object(
     'ok', true, 'coins', v_paid, 'score', v_score, 'best', v_best,
     'capped', v_paid < v_wanted,
     'tokens_left', v_kid.play_tokens - 1,
     'earned_today', v_today + v_paid
-  );
+  ));
 end $$;
 
-grant execute on function play_minigame(uuid, text, int) to authenticated;
+grant execute on function play_minigame(uuid, text, int, uuid) to authenticated;
 
 /** The parent sends work back to be redone. */
 create or replace function reject_submission(
@@ -483,15 +531,36 @@ $$;
  * Idempotent through last_reset_on, so two devices opening at breakfast do
  * not bring the same chore back twice.
  */
-create or replace function reset_due_recurring_quests()
+drop function if exists reset_due_recurring_quests();
+create or replace function reset_due_recurring_quests(p_tz text default null)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
   v_family uuid := current_family_id();
-  v_today  date := current_date;
+  v_today  date;
+  v_tz     text;
   v_ids    uuid[];
 begin
   if v_family is null then return jsonb_build_object('ok', false, 'reason', 'no_family'); end if;
+
+  /*
+   * "Today" where the family is, not in UTC.
+   *
+   * This used current_date, which is UTC. The phone reopens a daily chore on
+   * its own local day, so for a family east of UTC (Sydney: every morning
+   * until 11:00) the phone showed the chore open, the child did it, and the
+   * server refused the submission because by its clock the day had not
+   * turned. The work vanished.
+   *
+   * The phone says which zone it is in. Any real zone is within a day of
+   * UTC, so the worst a changed setting can do is move a chore's day by one,
+   * and last_reset_on still lets it come back only once per day.
+   */
+  v_tz := coalesce(nullif(p_tz, ''), (select timezone from families where id = v_family), 'UTC');
+  if not exists (select 1 from pg_timezone_names where name = v_tz) then
+    v_tz := 'UTC';
+  end if;
+  v_today := (now() at time zone v_tz)::date;
 
   with due as (
     select q.id from quests q
@@ -515,7 +584,7 @@ begin
   return jsonb_build_object('ok', true, 'reset', to_jsonb(v_ids), 'count', coalesce(array_length(v_ids, 1), 0));
 end $$;
 
-grant execute on function reset_due_recurring_quests() to authenticated;
+grant execute on function reset_due_recurring_quests(text) to authenticated;
 revoke execute on function recurring_quest_due(text, text, date, date) from public;
 
 /**
@@ -649,6 +718,15 @@ begin
      and not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id and role = 'parent') then
     raise exception 'not allowed';
   end if;
+  -- Sent again because the phone never heard back: the redemption id is the
+  -- request id. Charging first and then inserting "on conflict do nothing"
+  -- took the coins a second time and recorded one redemption.
+  if exists (select 1 from redemptions where id = p_redemption_id) then
+    if exists (select 1 from redemptions where id = p_redemption_id and kid_id = p_kid_id) then
+      return jsonb_build_object('ok', true, 'repeat', true);
+    end if;
+    return jsonb_build_object('ok', false, 'reason', 'not_found');
+  end if;
   if v_kid.coins < v_reward.cost then
     return jsonb_build_object('ok', false, 'reason', 'insufficient');
   end if;
@@ -662,29 +740,34 @@ begin
 end $$;
 
 /** The Currency Tax tier of the System Override Protocol. Parent only. */
-create or replace function apply_currency_tax(p_kid_id uuid, p_percent int)
+drop function if exists apply_currency_tax(uuid, int);
+create or replace function apply_currency_tax(p_kid_id uuid, p_percent int, p_request_id uuid default null)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
   v_kid kids;
   v_taken int;
+  v_prior jsonb;
 begin
   select * into v_kid from kids where id = p_kid_id for update;
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
   if not exists (select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id and role = 'parent') then
     raise exception 'only a parent in this family can apply a tax';
   end if;
+  v_prior := rpc_receipt(p_request_id, p_kid_id);
+  if v_prior is not null then return v_prior; end if;
 
   v_taken := floor(v_kid.coins * greatest(1, least(p_percent, 100)) / 100.0);
   update kids set coins = coins - v_taken where id = p_kid_id;
-  return jsonb_build_object('ok', true, 'amount', v_taken);
+  return keep_rpc_receipt(p_request_id, p_kid_id, 'apply_currency_tax',
+                          jsonb_build_object('ok', true, 'amount', v_taken));
 end $$;
 
 grant execute on function submit_quest(uuid, uuid, uuid, jsonb) to anon, authenticated;
 grant execute on function reject_submission(uuid, text) to authenticated;
 grant execute on function claim_login_bonus(uuid, int) to anon, authenticated;
 grant execute on function redeem_reward(uuid, uuid, uuid) to anon, authenticated;
-grant execute on function apply_currency_tax(uuid, int) to authenticated;
+grant execute on function apply_currency_tax(uuid, int, uuid) to authenticated;
 
 /**
  * Creating a family, for a brand-new account.
@@ -744,3 +827,51 @@ begin
 end $$;
 
 grant execute on function create_family(text, text) to authenticated;
+
+/**
+ * A parent handing over a reward.
+ *
+ * "Mark given" used to change only the phone it was tapped on. Redemptions are
+ * written by functions, never by a device directly, so nothing carried it to
+ * the server: the next pull put it back to "requested" on that phone, and every
+ * other device kept showing the reward as owed. Parent only; supporters watch.
+ */
+create or replace function mark_redemption_given(p_redemption_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_family uuid := current_family_id();
+begin
+  if v_family is null or not is_parent() then
+    raise exception 'only a parent can mark a reward as given';
+  end if;
+  update redemptions
+     set status = 'given', given_at = coalesce(given_at, now())
+   where id = p_redemption_id and family_id = v_family;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'not_found');
+  end if;
+  return jsonb_build_object('ok', true);
+end $$;
+grant execute on function mark_redemption_given(uuid) to authenticated;
+
+/**
+ * Cut a child's phone off.
+ *
+ * "Unlink" said it removed the device's access and did not: it changed a field
+ * on the parent's own phone, and the child's phone (or a lost one) kept reading
+ * and writing as the child. Access comes from kids.user_id, so this clears it.
+ * Pairing again gives the new phone its own identity.
+ */
+create or replace function unlink_kid_device(p_kid_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_family uuid := current_family_id();
+begin
+  if v_family is null or not is_parent() then
+    raise exception 'only a parent can unlink a device';
+  end if;
+  update kids set user_id = null where id = p_kid_id and family_id = v_family;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no_such_kid');
+  end if;
+  return jsonb_build_object('ok', true);
+end $$;
+grant execute on function unlink_kid_device(uuid) to authenticated;

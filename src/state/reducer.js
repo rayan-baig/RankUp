@@ -26,8 +26,15 @@ function mapKid(state, kidId, fn) {
  * effects while keeping the arguments where they are actually computed.
  */
 function queueRpc(state, fn, args) {
-  return { ...state, syncQueue: [...(state.syncQueue || []), { fn, args }] }
+  // A call that moves a balance carries an id made now, when the thing
+  // happened. If the phone sends it, never hears back and sends it again, the
+  // server recognises the id and does not charge or pay a second time.
+  const withId = RETRY_SAFE.has(fn) && !args?.p_request_id ? { ...args, p_request_id: uid('req') } : args
+  return { ...state, syncQueue: [...(state.syncQueue || []), { fn, args: withId }] }
 }
+
+/** Functions that take a request id. Mirrored by rpc_receipts in supabase/sync.sql. */
+const RETRY_SAFE = new Set(['play_minigame', 'buy_market_skin', 'apply_currency_tax', 'record_payout', 'record_gift'])
 
 /**
  * Ask for a notification to be sent, without the reducer doing it itself.
@@ -206,11 +213,16 @@ export function reducer(state, action) {
       const snap = action.snapshot
       let next = { ...state }
 
-      for (const [snapshotKey, { key, mapper }] of Object.entries(ENTITIES)) {
+      // Rows with a change of this device's still waiting to go are left as
+      // they are: the server's copy is older. They come back with the next
+      // pull once the change has landed. See the engine's dispatch.
+      const pending = new Set(action.pending || [])
+      for (const [snapshotKey, { key, mapper, table }] of Object.entries(ENTITIES)) {
         const incoming = snap[snapshotKey]
         if (!incoming?.length) continue
         const byId = new Map((next[key] || []).map((item) => [item.id, item]))
         for (const row of incoming) {
+          if (pending.has(`${table}:${row.id}`) && byId.has(row.id)) continue
           byId.set(row.id, mapper.fromRow(row, byId.get(row.id) || {}))
         }
         next = { ...next, [key]: [...byId.values()] }
@@ -341,9 +353,16 @@ export function reducer(state, action) {
     }
 
     /** Cut a kid's device loose. Their profile and progress stay with the family. */
+    // The server is what decides which phone is the child's, so the unlink has
+    // to reach it: this used to change only the parent's own screen, and the
+    // child's phone (or a lost one) kept full access.
     case 'UNLINK_KID_DEVICE':
       return logEvent(
-        mapKid(state, action.kidId, (k) => ({ ...k, pairedDeviceAt: null, pairedCodeId: null })),
+        queueRpc(
+          mapKid(state, action.kidId, (k) => ({ ...k, pairedDeviceAt: null, pairedCodeId: null })),
+          'unlink_kid_device',
+          { p_kid_id: action.kidId },
+        ),
         { type: 'device_unlinked', kidId: action.kidId },
       )
 
@@ -668,7 +687,7 @@ export function reducer(state, action) {
             : q,
         ),
       }
-      return logEvent(queueRpc(next, 'reset_due_recurring_quests', {}), {
+      return logEvent(queueRpc(next, 'reset_due_recurring_quests', action.tz ? { p_tz: action.tz } : {}), {
         type: 'quests_returned',
         meta: { count: due.length },
       })
@@ -937,9 +956,50 @@ export function reducer(state, action) {
     case 'CLEAR_LEVEL_UP':
       return { ...state, pendingLevelUp: null }
 
-    /** The provider has moved these into the outbox. */
+    /** The provider has moved these into the outbox; `keep` are the ones it could not. */
     case 'DRAIN_SYNC_QUEUE':
-      return { ...state, syncQueue: [] }
+      return { ...state, syncQueue: action.keep?.length ? action.keep : [] }
+
+    /** Try the ones storage refused again. A new array is what makes the provider look. */
+    case 'RETRY_SYNC_QUEUE':
+      return state.syncQueue?.length ? { ...state, syncQueue: [...state.syncQueue] } : state
+
+    /**
+     * The server turned down something this phone had already shown as done.
+     *
+     * Put the phone's own picture back the way it was, as far as it can be
+     * known here, and say so. The engine also fetches the whole family again,
+     * which puts right anything this cannot (the server's balances, a quest's
+     * real status).
+     */
+    case 'RPC_REFUSED': {
+      const { fn, args = {} } = action
+      let next = state
+      let message = 'Something you did could not be saved, so it has been undone.'
+      if (fn === 'submit_quest') {
+        const quest = state.quests.find((q) => q.id === args.p_quest_id)
+        next = {
+          ...next,
+          submissions: next.submissions.filter((sub) => !(sub.id === args.p_submission_id && sub.status === 'pending')),
+          quests: next.quests.map((q) => (q.id === args.p_quest_id && q.status === 'submitted' ? { ...q, status: 'assigned' } : q)),
+        }
+        message = `"${quest?.title || 'A quest'}" was not sent: it was not open on the server. Check it and try again.`
+      } else if (fn === 'redeem_reward') {
+        const redemption = state.redemptions.find((r) => r.id === args.p_redemption_id)
+        next = { ...next, redemptions: next.redemptions.filter((r) => r.id !== args.p_redemption_id) }
+        if (redemption) next = mapKid(next, redemption.kidId, (k) => ({ ...k, coins: (k.coins || 0) + (redemption.cost || 0) }))
+        message = `"${redemption?.name || 'A reward'}" could not be claimed, so the coins are back.`
+      } else if (fn === 'mark_redemption_given') {
+        next = {
+          ...next,
+          redemptions: next.redemptions.map((r) => (r.id === args.p_redemption_id ? { ...r, status: 'requested', givenAt: null } : r)),
+        }
+      }
+      return { ...next, syncNotice: { message, at: Date.now() } }
+    }
+
+    case 'CLEAR_SYNC_NOTICE':
+      return state.syncNotice ? { ...state, syncNotice: null } : state
 
     case 'DRAIN_NOTICE_QUEUE':
       return { ...state, noticeQueue: [] }
@@ -1030,11 +1090,13 @@ export function reducer(state, action) {
       return logEvent(next, { type: 'reward_redeemed', kidId: kid.id, meta: { name: reward.name, cost: reward.cost } })
     }
 
+    // Reaches the server now. It used to change this phone only, so the next
+    // pull put the reward back to "owed" and every other phone said the same.
     case 'FULFIL_REDEMPTION':
-      return {
+      return queueRpc({
         ...state,
         redemptions: state.redemptions.map((r) => (r.id === action.redemptionId ? { ...r, status: 'given', givenAt: Date.now() } : r)),
-      }
+      }, 'mark_redemption_given', { p_redemption_id: action.redemptionId })
 
     /* ---------- notes ---------- */
 

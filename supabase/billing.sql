@@ -302,14 +302,16 @@ revoke execute on function credit_flash_tickets(uuid, int, text, jsonb) from pub
  * to set either. The kid's own client calls this; the function decides whether
  * they could afford it.
  */
+drop function if exists buy_market_skin(uuid, text, int, boolean);
 create or replace function buy_market_skin(
   p_kid_id uuid,
   p_skin_id text,
   p_cost int,
-  p_use_ticket boolean default false
+  p_use_ticket boolean default false,
+  p_request_id uuid default null
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_kid kids; v_family families; v_cost int := 0;
+declare v_kid kids; v_family families; v_cost int := 0; v_prior jsonb;
 begin
   select * into v_kid from kids where id = p_kid_id for update;
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
@@ -321,6 +323,15 @@ begin
   end if;
 
   select * into v_family from families where id = v_kid.family_id for update;
+
+  -- Sent again because the phone never heard back.
+  v_prior := rpc_receipt(p_request_id, p_kid_id);
+  if v_prior is not null then return v_prior; end if;
+  -- And a skin already owned is never charged for twice, whatever the id.
+  if coalesce(v_kid.skins, '[]'::jsonb) ? p_skin_id then
+    update kids set skin_id = p_skin_id where id = p_kid_id;
+    return jsonb_build_object('ok', true, 'skin_id', p_skin_id, 'tickets_spent', 0, 'owned', true);
+  end if;
 
   /*
    * What anything costs is decided here, not by the caller.
@@ -390,10 +401,11 @@ begin
   values (v_kid.family_id, p_kid_id, 'skin_bought',
           jsonb_build_object('skin', p_skin_id, 'ticket', p_use_ticket));
 
-  return jsonb_build_object('ok', true, 'skin_id', p_skin_id, 'tickets_spent', v_cost);
+  return keep_rpc_receipt(p_request_id, p_kid_id, 'buy_market_skin',
+                          jsonb_build_object('ok', true, 'skin_id', p_skin_id, 'tickets_spent', v_cost));
 end $$;
 
-grant execute on function buy_market_skin(uuid, text, int, boolean) to authenticated;
+grant execute on function buy_market_skin(uuid, text, int, boolean, uuid) to authenticated;
 
 /**
  * The Stripe customer for a family. Server-side only — it is not secret, but

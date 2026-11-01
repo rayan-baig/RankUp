@@ -3,9 +3,9 @@ import { reducer, isElite, guildCapacity, activeLockout } from './reducer.js'
 import { createInitialState, TIERS } from './initialState.js'
 import { buildDemoFamily, DEMO_VERSION } from '../lib/demoFamily.js'
 import { loadState, saveState, clearState, purgeOrphanPhotos, getPhoto, putPhoto } from '../lib/storage.js'
-import { createSyncEngine, SYNC_STATUS } from '../lib/sync/syncEngine.js'
-import { queueChanges, recordServerState } from '../lib/sync/shadow.js'
-import { enqueue as enqueueOp } from '../lib/sync/outbox.js'
+import { createSyncEngine, SYNC_STATUS, resetCursor } from '../lib/sync/syncEngine.js'
+import { queueChanges, recordDelivered, pendingRows } from '../lib/sync/shadow.js'
+import { enqueue as enqueueOp, readOutbox } from '../lib/sync/outbox.js'
 import { transport } from '../lib/sync/transport.js'
 import { NOTICES, notifyLocally, notifyRemote, getPrefs as notificationPrefs } from '../lib/notifications.js'
 import { resolveKidTheme } from '../data/kidThemes.js'
@@ -15,6 +15,11 @@ import { levelFromXp } from '../lib/xp.js'
 import { dayOf } from '../lib/recurrence.js'
 
 const AppContext = createContext(null)
+
+/** The phone's own time zone, so "today" on the server is the family's today. */
+function localZone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null } catch { return null }
+}
 
 function init() {
   const saved = loadState()
@@ -69,21 +74,9 @@ const syncs = (state) =>
   const [state, dispatch] = useReducer(reducer, undefined, init)
   const saveTimer = useRef(null)
   const engineRef = useRef(null)
-  /**
-   * The row ids the last pull actually delivered.
-   *
-   * This used to be a single boolean, and a boolean cannot tell the difference
-   * between "this state came from the server" and "this state came from the
-   * server AND has a local edit in it". Any change made in the same 250ms
-   * debounce window as a pull was written into the shadow as already-synced and
-   * therefore never sent — and never sent again, because a matching shadow
-   * entry suppresses all future attempts. Pulls run every 8-20 seconds, so this
-   * was routine, permanent, and silent.
-   *
-   * A set of ids fixes it: only what the server actually sent is recorded as
-   * the server's, and everything else still goes through queueChanges.
-   */
-  const mergedIds = useRef(new Set())
+  /** The state as last rendered, for the engine, which lives outside React. */
+  const latest = useRef(state)
+  latest.current = state
   const [sync, setSync] = useState({
     status: transport.isConfigured() ? SYNC_STATUS.IDLE : SYNC_STATUS.DISABLED,
     error: null,
@@ -92,22 +85,49 @@ const syncs = (state) =>
 
   // One engine for the life of the app.
   if (!engineRef.current) {
+    const photoFor = (submission) => (submission.photoId ? getPhoto(submission.photoId) : null)
     engineRef.current = createSyncEngine({
       dispatch: (action) => {
-        // Rows arriving FROM the server must not be queued straight back to it.
-        // Remember exactly which ones, so a local change that happens to be in
-        // flight at the same moment is not mistaken for one of them.
+        /*
+         * A pull landing next to a local edit.
+         *
+         * Three steps, in this order, before the merge:
+         *   1. Queue any edit that is still waiting for the debounced save, so
+         *      it is in the outbox rather than only in memory.
+         *   2. Note every row with a change of ours still waiting to go. The
+         *      merge leaves those alone: the server's copy is the older one.
+         *   3. Record what the server sent as the server's, from the rows it
+         *      sent rather than from the state a moment later.
+         * Before, a pull arriving within a quarter second of an edit wrote the
+         * server's old row over it, and recorded the result as synced, so the
+         * edit was gone on this phone and never sent. Lifting a lockdown as a
+         * pull landed left the child locked out.
+         */
         if (action?.type === 'MERGE_SNAPSHOT') {
-          for (const [table, rows] of Object.entries(action.snapshot || {})) {
-            if (!Array.isArray(rows)) continue
-            for (const row of rows) {
-              if (row?.id) mergedIds.current.add(`${table}:${row.id}`)
-            }
+          const current = latest.current
+          let pending = new Set()
+          if (syncs(current)) {
+            queueChanges(current, { photoFor, role: current.device?.role })
+            pending = pendingRows(readOutbox())
+            recordDelivered(current, action.snapshot, { photoFor, skip: pending })
           }
+          dispatch({ ...action, pending: [...pending] })
+          return
         }
         dispatch(action)
       },
       onStatus: setSync,
+      // The server said no. Undo what this phone showed, and fetch the
+      // family afresh so everything else it touched is put right too.
+      onRefused: (refusal) => {
+        dispatch({ type: 'RPC_REFUSED', ...refusal })
+        resetCursor()
+      },
+      prepare: async (op) => {
+        if (!op.photoRef || op.fn !== 'submit_quest') return op.args
+        const photo = getPhoto(op.photoRef)
+        return { ...op.args, p_payload: { ...op.args.p_payload, photo_data: photo || null } }
+      },
     })
   }
 
@@ -153,7 +173,7 @@ const syncs = (state) =>
   // same state when nothing is due, so this settles immediately rather than
   // chasing its own tail.
   useEffect(() => {
-    dispatch({ type: 'RETURN_RECURRING', today: dayOf(new Date()) })
+    dispatch({ type: 'RETURN_RECURRING', today: dayOf(new Date()), tz: localZone() })
   }, [state.quests])
 
   // And a phone left open overnight — a tablet on a kitchen counter is the
@@ -164,7 +184,7 @@ const syncs = (state) =>
       const now = dayOf(new Date())
       if (now === today) return
       today = now
-      dispatch({ type: 'RETURN_RECURRING', today: now })
+      dispatch({ type: 'RETURN_RECURRING', today: now, tz: localZone() })
     }, 60000)
     return () => clearInterval(timer)
   }, [])
@@ -244,14 +264,45 @@ const syncs = (state) =>
     return () => { cancelled = true }
   }, [state.submissions])
 
-  // Move any server calls the reducer asked for into the outbox.
+  /*
+   * Move any server calls the reducer asked for into the outbox.
+   *
+   * Only the ones that actually made it in leave the queue. The outbox lives in
+   * localStorage, which fills up (proof photos live there too), and when it
+   * refused the write this used to drain the queue anyway: a child's chore
+   * submission vanished while their phone said "waiting for approval" for
+   * ever, and could not be sent again because one was already waiting.
+   *
+   * A submission's photo goes in by reference when the photo store already
+   * has it, and is attached at the moment of sending. Carrying the picture in
+   * the outbox as well doubled the space every proof photo took.
+   */
+  const queueRetry = useRef(null)
   useEffect(() => {
-    if (!state.syncQueue?.length) return
-    if (syncs(state)) {
-      state.syncQueue.forEach(({ fn, args }) => enqueueOp({ type: 'rpc', fn, args }))
-      engineRef.current?.wake()
+    if (!state.syncQueue?.length) return undefined
+    if (!syncs(state)) {
+      dispatch({ type: 'DRAIN_SYNC_QUEUE' })
+      return undefined
     }
-    dispatch({ type: 'DRAIN_SYNC_QUEUE' })
+    const left = []
+    for (const item of state.syncQueue) {
+      const { fn, args } = item
+      let op = { type: 'rpc', fn, args }
+      const photoId = fn === 'submit_quest' && args?.p_payload?.photo_data
+        ? state.submissions.find((sub) => sub.id === args.p_submission_id)?.photoId
+        : null
+      if (photoId && getPhoto(photoId)) {
+        op = { ...op, args: { ...args, p_payload: { ...args.p_payload, photo_data: null } }, photoRef: photoId }
+      }
+      if (!enqueueOp(op)) left.push(item)
+    }
+    if (left.length < state.syncQueue.length) engineRef.current?.wake()
+    dispatch({ type: 'DRAIN_SYNC_QUEUE', keep: left })
+    if (!left.length) return undefined
+    console.warn(`[RankUp] ${left.length} change(s) could not be saved for sending yet (storage is full); retrying.`)
+    clearTimeout(queueRetry.current)
+    queueRetry.current = setTimeout(() => dispatch({ type: 'RETRY_SYNC_QUEUE' }), 15000)
+    return () => clearTimeout(queueRetry.current)
   }, [state.syncQueue])
 
   /**
@@ -353,14 +404,8 @@ const syncs = (state) =>
 
       if (syncs(state)) {
         const photoFor = (submission) => (submission.photoId ? getPhoto(submission.photoId) : null)
-        // Rows the server just sent are recorded as the server's...
-        if (mergedIds.current.size > 0) {
-          recordServerState(state, { photoFor, only: mergedIds.current })
-          mergedIds.current = new Set()
-        }
-        // ...and everything else still goes out. This runs on every save now,
-        // not only on saves that had no pull in them, which is what stops a
-        // local edit disappearing into a merge.
+        // Rows the server sent were recorded as the server's when they arrived
+        // (see the engine's dispatch above); everything else goes out.
         //
         // Anything queued should go now rather than wait out the idle backoff —
         // the poll slows down precisely because nothing is happening, and this

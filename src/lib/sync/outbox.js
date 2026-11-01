@@ -72,9 +72,9 @@ export function enqueue(op) {
   const ops = readOutbox()
   const entry = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`, attempts: 0, ...op }
 
-  if (op.type === 'upsert') {
+  if (op.type === 'upsert' || op.type === 'patch') {
     const index = ops.findIndex(
-      (o) => o.type === 'upsert' && o.table === op.table && o.row?.id === op.row?.id
+      (o) => (o.type === 'upsert' || o.type === 'patch') && o.table === op.table && o.row?.id === op.row?.id
         // Never collapse into an op that is CURRENTLY BEING SENT. push() holds
         // the id it is awaiting and deletes exactly that id when the request
         // succeeds — so folding a newer row into it meant the success of the
@@ -87,7 +87,12 @@ export function enqueue(op) {
       // The fresh row gets a fresh budget: inheriting a nearly-exhausted
       // attempts count would retire a brand-new write after one or two tries,
       // and inheriting a backoff would sit a brand-new write out for minutes.
-      ops[index] = { ...ops[index], row: op.row, attempts: 0 }
+      // A patch carries only the columns that changed, so two of them add up
+      // rather than the second replacing the first. A whole row (a new one,
+      // not yet on the server) stays a whole row, with the change folded in.
+      const waiting = ops[index]
+      const type = waiting.type === 'upsert' || op.type === 'upsert' ? 'upsert' : 'patch'
+      ops[index] = { ...waiting, type, row: { ...waiting.row, ...op.row }, attempts: 0 }
       delete ops[index].nextAttemptAt
       delete ops[index].firstFailedAt
       return writeOutbox(ops) ? ops[index] : null

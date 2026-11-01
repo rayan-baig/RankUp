@@ -129,7 +129,7 @@ begin
                              'reminder_schedules','digest_sends','job_runs',
                              'crash_reports','billing_events','push_subscriptions',
                              'parental_consents','deletions','referrals',
-                             'parent_invites','adult_invite_attempts');
+                             'parent_invites','adult_invite_attempts','rpc_receipts');
   perform ok('no table is left locked with no policy at all', coalesce(bare, '') = '',
              'bare: ' || coalesce(bare, ''));
 end $$;
