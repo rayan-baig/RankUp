@@ -96,7 +96,17 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: 'settle_failed', detail: err.message })
   }
 
-  const awards = settled?.awards || []
+  // Every prize still owed, not just this run's: one that failed last time
+  // (a Stripe error, a run cut short) is given now. The idempotency keys
+  // below make a second attempt at one already given a no-op in Stripe.
+  let owed
+  try {
+    owed = await serviceRpc('unapplied_alliance_awards', {})
+  } catch (err) {
+    await recordRun(serviceRpc, 'settle-alliances', false, err.message)
+    return res.status(502).json({ error: 'settle_failed', detail: err.message })
+  }
+  const awards = owed || []
   const stripe = makeStripe(STRIPE_SECRET)
   const applied = []
   const failed = []
@@ -108,26 +118,46 @@ export default async function handler(req, res) {
       failed.push({ alliance_id: award.alliance_id, reason: 'no_stripe_customer' })
       continue
     }
+    const awardMonth = `${award.month_key}-01`
     try {
-      // A fresh coupon per award, redeemable once, so a coupon id that leaked
-      // could not be reused by anyone else.
-      const coupon = await stripe.coupons.create({
-        percent_off: DISCOUNT_PERCENT,
-        duration: 'once',
-        max_redemptions: 1,
-        name: `Alliance winner ${month.slice(0, 7)}`,
-      })
-      await stripe.customers.update(award.stripe_customer_id, { coupon: coupon.id })
+      /*
+       * The prize, as account credit: 20% of one month at the price they pay.
+       *
+       * Credit rather than a percentage coupon. A coupon takes 20% off the
+       * next invoice, which on a yearly plan is 20% of a year, a prize ten
+       * times bigger for the same win. The price is read from their own
+       * subscription (a yearly price divided by twelve), in its currency.
+       *
+       * Any live subscription counts, trialing and past_due included: the
+       * free trial makes "trialing" common, and those winners were skipped.
+       */
+      const subs = await stripe.subscriptions.list({ customer: award.stripe_customer_id, status: 'all', limit: 10 })
+      const sub = subs.data.find((s) => ['active', 'trialing', 'past_due'].includes(s.status))
+      const price = sub?.items?.data?.[0]?.price
+      if (!sub || !price?.unit_amount) {
+        failed.push({ alliance_id: award.alliance_id, reason: 'no_live_subscription' })
+        continue
+      }
+      const perMonth = price.recurring?.interval === 'year' ? price.unit_amount / 12 : price.unit_amount
+      const credit = await stripe.customers.createBalanceTransaction(
+        award.stripe_customer_id,
+        {
+          amount: -Math.round(perMonth * DISCOUNT_PERCENT / 100),
+          currency: sub.currency || price.currency,
+          description: `Alliance winner, ${award.month_key}: ${DISCOUNT_PERCENT}% of a month`,
+          metadata: { alliance_id: award.alliance_id, month_key: award.month_key },
+        },
+        { idempotencyKey: `alliance-credit:${award.alliance_id}:${award.month_key}` },
+      )
       await serviceRpc('mark_alliance_award_applied', {
         p_alliance_id: award.alliance_id,
-        p_month: month,
-        p_coupon: coupon.id,
+        p_month: awardMonth,
+        p_coupon: credit.id,
       })
-      applied.push({ alliance_id: award.alliance_id, coupon: coupon.id })
+      applied.push({ alliance_id: award.alliance_id, credit: credit.id })
     } catch (err) {
-      // Left unapplied on purpose. The award row is already written, so the
-      // next run will not re-decide the month — but it also will not silently
-      // look paid, and the failure is visible in alliance_results.
+      // Left unapplied on purpose, so the next run tries it again rather than
+      // it silently looking paid.
       failed.push({ alliance_id: award.alliance_id, reason: err.message })
     }
   }
@@ -136,5 +166,5 @@ export default async function handler(req, res) {
   // which is exactly the state somebody has to go and look at.
   await recordRun(serviceRpc, 'settle-alliances', failed.length === 0,
     failed.length ? `${failed.length} award(s) not applied` : null)
-  return res.status(200).json({ ok: true, month, decided: awards.length, applied, failed })
+  return res.status(200).json({ ok: true, month, decided: (settled?.awards || []).length, owed: awards.length, applied, failed })
 }

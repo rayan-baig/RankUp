@@ -178,14 +178,13 @@ export async function asKid(page) {
   await page.waitForTimeout(600)
 }
 
-/** Open the camera, take a shot, run the check, and send it to the parent. */
+/**
+ * Mark a quest done and send it to the parent. RankUp takes no photos: proof,
+ * if a parent wants it, travels by the family's own messages.
+ */
 export async function submitPhotoProof(page) {
-  await page.getByRole('button', { name: /Take photo proof/ }).click()
-  await page.waitForTimeout(2500)
-  await page.getByRole('button', { name: 'Take photo' }).click()
-  await page.waitForTimeout(700)
-  await page.getByRole('button', { name: 'Use this photo' }).click()
-  await page.waitForTimeout(3000)
+  await page.getByRole('button', { name: /I did it/ }).click()
+  await page.waitForTimeout(500)
   await page.getByRole('button', { name: 'Send to parent' }).click()
   await page.waitForTimeout(800)
 }

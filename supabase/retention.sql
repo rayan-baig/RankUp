@@ -76,6 +76,12 @@ begin
 
   -- crash_reports only exists once crashes.sql has been applied; retention
   -- must not fail on a deployment that has not.
+  -- Receipts for retried calls (sync.sql) only matter while a phone might
+  -- still be retrying; a month is far past that.
+  if to_regclass('public.rpc_receipts') is not null then
+    delete from rpc_receipts where created_at < now() - interval '30 days';
+  end if;
+
   if to_regclass('public.crash_reports') is not null then
     execute format(
       'with gone as (delete from crash_reports where created_at < now() - make_interval(days => %s) returning 1) select count(*) from gone',

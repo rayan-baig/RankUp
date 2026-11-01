@@ -38,7 +38,12 @@ export default function ThemePicker({ value, onChange, previewLevel = 1, showEvo
           </div>
         </div>
 
-        {showEvolutionPreview && (
+        {/*
+          The preview only goes as far as the child has been. Sliding to
+          level 320 used to show every world in every theme, names and all,
+          and worlds are meant to be secrets until they are reached.
+        */}
+        {showEvolutionPreview && previewLevel > 1 && (
           <label className="block mt-3">
             <span className="text-[11px] uppercase tracking-wider font-semibold" style={{ color: selected.colors.inkMuted }}>
               Preview at level {level}
@@ -46,7 +51,7 @@ export default function ThemePicker({ value, onChange, previewLevel = 1, showEvo
             <input
               type="range"
               min="1"
-              max="320"
+              max={previewLevel}
               value={level}
               onChange={(e) => setLevel(Number(e.target.value))}
               className="w-full accent-[var(--accent)]"

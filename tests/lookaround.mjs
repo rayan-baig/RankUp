@@ -43,9 +43,9 @@ const door = await page.evaluate(() => document.body.innerText)
 
 // The self-playing loop has to actually advance — a still frame of a phone is
 // not worth the code.
-const firstBeat = await page.evaluate(() => document.body.innerText.match(/You assign it|They photograph it|The app checks the photo|You approve/)?.[0])
+const firstBeat = await page.evaluate(() => document.body.innerText.match(/You assign it|They do it|They show you, in a message|You accept/)?.[0])
 await page.waitForTimeout(2600)
-const secondBeat = await page.evaluate(() => document.body.innerText.match(/You assign it|They photograph it|The app checks the photo|You approve/)?.[0])
+const secondBeat = await page.evaluate(() => document.body.innerText.match(/You assign it|They do it|They show you, in a message|You accept/)?.[0])
 firstBeat && secondBeat && firstBeat !== secondBeat
   ? pass(`the loop plays by itself (${firstBeat} → ${secondBeat})`)
   : fail('loop preview advances', `${firstBeat} then ${secondBeat}`)

@@ -99,7 +99,13 @@ export const KID_THEMES = [
   },
   {
     id: 'blockcraft',
-    story: 'You spawned with nothing but your hands. Dig, build, and find the way through to whatever is on the other side.',
+    story: 'Raiders hit your village every night, and you are sick and tired of it. Pick up a pickaxe, get strong, and fight back. Help save your village.',
+    /*
+     * Block Craft is told as chapters, each one a short battle scene
+     * (src/lib/battleEngine.js). `storyStart` is the first, there from
+     * level 1 and told by `story` above; every world below names its own.
+     */
+    storyStart: { chapter: 'raid', label: 'Raid Night' },
     name: 'Block Craft',
     inspiredBy: 'Minecraft style',
     blurb: 'Pixelated soil panels and blocky voxel borders.',
@@ -163,7 +169,10 @@ export const KID_THEMES = [
       {
         level: 125,
         label: 'The Nether Portal',
-        story: 'You found obsidian. Twelve blocks and one spark later, something is open that should not be.',
+        story: "You followed the raiders' tracks to a portal of obsidian, still warm. This is where they come from.",
+        chapter: 'portal',
+        // Arriving here tears the screen for a moment: something is open that should not be.
+        glitchIntro: true,
         scene: 'voxel-volcanic',
         companion: 'boarling',
         colors: {
@@ -174,7 +183,8 @@ export const KID_THEMES = [
       {
         level: 175,
         label: 'Nether Rise',
-        story: 'Through. The air burns and the ground is not ground.',
+        story: 'Their land. The air burns, and every raid on your village started here.',
+        chapter: 'rise',
         scene: 'voxel-nether',
         companion: 'boarling',
         colors: {
@@ -185,7 +195,9 @@ export const KID_THEMES = [
       {
         level: 250,
         label: 'The End',
-        story: 'A quiet island in the middle of nothing at all, and tall pillars with light on top.',
+        story: 'The raiders were never in charge. Something sent them, from a quiet island at the end of everything.',
+        chapter: 'end',
+        glitchIntro: true,
         scene: 'voxel-end',
         companion: 'ender',
         colors: {
@@ -196,12 +208,34 @@ export const KID_THEMES = [
       {
         level: 399,
         label: 'The Dragon',
-        story: 'It has been circling the whole time. Now it has seen you.',
+        story: 'It sent the raiders the whole time. Now it has seen you. Every chore you finish is a hit.',
+        chapter: 'dragon',
         scene: 'voxel-end',
         companion: 'ender',
         colors: {
           bg: '#0d0418', surface: '#2a0c3d', surface2: '#3d1157', line: '#6a1f96',
           ink: '#fbe9ff', inkMuted: '#c79add', accent: '#e879f9', accent2: '#a855f7',
+        },
+      },
+      /*
+       * The ending. Not reached by level: it opens the moment the dragon's
+       * health reaches zero (src/lib/dragonFight.js), which is why it sits
+       * on the same level as the dragon and carries `requires`.
+       *
+       * Back to the Overworld scene, at dawn. Still a dark palette, because
+       * Block Craft is a dark theme at every stage.
+       */
+      {
+        level: 399,
+        requires: 'dragonDefeated',
+        label: "Hero's Return",
+        story: 'The dragon is down and the raids are over. You walk back through the portal, and your whole village is waiting to cheer you home.',
+        chapter: 'home',
+        scene: 'voxel',
+        companion: 'ender',
+        colors: {
+          bg: '#1a1033', surface: '#2e1f4f', surface2: '#3d2a66', line: '#6b4fa0',
+          ink: '#fff4e6', inkMuted: '#e0c9b0', accent: '#ffc94a', accent2: '#ff9a6b',
         },
       },
     ],
@@ -1126,11 +1160,21 @@ export const DEFAULT_KID_THEME = 'matrixblocks'
 /**
  * Resolve a theme for a given level, applying its level-gated worlds.
  */
-export function resolveKidTheme(themeId, level = 1) {
+/** Whether a world is open: its level is reached, and anything it `requires` is done. */
+const worldOpen = (e, level, progress) => level >= e.level && (!e.requires || Boolean(progress?.[e.requires]))
+
+/**
+ * Resolve a theme for a given level, applying its level-gated worlds.
+ *
+ * `progress` carries story milestones that are not levels — today only
+ * `dragonDefeated`, which opens Block Craft's last world. Callers without a
+ * kid to hand can leave it out; the world simply stays closed.
+ */
+export function resolveKidTheme(themeId, level = 1, progress = null) {
   const theme = KID_THEME_MAP[themeId] || KID_THEME_MAP[DEFAULT_KID_THEME]
   if (!theme.evolutions?.length) return { ...theme, evolution: null }
 
-  const unlocked = theme.evolutions.filter((e) => level >= e.level)
+  const unlocked = theme.evolutions.filter((e) => worldOpen(e, level, progress))
   if (!unlocked.length) return { ...theme, evolution: null }
 
   const active = unlocked[unlocked.length - 1]
@@ -1144,9 +1188,33 @@ export function resolveKidTheme(themeId, level = 1) {
   }
 }
 
-/** The next locked evolution, so the kid can see what they are climbing toward. */
-export function nextEvolution(themeId, level = 1) {
+/**
+ * The next locked world, so the kid knows something is coming.
+ *
+ * Screens show only WHEN (its level, or that the dragon has to fall) and
+ * never its name or story: a world nobody has reached is a secret.
+ */
+export function nextEvolution(themeId, level = 1, progress = null) {
   const theme = KID_THEME_MAP[themeId]
   if (!theme?.evolutions?.length) return null
-  return theme.evolutions.find((e) => level < e.level) || null
+  return theme.evolutions.find((e) => !worldOpen(e, level, progress)) || null
+}
+
+/**
+ * The chapters of a theme's story this child has reached, oldest first:
+ * the opening, then one for every world they have opened. A theme without
+ * a story has none. Nothing here is ever a world they have not reached, so
+ * a screen can list all of it without giving anything away.
+ */
+export function storyChapters(themeId, level = 1, progress = null) {
+  const theme = KID_THEME_MAP[themeId]
+  if (!theme?.storyStart) return []
+  const first = { chapter: theme.storyStart.chapter, label: theme.storyStart.label, story: theme.story, level: 1 }
+  const worlds = (theme.evolutions || [])
+    .filter((e) => e.chapter && worldOpen(e, level, progress))
+    .map((e) => ({
+      chapter: e.chapter, label: e.label, story: e.story, level: e.level,
+      requires: e.requires || null, glitch: Boolean(e.glitchIntro),
+    }))
+  return [first, ...worlds]
 }

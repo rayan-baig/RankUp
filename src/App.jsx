@@ -4,6 +4,7 @@ import { activeLockout, guildsAllowedByPlan, overdriveActive } from './state/red
 import { useRoute, navigate } from './lib/router.js'
 import { applyTheme } from './lib/applyTheme.js'
 import { resolveKidTheme } from './data/kidThemes.js'
+import { storyProgress } from './lib/dragonFight.js'
 import { resolveParentTheme } from './data/parentThemes.js'
 import { levelFromXp } from './lib/xp.js'
 
@@ -25,6 +26,9 @@ import KidShop from './screens/kid/KidShop.jsx'
 import KidMarket from './screens/kid/KidMarket.jsx'
 import KidArcade from './screens/kid/KidArcade.jsx'
 import KidProfile from './screens/kid/KidProfile.jsx'
+import KidStory from './screens/kid/KidStory.jsx'
+import KidDragon from './screens/kid/KidDragon.jsx'
+import KidSchool from './screens/kid/KidSchool.jsx'
 import KidPairing from './screens/kid/KidPairing.jsx'
 import ParentDashboard from './screens/parent/ParentDashboard.jsx'
 import ParentApprovals from './screens/parent/ParentApprovals.jsx'
@@ -33,6 +37,9 @@ import ParentKids from './screens/parent/ParentKids.jsx'
 import ParentBlueprint from './screens/parent/ParentBlueprint.jsx'
 import ParentOverride from './screens/parent/ParentOverride.jsx'
 import ParentAlliance from './screens/parent/ParentAlliance.jsx'
+import ParentSchool from './screens/parent/ParentSchool.jsx'
+import SchoolPortal from './screens/SchoolPortal.jsx'
+import OperatorSchools from './screens/OperatorSchools.jsx'
 import { guildsEnabled } from './lib/guilds.js'
 import LegalDoc from './screens/LegalDoc.jsx'
 import ParentGuilds from './screens/parent/ParentGuilds.jsx'
@@ -102,8 +109,10 @@ export default function App() {
 
   const activeKid = state.kids.find((k) => k.id === state.session.kidId) || state.kids[0] || null
   const kidTheme = useMemo(
-    () => (activeKid ? resolveKidTheme(activeKid.themeId, levelFromXp(activeKid.xp).level) : null),
-    [activeKid],
+    () => (activeKid
+      ? resolveKidTheme(activeKid.themeId, levelFromXp(activeKid.xp).level, storyProgress(state, activeKid))
+      : null),
+    [activeKid, state.submissions, state.quests],
   )
   const parentTheme = useMemo(() => resolveParentTheme(state.family.parentThemeId), [state.family.parentThemeId])
   const pendingTheme = state.pendingPairing
@@ -136,7 +145,7 @@ export default function App() {
 
   // Route guards.
   useEffect(() => {
-    if (route.startsWith('/legal/')) return
+    if (route.startsWith('/legal/') || route === '/school' || route === '/operator') return
     if (!state.onboarded && route !== '/welcome') {
       navigate('/welcome')
       return
@@ -172,6 +181,33 @@ export default function App() {
       <>
         <ParentBackground theme={parentTheme} />
         <LegalDoc which={route.endsWith('terms') ? 'terms' : 'privacy'} />
+      </>
+    )
+  }
+
+  // The School League's door for teachers and principals. No family needed:
+  // a principal should never be walked through setting up a household.
+  // Whoever runs RankUp, checking schools are real. Not linked from the app;
+  // the page asks for the operator key and the server checks it every time.
+  if (route === '/operator') {
+    return (
+      <>
+        <ParentBackground theme={parentTheme} />
+        <ScreenBoundary key={route} route={route}>
+          <OperatorSchools />
+        </ScreenBoundary>
+      </>
+    )
+  }
+
+  if (route === '/school') {
+    return (
+      <>
+        <ParentBackground theme={parentTheme} />
+        <DemoBanner />
+        <ScreenBoundary key={route} route={route}>
+          <SchoolPortal />
+        </ScreenBoundary>
       </>
     )
   }
@@ -232,7 +268,9 @@ export default function App() {
   }
 
   const pending = pendingSubmissions(state).length
-  const glitch = Boolean(kidTheme?.evolution?.glitchIntro)
+  // The arrival glitch keeps tearing the screen until the child has watched
+  // the chapter that explains it.
+  const glitch = Boolean(kidTheme?.evolution?.glitchIntro && !activeKid?.storySeen?.[kidTheme.evolution.chapter])
 
   return (
     <>
@@ -296,6 +334,9 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route === '/kid/market') return <KidMarket />
   if (route === '/kid/arcade') return <KidArcade />
   if (route === '/kid/profile') return <KidProfile />
+  if (route.startsWith('/kid/story/')) return <KidStory chapter={route.replace('/kid/story/', '')} />
+  if (route === '/kid/dragon') return <KidDragon />
+  if (route === '/kid/school') return <KidSchool />
 
   if (route === '/parent') return <ParentDashboard />
   if (route === '/parent/approvals') return <ParentApprovals />
@@ -304,6 +345,7 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route === '/parent/blueprint') return <ParentBlueprint initialKidId={queryParam(fullPath, 'kid') || activeKid?.id} />
   if (route === '/parent/override') return <ParentOverride />
   if (route === '/parent/alliance') return <ParentAlliance />
+  if (route === '/parent/school') return <ParentSchool />
   if (route === '/parent/guilds') return guildsEnabled() ? <ParentGuilds /> : <ParentDashboard />
   if (route === '/parent/pair') return <ParentPairKid />
   if (route === '/parent/plan') return <ParentPlan />

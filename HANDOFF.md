@@ -221,7 +221,7 @@ Block Craft at 125 becomes **The Nether Portal**; at 250, **The End**; at 399,
                               ▼
 ┌────────────────────────────────────────────────────────────┐
 │ SUPABASE / POSTGRES                                         │
-│  32 tables · 108 SECURITY DEFINER functions · 36 RLS policies│
+│  40 tables · 143 SECURITY DEFINER functions · 36 RLS policies│
 │  All writes go through functions. No table is writable      │
 │  directly by a client.                                      │
 └────────────────────────────────────────────────────────────┘
@@ -229,9 +229,10 @@ Block Craft at 125 becomes **The Nether Portal**; at 250, **The End**; at 399,
                               ▼
 ┌────────────────────────────────────────────────────────────┐
 │ SERVERLESS (api/, served by functions/api/[[route]].js)     │
-│  verify-photo · create-checkout · billing-portal            │
+│  create-checkout · billing-portal                           │
 │  stripe-webhook · send-push · send-reminders                │
 │  send-digests · settle-alliances · run-retention · health   │
+│  school-checkout · settle-schools · operator-schools        │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -299,17 +300,19 @@ it is the one they can see.
 
 ## 6. Database
 
-16 SQL files in `supabase/`, applied in the order `docs/BACKEND.md` gives.
+17 SQL files in `supabase/`, applied in the order `docs/BACKEND.md` gives.
 
-**32 tables:** `families · parents · kids · quests · submissions · rewards ·
+**40 tables:** `families · parents · kids · quests · submissions · rewards ·
 redemptions · notes · events · overrides · allowance_entries · family_goals ·
 guilds · guild_members · guild_messages · alliances · alliance_members ·
 alliance_results · pairing_codes · pairing_claim_attempts · parent_invites ·
 adult_invite_attempts · parental_consents · consent_notices · push_subscriptions ·
 reminder_schedules · digest_sends · billing_events · referrals · crash_reports ·
-deletions · job_runs`
+deletions · job_runs · schools · school_staff · school_members ·
+school_rivalries · school_month_scores · school_awards · school_rivalry_results ·
+school_top_students`
 
-**108 SECURITY DEFINER functions.** The important ones:
+**143 SECURITY DEFINER functions.** The important ones:
 
 | Function | Guards |
 |---|---|
@@ -341,6 +344,7 @@ another's rows. There are tests that attempt exactly that and assert failure.
 | `/kid/arcade` | `KidArcade.jsx` | 24 games, daily featured, shelves, tokens |
 | `/kid/shop` | `KidShop.jsx` | Rewards catalogue, redemption |
 | `/kid/market` | `KidMarket.jsx` | Sunday Market — cosmetic skins, flash tickets |
+| `/kid/school` | `KidSchool.jsx` | The child's school: place in the district, rivals, and whether they are a School Star |
 | `/kid/profile` | `KidProfile.jsx` | Forms, badges, **the theme's storyline**, customisation |
 | — | `KidPairing.jsx`, `KidDeviceSetup.jsx`, `LockoutScreen.jsx` | Pairing and the Elite lockout |
 
@@ -357,8 +361,31 @@ another's rows. There are tests that attempt exactly that and assert failure.
 | `/parent/blueprint` | `ParentBlueprint.jsx` | Elite: weekly behaviour charts from real history |
 | `/parent/override` | `ParentOverride.jsx` | Elite: Consequence Engine — currency tax, lockout, lockdown |
 | `/parent/alliance` | `ParentAlliance.jsx` | Elite: ten-family monthly contest, 20% off for the winner |
+| `/parent/school` | `ParentSchool.jsx` | School League: join a child's school with its code, choose whether their first name may show, see the league |
 | `/parent/guilds` | `ParentGuilds.jsx` | Approve guild joins, moderate reported messages |
 | `/parent/pair` | `ParentPairKid.jsx` | Type the child's six-digit code |
+
+### Schools (`src/screens/SchoolPortal.jsx`, no family needed)
+
+| Route | File | What it does |
+|---|---|---|
+| `/school` | `SchoolPortal.jsx` | What it is and the price by size; a teacher or principal signs the school up, then manages codes, rivals and School Stars |
+
+The School League lives in `supabase/schools.sql` and `src/lib/schools.js`.
+Schools pay by size ($29 up to 300 students, $59 up to 800, $99 up to 1,500,
+$149 above; a year is ten months; 30 days free). A school's score is approved
+chores per student, at most eight a day each, averaged, so size does not win.
+`settle_school_month` closes a month: District Champion (needs two ranked
+schools), rivalry results and each school's top ten. A school sees no child's
+name until the operator has verified it on `/#/operator`, and then only first
+names a parent agreed to.
+
+Schools pay through `api/school-checkout.js` (price picked from the school's
+size, never from the request); the existing Stripe webhook switches a school
+on and off by the `school_id` on its subscription. `api/settle-schools.js` runs
+monthly: it closes the month and gives each Champion its free month (a month's
+credit if it pays, thirty more trial days if not). Setup is in
+[docs/PAYMENTS.md](docs/PAYMENTS.md#the-school-league).
 
 ---
 
@@ -431,6 +458,50 @@ really are different drawings, because there the worlds *are* the story:
 Overworld → The Nether Portal (125) → Nether Rise (175) → The End (250) →
 The Dragon (399).
 
+### The Block Craft story, battles and the dragon fight
+
+Block Craft is told as a story: *raiders hit your village every night, you
+are sick and tired of it, and you fight back.* Each chapter is a short
+animated battle drawn on a canvas, no React in the loop. The fight is in
+`src/lib/battleEngine.js`; the look is in `src/lib/battleArt.js`: smooth,
+lit, cartoon-style block characters drawn at the screen's real pixels, so
+it is sharp on any phone (it was pixel art until the owner asked for
+something less pixelated):
+
+| Chapter | Opens at | Scene |
+|---|---|---|
+| Raid Night | level 1 | raiders at the village gate |
+| The Nether Portal | 125 | through the portal — **glitch** arrival |
+| Nether Rise | 175 | the raiders' fortress |
+| The End | 250 | shadow walkers — **glitch** arrival |
+| The Dragon | 399 | the boss fight, powered by chores |
+| Hero's Return | **when the dragon is beaten** | the village cheers you home |
+
+- **Secret until reached.** No screen names a world before the child gets
+  there: the chip says only "Secret world at level N" or "Beat the dragon to
+  find out what comes next". `/kid/story/<chapter>` for a chapter not
+  reached shows the home screen. `storyChapters()` in `kidThemes.js` only
+  ever returns chapters reached.
+- **Watching.** A "New chapter" card on the kid home screen opens
+  `/kid/story/<chapter>`; the level-up overlay has "Watch the battle". The
+  arrival glitch keeps tearing the background until that chapter is watched.
+  Watched chapters are `kid.storySeen` — local to the device, never synced.
+- **The dragon fight** (`src/lib/dragonFight.js`, `/kid/dragon`). Dragon
+  1,000 health, child 100. An approved chore is a hit: easy 40, medium 80,
+  hard 150, boss 300. A chore sent back: the dragon hits for 15. 48 hours
+  with no approval: 25. About one day in four, a special attack (Wing Storm
+  10, Void Breath 20, Tail Quake 15). At zero health the child rests in the
+  village: health back to 100, the dragon heals 100, **nothing earned is
+  lost.**
+- **Nothing about the fight is stored.** It is worked out from the synced
+  chores plus the clock, so every device agrees and there is no database
+  change. Specials use a hash of the child's id and the date, not
+  `Math.random`, for the same reason. The dragon screen replays what
+  happened since the child last looked and ends on the real numbers.
+- Tests: `tests/dragon.mjs` (the arithmetic) and `tests/battles.mjs` (every
+  scene plays and is won, the replay lands on the fight's numbers, chapters
+  stay secret). Both run in `npm run test:awards`.
+
 All **75 palettes** (15 themes × base + 4 worlds) pass contrast floors, checked
 in `tests/themes.mjs`. Light themes stay light at every stage — an earlier
 "Pale Cream" world put dark night artwork behind dark-on-light text.
@@ -440,6 +511,8 @@ in `tests/themes.mjs`. Light themes stay light at every stage — an earlier
 | Thing | File |
 |---|---|
 | Theme data, worlds, stories | `src/data/kidThemes.js` |
+| Battle scenes / dragon fight | `src/lib/battleEngine.js`, `src/lib/dragonFight.js` |
+| Story and dragon screens | `src/screens/kid/KidStory.jsx`, `src/screens/kid/KidDragon.jsx` |
 | Scenes + the shared Sky | `src/components/ThemeBackground.jsx` (19 scenes) |
 | Aurora, dust, vignette | `src/components/Atmosphere.jsx` |
 | Avatar and its forms | `src/components/Avatar.jsx`, `src/lib/avatarTiers.js` |
@@ -500,34 +573,16 @@ and testing the dealer's bust first, each make the suite fail.
 
 ---
 
-## 11. The AI photo check
+## 11. No photos (the AI photo check was removed)
 
-`src/lib/aiVerify.js` + `api/verify-photo.js`. Full write-up in `docs/AI-CHECK.md`.
+RankUp used to take a proof photo, check it on the phone and optionally with an
+AI model. All of that is gone. The kid taps "I did it!"; if the parent wants
+proof, the kid sends a photo from their own camera app, by message; the parent
+taps **Accept** in RankUp. RankUp never takes, sends or keeps a picture.
 
-**It is advisory. It never approves or rejects anything.** Deliberate product
-rule, not a limitation.
-
-**Layer 1 — on device.** Always runs. No key, no upload, no cost. Catches the
-mechanical cheats: a screenshot, a photo of a screen, a re-used photo from an
-earlier submission, a photo taken long before the quest was opened, a thumb over
-the lens. Built on a Laplacian-variance sharpness measure and a dHash for
-duplicate detection (`src/lib/imaging.js`).
-
-**Layer 2 — Claude vision.** Only if `VITE_AI_VERIFY_URL` is set and
-`api/verify-photo.js` is deployed with `ANTHROPIC_API_KEY`. This is the layer
-that answers "does this actually show a made bed?" Defaults to Haiku for cost;
-`AI_VERIFY_MODEL` can raise it.
-
-Three verdicts: `looks_good` ✅ · `needs_review` 👀 · `suspicious` ⚠️
-
-Cost control: checks are rationed per family, require a signed-in caller, and
-`refund_photo_check` returns the quota when a call fails. One commit cut the
-running cost by about three quarters; `docs/AI-CHECK.md` records what a check
-costs so nobody optimises the wrong thing.
-
-`tests/photocheck.mjs` is named *“Does the photo check accuse honest children?”*
-
----
+`photo_data` and `photo_hash` still exist as database columns so old rows and
+old phones keep working, but `submit_quest` always stores null in them, and the
+retention job clears anything an older version left behind.
 
 ## 12. Plans, billing and Charity Week
 
@@ -766,7 +821,7 @@ was actually made in this repo.
 RankUp/
 ├── HANDOFF.md                  ← this file
 ├── README.md
-├── docs/                       AI-CHECK BACKEND DECISIONS DEPLOY GAME-DESIGN
+├── docs/                       BACKEND DECISIONS DEPLOY GAME-DESIGN
 │                               LAUNCH LEGAL NOTIFICATIONS PAYMENTS ROADMAP
 │                               STATUS SYNC
 ├── src/

@@ -74,29 +74,15 @@ do, and saving is one line because there is only one thing to save.
 
 ---
 
-## The AI key lives on a server, never in the app
+## No photos in the app
 
-Anything shipped to a phone browser can be read by anyone who has the app. An API key
-in the front-end is a key you have published.
+RankUp used to take a proof photo, check it on the phone, and optionally send it to an
+AI check. All of that is gone. A family already has a way to send each other pictures:
+their messages. So the child taps "I did it!", sends a photo from their own camera app
+if the parent wants one, and the parent taps Accept in RankUp.
 
-So the browser sends the photo to `/api/verify-photo`, a small function that runs on the
-server, and *that* holds the key. Vercel and Netlify both run these for free at low
-volume. → [AI-CHECK.md](AI-CHECK.md)
-
----
-
-## Two layers of photo checking
-
-**Layer 1** runs in the browser: sharpness, brightness, flat-colour ratio, long straight
-UI edges, and a perceptual fingerprint compared against every photo the kid has sent
-before. Free, instant, private, and it catches the mechanical cheats — screenshots,
-covered lenses, re-sent photos.
-
-**Layer 2** is Claude looking at the photo and answering "is this a real photo, and does
-it show this chore?" It costs money per check and needs a key, so it is optional. When
-it is off, the app says so on the parent's screen rather than pretending.
-
-Both layers only ever produce advice. → [STATUS.md](STATUS.md#deliberate-product-rules--not-gaps)
+This means RankUp never holds a picture of a child or their home, needs no storage
+bucket, and has no AI key to protect or pay for.
 
 ---
 

@@ -29,7 +29,7 @@ state.submissions.length === 1
 await page.goto(questUrl, { waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(700)
 await page.screenshot({ path: `${SHOT_DIR}/submitted-quest.png` })
-const resubmitButtons = await page.getByRole('button', { name: /Take photo proof|Mark as done/ }).count()
+const resubmitButtons = await page.getByRole('button', { name: /I did it/ }).count()
 resubmitButtons === 0
   ? pass('an already-submitted quest offers no way to send again')
   : fail('an already-submitted quest offers no way to send again', `${resubmitButtons} submit buttons still shown`)
@@ -40,7 +40,7 @@ resubmitButtons === 0
 await asParent(page)
 await page.evaluate(() => { window.location.hash = '/parent/approvals' })
 await page.waitForTimeout(700)
-await page.getByRole('button', { name: 'Approve' }).first().click()
+await page.getByRole('button', { name: 'Accept' }).first().click()
 await page.waitForTimeout(1000)
 state = await readState(page)
 const approvals = state.events.filter((e) => e.type === 'quest_approved' && e.meta.questId === questId)
@@ -107,8 +107,9 @@ afterDecision === 0
   ? pass('approving destroys the photo on the device')
   : fail('approving destroys the photo', `${afterDecision} still stored`)
 
-console.log('\n=== Removing a kid removes any photo still waiting ===')
-// Submit something and leave it undecided, so there is a photo to lose.
+console.log('\n=== Removing a kid, with a chore still waiting ===')
+// Submit something and leave it undecided. RankUp keeps no photos, so there
+// is never a picture on the device to begin with.
 await asKid(page)
 await page.evaluate(() => { window.location.hash = '/kid/quests' })
 await page.waitForTimeout(600)
@@ -130,8 +131,8 @@ await page.waitForTimeout(300)
 await page.getByRole('button', { name: 'Remove', exact: true }).click()
 await page.waitForTimeout(1200)
 const after = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('rankup.photos.v1') || '{}')).length)
-before > 0 && after === 0
-  ? pass(`photos purged on kid removal (${before} → ${after})`)
-  : fail('photos purged on kid removal', `before=${before} after=${after}`)
+before === 0 && after === 0
+  ? pass('no photo is ever stored on the device')
+  : fail('no photo stored', `before=${before} after=${after}`)
 
 await finish(errors, fails, browser)

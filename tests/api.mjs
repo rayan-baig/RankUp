@@ -11,6 +11,7 @@
  * Needs the Cloudflare stack up:  supabase/test/up.sh --cf
  */
 import pg from 'pg'
+import Stripe from 'stripe'
 
 const BASE = process.env.API_BASE || 'http://localhost:8788'
 const CRON = 'test-cron-secret'
@@ -44,11 +45,6 @@ await db.query(
   `insert into parents (user_id, family_id, name) values ($1, $3, 'API Parent'), ($2, $4, 'API Outsider')
      on conflict do nothing`, [PARENT, OUTSIDER, FAMILY, OTHER_FAMILY])
 
-const checksUsed = async () => {
-  const r = await db.query('select ai_checks_used from families where id = $1', [FAMILY])
-  return r.rows[0]?.ai_checks_used ?? null
-}
-
 const post = (path, body, token) =>
   fetch(`${BASE}${path}`, {
     method: 'POST',
@@ -58,8 +54,11 @@ const post = (path, body, token) =>
 
 console.log('\n=== Nothing works without a token ===')
 ok('a push with no token is refused', (await post('/api/send-push', { familyId: FAMILY, role: 'parent', kind: 'reminder' })).status === 401)
-ok('a photo check with no token is refused', (await post('/api/verify-photo', { imageDataUrl: 'x' })).status === 401)
 ok('a checkout with no token is refused', (await post('/api/create-checkout', { tier: 'standard' })).status === 401)
+ok('a school checkout with no token is refused', (await post('/api/school-checkout', { cycle: 'month' })).status === 401)
+const parentAsSchool = await post('/api/school-checkout', { cycle: 'month' }, PARENT)
+ok('a parent CANNOT start a school’s checkout', parentAsSchool.status === 403 || parentAsSchool.status === 503,
+  `status ${parentAsSchool.status}`)
 
 console.log('\n=== A stranger cannot buzz somebody else’s phone ===')
 const outsiderPush = await post('/api/send-push', { familyId: FAMILY, role: 'parent', kind: 'reminder' }, OUTSIDER)
@@ -73,18 +72,12 @@ const forged = await post('/api/send-push',
   { familyId: FAMILY, role: 'parent', kind: 'anything', title: 'Send money', body: 'to this account' }, PARENT)
 ok('an unknown notice kind is refused outright', forged.status === 400, `status ${forged.status}`)
 
-console.log('\n=== A photo that was never looked at does not cost a check ===')
-// The endpoint claimed the allowance and THEN parsed the image, so a picture
-// that was too large or in the wrong format spent one of the family's two
-// hundred and returned 400 without giving it back.
-const before = await checksUsed()
-const badImage = await post('/api/verify-photo', { imageDataUrl: 'data:text/plain;base64,aGVsbG8=' }, PARENT)
-const after = await checksUsed()
-ok('a malformed image is refused', badImage.status === 400, `status ${badImage.status}`)
-ok('and it cost the family nothing', after === before, `used ${before} → ${after}`)
+console.log('\n=== RankUp takes no photos ===')
+const noPhotoCheck = await post('/api/verify-photo', { imageDataUrl: 'x' }, PARENT)
+ok('there is no photo-check address any more', noPhotoCheck.status === 404, `status ${noPhotoCheck.status}`)
 
 console.log('\n=== The scheduled jobs are not open to the public ===')
-for (const job of ['run-retention', 'send-reminders', 'send-digests', 'settle-alliances']) {
+for (const job of ['run-retention', 'send-reminders', 'send-digests', 'settle-alliances', 'settle-schools']) {
   const open = await fetch(`${BASE}/api/${job}`, { method: 'POST' })
   ok(`${job} refuses a caller with no secret`, open.status === 401 || open.status === 403, `status ${open.status}`)
   const withSecret = await fetch(`${BASE}/api/${job}`, {
@@ -102,11 +95,116 @@ ok('but tells it nothing about the inside',
 const deep = await (await fetch(`${BASE}/api/health`, { headers: { Authorization: `Bearer ${CRON}` } })).json()
 ok('while the operator sees the jobs', Boolean(deep.jobs), `keys: ${Object.keys(deep).join(', ')}`)
 
+console.log('\n=== The owner\'s console can count families, and nobody else can ===')
+const noKey = await fetch(`${BASE}/api/stats`)
+ok('stats refuse a caller without the key', noKey.status === 401 || noKey.status === 404, `status ${noKey.status}`)
+if (process.env.STATS_KEY_FOR_TEST) {
+  const counted = await fetch(`${BASE}/api/stats`, { headers: { Authorization: `Bearer ${process.env.STATS_KEY_FOR_TEST}` } })
+  const body = await counted.json().catch(() => ({}))
+  ok('and answer the console with two numbers only', counted.status === 200 && Number.isInteger(body.users)
+    && Number.isInteger(body.active_users) && Object.keys(body).length === 2, JSON.stringify(body))
+}
+
 console.log('\n=== An unsigned Stripe event is never acted on ===')
 const forgedPayment = await post('/api/stripe-webhook',
   { type: 'customer.subscription.updated', data: { object: { id: 'sub_fake', status: 'active' } } })
 ok('a webhook with no signature is rejected', forgedPayment.status === 400 || forgedPayment.status === 503,
   `status ${forgedPayment.status}`)
+
+console.log('\n=== A signed Stripe event reaches the right customer ===')
+// Signed with the same test secret up.sh gives the runtime, so these go all the
+// way through signature checking to the database.
+const signer = new Stripe('sk_test_routing_only')
+const signed = async (event) => {
+  const payload = JSON.stringify(event)
+  const header = signer.webhooks.generateTestHeaderString({ payload, secret: 'whsec_test_local_only' })
+  return fetch(`${BASE}/api/stripe-webhook`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'stripe-signature': header }, body: payload,
+  })
+}
+const SCHOOL = 'a0000000-0000-4000-8000-0000000005c1'
+await db.query(
+  `insert into schools (id, name, district, district_key, student_count, size_band, status)
+   values ($1, 'API School', 'API District', 'api district', 400, 'medium', 'trial')
+   on conflict (id) do update set status = 'trial', stripe_customer_id = null`, [SCHOOL])
+const schoolPaid = await signed({
+  id: `evt_api_school_${Date.now()}`, type: 'customer.subscription.updated',
+  data: { object: { id: 'sub_api_school', object: 'subscription', status: 'active',
+                    customer: 'cus_api_school', metadata: { school_id: SCHOOL } } },
+})
+const schoolRow = (await db.query('select status, stripe_customer_id from schools where id = $1', [SCHOOL])).rows[0]
+ok('a school’s paid subscription is accepted', schoolPaid.status === 200, `status ${schoolPaid.status}`)
+ok('and switches that school on', schoolRow.status === 'active' && schoolRow.stripe_customer_id === 'cus_api_school',
+  JSON.stringify(schoolRow))
+const familyPaid = await signed({
+  id: `evt_api_family_${Date.now()}`, type: 'customer.subscription.updated',
+  data: { object: { id: 'sub_api_family', object: 'subscription', status: 'active',
+                    customer: 'cus_api_family', metadata: { family_id: OTHER_FAMILY, tier: 'standard' } } },
+})
+const familyRow = (await db.query('select subscription_status from families where id = $1', [OTHER_FAMILY])).rows[0]
+ok('a family’s still goes to the family', familyPaid.status === 200 && familyRow.subscription_status === 'active',
+  `status ${familyPaid.status}, ${JSON.stringify(familyRow)}`)
+ok('and touches no school', (await db.query(
+  "select count(*)::int as n from schools where stripe_customer_id = 'cus_api_family'")).rows[0].n === 0)
+
+console.log('\n=== A family already paying, and Stripe news out of order ===')
+await db.query(
+  `update families set tier = 'elite', subscription_status = 'active', stripe_subscription_id = 'sub_api_live',
+          stripe_customer_id = 'cus_api_live', billing_event_at = now() where id = $1`, [FAMILY])
+const second = await post('/api/create-checkout', { tier: 'standard' }, PARENT)
+ok('a family already paying cannot start a second subscription', second.status === 409, `status ${second.status}`)
+const lateFailure = await signed({
+  id: `evt_api_fail_${Date.now()}`, type: 'invoice.payment_failed', created: Math.floor(Date.now() / 1000) - 3600,
+  data: { object: { id: 'in_api_1', object: 'invoice', customer: 'cus_api_live', metadata: { family_id: FAMILY } } },
+})
+ok('a late "payment failed" is accepted', lateFailure.status === 200, `status ${lateFailure.status}`)
+ok('and does not downgrade a family that has paid',
+  (await db.query('select tier from families where id = $1', [FAMILY])).rows[0].tier === 'elite')
+const oldCancel = await signed({
+  id: `evt_api_oldcancel_${Date.now()}`, type: 'customer.subscription.deleted', created: Math.floor(Date.now() / 1000),
+  data: { object: { id: 'sub_api_old', object: 'subscription', status: 'canceled', customer: 'cus_api_live',
+                    metadata: { family_id: FAMILY, tier: 'standard' } } },
+})
+ok('an old plan being cancelled leaves the family on the plan they pay for',
+  oldCancel.status === 200 && (await db.query('select tier from families where id = $1', [FAMILY])).rows[0].tier === 'elite')
+const ticketsBefore = (await db.query('select flash_tickets from families where id = $1', [FAMILY])).rows[0].flash_tickets
+for (const type of ['checkout.session.completed', 'checkout.session.async_payment_succeeded']) {
+  // eslint-disable-next-line no-await-in-loop
+  await signed({
+    id: `evt_api_${type}_${Date.now()}`, type,
+    data: { object: { id: 'cs_api_bank_debit', object: 'checkout.session', customer: 'cus_api_live',
+                      payment_status: type.endsWith('completed') ? 'unpaid' : 'paid', amount_total: 499, currency: 'usd',
+                      metadata: { family_id: FAMILY, product: 'flash_5', ticket_count: '5' } } },
+  })
+}
+const ticketsAfter = (await db.query('select flash_tickets from families where id = $1', [FAMILY])).rows[0].flash_tickets
+ok('Flash Tickets paid by a payment that clears later are credited, once',
+  ticketsAfter === ticketsBefore + 5, `${ticketsBefore} -> ${ticketsAfter}`)
+
+console.log('\n=== Only the operator can check schools ===')
+const operator = (key, body) => fetch(`${BASE}/api/operator-schools`, {
+  method: body ? 'POST' : 'GET',
+  headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
+  ...(body ? { body: JSON.stringify(body) } : {}),
+})
+ok('nobody without the key sees the schools', (await operator(null)).status === 401)
+ok('not even with the scheduler’s key', (await operator(CRON)).status === 401)
+ok('a signed-in parent’s token is not the key', (await operator(PARENT)).status === 401)
+const listed = await (await operator('test-operator-secret')).json()
+ok('the operator sees every school, with who signed it up',
+  listed.ok && listed.schools.some((s) => s.id === SCHOOL && Array.isArray(s.staff)))
+const verified = await operator('test-operator-secret', { action: 'verify', school_id: SCHOOL })
+ok('and can verify one', verified.status === 200 &&
+  (await db.query('select verified from schools where id = $1', [SCHOOL])).rows[0].verified === true)
+await operator('test-operator-secret', { action: 'suspend', school_id: SCHOOL })
+ok('or suspend it', (await db.query('select status from schools where id = $1', [SCHOOL])).rows[0].status === 'suspended')
+await operator('test-operator-secret', { action: 'unsuspend', school_id: SCHOOL })
+ok('and lifting it puts the paying school back to active',
+  (await db.query('select status from schools where id = $1', [SCHOOL])).rows[0].status === 'active')
+ok('an unknown action is refused',
+  (await operator('test-operator-secret', { action: 'delete', school_id: SCHOOL })).status === 400)
+ok('as is a school that does not exist',
+  (await operator('test-operator-secret', { action: 'verify', school_id: '00000000-0000-4000-8000-000000000000' })).status === 404)
 
 console.log('\n=== A route that does not exist is a 404, not a stack trace ===')
 const missing = await fetch(`${BASE}/api/not-a-real-endpoint`, { method: 'POST' })

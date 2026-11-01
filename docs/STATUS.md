@@ -14,16 +14,16 @@ Legend: ✅ genuinely works · 🟡 works but only on this device · ❌ looks r
 | Parent assigns a quest | ✅ | Custom quests and four bulk packs |
 | Adaptive / special tasks | ✅ | Own difficulty and own definition of "done", per kid |
 | Kid opens quest, sees rewards breakdown | ✅ | Every bonus is itemised before they start |
-| In-app camera | ✅ | Real `getUserMedia`. **Needs https** — see the caveat below |
-| On-device photo checks | ✅ | Blur, darkness, flatness, screen-edge and duplicate detection, all in the browser |
-| Claude vision photo check | ✅ *if configured* | Off unless you deploy `api/verify-photo.js` with an API key — [docs/AI-CHECK.md](AI-CHECK.md) |
-| Parent approve / send back | ✅ | Sending back puts the quest straight back on the kid's list with your note |
-| XP, levels, currency | ✅ | Awarded only on approval |
+| Kid taps "I did it!" | ✅ | No photo in the app. If the parent wants proof, the kid sends one from their own camera app, by message |
+| Parent accept / send back | ✅ | Sending back puts the quest straight back on the kid's list with your note |
+| XP, levels, currency | ✅ | Awarded only when a parent accepts |
 | Streaks and streak freeze | ✅ | |
 | 15 kid themes | ✅ | Background, currency and avatar all change |
 | 5-tier avatar that evolves | ✅ | Tap it — it reacts |
 | A world that changes as you level | ✅ | Every theme has four worlds at levels 10/25/50/100, each with its own palette, sky and line of story |
 | Block Craft level evolutions | ✅ | Nine forms, not five: Overworld, then The Nether Portal (125), Nether Rise (175), The End (250), The Dragon (399). Boarling companion from 125, Ender from 250 |
+| Block Craft story and battles | ✅ | A battle scene per chapter (raid, portal, Nether, End, dragon, Hero's Return). Glitch arrivals at the portal and the End. Worlds stay secret until reached |
+| Dragon boss fight | ✅ | Health bars for the child and the dragon. Approved chores hit by difficulty; chores sent back, 48 idle hours and random specials hit back. Worked out from synced chores, nothing stored. Hero's Return opens when it falls |
 | 10 parent dashboard themes | ✅ | Cosmetic only, by design |
 | Timer / "race the clock" quests | ✅ | Best times are recorded per quest |
 | Test-score quests | ✅ | 80%+ earns a bonus |
@@ -45,16 +45,10 @@ Legend: ✅ genuinely works · 🟡 works but only on this device · ❌ looks r
 | Notifications | ✅ | Submissions, approvals, send-backs and daily reminders. Works with no server while the app is open; background delivery needs VAPID keys — [docs/NOTIFICATIONS.md](NOTIFICATIONS.md) |
 | A kid's device has no Parent Mode | ✅ | Not behind a PIN — not present at all |
 
-### The camera caveat
+### No photos
 
-Browsers block camera access on plain `http://`. That means:
-
-- ✅ works on `localhost` while you develop
-- ✅ works on a deployed `https://` site
-- ❌ does **not** work if you open the app on your phone via a `http://192.168.x.x` address
-
-If the camera cannot start, the app offers the phone's own camera app as a fallback and
-tags that photo as "not taken in the app" so the check can tell the parent.
+RankUp never takes, sends or keeps a photo, so it needs no camera permission and
+stores no pictures on any device or server.
 
 ---
 
@@ -71,16 +65,6 @@ With Supabase configured this no longer applies: pairing links the two devices a
 quests, submissions, approvals and XP all travel across, offline-first, through an
 outbox. → [docs/SYNC.md](SYNC.md)
 
-Photos are also stored locally, downsized to about 40–80 KB each. Browsers cap
-`localStorage` at roughly 5 MB, so after a few dozen photos the oldest ones are dropped
-to make room. Photos belonging to a deleted kid or quest are purged automatically after
-every save — deleting a child's profile really does remove their pictures from the
-device.
-
-If storage is full when a photo is taken, the submission still goes through and the
-parent is told the photo was lost, rather than being shown "no photo required" as though
-none was ever taken.
-
 ---
 
 ## Looks real, is not — ❌
@@ -93,9 +77,9 @@ none was ever taken.
 | **Parent Alliance leaderboard** | ✅ real now — real families, real invite codes, scores counted server-side from approved submissions | — |
 | **Sync after pairing** | ✅ real now — quests, submissions, approvals and XP all travel the link | — |
 | **Reminders while the app is closed** | ✅ built — reminder times are saved to the account with the family's own time zone, and `api/send-reminders.js` delivers them. **You have to schedule it** — [docs/NOTIFICATIONS.md](NOTIFICATIONS.md) | — |
-| **Background push delivery** | Written and wired, but never actually delivered a message — no push service is reachable from the sandbox | Test on two real phones |
+| **Background push delivery** | ✅ proven end to end against a stand-in push service (`tests/push.mjs`): sent from the production build under workerd, VAPID signature verified, body decrypted with the phone's keys. A real phone's push service is the one step not exercised | Try it on one real phone |
 | **Subscriptions** | ✅ built — off until you connect your own Stripe account | [docs/PAYMENTS.md](PAYMENTS.md) |
-| **The 20% Discount Tournament** | ✅ built — `api/settle-alliances.js` decides each month's winner and applies a real Stripe coupon. **You have to schedule it**; nothing pays out until you do — [docs/PAYMENTS.md](PAYMENTS.md) | — |
+| **The 20% Discount Tournament** | ✅ built — `api/settle-alliances.js` decides each month's winner and gives a real Stripe account credit. **You have to schedule it**; nothing pays out until you do — [docs/PAYMENTS.md](PAYMENTS.md) | — |
 
 One row is left, and it is the honest one: background push has been written,
 wired and reviewed, but has never delivered a single message, because no push
@@ -103,6 +87,30 @@ service is reachable from the sandbox this was built in. It needs two real
 phones. Everything else in this table is real.
 
 ---
+
+## The School League — ✅ built, charging once Stripe is connected
+
+| Thing | Status | Notes |
+|---|---|---|
+| School sign-up, priced by size | ✅ | `/school`. Anyone can sign a school up; it starts on a 30-day trial |
+| Join codes for parents and staff | ✅ | Only a parent can put a child in a school |
+| District league | ✅ | Average per student, at most 8 chores a day each, from approved chores only |
+| Rival schools | ✅ | Challenge, accept, decline, end; monthly results kept |
+| School Stars (top ten) | ✅ | The admin checks the list before families see it. First names only with a parent's yes |
+| Checking a school is real | ✅ | `/#/operator` with your `OPERATOR_SECRET`: verify, suspend, lift a suspension. Until verified a school is in no league and sees no names |
+| Charging schools | ✅ built, off until Stripe is connected | `api/school-checkout.js`, priced by the school's size. Needs the eight `STRIPE_PRICE_SCHOOL_*` prices — [PAYMENTS.md](PAYMENTS.md#the-school-league) |
+| Closing each month, and the Champion's free month | ✅ built — **you have to schedule it** | `api/settle-schools.js`, monthly. Safe to run twice; a free month that failed is retried next run |
+
+Known limits, decided rather than missed (from the October 2026 review):
+
+- **Membership is counted when the month is closed**, not on its last day. A
+  family taking a child out on the 31st changes that school's average.
+- **Five students can be one family.** The minimum counts children, not
+  households. Requiring several families would stop one family making a
+  school rankable; it would also slow a new school's start.
+- **The 8-a-day cap is by approval day.** A parent who approves a week's
+  chores in one go counts at most 8 that day. Counting by when the child
+  submitted would fix that; it would also let a child's backlog count later.
 
 ## Knowing it is working, without watching it
 
@@ -124,13 +132,10 @@ app.
 
 These look like missing features. They are choices.
 
-- **The AI never approves or rejects.** It produces a score and a list of flags for the
-  parent to read. A false accusation from an automated checker does far more damage in a
-  family app than a missed cheat. There is no "auto-approve anything clean" button and
-  there should not be one.
+- **Only a parent accepts.** There is no automatic checker and no "auto-accept"
+  button. A parent looks (at the chore, or a photo sent by message) and decides.
 - **Adaptive quests are scored leniently.** They are written around one child's limits,
-  so a fixed "does the photo show a perfectly made bed" test does not apply. The photo
-  check knows a quest is adaptive and softens accordingly.
+  so a fixed "is the bed perfectly made" test does not apply.
 - **Overrides never remove XP, levels or streaks.** A parent can tax currency and lock
   the app, but progress a kid earned stays earned.
 - **Parent themes change nothing but colours.** That is the promise made in the pricing.

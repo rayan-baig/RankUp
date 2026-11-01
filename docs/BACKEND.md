@@ -13,8 +13,9 @@ setting two environment variables.
 this order, or `psql -f` it.
 
 ```
-schema.sql  sync.sql  guilds.sql  notifications.sql  consent.sql  billing.sql
-alliances.sql  reminders.sql  digests.sql  retention.sql  crashes.sql  health.sql
+schema.sql  sync.sql  coparents.sql  allowance.sql  guilds.sql  notifications.sql
+consent.sql  billing.sql  charity.sql  alliances.sql  schools.sql  reminders.sql
+digests.sql  referrals.sql  retention.sql  crashes.sql  health.sql
 ```
 
 Every one of them is safe to run again over a live database, and that IS the upgrade
@@ -22,7 +23,7 @@ procedure — there is no migration tool and no version table. A column added la
 appears as an explicit `alter table ... add column if not exists` at the end of
 `schema.sql`, so an existing database catches up without being rebuilt.
 
-`supabase/test/run.sh` applies all twelve files twice, over a database with rows in it,
+`supabase/test/run.sh` applies all seventeen files twice, over a database with rows in it,
 and `supabase/test/18-upgrade.sql` then checks that the data survived and that the later
 columns and constraints really arrived. So "safe to re-run" is a tested claim rather
 than an intention.
@@ -37,10 +38,9 @@ Three separate things, often confused:
    app on your phone and the app on your kid's phone to know they belong together.
 2. **A database** — one shared copy of the data, so both phones read and write the same
    quests, XP and approvals.
-3. **File storage** — somewhere to put the photos that is not the phone's 5 MB browser
-   quota.
+RankUp needs no file storage: it keeps no photos.
 
-Supabase provides all three, has a free tier that is genuinely enough to develop and
+Supabase provides both, has a free tier that is genuinely enough to develop and
 demo on, and is a normal Postgres database underneath, so nothing about it is a dead end.
 
 Firebase is a reasonable alternative. Supabase is suggested because its database is
@@ -83,11 +83,10 @@ The one genuine complication: `loadState()` is synchronous today (it returns ins
 and a database call is not (it takes time). So the app needs a loading state on first
 open. That is one extra screen, not a rewrite.
 
-### Step 4 — move photos to Supabase Storage
+### Step 4 — no photos to move
 
-Instead of stuffing a base64 data URL into `localStorage`, upload the JPEG to a Storage
-bucket and keep only its URL in the database. This also fixes the "oldest photos get
-dropped when the quota fills" behaviour that exists today.
+RankUp no longer takes or keeps photos. A parent who wants proof gets one from the
+child's own camera app, by message, and taps Accept. So there is no storage bucket.
 
 ### Step 5 — real guilds, last
 

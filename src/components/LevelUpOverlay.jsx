@@ -3,6 +3,7 @@ import Avatar, { avatarTier, tiersFor } from './Avatar.jsx'
 import { Button, SparkleBurst } from './ui.jsx'
 import { CountUp } from './Motion.jsx'
 import { nextEvolution, KID_THEME_MAP } from '../data/kidThemes.js'
+import { navigate } from '../lib/router.js'
 
 /** The moment the whole loop is built around. Keep it short and loud. */
 export default function LevelUpOverlay({ levelUp, kid, theme, onClose }) {
@@ -15,8 +16,10 @@ export default function LevelUpOverlay({ levelUp, kid, theme, onClose }) {
   const tierAfter = avatarTier(levelUp.to, theme)
   const formCount = tiersFor(theme).length
   const newForm = tierAfter > tierBefore
+  // Worlds opened by a story milestone (Block Craft's last, by beating the
+  // dragon) arrive with that milestone, not with a level.
   const evolutionHit = KID_THEME_MAP[kid.themeId]?.evolutions?.find(
-    (e) => levelUp.from < e.level && levelUp.to >= e.level,
+    (e) => !e.requires && levelUp.from < e.level && levelUp.to >= e.level,
   )
   const upcoming = nextEvolution(kid.themeId, levelUp.to)
 
@@ -60,10 +63,27 @@ export default function LevelUpOverlay({ levelUp, kid, theme, onClose }) {
           </>
         )}
         {!newForm && !evolutionHit && upcoming && (
-          <p className="text-xs text-muted mb-2">Next secret at level {upcoming.level}.</p>
+          <p className="text-xs text-muted mb-2">
+            {upcoming.requires === 'dragonDefeated' ? 'Next secret: beat the dragon.' : `Next secret at level ${upcoming.level}.`}
+          </p>
         )}
 
-        <Button className="mt-3 px-8" onClick={onClose}>Nice</Button>
+        {/* Only in the child's half: a parent's phone has no story to watch. */}
+        {evolutionHit?.chapter && window.location.hash.startsWith('#/kid') ? (
+          <div className="flex gap-2 justify-center mt-3">
+            <Button variant="soft" onClick={onClose}>Later</Button>
+            <Button
+              onClick={() => {
+                onClose()
+                navigate(evolutionHit.chapter === 'dragon' ? '/kid/dragon' : `/kid/story/${evolutionHit.chapter}`)
+              }}
+            >
+              ▶ Watch the battle
+            </Button>
+          </div>
+        ) : (
+          <Button className="mt-3 px-8" onClick={onClose}>Nice</Button>
+        )}
       </div>
     </div>
   )

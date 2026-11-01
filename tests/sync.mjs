@@ -2,7 +2,7 @@
  * The whole loop, across two devices, through a real database.
  *
  * This is the test that matters most: a quest assigned on the parent's phone
- * has to appear on the kid's, their photo proof has to come back, and the XP
+ * has to appear on the kid's, their "I did it" has to come back, and the XP
  * has to land. Everything else in the app is decoration if this does not work.
  *
  * It needs the local backend running — see supabase/test/README.md:
@@ -128,12 +128,8 @@ const visible = await kid.getByText('Tidy the bookshelf').count()
 if (visible) {
   await kid.getByText('Tidy the bookshelf').first().click()
   await kid.waitForTimeout(600)
-  await kid.getByRole('button', { name:/Take photo proof/ }).click()
-  await kid.waitForTimeout(2500)
-  await kid.getByRole('button', { name:'Take photo' }).click()
-  await kid.waitForTimeout(700)
-  await kid.getByRole('button', { name:'Use this photo' }).click()
-  await kid.waitForTimeout(3500)
+  await kid.getByRole('button', { name:/I did it/ }).click()
+  await kid.waitForTimeout(600)
   await kid.getByRole('button', { name:'Send to parent' }).click()
   await kid.waitForTimeout(4000)
 
@@ -143,19 +139,18 @@ if (visible) {
   await parent.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
   await parent.waitForTimeout(4000)
   await parent.screenshot({ path:`${SHOT}/sync-parent-review.png` })
-  // The photo is the whole point of the review screen: a parent asked to
-  // approve a picture they cannot see is just clicking yes.
+  // RankUp carries no photos: proof, if wanted, goes by the family's messages.
   const proof = await parent.locator('img[alt^="Proof for"]').count()
-  proof
-    ? pass('the photo itself reached the parent phone, not just the row')
-    : fail('the photo itself reached the parent phone', 'no proof image on the review screen')
+  proof === 0
+    ? pass('no photo travels through RankUp')
+    : fail('no photo travels through RankUp', 'an image is on the review screen')
 
   const inQueue = await parent.getByText('Tidy the bookshelf').count()
   inQueue ? pass('the submission reached the parent phone')
           : fail('submission reached the parent', 'not in the review queue')
 
   if (inQueue) {
-    await parent.getByRole('button', { name:'Approve' }).first().click()
+    await parent.getByRole('button', { name:'Accept' }).first().click()
     await parent.waitForTimeout(4000)
     await kid.bringToFront()
     await kid.evaluate(() => { window.location.hash = '/kid' })

@@ -102,9 +102,11 @@ revoke execute on function credit_allowance(uuid) from public;
  * A parent who wants to give extra gives a gift, which is its own line and
  * says so.
  */
-create or replace function record_payout(p_kid_id uuid, p_pence int, p_note text default '')
+drop function if exists record_payout(uuid, int, text);
+create or replace function record_payout(p_kid_id uuid, p_pence int, p_note text default '', p_request_id uuid default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
+  v_prior  jsonb;
   v_family uuid := current_family_id();
   v_pot    int;
   v_me     uuid;
@@ -115,6 +117,10 @@ begin
   if not exists (select 1 from kids where id = p_kid_id and family_id = v_family) then
     return jsonb_build_object('ok', false, 'reason', 'no_such_kid');
   end if;
+  -- One line per request: a retried send must not record the money twice.
+  perform 1 from kids where id = p_kid_id for update;
+  v_prior := rpc_receipt(p_request_id, p_kid_id);
+  if v_prior is not null then return v_prior; end if;
   if p_pence is null or p_pence <= 0 then
     return jsonb_build_object('ok', false, 'reason', 'not_an_amount');
   end if;
@@ -129,10 +135,11 @@ begin
   insert into allowance_entries (family_id, kid_id, pence, kind, note, created_by)
   values (v_family, p_kid_id, -p_pence, 'paid', coalesce(p_note, ''), v_me);
 
-  return jsonb_build_object('ok', true, 'pot', v_pot - p_pence);
+  return keep_rpc_receipt(p_request_id, p_kid_id, 'record_payout',
+                          jsonb_build_object('ok', true, 'pot', v_pot - p_pence));
 end $$;
 
-grant execute on function record_payout(uuid, int, text) to authenticated;
+grant execute on function record_payout(uuid, int, text, uuid) to authenticated;
 
 /**
  * Money from outside the chore list: a birthday, a one-off job, a correction.
@@ -141,9 +148,11 @@ grant execute on function record_payout(uuid, int, text) to authenticated;
  * every one is somebody typing a number, and the only realistic way it goes
  * wrong is by typing too many noughts.
  */
-create or replace function record_gift(p_kid_id uuid, p_pence int, p_note text default '')
+drop function if exists record_gift(uuid, int, text);
+create or replace function record_gift(p_kid_id uuid, p_pence int, p_note text default '', p_request_id uuid default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
+  v_prior  jsonb;
   v_family uuid := current_family_id();
   v_me     uuid;
 begin
@@ -153,6 +162,10 @@ begin
   if not exists (select 1 from kids where id = p_kid_id and family_id = v_family) then
     return jsonb_build_object('ok', false, 'reason', 'no_such_kid');
   end if;
+  -- One line per request: a retried send must not record the money twice.
+  perform 1 from kids where id = p_kid_id for update;
+  v_prior := rpc_receipt(p_request_id, p_kid_id);
+  if v_prior is not null then return v_prior; end if;
   if p_pence is null or p_pence <= 0 or p_pence > 50000 then
     return jsonb_build_object('ok', false, 'reason', 'not_an_amount');
   end if;
@@ -161,10 +174,10 @@ begin
   insert into allowance_entries (family_id, kid_id, pence, kind, note, created_by)
   values (v_family, p_kid_id, p_pence, 'gift', coalesce(p_note, ''), v_me);
 
-  return jsonb_build_object('ok', true);
+  return keep_rpc_receipt(p_request_id, p_kid_id, 'record_gift', jsonb_build_object('ok', true));
 end $$;
 
-grant execute on function record_gift(uuid, int, text) to authenticated;
+grant execute on function record_gift(uuid, int, text, uuid) to authenticated;
 
 /**
  * The pot, and how it got there.

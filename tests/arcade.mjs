@@ -37,7 +37,7 @@ await submitPhotoProof(page)
 await asParent(page)
 await page.evaluate(() => { window.location.hash = '/parent/approvals' })
 await page.waitForTimeout(700)
-await page.getByRole('button', { name: 'Approve' }).first().click()
+await page.getByRole('button', { name: 'Accept' }).first().click()
 await page.waitForTimeout(1200)
 const afterApproval = (await readState(page)).kids[0]
 afterApproval.playTokens === 1

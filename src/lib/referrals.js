@@ -75,8 +75,8 @@ export function shareText(code, days = 30) {
   return [
     `Here's ${days} days of RankUp, free.`,
     '',
-    'It turns chores into a game my kids actually ask to play — they photograph',
-    'what they did, I approve it, they level up.',
+    'It turns chores into a game my kids actually ask to play — they do the chore,',
+    'I accept it, they level up.',
     '',
     `Use my code when you sign up: ${code}`,
   ].join('\n')

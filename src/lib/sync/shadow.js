@@ -203,13 +203,36 @@ export function queueChanges(state, { photoFor, role } = {}) {
       const shadowId = `${table}:${item.id}`
       seen.add(shadowId)
       const serialised = JSON.stringify(row)
-      if (shadow[shadowId] === serialised) continue
+      const known = shadow[shadowId]
+      if (known === serialised) continue
+      // A row this device created, that the server has not yet sent back,
+      // may never have arrived (its insert refused, or given up on after a
+      // day). Changes to it go whole, so they create it rather than patch
+      // nothing: a patch of a missing row "succeeds" and changes nothing.
+      const unconfirmed = shadow[`?${shadowId}`]
+      // A row the server already has is sent as the columns that changed,
+      // never the whole row. The whole row overwrote, column by column, what
+      // another parent had changed meanwhile: renaming a child on one phone
+      // lifted the lockdown just applied on the other. And a child's phone
+      // marking a note read sent an insert-or-update, which row level security
+      // refuses for a note the child did not write; an update is allowed.
+      let op = { type: 'upsert', table, row }
+      if (known && !unconfirmed) {
+        const before = JSON.parse(known)
+        const changed = { id: row.id }
+        for (const [column, value] of Object.entries(row)) {
+          if (JSON.stringify(before[column]) !== JSON.stringify(value)) changed[column] = value
+        }
+        if (Object.keys(changed).length === 1) { shadow[shadowId] = serialised; continue }
+        op = { type: 'patch', table, row: changed }
+      }
       // Only remember it as sent if it was actually queued. enqueue returns
       // null when localStorage refused the write, and recording the shadow
       // anyway meant the change was skipped from then on — silently lost to a
       // full quota, which this app hits routinely because photos live there.
-      if (!enqueue({ type: 'upsert', table, row })) continue
+      if (!enqueue(op)) continue
       shadow[shadowId] = serialised
+      if (op.type === 'upsert') shadow[`?${shadowId}`] = true
       queued += 1
     }
 
@@ -219,6 +242,7 @@ export function queueChanges(state, { photoFor, role } = {}) {
       const id = shadowId.slice(table.length + 1)
       if (!enqueue({ type: 'delete', table, id })) continue
       delete shadow[shadowId]
+      delete shadow[`?${shadowId}`]
       queued += 1
     }
     void snapshotKey
@@ -226,6 +250,76 @@ export function queueChanges(state, { photoFor, role } = {}) {
 
   writeShadow(shadow)
   return queued
+}
+
+/**
+ * The rows this device has changed and the server has not yet confirmed.
+ *
+ * A pull that arrives while one of these is waiting must not overwrite it: the
+ * server's copy is older than the device's. That was the commonest way an edit
+ * disappeared. The cursor deliberately lags, so a pull routinely carries rows
+ * changed in the last few seconds, and a child's row changes every time they
+ * play or are approved. A parent tapping "Lift now" a moment before such a
+ * pull landed saw the lockdown come straight back, and it stayed back.
+ */
+export function pendingRows(ops) {
+  const pending = new Set()
+  for (const op of ops) {
+    if ((op.type === 'upsert' || op.type === 'patch') && op.row?.id) pending.add(`${op.table}:${op.row.id}`)
+    // A delete is marked twice: as a row with a change waiting, and as a
+    // delete, so a pull cannot bring the row back while the delete waits.
+    else if (op.type === 'delete') { pending.add(`${op.table}:${op.id}`); pending.add(`delete:${op.table}:${op.id}`) }
+    // A child's own look travels by function rather than as a row.
+    else if (op.type === 'rpc' && op.fn === 'set_kid_look' && op.args?.p_kid_id) pending.add(`kids:${op.args.p_kid_id}`)
+  }
+  return pending
+}
+
+/**
+ * Record the rows a pull delivered as what the server holds, from the rows
+ * themselves.
+ *
+ * This used to record the device's state AFTER the merge, a quarter of a
+ * second later. An edit made in that quarter second was in that state, so it
+ * was written down as already on the server and never sent. Taking the
+ * server's own row, laid over the local item so local-only fields are there,
+ * records exactly what the server said and nothing the device did since.
+ *
+ * Rows in `skip` have a change of the device's own still waiting to go; their
+ * shadow already describes that change and is left alone.
+ */
+export function recordDelivered(state, snapshot, { photoFor, skip = new Set() } = {}) {
+  if (!state.family?.id || !snapshot) return
+  const shadow = readShadow()
+  const familyId = state.family.id
+  for (const [snapshotKey, { key: stateKey, mapper, table }] of Object.entries(ENTITIES)) {
+    const rows = snapshot[snapshotKey]
+    if (!Array.isArray(rows) || !rows.length) continue
+    const local = new Map((state[stateKey] || []).map((item) => [item.id, item]))
+    for (const delivered of rows) {
+      if (!delivered?.id || skip.has(`${table}:${delivered.id}`)) continue
+      const item = mapper.fromRow(delivered, local.get(delivered.id) || {})
+      const row = stripServerOwned(
+        table,
+        table === 'submissions'
+          ? mapper.toRow(item, familyId, photoFor?.(item))
+          : mapper.toRow(item, familyId),
+      )
+      shadow[`${table}:${item.id}`] = JSON.stringify(row)
+      delete shadow[`?${table}:${item.id}`]   // the server has it
+      if (table === 'kids' && item.id === state.device?.linkedKidId) {
+        shadow[`kids-look:${item.id}`] = JSON.stringify(lookOf(item, familyId))
+      }
+    }
+  }
+  // Gone on the server: nothing left to send a delete for.
+  for (const deletion of snapshot.deletions || []) {
+    if (deletion?.table_name && deletion?.row_id) {
+      delete shadow[`${deletion.table_name}:${deletion.row_id}`]
+      delete shadow[`?${deletion.table_name}:${deletion.row_id}`]
+    }
+  }
+  writeShadow(shadow)
 }
 
 /** After a pull, record what the server now holds so we do not echo it back. */

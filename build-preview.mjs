@@ -68,7 +68,13 @@ const run = (cmd, args, opts = {}) => {
 
 // --- 1. build, with nothing behind it ---------------------------------------
 console.log('· building the app in its no-backend mode')
-run('npx', ['vite', 'build', '--outDir', DIST], {
+/*
+ * `--base ./` because a preview is opened from inside somebody else's
+ * folder (the MTRX Horizon demo puts it under rankup/). Built for the site
+ * root, the pictures the bundle imports asked for /assets/... and came back
+ * missing, so every avatar was a broken image.
+ */
+run('npx', ['vite', 'build', '--outDir', DIST, '--base', './'], {
   env: {
     ...process.env,
     VITE_SUPABASE_URL: '',
@@ -163,9 +169,16 @@ try {
    * 76 kB of seeded state contains those sequences by chance — which silently
    * splices fragments of the page into the middle of the JSON.
    */
+  /*
+   * Without the page's Content-Security-Policy. The preview has no backend
+   * and nobody's data, so the policy protects nothing here, and it would
+   * refuse the inline seed script below and the one the MTRX Horizon demo
+   * adds when it wraps this build.
+   */
+  const unlocked = rooted.replace(/\s*<meta http-equiv="Content-Security-Policy"[^>]*>/, '')
   const html = seedScript
-    ? rooted.replace(MODULE_TAG, () => `${seedScript}\n${tag[0].trim()}`)
-    : rooted
+    ? unlocked.replace(MODULE_TAG, () => `${seedScript}\n${tag[0].trim()}`)
+    : unlocked
 
   writeFileSync(`${OUT_DIR}/index.html`, html)
   pageSize = Buffer.byteLength(html)

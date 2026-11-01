@@ -1,14 +1,18 @@
 # Getting RankUp online
 
-You need it deployed for two reasons beyond sharing it: **the camera only works on
-`https://`**, and the AI photo check needs a server to hold the API key.
+> **This page is for a quick preview.** To launch for real families (database,
+> payments, scheduled jobs, legal), follow [LAUNCH.md](LAUNCH.md) instead; it
+> recommends Cloudflare Pages.
+
+You need it deployed to share it, and because phones only install a site (and only
+send notifications) when it is on `https://`.
 
 Both options below are free at this size and deploy automatically every time you push to
 GitHub.
 
 ---
 
-## Vercel (recommended, because `api/verify-photo.js` works with no setup)
+## Vercel
 
 1. Push this repository to GitHub.
 2. Go to [vercel.com](https://vercel.com), sign in with GitHub, **Add New → Project**,
@@ -16,50 +20,21 @@ GitHub.
 3. Vercel detects Vite by itself. Leave the build settings alone:
    - Build command: `npm run build`
    - Output directory: `dist`
-4. Before deploying, open **Environment Variables** and add:
-   - `ANTHROPIC_API_KEY` → your key (optional; skip it to run the on-device checks only)
-   - `VITE_AI_VERIFY_URL` → `/api/verify-photo`
-5. Deploy.
-
-The `api/` folder becomes a serverless function automatically. Nothing else to configure.
+4. Deploy.
 
 ---
 
 ## Netlify
-
-Netlify looks for functions in a different folder, so add one file:
 
 ```toml
 # netlify.toml, in the project root
 [build]
   command = "npm run build"
   publish = "dist"
-  functions = "netlify/functions"
 ```
 
-```js
-// netlify/functions/verify-photo.js
-import handler from '../../api/verify-photo.js'
-
-export default async (request) => {
-  const body = await request.text()
-  let status = 200
-  let payload = null
-  const res = {
-    status: (code) => { status = code; return res },
-    json: (data) => { payload = data; return res },
-    setHeader: () => res,
-    end: () => res,
-  }
-  await handler({ method: request.method, body }, res)
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
-```
-
-Then set the same two environment variables in Site settings → Environment variables.
+A preview needs nothing else. For payments, reminders and the other server jobs, use
+the Cloudflare set-up in [LAUNCH.md](LAUNCH.md).
 
 ---
 
@@ -90,9 +65,8 @@ https certificate automatically.
 ## Checking a deploy actually worked
 
 1. Open the site on a real phone.
-2. Complete the setup, assign a quest, open it, tap **Take photo proof**. The camera
-   should ask permission and show a live view. If it does not, you are on `http://`, not
-   `https://`.
-3. Take a photo. If you configured the API key, the report should include a sentence of
-   description from Claude. If it does not, the report will say the cloud check did not
-   run — check the environment variables and redeploy.
+2. Complete the setup and assign a quest.
+3. On the kid's side, open it and tap **I did it!**, then **Send to parent**.
+4. On the parent's side, the chore should be waiting. Tap **Accept** and the XP should
+   land. RankUp takes no photos: a parent who wants proof gets one from the child's
+   own camera app, by message.

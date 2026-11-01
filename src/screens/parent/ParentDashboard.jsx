@@ -3,6 +3,7 @@ import { useApp, useElite, pendingSubmissions } from '../../state/AppContext.jsx
 import { levelFromXp, formatXp } from '../../lib/xp.js'
 import { lastSevenDays, relativeTime } from '../../lib/dates.js'
 import { resolveKidTheme } from '../../data/kidThemes.js'
+import { storyProgress } from '../../lib/dragonFight.js'
 import { findGame } from '../../data/minigames.js'
 import { MARKET_SKINS } from '../../data/marketSkins.js'
 import { activeLockout } from '../../state/reducer.js'
@@ -29,7 +30,6 @@ export default function ParentDashboard() {
   }, [state.events])
 
   const totalWeekXp = Object.values(weekXp).reduce((a, b) => a + b, 0)
-  const flagged = pending.filter((s) => s.report && s.report.verdict !== 'looks_good')
 
   return (
     <Screen>
@@ -50,13 +50,13 @@ export default function ParentDashboard() {
       {pending.length > 0 && (
         <Card className="mb-3" style={{ borderColor: 'var(--warn)' }}>
           <div className="flex items-center gap-3">
-            <span className="text-2xl" aria-hidden="true">📸</span>
+            <span className="text-2xl" aria-hidden="true">✅</span>
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-sm">
                 {pending.length} {pending.length === 1 ? 'submission' : 'submissions'} waiting
               </div>
               <div className="text-xs text-muted">
-                {flagged.length > 0 ? `${flagged.length} flagged by the photo check` : 'None flagged by the photo check'}
+                Waiting for you to accept
               </div>
             </div>
             <Button className="px-3 py-2 min-h-0 text-sm" onClick={() => navigate('/parent/approvals')}>Review</Button>
@@ -73,7 +73,7 @@ export default function ParentDashboard() {
       ) : (
         state.kids.map((kid) => {
           const { level, progress } = levelFromXp(kid.xp)
-          const theme = resolveKidTheme(kid.themeId, level)
+          const theme = resolveKidTheme(kid.themeId, level, storyProgress(state, kid))
           const lock = activeLockout(kid)
           const kidPending = pending.filter((s) => s.kidId === kid.id).length
           const active = state.quests.filter((q) => q.kidId === kid.id && (q.status === 'assigned' || q.status === 'redo')).length
@@ -150,6 +150,21 @@ export default function ParentDashboard() {
           </button>
         ))}
       </div>
+
+      {/* Not an Elite tool: the school pays for the league, so every family
+          whose school plays can join it, on any plan. */}
+      <button
+        type="button"
+        onClick={() => navigate('/parent/school')}
+        className="card w-full mb-3 p-3 flex items-center gap-3 text-left transition-transform active:scale-[0.98]"
+      >
+        <span className="text-2xl shrink-0" aria-hidden="true">🏫</span>
+        <span className="flex-1 min-w-0">
+          <span className="block font-semibold text-sm">School League</span>
+          <span className="block text-xs text-muted">Chores count for your child’s school. Best school in the district wins.</span>
+        </span>
+        <span aria-hidden="true" className="text-muted">›</span>
+      </button>
 
       {!elite && (
         <Banner tone="info" icon="⚡" title="Elite Pass — $15.99/mo" action={<Button className="px-3 py-2 min-h-0 text-xs shrink-0" onClick={() => navigate('/parent/plan')}>See it</Button>}>

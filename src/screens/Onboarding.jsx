@@ -139,8 +139,7 @@ export default function Onboarding() {
             <h2 className="font-display font-bold mb-2 text-sm">How the loop works</h2>
             <ol className="text-sm text-muted space-y-1.5 list-decimal list-inside">
               <li>You assign a quest to a kid.</li>
-              <li>They do it, then photograph the result in the app.</li>
-              <li>An AI check flags anything that looks faked — as advice, not a decision.</li>
+              <li>They do it and tap “I did it!”. If you want proof, they send you a photo from their camera app.</li>
               <li>You approve or send it back. Approving awards XP and currency.</li>
             </ol>
           </Card>

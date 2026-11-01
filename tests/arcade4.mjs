@@ -215,8 +215,17 @@ for (let i = 0; i < 90; i += 1) {
   if (await ended()) break
   // eslint-disable-next-line no-await-in-loop
   const pickUp = page.getByRole('button', { name: /pick up/ })
+  /*
+   * A wild card asks for a colour before the game goes on. Nothing below
+   * answered it, so a game that dealt a wild stalled on the question until
+   * the loop ran out: this test failed about one run in three.
+   */
   // eslint-disable-next-line no-await-in-loop
-  if (await pickUp.count()) {
+  if (await page.getByText('Pick a colour').count()) {
+    // eslint-disable-next-line no-await-in-loop
+    await page.getByRole('button', { name: /^(red|yellow|green|blue)$/i }).first().click().catch(() => {})
+  // eslint-disable-next-line no-await-in-loop
+  } else if (await pickUp.count()) {
     // eslint-disable-next-line no-await-in-loop
     await pickUp.first().click().catch(() => {})
   } else {

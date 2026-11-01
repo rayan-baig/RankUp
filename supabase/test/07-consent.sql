@@ -129,6 +129,36 @@ begin
   set local role app_user;
 end $$;
 
+-- Deleting an account that has children in it. The case above has none, and
+-- that is how a deletion that failed for every real family went unnoticed:
+-- the child's row tried to leave a sync tombstone pointing at the family
+-- being deleted, and the foreign key aborted the lot.
+reset role;
+insert into auth.users (id, email) values ('d7777777-7777-7777-7777-777777777777', 'del-with-kid@example.com');
+insert into families (id, name) values ('d7777777-0000-0000-0000-0000000000f1', 'Family With A Child');
+insert into parents (user_id, family_id, name)
+values ('d7777777-7777-7777-7777-777777777777', 'd7777777-0000-0000-0000-0000000000f1', 'Del');
+select seed_consent('d7777777-0000-0000-0000-0000000000f1', 'd7777777-7777-7777-7777-777777777777');
+insert into kids (id, family_id, name)
+values ('d7777777-0000-0000-0000-0000000000c1', 'd7777777-0000-0000-0000-0000000000f1', 'Kit');
+insert into quests (family_id, kid_id, title)
+values ('d7777777-0000-0000-0000-0000000000f1', 'd7777777-0000-0000-0000-0000000000c1', 'Bins');
+set role app_user;
+
+do $$
+declare res jsonb;
+begin
+  perform become('d7777777-7777-7777-7777-777777777777');
+  res := delete_family_account('DELETE');
+  perform ok('an account with a child in it can be deleted', (res->>'ok')::boolean);
+  set local role postgres;
+  perform ok('and the child is really gone',
+    not exists (select 1 from kids where id = 'd7777777-0000-0000-0000-0000000000c1'));
+  perform ok('with nothing left behind pointing at the family',
+    not exists (select 1 from deletions where family_id = 'd7777777-0000-0000-0000-0000000000f1'));
+  set local role app_user;
+end $$;
+
 -- Photos.
 --
 -- The rule is now blunt: a reviewed photo is destroyed at the moment of the

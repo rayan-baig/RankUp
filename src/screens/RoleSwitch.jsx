@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useApp } from '../state/AppContext.jsx'
 import { resolveKidTheme } from '../data/kidThemes.js'
+import { storyProgress } from '../lib/dragonFight.js'
 import { levelFromXp } from '../lib/xp.js'
 import Avatar from '../components/Avatar.jsx'
 import { Card, Button, TextInput, Modal } from '../components/ui.jsx'
@@ -63,7 +64,7 @@ export default function RoleSwitch() {
       <div className="space-y-2.5 mb-5">
         {state.kids.map((kid) => {
           const { level } = levelFromXp(kid.xp)
-          const theme = resolveKidTheme(kid.themeId, level)
+          const theme = resolveKidTheme(kid.themeId, level, storyProgress(state, kid))
           return (
             <button
               key={kid.id}
@@ -88,7 +89,7 @@ export default function RoleSwitch() {
       <Card className="text-center">
         <div className="text-2xl mb-1" aria-hidden="true">🔐</div>
         <h2 className="font-display font-bold mb-1">Parent Mode</h2>
-        <p className="text-xs text-muted mb-3">Assign quests, approve photo proof, manage the plan.</p>
+        <p className="text-xs text-muted mb-3">Assign quests, accept finished chores, manage the plan.</p>
         <Button className="w-full" onClick={openParent}>
           {state.demo || !state.family.pin ? 'Open Parent Mode' : 'Enter PIN'}
         </Button>

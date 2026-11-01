@@ -13,7 +13,12 @@ import { chromium } from 'playwright'
 import { reporter, finish, BASE, setUpFamily } from './helpers.mjs'
 
 const { fails, pass, fail } = reporter()
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined })
+// The full browser, not the stripped "headless shell" Playwright uses by
+// default: the shell refuses notification permission whatever the context
+// grants, which is why this failed on GitHub and passed locally.
+const browser = await chromium.launch(
+  process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : { channel: 'chromium' },
+)
 const ctx = await browser.newContext({
   viewport: { width: 390, height: 844 },
   permissions: ['notifications'],

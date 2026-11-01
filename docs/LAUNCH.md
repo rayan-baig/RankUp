@@ -12,10 +12,11 @@ this.
 ## 1. Create the accounts (about an hour)
 
 - [ ] **Supabase** — [supabase.com](https://supabase.com), new project, pick a
-      region near your users. **Stay on the free tier.** It covers 500MB of
-      database and 50,000 monthly users; you will not outgrow it for a long
-      time, and upgrading before something actually breaks is $25/month spent on
-      nothing.
+      region near your users. The free tier is enough while you build and
+      test (500MB of database, 50,000 monthly users). **Before real families
+      use it, move to the paid plan** (about $25/month): the free plan does not
+      keep backups you can count on, and losing the database loses every
+      family. See docs/BACKUPS.md.
 - [ ] **A host.** Two are configured and the same `/api` handlers run on either:
       - **Cloudflare Pages** — free, and its free tier permits commercial use.
         Config is `wrangler.toml`; the Node handlers run through
@@ -32,10 +33,8 @@ this.
       **Not yet verified on Cloudflare:** `web-push` reaches for Node crypto.
       `nodejs_compat` is enabled for it, but send one real push from a Cloudflare
       deploy before trusting it. Everything else — Stripe checkout, the billing
-      portal, webhook signature verification and the photo check — was exercised
+      portal and webhook signature verification — was exercised
       against the adapter and behaves identically on both.
-- [ ] **Anthropic** *(optional)* — [console.anthropic.com](https://console.anthropic.com)
-      for the AI photo check. The app works without it.
 - [ ] **Stripe** — [stripe.com](https://stripe.com). Needs business details and
       a bank account, so start this early; verification can take days.
 
@@ -43,21 +42,34 @@ this.
 
 In the Supabase SQL editor, run these **in order**:
 
+**Upgrading later: always run the files again *before* deploying the new app.** A
+newer app calls functions the older database does not have yet, and those calls are
+refused (games, gifts and purchases would show as not accepted).
+
+(The same order the tests use, in `supabase/test/run.sh`. Leaving one out
+breaks that feature for every family: co-parents, the allowance pot,
+charity and referrals each live in their own file.)
+
 - [ ] `supabase/schema.sql`
 - [ ] `supabase/sync.sql`
+- [ ] `supabase/coparents.sql`
+- [ ] `supabase/allowance.sql`
 - [ ] `supabase/guilds.sql`
 - [ ] `supabase/notifications.sql`
 - [ ] `supabase/consent.sql`
 - [ ] `supabase/billing.sql`
+- [ ] `supabase/charity.sql`
 - [ ] `supabase/alliances.sql`
+- [ ] `supabase/schools.sql`
 - [ ] `supabase/reminders.sql`
 - [ ] `supabase/digests.sql`
+- [ ] `supabase/referrals.sql`
 - [ ] `supabase/retention.sql`
 - [ ] `supabase/crashes.sql`
 - [ ] `supabase/health.sql`
-- [ ] Create a **private** Storage bucket called `proof-photos`.
+- No storage bucket is needed: RankUp keeps no photos.
 
-## 2b. Schedule the four jobs — none of them are optional
+## 2b. Schedule the jobs — none of them are optional
 
 Set `CRON_SECRET` to a long random string. Each job is one HTTP request with
 `Authorization: Bearer <CRON_SECRET>`; they accept GET or POST, because
@@ -68,15 +80,16 @@ itself once `CRON_SECRET` is set in the project — there is nothing else to do.
 
 **On Cloudflare Pages there is no scheduler.** Pages Functions have no
 `scheduled` handler, so these will never fire on their own. Either deploy a
-small Worker with a Cron Trigger that `fetch`es the three URLs with the header,
+small Worker with a Cron Trigger that `fetch`es the job URLs below with the header,
 or point any external scheduler at them. Do not assume Pages will run them.
 
 | Job | How often | What breaks without it |
 |---|---|---|
 | `/api/send-reminders` | every 15 min | Daily reminders never arrive |
 | `/api/send-digests` | hourly | The Sunday digest never goes out |
-| `/api/run-retention` | daily | **Children's photos are never deleted** |
+| `/api/run-retention` | daily | Old activity records pile up |
 | `/api/settle-alliances` | monthly | Nobody is ever paid their discount |
+| `/api/settle-schools` | monthly | No District Champion, no School Stars, no free month |
 
 The hourly one looks wasteful and is not: the database decides whose Sunday
 evening it actually is, so an hourly run is what makes a digest arrive at six
@@ -96,8 +109,7 @@ GET  https://your-site/api/health   (with CRON_SECRET)   -> the detail
 ```
 
 Point any free uptime monitor at the shallow one. It is public on purpose and
-says nothing useful to a stranger; the detail — which job is stale, the
-undeleted-photo backlog, crashes in the last 24 hours — needs the secret, and
+says nothing useful to a stranger; the detail — which job is stale, crashes in the last 24 hours — needs the secret, and
 returns **503** when something is wrong so a monitor treats it as down.
 
 Worth knowing: a job that has **never** run reports `never_run`, not `stale`.
@@ -109,26 +121,28 @@ schedule was never set up at all.
 | every 10–15 min | `/api/send-reminders` | reminder times are saved and never delivered |
 | daily | `/api/run-retention` | see below |
 | monthly | `/api/settle-alliances` | families see a leaderboard and never get the discount |
+| monthly | `/api/settle-schools` | schools never get their Champion, Stars or free month |
 
-**Retention is the one that costs money.** Four tables grow forever and are only
-ever read over a short recent window — undecided submissions keep their photo,
-the activity log keeps every row, spent pairing codes never leave. Undecided
-photos alone are roughly **1.1 GB per 100 families per year**, against a 0.5 GB
-free-tier database; at 1,000 families it is about 12 GB a year. It is also the
-job that stops you holding photographs of the inside of children's homes for
-longer than you need them, which matters more than the bill.
+**Retention keeps the database small.** The activity log keeps every row and
+spent pairing codes never leave unless this job runs. (RankUp keeps no photos;
+the job also clears any left by an older version.)
 
 ## 3. Generate the keys
 
 - [ ] `npx web-push generate-vapid-keys` → the two VAPID values
 - [ ] Supabase → Settings → API → the project URL, the **anon** key, and the
       **service role** key
-- [ ] Stripe → three **monthly** prices ($4.99 Starter, $9.99 Standard, $15.99
-      Elite) plus three **one-off** Flash Ticket prices ($2.99 / 2, $5.99 / 5,
-      $11.99 / 12) → six price ids, as `STRIPE_PRICE_STARTER`,
-      `_STANDARD`, `_ELITE`, `_FLASH_2`, `_FLASH_5`, `_FLASH_12`. There is no
-      annual plan; do not create one without also changing
-      `api/create-checkout.js`.
+- [ ] Stripe → the family plans and the ticket packs:
+      - Starter is **free**: no Stripe price.
+      - Standard: $9.99 a month **and** $99.90 a year → `STRIPE_PRICE_STANDARD`,
+        `STRIPE_PRICE_STANDARD_YEAR`.
+      - Elite: $15.99 a month **and** $159.90 a year → `STRIPE_PRICE_ELITE`,
+        `STRIPE_PRICE_ELITE_YEAR`.
+      - Three **one-off** Flash Ticket prices ($2.99 / 2, $5.99 / 5,
+        $11.99 / 12) → `STRIPE_PRICE_FLASH_2`, `_FLASH_5`, `_FLASH_12`.
+      - School League: eight prices, see docs/PAYMENTS.md.
+      All the yearly ids must be set if you sell yearly: a missing one means
+      a family who just paid for a year is put back on the free plan.
 
       The three ticket packs exist because Stripe's flat 30c is 10% of a $2.99
       sale and 2.5% of an $11.99 one. They are sized against the shop, not
@@ -151,7 +165,7 @@ Safe in `VITE_`: the Supabase URL, the Supabase **anon** key, the VAPID
 **public** key, `VITE_STRIPE_ENABLED`.
 
 Never in `VITE_`: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`,
-`STRIPE_WEBHOOK_SECRET`, `VAPID_PRIVATE_KEY`, `ANTHROPIC_API_KEY`.
+`STRIPE_WEBHOOK_SECRET`, `VAPID_PRIVATE_KEY`.
 
 The app checks for this at start-up and shouts in the console if it finds a
 secret-shaped value in a public name. `npm run test:smoke` checks the other
@@ -166,8 +180,7 @@ them:
       start rather than sending a paying parent to a broken page.
 - [ ] `CRON_SECRET` — one long random string (`openssl rand -hex 32`) for all
       three scheduled jobs. Without it they refuse every caller including your
-      own scheduler, and the first thing you would notice is that children's
-      photos are never deleted.
+      own scheduler, and reminders and digests never go out.
 
 `GET /api/health` with that secret lists all of these as booleans, so you can
 check the deploy rather than guess at it.
@@ -185,9 +198,7 @@ check the deploy rather than guess at it.
 - [ ] Open the site on a **real phone**, not a desktop browser.
 - [ ] Add it to the home screen (Share → Add to Home Screen).
 - [ ] Walk the whole loop: sign up → consent → add a kid → assign a quest →
-      pair a second device → submit a photo → approve → check the XP lands.
-- [ ] Confirm the camera works. If it does not, you are on `http://` — it only
-      works over `https://`.
+      pair a second device → tap "I did it!" → accept → check the XP lands.
 - [ ] Turn on notifications and confirm one actually arrives.
 - [ ] In Stripe **test mode**, subscribe with `4242 4242 4242 4242`, then check
       the family really becomes Elite. Then use `4000 0000 0000 0341` and check
@@ -197,9 +208,10 @@ check the deploy rather than guess at it.
 
 The app is now built so there is very little to be responsible for:
 
-- **Photos are never retained.** A chore photo is destroyed the instant a parent
-  approves or sends it back. There is no library of photographs of children's
-  homes to lose, which removes most of the real-world risk in one stroke.
+- **No photos at all.** RankUp never takes, sends or keeps a picture. A parent
+  who wants proof gets a photo from the child's own camera app, by message,
+  and taps Accept. There is no photograph of a child or their home on any
+  RankUp server to protect or lose.
 - **Guilds are off by default.** Kid-to-kid contact across families is the
   heaviest obligation in the product and nobody subscribes for it. Leave
   `VITE_GUILDS_ENABLED` unset for launch.
@@ -226,7 +238,7 @@ launch.
 - [ ] One paid consultation with a solicitor or attorney who knows children's
       apps. Take them: `docs/LEGAL.md`, `src/data/legalText.js`, and this list.
 - [ ] Ask specifically about: whether your consent method is sufficient in your
-      jurisdiction, your photo retention period, guild chat between children in
+      jurisdiction, guild chat between children in
       different families, and whether you need age verification beyond a
       parent's word.
 - [ ] Register with the ICO if you are in the UK.
@@ -267,9 +279,8 @@ Be honest about these when you launch.
 
 | | Why |
 |---|---|
-| **The 20% Discount Tournament** | The leaderboard is sample data. Awarding the prize means applying Stripe coupons to ten subscriptions from a monthly job. |
 | **Reminders with the app closed** | They fire while RankUp is open. Background ones need a scheduled server job. |
-| **Background push, proven** | The code is written and its logic is sound, but no real push message has ever been delivered — no push service was reachable during development. Test it on two phones. |
+| **Background push, on a real phone** | Proven end to end against a stand-in push service (`tests/push.mjs`): the production build sends it, the signature verifies, and it decrypts with the phone's keys. It sends with `fetch`, because Node's `https` does not exist on Cloudflare and every push failed there before. A real phone's push service is the one step not yet tried. |
 | **Guilds** | Built and tested, but switched OFF by default. Turn them on with `VITE_GUILDS_ENABLED=true` once you are ready for kid-to-kid contact and the moderation it implies. |
 
 ## Running the tests

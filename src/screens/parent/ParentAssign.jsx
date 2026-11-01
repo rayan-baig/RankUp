@@ -224,7 +224,7 @@ export default function ParentAssign({ initialKidId }) {
 
           <Field
             label={quest.adaptive ? 'What counts as done for this kid' : 'What counts as done'}
-            hint="Both your kid and the photo check read this. Be concrete."
+            hint="Your kid reads this. Be concrete."
           >
             <TextArea
               value={quest.doneMeans}
@@ -261,15 +261,14 @@ export default function ParentAssign({ initialKidId }) {
                   ))}
                 </div>
                 <p className="text-xs text-muted mt-2">
-                  Adaptive quests are scored more leniently by the photo check, and partial credit is
-                  expected rather than exceptional.
+                  On adaptive quests, partial credit is expected rather than exceptional.
                 </p>
               </div>
             )}
           </div>
 
           <div className="card-flat p-3 mb-3 divide-y" style={{ borderColor: 'var(--line)' }}>
-            <Toggle checked={quest.requiresPhoto} onChange={(v) => set({ requiresPhoto: v })} label="Require photo proof" hint="Uses the in-app camera and runs the AI check." />
+            <Toggle checked={quest.requiresPhoto} onChange={(v) => set({ requiresPhoto: v })} label="Ask to see a photo" hint="Your kid sends you a photo from their own camera app before you accept. RankUp never takes or keeps photos." />
             <Toggle checked={quest.doubleXp} onChange={(v) => set({ doubleXp: v })} label="Surprise 2× XP" hint="Doubles the base XP for this quest." />
             <Toggle checked={quest.testScore} onChange={(v) => set({ testScore: v })} label="Test-score quest" hint="Kid enters a percentage; 80%+ earns a bonus." />
             <Toggle

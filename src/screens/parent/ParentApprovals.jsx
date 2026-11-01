@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { useApp, pendingSubmissions } from '../../state/AppContext.jsx'
-import { getPhoto } from '../../lib/storage.js'
-import { VERDICT, VERDICT_META } from '../../lib/aiVerify.js'
 import { calcReward } from '../../lib/xp.js'
 import { relativeTime, formatDuration } from '../../lib/dates.js'
 import { resolveKidTheme } from '../../data/kidThemes.js'
+import { storyProgress } from '../../lib/dragonFight.js'
 import { levelFromXp } from '../../lib/xp.js'
 import { isElite } from '../../state/reducer.js'
 import { Screen, Card, Button, SectionTitle, EmptyState, Banner, Chip, TextInput, Modal } from '../../components/ui.jsx'
@@ -13,10 +12,9 @@ import { STICKERS, STICKER_MAP } from '../../data/stickers.js'
 /**
  * The approval queue.
  *
- * The AI report is displayed as evidence, never as a decision. There is no
- * "auto-approve everything clean" button and there deliberately never will be:
- * the whole product promise is that a person, not a model, decides whether a
- * child gets credit for their work.
+ * RankUp holds no photos. When a parent wants proof, the child sends a photo
+ * from the phone's own camera app, the way the family already messages, and
+ * the parent taps Accept here once they have looked. A person decides, always.
  */
 export default function ParentApprovals() {
   const { state, dispatch } = useApp()
@@ -31,13 +29,12 @@ export default function ParentApprovals() {
    * Optional, and never in the way: not choosing one approves exactly as before.
    */
   const [stickers, setStickers] = useState({})
-  const [zoom, setZoom] = useState(null)
 
   if (pending.length === 0) {
     return (
       <Screen>
         <h1 className="font-display text-2xl font-extrabold mb-3">Review</h1>
-        <EmptyState icon="✨" title="Nothing to review" body="Submitted photo proof lands here." />
+        <EmptyState icon="✨" title="Nothing to review" body="Chores your kids finish land here for you to accept." />
       </Screen>
     )
   }
@@ -45,19 +42,14 @@ export default function ParentApprovals() {
   return (
     <Screen>
       <h1 className="font-display text-2xl font-extrabold mb-1">Review</h1>
-      <p className="text-sm text-muted mb-1">{pending.length} waiting. You decide — the AI only advises.</p>
-      <p className="text-xs text-muted mb-3">
-        📸 Photos are deleted the moment you approve or send back. Look properly first.
-      </p>
+      <p className="text-sm text-muted mb-3">{pending.length} waiting for you to accept.</p>
 
       {pending.map((sub) => {
         const quest = state.quests.find((q) => q.id === sub.questId)
         const kid = state.kids.find((k) => k.id === sub.kidId)
         if (!quest || !kid) return null
-        const theme = resolveKidTheme(kid.themeId, levelFromXp(kid.xp).level)
+        const theme = resolveKidTheme(kid.themeId, levelFromXp(kid.xp).level, storyProgress(state, kid))
         const reward = calcReward(quest, { elite: isElite(state), streak: kid.streak.count, onTime: sub.onTime !== false })
-        const photo = sub.photoId ? getPhoto(sub.photoId) : null
-        const report = sub.report
 
         return (
           <Card key={sub.id} className="mb-4">
@@ -72,25 +64,9 @@ export default function ParentApprovals() {
               {quest.adaptive && <Chip tone="var(--accent-2)">♿ Adaptive</Chip>}
             </div>
 
-            {photo ? (
-              <button type="button" onClick={() => setZoom(photo)} className="block w-full mb-3">
-                <img src={photo} alt={`Proof for ${quest.title}`} className="w-full" style={{ borderRadius: 'var(--radius)' }} />
-              </button>
-            ) : sub.photoUnavailable ? (
-              <Banner tone="warn" icon="⚠️" title="Photo could not be saved">
-                {kid.name} took a photo but this device ran out of storage space, so it was lost.
-                That is a fault in the app, not a sign of anything — ask them to show you, or send
-                the quest back for a fresh photo.
-              </Banner>
-            ) : sub.photoDeletedAt ? (
-              <Banner tone="warn" icon="🗑️" title="The photo has been deleted">
-                {kid.name} did send a photo. RankUp deletes proof automatically after a while, and
-                this one has been sitting here long enough to go. Send the quest back if you want a
-                fresh one — this is not a sign they skipped it.
-              </Banner>
-            ) : (
-              <Banner tone="info" icon="📝" title="No photo required">
-                This quest was marked done without photo proof.
+            {quest.requiresPhoto && (
+              <Banner tone="info" icon="📷" title="Want to see it first?">
+                {kid.name} can send you a photo from their camera app. Look at it, then accept here.
               </Banner>
             )}
 
@@ -111,11 +87,9 @@ export default function ParentApprovals() {
               )}
             </div>
 
-            <AiReport report={report} adaptive={quest.adaptive} />
-
             <div className="card-flat p-3 my-3">
               <div className="flex justify-between text-sm">
-                <span className="text-muted">If you approve</span>
+                <span className="text-muted">If you accept</span>
                 <span className="font-display font-extrabold" style={{ color: 'var(--good)' }}>
                   +{reward.xp} XP · {theme.currency.icon} {reward.coins}
                 </span>
@@ -147,7 +121,7 @@ export default function ParentApprovals() {
               </div>
               {stickers[sub.id] && (
                 <p className="text-xs text-muted mt-1.5">
-                  {STICKER_MAP[stickers[sub.id]].emoji} “{STICKER_MAP[stickers[sub.id]].label}” goes with the approval.
+                  {STICKER_MAP[stickers[sub.id]].emoji} “{STICKER_MAP[stickers[sub.id]].label}” goes with it.
                 </p>
               )}
             </div>
@@ -164,7 +138,7 @@ export default function ParentApprovals() {
                   sticker: stickers[sub.id] || null,
                 })}
               >
-                {stickers[sub.id] ? `Approve ${STICKER_MAP[stickers[sub.id]].emoji}` : 'Approve'}
+                {stickers[sub.id] ? `Accept ${STICKER_MAP[stickers[sub.id]].emoji}` : 'Accept'}
               </Button>
             </div>
           </Card>
@@ -202,87 +176,6 @@ export default function ParentApprovals() {
           autoFocus
         />
       </Modal>
-
-      <Modal open={Boolean(zoom)} onClose={() => setZoom(null)} title="Photo proof">
-        {zoom && <img src={zoom} alt="Photo proof, enlarged" className="w-full" style={{ borderRadius: 'var(--radius)' }} />}
-      </Modal>
     </Screen>
-  )
-}
-
-function AiReport({ report, adaptive }) {
-  const [open, setOpen] = useState(false)
-  if (!report) {
-    return (
-      <Banner tone="warn" icon="🤖" title="No photo check available">
-        The check did not run for this submission. Judge it on the photo alone.
-      </Banner>
-    )
-  }
-
-  const meta = VERDICT_META[report.verdict]
-  const tone =
-    report.verdict === VERDICT.SUSPICIOUS ? 'var(--bad)' : report.verdict === VERDICT.NEEDS_REVIEW ? 'var(--warn)' : 'var(--good)'
-
-  return (
-    <div className="card-flat p-3" style={{ borderColor: tone }}>
-      <div className="flex items-center gap-2">
-        <span aria-hidden="true">{meta.icon}</span>
-        <span className="font-semibold text-sm" style={{ color: tone }}>{meta.label}</span>
-        <span className="ml-auto chip">{report.score}/100</span>
-      </div>
-
-      <p className="text-xs text-muted mt-1.5">
-        Advice only. RankUp never approves or rejects on its own.
-        {adaptive && ' Adaptive quests are scored more leniently on purpose.'}
-      </p>
-
-      {report.cloud?.summary && <p className="text-sm mt-2">{report.cloud.summary}</p>}
-
-      {report.flags.length > 0 && (
-        <ul className="mt-2 space-y-1.5">
-          {report.flags.map((f, i) => (
-            <li key={i} className="text-xs">
-              <span
-                className="font-semibold"
-                style={{ color: f.severity === 'high' ? 'var(--bad)' : f.severity === 'medium' ? 'var(--warn)' : 'var(--ink-muted)' }}
-              >
-                {f.label}
-              </span>
-              {f.detail && <span className="text-muted"> — {f.detail}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {!report.cloudConfigured && (
-        <p className="text-[11px] text-muted mt-2">
-          Only the on-device checks ran. The AI opinion on whether the photo matches the chore
-          is switched off for this family.
-        </p>
-      )}
-      {report.cloudError && (
-        <p className="text-[11px] mt-2" style={{ color: 'var(--warn)' }}>
-          The AI check could not run: {report.cloudError}
-        </p>
-      )}
-
-      <button type="button" className="text-[11px] underline text-muted mt-2" onClick={() => setOpen((v) => !v)}>
-        {open ? 'Hide' : 'Show'} what was measured
-      </button>
-      {open && (
-        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 mt-2 text-[11px] text-muted">
-          {Object.entries(report.metrics || {}).map(([k, v]) => (
-            <div key={k} className="flex justify-between gap-2">
-              <dt className="truncate">{k}</dt>
-              <dd className="font-mono">{String(v)}</dd>
-            </div>
-          ))}
-          {report.cloud?.observations?.map((o, i) => (
-            <div key={`obs${i}`} className="col-span-2">• {o}</div>
-          ))}
-        </dl>
-      )}
-    </div>
   )
 }

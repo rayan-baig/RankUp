@@ -9,7 +9,7 @@ import { Screen, Card, Button, SectionTitle, Banner, Chip, Modal } from '../../c
  * Kept beside the price so the question is answered where it gets asked.
  */
 const UPGRADE_REASON = {
-  standard: 'a second child, and the AI checks every photo before you see it.',
+  standard: 'more than one child, and every theme.',
   elite: 'every chore pays 1.5×, the whole app switches to Overdrive, plus the parent tools.',
 }
 
@@ -299,7 +299,7 @@ export default function ParentPlan() {
         <p className="text-sm mb-2">
           {confirm && UPGRADE_REASON[confirm.id]
             ? `On ${confirm.name}: ${UPGRADE_REASON[confirm.id]}`
-            : 'One child, and you review every photo yourself.'}
+            : 'One child, free.'}
         </p>
         <p className="text-sm mb-2">
           Nothing your children have already earned is ever removed by changing plan — XP,

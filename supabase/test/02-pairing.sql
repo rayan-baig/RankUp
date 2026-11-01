@@ -126,14 +126,23 @@ begin
   perform create_pairing_code('222222', 'Ben', 'blockcraft', 600, 'b0000000-0000-0000-0000-000000000222');
   perform become('a1111111-1111-1111-1111-111111111111');
 
-  -- Five wrong guesses against this specific code.
+  -- Five wrong guesses against this specific code. Recorded as the system
+  -- does it: the function is no longer callable from a browser.
+  set local role postgres;
   for i in 1..5 loop
     perform record_pairing_attempt('222222');
   end loop;
+  set local role app_user;
 
   v_res := claim_pairing_code('222222', 'a2222222-0000-0000-0000-000000000001', 'Pairing Family');
   perform ok('five failed attempts kill a code',
     (v_res->>'ok')::boolean = false and v_res->>'reason' = 'blocked');
+  begin
+    perform record_pairing_attempt('222222');
+    perform ok('nobody can burn a code''s tries from a browser', false);
+  exception when insufficient_privilege then
+    perform ok('nobody can burn a code''s tries from a browser', true);
+  end;
 end $$;
 
 do $$

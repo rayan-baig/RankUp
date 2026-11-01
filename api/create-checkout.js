@@ -15,6 +15,7 @@ import { makeStripe } from './_shared/stripe.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
 /**
  * Two ways to pay for the same two plans.
@@ -69,7 +70,7 @@ const PRODUCTS = {
  * billing_status returns the one field, and it joins through `parents`, so a
  * child's device cannot start a checkout for their family either.
  */
-async function callerFamilyId(token) {
+async function callerBilling(token) {
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/billing_status`, {
       method: 'POST',
@@ -78,10 +79,47 @@ async function callerFamilyId(token) {
     })
     if (!res.ok) return null
     const status = await res.json()
-    return status?.ok ? status.family_id || null : null
+    return status?.ok && status.family_id ? status : null
   } catch {
     return null
   }
+}
+
+/**
+ * The family's Stripe customer, read with the service key so the id never goes
+ * near the browser. Reusing it keeps one family on one customer: a new one per
+ * checkout left the billing portal showing only the newest, with an older plan
+ * still charging where the family could not see it to cancel it.
+ */
+async function existingCustomer(familyId) {
+  if (!SERVICE_KEY) return null
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/stripe_customer_for_family`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+      body: JSON.stringify({ p_family_id: familyId }),
+    })
+    return res.ok ? (await res.json()) || null : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * What is left of the in-app free trial, as a Stripe trial end, or nothing.
+ *
+ * It used to be fourteen days on every checkout: cancel during the trial,
+ * check out again, fourteen more, for ever; and someone paying on day 13 of
+ * their in-app trial got fourteen days instead of one. Now the card carries
+ * only the days the family had left, never more, and a family that has had a
+ * Stripe customer before (so has had its trial) gets none. Stripe refuses a
+ * trial end under two days away, so a nearly-finished trial is not carried.
+ */
+function trialEndFor(billing, now = Date.now()) {
+  if (billing.has_customer) return undefined
+  const end = new Date(billing.trial_ends_at || 0).getTime()
+  if (!Number.isFinite(end) || end < now + 2 * 86400000) return undefined
+  return Math.floor(end / 1000)
 }
 
 /**
@@ -129,13 +167,24 @@ export default async function handler(req, res) {
 
   // The caller's own token decides which family this is. Trusting a family id
   // from the request body would let anyone upgrade anyone.
-  const familyId = await callerFamilyId(token)
-  if (!familyId) return res.status(403).json({ error: 'No family for this account.' })
+  const billing = await callerBilling(token)
+  if (!billing) return res.status(403).json({ error: 'No family for this account.' })
+  const familyId = billing.family_id
+
+  // A family already paying changes plan in the billing portal, where Stripe
+  // swaps the price on the subscription they have. A second checkout started a
+  // second subscription, billed twice, and the two then fought over the plan.
+  if (!oneOff && billing.has_subscription && ['active', 'trialing', 'past_due'].includes(billing.status)) {
+    return res.status(409).json({ error: 'already_subscribed' })
+  }
 
   // Whatever lands in success_url/cancel_url is where Stripe sends the person
   // after paying, on a page carrying RankUp's name. An unvalidated origin from
   // the request body makes that an attacker's site.
-  const origin = safeOrigin(body?.origin || req.headers.origin || '')
+  // The browser's own Origin header, never the request body: a body that named
+  // any https site let a checkout page carrying RankUp's name send the payer
+  // on to it afterwards.
+  const origin = safeOrigin(req.headers.origin || '')
   // No origin means no absolute URL to send Stripe back to. Sending a relative
   // one produced a Stripe 400 reported to the parent as "checkout_failed",
   // which says nothing about the actual problem: PUBLIC_SITE_URL is not set.
@@ -146,10 +195,13 @@ export default async function handler(req, res) {
     })
   }
   const stripe = makeStripe(STRIPE_SECRET)
+  const customer = billing.has_customer ? await existingCustomer(familyId) : null
+  const trialEnd = oneOff ? undefined : trialEndFor(billing)
 
   try {
     const session = await stripe.checkout.sessions.create({
       mode: oneOff ? 'payment' : 'subscription',
+      ...(customer ? { customer } : {}),
       line_items: [{ price: oneOff ? PRODUCTS[product].price : planPrice, quantity: 1 }],
       client_reference_id: familyId,
       // Both, because different webhook events surface different ones.
@@ -159,16 +211,8 @@ export default async function handler(req, res) {
       ...(oneOff ? {} : {
         subscription_data: {
           metadata: { family_id: familyId, tier, cycle },
-          /*
-           * A fortnight on the card as well as the fortnight in the app.
-           *
-           * Somebody who decides to pay on day three should not lose the eleven
-           * days they have left, and should not be charged until the trial they
-           * were promised is actually over. Stripe holds the card and bills at
-           * the end, which is also what turns a trial into a subscription
-           * without asking them to come back and do it again.
-           */
-          trial_period_days: 14,
+          // What is left of the in-app trial, if anything. See trialEndFor.
+          ...(trialEnd ? { trial_end: trialEnd } : {}),
         },
       }),
       success_url: oneOff
@@ -181,7 +225,9 @@ export default async function handler(req, res) {
     })
     return res.status(200).json({ url: session.url })
   } catch (err) {
+    // Logged here, not returned: Stripe's message can describe this
+    // deployment's configuration ("No such price ...").
     console.error('[create-checkout]', err.message)
-    return res.status(502).json({ error: 'checkout_failed', message: err.message })
+    return res.status(502).json({ error: 'checkout_failed' })
   }
 }

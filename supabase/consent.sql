@@ -69,7 +69,8 @@ create policy consent_notices_read on consent_notices for select using (true);
 drop policy if exists parental_consents_read on parental_consents;
 drop policy if exists parental_consents_read on parental_consents;
 create policy parental_consents_read on parental_consents
-  for select using (family_id = current_family_id());
+  -- Parents only: the consent holds the parent's signed name.
+  for select using (family_id = current_family_id() and is_parent());
 
 /** Does this family have consent that has not been withdrawn? */
 create or replace function has_valid_consent(p_family_id uuid)
@@ -95,7 +96,8 @@ language plpgsql security definer set search_path = public as $$
 declare
   v_parent parents;
 begin
-  select * into v_parent from parents where user_id = auth.uid();
+  -- A parent, not a supporter: consent for a child is a parent's to give.
+  select * into v_parent from parents where user_id = auth.uid() and role = 'parent';
   if not found then raise exception 'only a parent can give consent'; end if;
   if length(trim(p_signed_name)) < 2 then
     return jsonb_build_object('ok', false, 'reason', 'signature_required');
@@ -126,7 +128,9 @@ declare
   v_parent parents;
   v_kids int;
 begin
-  select * into v_parent from parents where user_id = auth.uid();
+  -- A parent, not a supporter. Withdrawing consent deletes every child in the
+  -- family; a grandparent with read-only access must not be able to do that.
+  select * into v_parent from parents where user_id = auth.uid() and role = 'parent';
   if not found then raise exception 'only a parent can withdraw consent'; end if;
 
   update parental_consents
@@ -171,12 +175,23 @@ create trigger kids_require_consent
 create or replace function export_family_data()
 returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_family uuid;
+declare
+  v_family uuid;
+  v_school jsonb;
 begin
-  select family_id into v_family from parents where user_id = auth.uid();
+  -- A parent, not a supporter: a grandparent who can look in has no right to
+  -- download the whole household's records.
+  select family_id into v_family from parents where user_id = auth.uid() and role = 'parent';
   if v_family is null then raise exception 'only a parent can export'; end if;
 
+  -- The School League lives in schools.sql, applied after this file, so it is
+  -- asked for by name only when it exists. A database without it still exports.
+  if to_regprocedure('public.export_family_school_data(uuid)') is not null then
+    execute 'select public.export_family_school_data($1)' into v_school using v_family;
+  end if;
+
   return jsonb_build_object(
+    'school_league', coalesce(v_school, '[]'::jsonb),
     'exported_at', now(),
     'family',      (select to_jsonb(f) from families f where f.id = v_family),
     'parents',     coalesce((select jsonb_agg(to_jsonb(p)) from parents p where p.family_id = v_family), '[]'::jsonb),
@@ -198,7 +213,9 @@ returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare v_family uuid;
 begin
-  select family_id into v_family from parents where user_id = auth.uid();
+  -- A parent, not a supporter. Without the role check a grandparent with
+  -- read-only access could delete the entire family, children and all.
+  select family_id into v_family from parents where user_id = auth.uid() and role = 'parent';
   if v_family is null then raise exception 'only a parent can delete the account'; end if;
   if p_confirm <> 'DELETE' then
     return jsonb_build_object('ok', false, 'reason', 'confirmation_required');

@@ -13,7 +13,14 @@
  */
 
 export const CONSENT_VERSION = '2026-01'
-export const LAST_UPDATED = 'January 2026'
+export const LAST_UPDATED = 'October 2026'
+/*
+ * The policy and terms were updated for the School League. The consent notice
+ * itself is unchanged (still CONSENT_VERSION above): joining a school is a
+ * separate, explicit choice a parent makes on the School League screen, which
+ * says there exactly what the school will see, in the same way a guild needs
+ * a parent's yes before a child joins one.
+ */
 
 /** Fill these in before you publish anything. */
 export const OPERATOR = {
@@ -31,16 +38,13 @@ export const CONSENT_NOTICE = {
       body: [
         'The first name you enter for your child. Nothing else identifying — no surname, no birthday, no email address, no home address.',
         'The chores you assign, and whether they were completed.',
-        'Photographs your child takes in the app as proof a chore is done. These are usually pictures inside your home.',
         'The theme they choose, and their XP, level and in-app currency.',
       ],
     },
     {
-      heading: 'About the photographs',
+      heading: 'No photographs',
       body: [
-        'Photographs are the most sensitive thing here, and we treat them that way.',
-        'They are stored so you can review them, and are deleted automatically once you have — you choose how long to keep them in Settings, and you can set that to as little as a day.',
-        'If you turn on the AI photo check, a photograph is sent to Anthropic to be assessed and a short opinion comes back. It is not used to train models. You can leave this off and the app works exactly the same, minus that opinion.',
+        'RankUp never takes, sends or keeps photographs. If you want to see that a chore is done, your child can send you a picture from their own phone\'s camera app, the way you already message each other. It never passes through RankUp.',
       ],
     },
     {
@@ -95,22 +99,32 @@ export const PRIVACY_POLICY = {
     {
       heading: 'What we collect from children',
       body: [
-        'A first name, chosen by you. Photographs of completed chores. Chore and progress history. Nothing more.',
+        'A first name, chosen by you. Chore and progress history. Nothing more. No photographs.',
         'Children do not have their own accounts, email addresses or passwords. A child\'s device joins your account with a six-digit code that you type in.',
         'We collect nothing at all about a child until you have given verifiable parental consent. This is enforced by our database, not just by the app.',
       ],
     },
     {
+      heading: 'The School League, if you join it',
+      body: [
+        'If your child\'s school takes part, you can add your child to it with a code the school gives you. Only a parent can do this; a school can never add a child.',
+        'Your child\'s approved chores then count towards the school\'s monthly score. The school, and other schools, see the school\'s total and its average per student, never your child\'s chores or anything else.',
+        'Each month the school sees its ten highest-scoring students. A child is shown there by first name only if you turned that on; otherwise they appear as "A student". You can change this at any time, and taking your child out of the school removes them from every list, past months included.',
+        'A school sees no names at all until we have checked that it is a real school. Schools never see a list of their students, and nothing about any child is shown to another school.',
+        'For school staff we collect the name and email address they sign in with, and the school\'s name, district, town and size.',
+      ],
+    },
+    {
       heading: 'How long we keep it',
       body: [
-        'Chore photographs: until you have reviewed them, plus a retention window you choose in Settings (30 days by default, or as little as one day).',
-        'Everything else: until you delete your account, which removes it immediately and permanently.',
+        'Everything: until you delete your account, which removes it immediately and permanently.',
       ],
     },
     {
       heading: 'Who we share it with',
       body: [
-        'Nobody, except the services that make the app work: Supabase (hosting and database), Anthropic (the AI photo check, only if you turn it on), Stripe (payments, only if you subscribe), and a push notification service if you enable notifications.',
+        'Nobody, except the services that make the app work: Supabase (hosting and database), Stripe (payments, only if you subscribe), and a push notification service if you enable notifications.',
+        'If you add your child to a school\'s league, that school sees what is described under "The School League" above, and nothing more.',
         'We do not sell data. We do not share it for advertising. We show children no advertising.',
       ],
     },
@@ -126,7 +140,8 @@ export const PRIVACY_POLICY = {
       body: [
         'Download everything we hold: Settings → Download my data.',
         'Delete everything: Settings → Delete account.',
-        'Turn off the AI photo check, notifications, or guilds independently. The app works without any of them.',
+        'Turn off notifications or guilds independently. The app works without either.',
+        'Take your child out of a school\'s league, or stop their first name being shown to the school, from the School League screen.',
       ],
     },
     {
@@ -179,9 +194,13 @@ export const TERMS = {
       ],
     },
     {
-      heading: 'The AI photo check',
+      heading: 'Schools',
       body: [
-        'The photo check produces an opinion to help you decide. It is not a verdict, it is sometimes wrong in both directions, and it never approves or rejects anything by itself. Every decision is yours.',
+        'Whoever signs a school up must work there and be allowed to sign it up. We check every school before it joins a league, and we may suspend one that is not genuine or that misuses the league.',
+        'A school\'s plan is priced by its number of students: $29 a month up to 300, $59 up to 800, $99 up to 1,500, and $149 above that. A year costs ten months. The first 30 days are free, and nothing is charged until they end.',
+        'A school can cancel at any time from its School League page. Its plan runs to the end of the period paid for. If a payment keeps failing, or the plan ends, the school stops being ranked until it is renewed.',
+        'Each month the best school in each district is named District Champion and its next month is free (or, during the free trial, the trial is extended by 30 days). This needs at least two ranked schools in the district.',
+        'Any prize a school gives its students is the school\'s own. A school must not use the league to identify, contact or single out any child outside the school\'s normal care of its students.',
       ],
     },
     {

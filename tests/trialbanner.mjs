@@ -42,8 +42,8 @@ ok('a one-child family is not told children will be put on hold',
   !([{ name: 'Ava' }].length > paid.limits.maxKids))
 ok('a two-child family is',
   [{ name: 'Ava' }, { name: 'Noah' }].length > paid.limits.maxKids)
-ok('and the AI check is named, because Starter really does not have it',
-  plan.limits.aiPhotoCheck && !paid.limits.aiPhotoCheck)
+ok('and no photo check is mentioned, because RankUp has none',
+  !/photo/i.test(readFileSync('src/components/TrialBanner.jsx', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')))
 ok('and the XP drop is real, because Elite really is 1.5×',
   plan.xpMultiplier > paid.xpMultiplier)
 

@@ -121,6 +121,17 @@ const server = http.createServer(async (req, res) => {
       // PostgREST hands back JSON. A raw driver hands back a composite type as
       // the string "(123456,...)", which every caller would then have to parse.
       // to_jsonb() makes this harness behave the way the real thing does.
+      // A function that returns a set comes back from PostgREST as an array of
+      // rows. Selecting it like a scalar returned only the first row, as a bare
+      // object, and callers that map over the array (send-push over its
+      // targets) then failed in tests that had any phone registered at all.
+      const retset = await pool.query('select bool_or(proretset) as s from pg_proc where proname = $1', [fn])
+      if (retset.rows[0]?.s) {
+        const rows = await withUser(userId, (c) => c.query(
+          `select coalesce(jsonb_agg(to_jsonb(t.*)), '[]'::jsonb) as result from ${fn}(${args}) t`, values), { service })
+        return send(res, 200, rows.rows[0]?.result ?? [])
+      }
+
       let out
       try {
         out = await withUser(userId, (c) => c.query(`select to_jsonb(${fn}(${args})) as result`, values), { service })
@@ -179,6 +190,24 @@ const server = http.createServer(async (req, res) => {
       return send(res, 201, {})
     }
 
+    // --- change some columns of a row (row level security decides) ---------
+    if (url.pathname.startsWith('/rest/v1/') && req.method === 'PATCH') {
+      const table = url.pathname.slice('/rest/v1/'.length)
+      if (!/^[a-z_][a-z0-9_]*$/.test(table)) return send(res, 400, { message: 'bad table' })
+      const id = (url.searchParams.get('id') || '').replace(/^eq\./, '')
+      if (!id) return send(res, 400, { message: 'id filter required' })
+      const row = await readBody(req)
+      const cols = Object.keys(row).filter((c) => c !== 'id' && /^[a-z_][a-z0-9_]*$/.test(c))
+      if (!cols.length) return send(res, 400, { message: 'no columns' })
+      const sets = cols.map((c, i) => `${c} = $${i + 1}`).join(', ')
+      const values = cols.map((c) => {
+        const v = row[c]
+        return v !== null && typeof v === 'object' && !Array.isArray(v) ? JSON.stringify(v) : v
+      })
+      await withUser(userId, (c) => c.query(`update ${table} set ${sets} where id = $${cols.length + 1}`, [...values, id]), { service })
+      return send(res, 204, {})
+    }
+
     // --- delete a row -------------------------------------------------------
     if (url.pathname.startsWith('/rest/v1/') && req.method === 'DELETE') {
       const table = url.pathname.slice('/rest/v1/'.length)
@@ -199,7 +228,7 @@ const server = http.createServer(async (req, res) => {
       if (url.pathname === '/auth/v1/signup' && body.anonymous) {
         const out = await pool.query('insert into auth.users (email) values (null) returning id')
         const id = out.rows[0].id
-        return send(res, 200, { access_token: id, user: { id, email: null, is_anonymous: true } })
+        return send(res, 200, session(id, { id, email: null, is_anonymous: true }))
       }
 
       if (url.pathname === '/auth/v1/signup') {
@@ -207,14 +236,22 @@ const server = http.createServer(async (req, res) => {
         if (existing.rows.length) return send(res, 400, { message: 'User already registered' })
         const out = await pool.query('insert into auth.users (email) values ($1) returning id', [body.email])
         const id = out.rows[0].id
-        return send(res, 200, { access_token: id, user: { id, email: body.email } })
+        return send(res, 200, session(id, { id, email: body.email }))
+      }
+
+      // Renewing a session. The refresh token is "r." and the user id.
+      if (url.pathname.startsWith('/auth/v1/token') && url.searchParams.get('grant_type') === 'refresh_token') {
+        const id = String(body.refresh_token || '').replace(/^r\./, '')
+        const out = /^[0-9a-f-]{36}$/.test(id) ? await pool.query('select id, email from auth.users where id = $1', [id]) : { rows: [] }
+        if (!out.rows.length) return send(res, 400, { message: 'Invalid Refresh Token' })
+        return send(res, 200, session(id, { id, email: out.rows[0].email }))
       }
 
       if (url.pathname.startsWith('/auth/v1/token')) {
         const out = await pool.query('select id from auth.users where email = $1', [body.email])
         if (!out.rows.length) return send(res, 400, { message: 'Invalid login credentials' })
         const id = out.rows[0].id
-        return send(res, 200, { access_token: id, user: { id, email: body.email } })
+        return send(res, 200, session(id, { id, email: body.email }))
       }
     }
 
@@ -225,5 +262,10 @@ const server = http.createServer(async (req, res) => {
     return send(res, 400, { message: err.message, code: err.code })
   }
 })
+
+/** A session as Supabase shapes it: the token here is just the user id. */
+function session(id, user) {
+  return { access_token: id, refresh_token: `r.${id}`, expires_in: 3600, token_type: 'bearer', user }
+}
 
 server.listen(PORT, () => console.log(`mock supabase on http://localhost:${PORT}`))

@@ -4,6 +4,7 @@ import { canAddKid, planOf } from '../../state/reducer.js'
 import { makeKid } from '../../state/initialState.js'
 import { ADAPTIVE_SUPPORTS } from '../../data/questTemplates.js'
 import { KID_THEMES, resolveKidTheme } from '../../data/kidThemes.js'
+import { storyProgress } from '../../lib/dragonFight.js'
 import { levelFromXp, formatXp } from '../../lib/xp.js'
 import Avatar from '../../components/Avatar.jsx'
 import ThemePicker from '../../components/ThemePicker.jsx'
@@ -62,15 +63,15 @@ export default function ParentKids() {
           title={`${planOf(state).name} covers one child`}
           action={<Button className="px-3 py-2 min-h-0 text-sm" onClick={() => navigate('/parent/plan')}>See plans</Button>}
         >
-          Standard is $5 more a month and adds unlimited children, plus the AI check on every
-          photo. Nothing this child has earned is affected either way.
+          Standard ($9.99 a month) adds unlimited children. Nothing this child has earned is
+          affected either way.
         </Banner>
       )}
 
       <div className="mt-3">
         {state.kids.map((kid) => {
           const { level } = levelFromXp(kid.xp)
-          const theme = resolveKidTheme(kid.themeId, level)
+          const theme = resolveKidTheme(kid.themeId, level, storyProgress(state, kid))
           const questCount = state.quests.filter((q) => q.kidId === kid.id && q.status !== 'approved').length
           return (
             <Card key={kid.id} className="mb-3">

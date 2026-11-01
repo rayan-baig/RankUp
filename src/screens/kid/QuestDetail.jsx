@@ -1,17 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { STICKER_MAP } from '../../data/stickers.js'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
 import { DIFFICULTY, calcReward } from '../../lib/xp.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
 import { formatDuration } from '../../lib/dates.js'
-import { verifyPhoto, VERDICT, VERDICT_META } from '../../lib/aiVerify.js'
-import { aiCheckAllowed } from '../../state/reducer.js'
-import { putPhoto } from '../../lib/storage.js'
-import { uid } from '../../lib/id.js'
-import CameraCapture from '../../components/CameraCapture.jsx'
 import { Screen, Card, Button, Banner, Chip, TextInput, Field, SectionTitle } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
-import { humanError } from '../../lib/errors.js'
+
+/*
+ * RankUp never takes, keeps or sends photos.
+ *
+ * When a parent wants to see proof, the child uses the phone's own camera app
+ * and sends the picture to the parent the way they already message each
+ * other. The parent looks, then taps Accept here. Nothing about the picture
+ * passes through RankUp, so there is no photo of a child's room, face or
+ * homework on our servers to protect, keep or delete.
+ */
 
 export default function QuestDetail({ questId }) {
   const { state, dispatch } = useApp()
@@ -20,32 +24,18 @@ export default function QuestDetail({ questId }) {
   const elite = useElite()
 
   const quest = state.quests.find((q) => q.id === questId)
-  const openedAt = useRef(Date.now())
 
-  const [mode, setMode] = useState('detail') // detail | camera | checking | review
-  const [photo, setPhoto] = useState(null)
-  const [report, setReport] = useState(null)
+  const [mode, setMode] = useState('detail') // detail | review
   const [note, setNote] = useState('')
   const [score, setScore] = useState('')
   const [timerStart, setTimerStart] = useState(null)
   const [elapsed, setElapsed] = useState(0)
-  const [error, setError] = useState('')
 
   useEffect(() => {
     if (!timerStart) return undefined
     const t = setInterval(() => setElapsed(Date.now() - timerStart), 200)
     return () => clearInterval(t)
   }, [timerStart])
-
-  // Compared across the WHOLE family, not just this kid: re-using a sibling's
-  // photo is exactly the cheat this check exists to catch.
-  const previousHashes = useMemo(
-    () =>
-      state.submissions
-        .filter((s) => s.hash)
-        .map((s) => ({ hash: s.hash, submissionId: s.id, kidId: s.kidId })),
-    [state.submissions],
-  )
 
   /**
    * The parent's reaction to this piece of work.
@@ -77,132 +67,30 @@ export default function QuestDetail({ questId }) {
   const isOpen = quest.status === 'assigned' || quest.status === 'redo'
   const onTime = quest.timerSeconds ? elapsed > 0 && elapsed <= quest.timerSeconds * 1000 : true
   const preview = calcReward(quest, { elite, streak: kid.streak.count, onTime })
-  const aiCheck = aiCheckAllowed(state)
-
-  const runCheck = async (captured) => {
-    setPhoto(captured)
-    setError('')
-    // The AI second opinion is what Standard buys. On Starter the photo still
-    // goes to the parent — they just look at it themselves, which is what the
-    // plan screen says they are getting.
-    if (!aiCheck) {
-      setReport(null)
-      setMode('review')
-      return
-    }
-    setMode('checking')
-    try {
-      const result = await verifyPhoto(captured.dataUrl, {
-        quest,
-        context: {
-          captureSource: captured.source,
-          kidId: kid.id,
-          previousHashes,
-          secondsSinceQuestOpened: Math.round((Date.now() - openedAt.current) / 1000),
-        },
-      })
-      setReport(result)
-    } catch (err) {
-      setError(humanError(err, 'The photo check could not run. You can still submit.'))
-      setReport(null)
-    }
-    setMode('review')
-  }
 
   const submit = () => {
-    // Storing the photo can fail — localStorage is capped at about 5MB. If it
-    // does, the submission still goes through, but it must say so: telling a
-    // parent "no photo required" when their kid took one is worse than useless.
-    let photoId = null
-    let photoUnavailable = false
-    if (photo) {
-      const id = uid('photo')
-      if (putPhoto(id, photo.dataUrl)) photoId = id
-      else photoUnavailable = true
-    }
     dispatch({
       type: 'SUBMIT_QUEST',
       submission: {
         questId: quest.id,
         kidId: kid.id,
-        photoId,
-        // Sent to the server so the parent's phone can show it, then dropped
-        // from local state — this device already has it in its photo store.
-        photoData: photo?.dataUrl || null,
-        photoUnavailable,
-        hash: report?.hash || null,
-        report,
         note: note.trim(),
         testScore: quest.testScore ? Number(score) || 0 : null,
         elapsedMs: quest.timerSeconds ? elapsed : null,
         onTime,
-        captureSource: photo?.source || 'none',
+        captureSource: 'none',
       },
     })
     navigate('/kid/quests')
   }
 
-  /* ---------- camera ---------- */
-  if (mode === 'camera' && isOpen) {
-    return (
-      <Screen>
-        <h1 className="font-display text-xl font-extrabold mb-1">Photograph your work</h1>
-        <p className="text-sm text-muted mb-3">{quest.doneMeans || 'Show the finished result.'}</p>
-        <CameraCapture onCapture={runCheck} onCancel={() => setMode('detail')} />
-      </Screen>
-    )
-  }
-
-  /* ---------- checking ---------- */
-  if (mode === 'checking') {
-    return (
-      <Screen>
-        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center gap-3">
-          <div className="w-14 h-14 rounded-full border-4 border-transparent" style={{ borderTopColor: 'var(--accent)', animation: 'rankup-spin 0.9s linear infinite' }} />
-          <h2 className="font-display font-bold text-lg">Checking your photo…</h2>
-          <p className="text-sm text-muted max-w-xs">
-            Looking for the things that mean a photo isn't real proof — a screenshot, a re-used
-            picture, or a photo of a screen.
-          </p>
-        </div>
-      </Screen>
-    )
-  }
-
   /* ---------- review before sending ---------- */
   if (mode === 'review' && isOpen) {
-    const meta = report ? VERDICT_META[report.verdict] : null
     return (
       <Screen>
         <h1 className="font-display text-xl font-extrabold mb-3">Ready to send?</h1>
-        {photo && (
-          <img src={photo.dataUrl} alt="Your proof" className="w-full mb-3" style={{ borderRadius: 'var(--radius)' }} />
-        )}
 
-        {error && <Banner tone="warn" icon="⚠️" title="Check didn't run">{error}</Banner>}
-
-        {report && (
-          <Card
-            className="mb-3"
-            style={{ borderColor: report.verdict === VERDICT.SUSPICIOUS ? 'var(--bad)' : report.verdict === VERDICT.NEEDS_REVIEW ? 'var(--warn)' : 'var(--good)' }}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-lg" aria-hidden="true">{meta.icon}</span>
-              <span className="font-display font-bold">{meta.label}</span>
-              <span className="ml-auto chip">{report.score}/100</span>
-            </div>
-            <p className="text-xs text-muted">
-              This is only a hint for your parent. They decide — the app never rejects your work on its own.
-            </p>
-            {report.flags.length > 0 && (
-              <ul className="mt-2 space-y-1">
-                {report.flags.map((f, i) => (
-                  <li key={i} className="text-xs text-muted">• {f.label}</li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        )}
+        {quest.requiresPhoto && <ShowYourParent />}
 
         {quest.testScore && (
           <Field label="Your score (%)" hint="80% or higher earns a bonus.">
@@ -214,22 +102,10 @@ export default function QuestDetail({ questId }) {
           <TextInput value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Also did the windowsill" />
         </Field>
 
-        {photo && (
-          <p className="text-xs text-muted mb-2 text-center">
-            Your parent sees this once, then it's deleted. It isn't saved anywhere.
-          </p>
-        )}
-
         <div className="flex gap-2 mt-2">
-          {quest.requiresPhoto ? (
-            <Button variant="soft" className="flex-1" onClick={() => { setPhoto(null); setReport(null); setMode('camera') }}>
-              Retake
-            </Button>
-          ) : (
-            <Button variant="soft" className="flex-1" onClick={() => setMode('detail')}>
-              Back
-            </Button>
-          )}
+          <Button variant="soft" className="flex-1" onClick={() => setMode('detail')}>
+            Back
+          </Button>
           <Button className="flex-1" onClick={submit}>Send to parent</Button>
         </div>
       </Screen>
@@ -323,12 +199,9 @@ export default function QuestDetail({ questId }) {
 
       {isOpen ? (
         <>
-          {quest.requiresPhoto ? (
-            <Button className="w-full" onClick={() => setMode('camera')}>📷 Take photo proof</Button>
-          ) : (
-            <Button className="w-full" onClick={() => setMode('review')}>Mark as done</Button>
-          )}
-          <p className="text-xs text-muted text-center mt-2">Your parent approves it before XP is awarded.</p>
+          {quest.requiresPhoto && <ShowYourParent />}
+          <Button className="w-full" onClick={() => setMode('review')}>✅ I did it!</Button>
+          <p className="text-xs text-muted text-center mt-2">Your parent accepts it before XP is awarded.</p>
         </>
       ) : quest.status === 'submitted' ? (
         <Banner tone="info" icon="⏳" title="Sent to your parent">
@@ -362,5 +235,19 @@ export default function QuestDetail({ questId }) {
         </>
       )}
     </Screen>
+  )
+}
+
+/** What to do when a parent wants to see the result. */
+function ShowYourParent() {
+  return (
+    <Card flat className="mb-3">
+      <SectionTitle>📷 Show your parent</SectionTitle>
+      <p className="text-sm">
+        Take a photo with your phone&apos;s camera app and send it to your parent. They look at it,
+        then tap Accept in RankUp.
+      </p>
+      <p className="text-xs text-muted mt-1">RankUp never takes or keeps photos.</p>
+    </Card>
   )
 }

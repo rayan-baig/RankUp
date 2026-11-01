@@ -68,10 +68,13 @@ https://your-domain.com/api/stripe-webhook
 Subscribe it to:
 
 - `checkout.session.completed`
+- `checkout.session.async_payment_succeeded` (bank payments that clear later)
 - `customer.subscription.created`
 - `customer.subscription.updated`
 - `customer.subscription.deleted`
-- `invoice.payment_failed`
+- `invoice.paid` and `invoice.payment_succeeded` (record each renewal's money)
+- `invoice.payment_failed` (received and deliberately ignored: the
+  subscription's own status change is what moves the plan)
 
 Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
 
@@ -121,8 +124,9 @@ longer than feels comfortable.
 ## The 20% Discount Tournament — one thing you must schedule
 
 Parent Alliances are real: `supabase/alliances.sql` counts each member family's
-approved quests for the month, and `api/settle-alliances.js` gives the winner a
-20% Stripe coupon. **Nothing pays out until you schedule that endpoint**, so
+approved quests for the month, and `api/settle-alliances.js` gives the winner
+20% of one month's price as credit on their Stripe account (worked out from
+their own subscription, so a yearly plan gets 20% of a month, not of a year). **Nothing pays out until you schedule that endpoint**, so
 until you do, families will see a leaderboard and never see a discount.
 
 Set `CRON_SECRET` to a long random string, then call it once a month:
@@ -140,16 +144,63 @@ gone, and it accepts `{"month":"YYYY-MM-01"}` to catch up a missed one.
 Three properties make it safe to retry, and they are covered by
 `supabase/test/10-alliances.sql`:
 
-- **It cannot pay twice.** The award row's key is (alliance, month), and the
-  function returns only rows it actually inserted. A second run issues nothing.
+- **It cannot pay twice.** The award row's key is (alliance, month), and each
+  credit is sent to Stripe with an idempotency key naming the award, so even a
+  run that dies half way and is run again gives each prize once.
+- **It does not forget.** Each run gives every prize still owed
+  (`unapplied_alliance_awards`), not only the month it has just decided, so a
+  prize Stripe refused last time is tried again.
 - **It cannot be called by a customer.** `settle_alliances` is revoked from
   `public`, so even a leaked user token cannot reach it, and the endpoint needs
   the shared secret on top.
 - **It cannot be steered.** The winner is computed from approved submissions in
   the database. The request body names a month and nothing else.
 
-If Stripe rejects a coupon, that award stays `applied_at = null` rather than
+If Stripe refuses a credit, that award stays `applied_at = null` rather than
 being marked paid, so an unpaid winner is visible instead of silently lost.
+
+---
+
+## The School League
+
+Schools pay by size. In Stripe, make one product, "RankUp School League", with
+eight recurring prices, and put their ids in the `STRIPE_PRICE_SCHOOL_*`
+variables (see `.env.example`):
+
+| Size | Students | Monthly | Yearly |
+|---|---|---|---|
+| small | up to 300 | $29 | $290 |
+| medium | 301–800 | $59 | $590 |
+| large | 801–1,500 | $99 | $990 |
+| xl | 1,501+ | $149 | $1,490 |
+
+The same numbers are in `supabase/schools.sql` and `src/lib/schools.js`, and
+`tests/schools.mjs` fails if those two disagree. If you change a price, change
+it in Stripe too.
+
+- **Checkout** is `api/school-checkout.js`. Only a school's admin can start it,
+  and the price is picked from the school's own size, never from the request.
+  Days left on the 30-day free trial carry onto the card.
+- **The webhook** you already have handles schools as well. A school's events
+  carry `school_id`; they switch the school on and off and never touch a
+  family's plan. A failing card keeps the school playing while Stripe retries.
+- **Each month**, schedule `api/settle-schools.js` the same way as the alliance
+  job (it is in `vercel.json`, a day after the month ends):
+
+  ```
+  POST https://your-site/api/settle-schools
+  Authorization: Bearer <CRON_SECRET>
+  ```
+
+  It closes the month (District Champions, rivalry results, School Stars) and
+  gives each Champion its free month: one month's price as credit on its
+  Stripe account if it pays (so a yearly plan gets a month off, not a year),
+  thirty more trial days if it is still on its trial. A free month that could not be
+  given stays owed and is tried again next run. It never gives one twice.
+- **Checking schools are real**: open `https://your-site/#/operator` and type
+  your `OPERATOR_SECRET`. New schools are listed first, with who signed each up
+  and their email; verify, un-verify, suspend or lift a suspension there.
+  Until a school is verified it is in no league and sees no child's name.
 
 ---
 
