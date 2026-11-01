@@ -1,6 +1,6 @@
 import { uid } from '../lib/id.js'
 import { dayKey, daysBetween, deviceZone } from '../lib/dates.js'
-import { calcReward, levelFromXp, testScoreBonus } from '../lib/xp.js'
+import { submissionReward, levelFromXp } from '../lib/xp.js'
 import { createInitialState, TIERS, makeKid } from './initialState.js'
 import { findSkin, isMarketOpen, ticketCost } from '../data/marketSkins.js'
 import { DAILY_COIN_CAP, MAX_TOKENS } from '../data/minigames.js'
@@ -772,23 +772,10 @@ export function reducer(state, action) {
       // exists, a quest can only ever pay out once.
       if (!quest || !kid || quest.status === 'approved') return state
 
-      const reward = calcReward(quest, {
+      const { xp, coins, lines } = submissionReward(quest, submission, {
         elite: isElite(state),
         streak: kid.streak.count,
-        onTime: submission.onTime !== false,
       })
-
-      let { xp, coins } = reward
-      const lines = [...reward.lines]
-
-      if (quest.testScore && typeof submission.testScore === 'number') {
-        const bonus = testScoreBonus(submission.testScore, quest.xp || 30)
-        if (bonus > 0) {
-          lines.push({ label: `Scored ${submission.testScore}%`, value: bonus })
-          xp += bonus
-          coins += Math.max(1, Math.round(bonus / 5))
-        }
-      }
 
       const beforeLevel = levelFromXp(kid.xp).level
       const afterLevel = levelFromXp(kid.xp + xp).level

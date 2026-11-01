@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useApp, pendingSubmissions } from '../../state/AppContext.jsx'
-import { calcReward } from '../../lib/xp.js'
+import { submissionReward } from '../../lib/xp.js'
 import { relativeTime, formatDuration } from '../../lib/dates.js'
 import { resolveKidTheme } from '../../data/kidThemes.js'
 import { storyProgress } from '../../lib/dragonFight.js'
@@ -49,7 +49,8 @@ export default function ParentApprovals() {
         const kid = state.kids.find((k) => k.id === sub.kidId)
         if (!quest || !kid) return null
         const theme = resolveKidTheme(kid.themeId, levelFromXp(kid.xp).level, storyProgress(state, kid))
-        const reward = calcReward(quest, { elite: isElite(state), streak: kid.streak.count, onTime: sub.onTime !== false })
+        // What accepting actually pays, test-score bonus included.
+        const reward = submissionReward(quest, sub, { elite: isElite(state), streak: kid.streak.count })
 
         return (
           <Card key={sub.id} className="mb-4">

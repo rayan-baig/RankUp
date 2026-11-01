@@ -76,6 +76,29 @@ export function calcReward(quest, { elite = false, streak = 0, onTime = true } =
   return { xp, coins, lines }
 }
 
+/**
+ * What accepting this submission pays: the quest's reward plus, for a
+ * test-score quest, the bonus for the score reported.
+ *
+ * One function for the reducer that pays it and the review screen that shows
+ * it. The screen used calcReward alone, so a parent was told "+30 XP" for a
+ * test-score chore that then paid 60.
+ */
+export function submissionReward(quest, submission, { elite = false, streak = 0 } = {}) {
+  const reward = calcReward(quest, { elite, streak, onTime: submission?.onTime !== false })
+  let { xp, coins } = reward
+  const lines = [...reward.lines]
+  if (quest.testScore && typeof submission?.testScore === 'number') {
+    const bonus = testScoreBonus(submission.testScore, quest.xp || 30)
+    if (bonus > 0) {
+      lines.push({ label: `Scored ${submission.testScore}%`, value: bonus })
+      xp += bonus
+      coins += Math.max(1, Math.round(bonus / 5))
+    }
+  }
+  return { xp, coins, lines }
+}
+
 /** Streaks add up to +25%, capped so they never dwarf the quest itself. */
 export function streakMultiplier(streak) {
   if (!streak || streak < 3) return 0
