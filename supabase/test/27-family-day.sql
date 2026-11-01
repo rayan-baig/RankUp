@@ -30,20 +30,20 @@ insert into kids (id, family_id, name, user_id) values
   ('7a444444-0000-0000-0000-0000000000a1', '7a222222-0000-0000-0000-00000000000a', 'Ava',
    '7a111111-0000-0000-0000-0000000000c1');
 
-create table fd_zone as
+create temp table fd_zone as
   select case when extract(hour from now() at time zone 'UTC') >= 10
               then 'Pacific/Kiritimati' else 'Etc/GMT+12' end as tz;
-create function fd_tz() returns text language sql stable as $$ select tz from fd_zone $$;
-create function fd_today() returns date language sql stable as $$
-  select (now() at time zone fd_tz())::date $$;
+create function pg_temp.fd_tz() returns text language sql stable as $$ select tz from fd_zone $$;
+create function pg_temp.fd_today() returns date language sql stable as $$
+  select (now() at time zone pg_temp.fd_tz())::date $$;
 
 -- The family has saved a reminder, so the server knows its zone.
-update families set timezone = fd_tz() where id = '7a222222-0000-0000-0000-00000000000a';
+update families set timezone = pg_temp.fd_tz() where id = '7a222222-0000-0000-0000-00000000000a';
 
 -- A child on a four-day streak whose last approved chore was yesterday, where
 -- they live, and whose arcade cap was used up yesterday.
-update kids set streak_count = 4, streak_last_day = fd_today() - 1,
-                play_tokens = 3, game_day = fd_today() - 1, game_coins_today = 15
+update kids set streak_count = 4, streak_last_day = pg_temp.fd_today() - 1,
+                play_tokens = 3, game_day = pg_temp.fd_today() - 1, game_coins_today = 15
  where id = '7a444444-0000-0000-0000-0000000000a1';
 
 insert into quests (id, family_id, kid_id, title, xp) values
@@ -63,7 +63,7 @@ set role app_user;
 
 do $$ begin
   perform ok('the zone chosen really does disagree with UTC today',
-             fd_today() <> (now() at time zone 'UTC')::date, fd_tz());
+             pg_temp.fd_today() <> (now() at time zone 'UTC')::date, pg_temp.fd_tz());
 end $$;
 
 -- ---------- the daily bonus is stamped with the family's day ----------
@@ -74,9 +74,9 @@ begin
   res := claim_login_bonus('7a444444-0000-0000-0000-0000000000a1');
   perform ok('the bonus is paid', (res->>'ok')::boolean, res::text);
   perform ok('and recorded as claimed on the day the phone sees',
-             (select last_login_bonus from kids where id = '7a444444-0000-0000-0000-0000000000a1') = fd_today(),
+             (select last_login_bonus from kids where id = '7a444444-0000-0000-0000-0000000000a1') = pg_temp.fd_today(),
              (select last_login_bonus from kids where id = '7a444444-0000-0000-0000-0000000000a1')::text
-               || ' vs ' || fd_today()::text);
+               || ' vs ' || pg_temp.fd_today()::text);
   res := claim_login_bonus('7a444444-0000-0000-0000-0000000000a1');
   perform ok('a second claim the same day is refused', res->>'reason' = 'already_claimed', res::text);
 end $$;
@@ -90,11 +90,11 @@ begin
   update kids set last_login_bonus = null where id = '7a444444-0000-0000-0000-0000000000a1';
   set local role app_user;
   perform become('7a111111-0000-0000-0000-0000000000c1');
-  res := claim_login_bonus('7a444444-0000-0000-0000-0000000000a1', 5, fd_tz());
+  res := claim_login_bonus('7a444444-0000-0000-0000-0000000000a1', 5, pg_temp.fd_tz());
   perform ok('a phone that names its zone gets that zone''s day',
-             (select last_login_bonus from kids where id = '7a444444-0000-0000-0000-0000000000a1') = fd_today());
+             (select last_login_bonus from kids where id = '7a444444-0000-0000-0000-0000000000a1') = pg_temp.fd_today());
   set local role postgres;
-  update families set timezone = fd_tz() where id = '7a222222-0000-0000-0000-00000000000a';
+  update families set timezone = pg_temp.fd_tz() where id = '7a222222-0000-0000-0000-00000000000a';
 end $$;
 
 -- ---------- the arcade's daily cap resets on the family's day ----------
@@ -105,7 +105,7 @@ begin
   res := play_minigame('7a444444-0000-0000-0000-0000000000a1', 'memory', 100);
   perform ok('yesterday''s cap does not hold today''s game back', (res->>'coins')::int > 0, res::text);
   perform ok('and the game is recorded on the family''s day',
-             (select game_day from kids where id = '7a444444-0000-0000-0000-0000000000a1') = fd_today());
+             (select game_day from kids where id = '7a444444-0000-0000-0000-0000000000a1') = pg_temp.fd_today());
 end $$;
 
 -- ---------- a streak carries on from yesterday ----------
@@ -117,7 +117,7 @@ begin
              (select streak_count from kids where id = '7a444444-0000-0000-0000-0000000000a1') = 5,
              (select streak_count from kids where id = '7a444444-0000-0000-0000-0000000000a1')::text);
   perform ok('and today is the streak''s last day',
-             (select streak_last_day from kids where id = '7a444444-0000-0000-0000-0000000000a1') = fd_today());
+             (select streak_last_day from kids where id = '7a444444-0000-0000-0000-0000000000a1') = pg_temp.fd_today());
 end $$;
 
 -- ---------- a streak freeze covers the family's today ----------
@@ -125,14 +125,14 @@ do $$
 declare res jsonb;
 begin
   set local role postgres;
-  update kids set streak_freezes = 1, streak_last_day = fd_today() - 2
+  update kids set streak_freezes = 1, streak_last_day = pg_temp.fd_today() - 2
    where id = '7a444444-0000-0000-0000-0000000000a1';
   set local role app_user;
   perform become('7a111111-0000-0000-0000-0000000000c1');
   res := use_streak_freeze('7a444444-0000-0000-0000-0000000000a1');
   perform ok('a freeze is spent', (res->>'ok')::boolean, res::text);
   perform ok('and marks the family''s today as covered',
-             (select streak_last_day from kids where id = '7a444444-0000-0000-0000-0000000000a1') = fd_today());
+             (select streak_last_day from kids where id = '7a444444-0000-0000-0000-0000000000a1') = pg_temp.fd_today());
 end $$;
 
 -- ---------- a zone Postgres does not know falls back, never fails ----------
