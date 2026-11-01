@@ -128,7 +128,7 @@ export default function ParentSettings() {
       <Section title="Family goal" icon="🎯"
         summary={state.familyGoal ? state.familyGoal.name : 'Not set'}>
       <Card flat>
-        <p className="text-sm text-muted mb-3">Everyone's XP adds to one shared bar.</p>
+        <p className="text-sm text-muted mb-3">Everyone's XP from now on adds to one shared bar.</p>
         <Field label="Reward for hitting it">
           <TextInput value={goal.name} onChange={(e) => setGoal({ ...goal, name: e.target.value })} placeholder="e.g. Trip to the aquarium" />
         </Field>
@@ -140,7 +140,7 @@ export default function ParentSettings() {
           />
         </Field>
         <div className="flex gap-2">
-          <Button className="flex-1" disabled={!goal.name.trim()} onClick={() => dispatch({ type: 'SET_FAMILY_GOAL', goal })}>
+          <Button className="flex-1" disabled={!goal.name.trim() || !goal.targetXp} onClick={() => dispatch({ type: 'SET_FAMILY_GOAL', goal })}>
             Save goal
           </Button>
           {state.familyGoal && (

@@ -182,6 +182,19 @@ export function potFor(state, kidId) {
     + local.filter((e) => e.at > since).reduce((total, e) => total + e.pence, 0)
 }
 
+/**
+ * XP earned towards the family goal since it was set.
+ *
+ * The bar used to add up everybody's lifetime XP, so a goal set after a month
+ * of play was full the day it was set. A goal saved by an older version has
+ * no starting point and counts from zero, as it always did.
+ */
+export function familyGoalProgress(state) {
+  if (!state.familyGoal) return 0
+  const total = (state.kids || []).reduce((sum, k) => sum + (k.xp || 0), 0)
+  return Math.max(0, total - (state.familyGoal.startXp || 0))
+}
+
 export function reducer(state, action) {
   switch (action.type) {
     /* ---------- lifecycle ---------- */
@@ -1251,8 +1264,16 @@ export function reducer(state, action) {
 
     /* ---------- misc ---------- */
 
-    case 'SET_FAMILY_GOAL':
-      return { ...state, familyGoal: action.goal }
+    case 'SET_FAMILY_GOAL': {
+      if (!action.goal) return { ...state, familyGoal: null }
+      // The same goal edited (a new target, say) keeps what was earned; a new
+      // goal starts from where everybody is now.
+      const same = state.familyGoal && state.familyGoal.name.trim() === action.goal.name.trim()
+      const startXp = same
+        ? state.familyGoal.startXp || 0
+        : state.kids.reduce((sum, k) => sum + (k.xp || 0), 0)
+      return { ...state, familyGoal: { ...action.goal, startXp, setAt: same ? state.familyGoal.setAt : Date.now() } }
+    }
 
     case 'CLAIM_LOGIN_BONUS': {
       const kid = state.kids.find((k) => k.id === action.kidId)

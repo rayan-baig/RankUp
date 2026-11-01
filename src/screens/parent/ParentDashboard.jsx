@@ -6,7 +6,7 @@ import { resolveKidTheme } from '../../data/kidThemes.js'
 import { storyProgress } from '../../lib/dragonFight.js'
 import { findGame } from '../../data/minigames.js'
 import { MARKET_SKINS } from '../../data/marketSkins.js'
-import { activeLockout } from '../../state/reducer.js'
+import { activeLockout, familyGoalProgress } from '../../state/reducer.js'
 import Avatar from '../../components/Avatar.jsx'
 import { Screen, Card, Button, SectionTitle, Stat, ProgressBar, EmptyState, Banner, Chip } from '../../components/ui.jsx'
 import SyncBadge from '../../components/SyncBadge.jsx'
@@ -148,11 +148,11 @@ export default function ParentDashboard() {
             <div className="flex justify-between text-sm mb-2">
               <span className="font-semibold">{state.familyGoal.name}</span>
               <span className="text-muted">
-                {formatXp(state.kids.reduce((s, k) => s + k.xp, 0))} / {formatXp(state.familyGoal.targetXp)} XP
+                {formatXp(familyGoalProgress(state))} / {formatXp(state.familyGoal.targetXp)} XP
               </span>
             </div>
             <ProgressBar
-              value={state.kids.reduce((s, k) => s + k.xp, 0)}
+              value={familyGoalProgress(state)}
               max={state.familyGoal.targetXp}
               height={12}
               label="Family goal progress"
