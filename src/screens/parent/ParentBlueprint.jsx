@@ -6,6 +6,7 @@ import { formatXp, levelFromXp } from '../../lib/xp.js'
 import { DailyBars, StackedBars, HorizontalBars, StatTile } from '../../components/charts/Charts.jsx'
 import { Screen, Card, SectionTitle, Select, Field, Banner, EmptyState, Chip } from '../../components/ui.jsx'
 import EliteGate from '../../components/EliteGate.jsx'
+import { activityFeed } from '../../lib/activity.js'
 
 const SLOTS = [
   { id: 'morning', label: 'Morning', from: 5, to: 12 },
@@ -31,7 +32,9 @@ export default function ParentBlueprint({ initialKidId }) {
   const report = useMemo(() => {
     if (!kid) return null
     const window = new Set(days)
-    const events = state.events.filter((e) => e.kidId === kid.id && window.has(e.day))
+    // From the synced submissions: approvals made on another parent's phone and
+    // chores sent from the child's own phone were missing from this one's log.
+    const events = activityFeed(state).filter((e) => e.kidId === kid.id && window.has(e.day))
     const approved = events.filter((e) => e.type === 'quest_approved')
     const rejected = events.filter((e) => e.type === 'quest_rejected')
     const submitted = events.filter((e) => e.type === 'quest_submitted')
@@ -89,7 +92,7 @@ export default function ParentBlueprint({ initialKidId }) {
       rejectedCount: rejected.length,
       sampleSize: decided,
     }
-  }, [state.events, state.submissions, kid, days])
+  }, [state.events, state.submissions, state.quests, kid, days])
 
   if (!elite) {
     return (

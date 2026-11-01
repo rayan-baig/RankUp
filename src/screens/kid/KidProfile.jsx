@@ -12,6 +12,7 @@ import AppHeader from '../../components/AppHeader.jsx'
 import KidPot from '../../components/KidPot.jsx'
 import { navigate } from '../../lib/router.js'
 import BadgeShelf from '../../components/BadgeShelf.jsx'
+import { activityFeed } from '../../lib/activity.js'
 
 export default function KidProfile() {
   const { state, dispatch } = useApp()
@@ -25,7 +26,9 @@ export default function KidProfile() {
   const [draftTheme, setDraftTheme] = useState(kid?.themeId)
 
   const stats = useMemo(() => {
-    const mine = state.events.filter((e) => e.kidId === kid?.id)
+    // From the synced submissions, not this phone's own log: on a child's
+    // phone the approvals all happen somewhere else.
+    const mine = activityFeed(state).filter((e) => e.kidId === kid?.id)
     const approved = mine.filter((e) => e.type === 'quest_approved')
     const rejected = mine.filter((e) => e.type === 'quest_rejected')
     return {
@@ -33,7 +36,7 @@ export default function KidProfile() {
       rejected: rejected.length,
       levelUps: mine.filter((e) => e.type === 'level_up').length,
     }
-  }, [state.events, kid?.id])
+  }, [state.events, state.submissions, state.quests, kid?.id])
 
   if (!kid) return null
   const { level } = levelFromXp(kid.xp)

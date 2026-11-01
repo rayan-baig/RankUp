@@ -161,6 +161,17 @@ if (visible) {
     const xp = (await kState()).kids[0].xp
     xp > 0 ? pass(`the XP reached the kid's phone (xp=${xp})`)
            : fail('XP reached the kid device', `xp=${xp}`)
+
+    // The profile's counts used to come from this phone's own activity log,
+    // and an approval happens on the PARENT's phone — so a paired child's
+    // profile said "Chores completed 0" for ever, however many they had done.
+    await kid.evaluate(() => { window.location.hash = '/kid/profile' })
+    await kid.waitForTimeout(1200)
+    const row = await kid.getByText('Chores completed', { exact: true }).first().locator('xpath=..').innerText()
+    const counted = /\b1\b/.test(row)
+    counted
+      ? pass('the kid\'s profile counts the chore approved on the parent\'s phone')
+      : fail('kid profile counts the approved chore', JSON.stringify(row))
   }
 } else {
   fail('kid could open the synced quest', 'quest not visible')

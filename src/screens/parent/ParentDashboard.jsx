@@ -12,6 +12,7 @@ import { Screen, Card, Button, SectionTitle, Stat, ProgressBar, EmptyState, Bann
 import SyncBadge from '../../components/SyncBadge.jsx'
 import { navigate } from '../../lib/router.js'
 import TrialBanner from '../../components/TrialBanner.jsx'
+import { activityFeed } from '../../lib/activity.js'
 import CharityWeek from '../../components/CharityWeek.jsx'
 import InstallPrompt from '../../components/InstallPrompt.jsx'
 
@@ -20,14 +21,19 @@ export default function ParentDashboard() {
   const elite = useElite()
   const pending = pendingSubmissions(state)
 
+  // Chores come from the synced submissions, so a co-parent's approvals and a
+  // child's "I did it!" from their own phone are here too, not only what was
+  // tapped on this phone.
+  const feed = useMemo(() => activityFeed(state), [state.events, state.submissions, state.quests])
+
   const weekXp = useMemo(() => {
     const week = new Set(lastSevenDays())
     const per = {}
-    state.events.forEach((e) => {
+    feed.forEach((e) => {
       if (e.type === 'quest_approved' && week.has(e.day)) per[e.kidId] = (per[e.kidId] || 0) + (e.meta?.xp || 0)
     })
     return per
-  }, [state.events])
+  }, [feed])
 
   const totalWeekXp = Object.values(weekXp).reduce((a, b) => a + b, 0)
 
@@ -176,11 +182,11 @@ export default function ParentDashboard() {
 
       <SectionTitle>Recent activity</SectionTitle>
       <Card>
-        {state.events.length === 0 ? (
+        {feed.length === 0 ? (
           <p className="text-sm text-muted">Nothing yet.</p>
         ) : (
           <ul className="space-y-2">
-            {[...state.events].reverse().slice(0, 8).map((e) => {
+            {[...feed].reverse().slice(0, 8).map((e) => {
               const kid = state.kids.find((k) => k.id === e.kidId)
               return (
                 <li key={e.id} className="flex items-baseline justify-between gap-2 text-sm">
@@ -201,7 +207,7 @@ function describeEvent(e, kid) {
   switch (e.type) {
     case 'quest_approved': return `✅ ${who} earned ${e.meta?.xp} XP`
     case 'quest_rejected': return `↩️ You sent a quest back to ${who}`
-    case 'quest_submitted': return `📸 ${who} submitted proof`
+    case 'quest_submitted': return `🙋 ${who} finished ${e.meta?.title ? `“${e.meta.title}”` : 'a quest'}`
     case 'quests_assigned': return `📋 ${e.meta?.count} quest(s) assigned to ${who}`
     case 'level_up': return `🎉 ${who} reached level ${e.meta?.to}`
     case 'reward_redeemed': return `🎁 ${who} redeemed ${e.meta?.name}`
