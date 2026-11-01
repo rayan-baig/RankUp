@@ -1,3 +1,5 @@
+import { dayKey, daysBetween } from './dates.js'
+
 /**
  * Levelling, XP and currency rules — the numbers that make the game a game.
  *
@@ -97,6 +99,19 @@ export function submissionReward(quest, submission, { elite = false, streak = 0 
     }
   }
   return { xp, coins, lines }
+}
+
+/**
+ * The streak as it stands today: its count while it is alive (a chore was
+ * approved today or yesterday), nothing once it has lapsed.
+ *
+ * The stored count only resets at the next approval, so a child who stopped a
+ * week ago still saw their old number, and the first chore back was paid a
+ * streak bonus. MIRRORED in award_for_submission in supabase/schema.sql.
+ */
+export function liveStreak(streak, today = dayKey()) {
+  if (!streak?.count || !streak.lastDay) return 0
+  return daysBetween(streak.lastDay, today) <= 1 ? streak.count : 0
 }
 
 /** Streaks add up to +25%, capped so they never dwarf the quest itself. */

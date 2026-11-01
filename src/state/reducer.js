@@ -1,6 +1,6 @@
 import { uid } from '../lib/id.js'
 import { dayKey, daysBetween, deviceZone } from '../lib/dates.js'
-import { submissionReward, levelFromXp } from '../lib/xp.js'
+import { submissionReward, levelFromXp, liveStreak } from '../lib/xp.js'
 import { createInitialState, TIERS, makeKid } from './initialState.js'
 import { findSkin, isMarketOpen, ticketCost } from '../data/marketSkins.js'
 import { DAILY_COIN_CAP, MAX_TOKENS } from '../data/minigames.js'
@@ -811,7 +811,8 @@ export function reducer(state, action) {
 
       const { xp, coins, lines } = submissionReward(quest, submission, {
         elite: isElite(state),
-        streak: kid.streak.count,
+        // A lapsed streak pays nothing; see liveStreak.
+        streak: liveStreak(kid.streak),
       })
 
       const beforeLevel = levelFromXp(kid.xp).level

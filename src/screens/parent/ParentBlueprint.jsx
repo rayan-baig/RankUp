@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useApp, useElite, useParentTheme } from '../../state/AppContext.jsx'
 import { lastSevenDays, shortDayName, dayKey } from '../../lib/dates.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
-import { formatXp, levelFromXp } from '../../lib/xp.js'
+import { formatXp, levelFromXp, liveStreak } from '../../lib/xp.js'
 import { DailyBars, StackedBars, HorizontalBars, StatTile } from '../../components/charts/Charts.jsx'
 import { Screen, Card, SectionTitle, Select, Field, Banner, EmptyState, Chip } from '../../components/ui.jsx'
 import EliteGate from '../../components/EliteGate.jsx'
@@ -209,7 +209,7 @@ export default function ParentBlueprint({ initialKidId }) {
 
           <div className="flex flex-wrap gap-1.5 mt-3">
             <Chip>Level {levelFromXp(kid.xp).level}</Chip>
-            <Chip>🔥 {kid.streak.count}-day streak</Chip>
+            <Chip>🔥 {liveStreak(kid.streak)}-day streak</Chip>
             {report.adaptiveCount > 0 && <Chip tone="var(--accent-2)">♿ {report.adaptiveCount} adaptive completed</Chip>}
           </div>
         </>

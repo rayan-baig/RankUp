@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { STICKER_MAP } from '../../data/stickers.js'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
-import { DIFFICULTY, calcReward } from '../../lib/xp.js'
+import { DIFFICULTY, calcReward, liveStreak } from '../../lib/xp.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
 import { formatDuration } from '../../lib/dates.js'
 import { Screen, Card, Button, Banner, Chip, TextInput, Field, SectionTitle } from '../../components/ui.jsx'
@@ -66,7 +66,7 @@ export default function QuestDetail({ questId }) {
   // sitting with the parent or already paid out.
   const isOpen = quest.status === 'assigned' || quest.status === 'redo'
   const onTime = quest.timerSeconds ? elapsed > 0 && elapsed <= quest.timerSeconds * 1000 : true
-  const preview = calcReward(quest, { elite, streak: kid.streak.count, onTime })
+  const preview = calcReward(quest, { elite, streak: liveStreak(kid.streak), onTime })
 
   const submit = () => {
     dispatch({

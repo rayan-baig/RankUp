@@ -146,3 +146,25 @@ begin
   res := claim_login_bonus('7a444444-0000-0000-0000-0000000000a1', 5, 'Mars/Olympus_Mons');
   perform ok('a nonsense zone still pays the bonus', (res->>'ok')::boolean, res::text);
 end $$;
+
+-- ---------- a lapsed streak pays nothing ----------
+-- The count only resets at the next approval, so the first chore after a
+-- week off was paid a streak bonus for a run that had already ended.
+do $$
+declare v_award jsonb;
+begin
+  set local role postgres;
+  update kids set streak_count = 9, streak_last_day = pg_temp.fd_today() - 5
+   where id = '7a444444-0000-0000-0000-0000000000a1';
+  insert into quests (id, family_id, kid_id, title, xp) values
+    ('7a555555-0000-0000-0000-000000000002', '7a222222-0000-0000-0000-00000000000a',
+     '7a444444-0000-0000-0000-0000000000a1', 'Water the plants', 30);
+  insert into submissions (id, family_id, quest_id, kid_id, status) values
+    ('7a666666-0000-0000-0000-000000000002', '7a222222-0000-0000-0000-00000000000a',
+     '7a555555-0000-0000-0000-000000000002', '7a444444-0000-0000-0000-0000000000a1', 'pending');
+  v_award := award_for_submission('7a666666-0000-0000-0000-000000000002');
+  perform ok('a streak last kept five days ago adds nothing', (v_award->>'xp')::int = 30, v_award::text);
+  update kids set streak_last_day = pg_temp.fd_today() - 1 where id = '7a444444-0000-0000-0000-0000000000a1';
+  v_award := award_for_submission('7a666666-0000-0000-0000-000000000002');
+  perform ok('one kept yesterday still does', (v_award->>'xp')::int = 35, v_award::text);
+end $$;

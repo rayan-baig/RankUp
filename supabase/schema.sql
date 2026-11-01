@@ -774,7 +774,10 @@ revoke execute on function qualify_referral(uuid) from public;
  * numeric rounds half away from zero, which is what Math.round does — double
  * precision would round half to even and the two would drift apart on .5.
  */
-create or replace function award_for_submission(p_submission_id uuid)
+-- Gained p_tz, so it can tell whether the streak is still alive on the
+-- family's day. The one-argument version has to go or both would exist.
+drop function if exists award_for_submission(uuid);
+create or replace function award_for_submission(p_submission_id uuid, p_tz text default null)
 returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 declare
@@ -806,8 +809,13 @@ begin
   end if;
 
   -- Streaks add up to +25%, and it is the streak BEFORE this approval bumps it.
+  -- A streak that has lapsed (nothing approved today or yesterday) is not a
+  -- streak: the count only resets at this approval, and paying a bonus for
+  -- it rewarded the week off. MIRRORS liveStreak in src/lib/xp.js.
   v_streak := case
     when coalesce(v_kid.streak_count, 0) < 3 then 0
+    when v_kid.streak_last_day is null
+      or v_kid.streak_last_day < family_today(v_sub.family_id, p_tz) - 1 then 0
     else least(0.25, floor(v_kid.streak_count / 3.0) * 0.05)
   end;
   if v_streak > 0 then
@@ -838,7 +846,7 @@ begin
   return jsonb_build_object('xp', v_xp, 'coins', v_coins);
 end $$;
 
-revoke execute on function award_for_submission(uuid) from public;
+revoke execute on function award_for_submission(uuid, text) from public;
 
 /*
  * Where a family lives. Also added by digests.sql; here as well because
@@ -938,7 +946,7 @@ begin
   -- so one HTTP request could mint any number. The parameters stay so that a
   -- phone running older code still works; they are ignored. See
   -- award_for_submission.
-  v_award := award_for_submission(p_submission_id);
+  v_award := award_for_submission(p_submission_id, p_tz);
   v_today := family_today(v_sub.family_id, p_tz);
   v_xp    := coalesce((v_award->>'xp')::int, 0);
   v_coins := coalesce((v_award->>'coins')::int, 0);

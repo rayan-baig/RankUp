@@ -104,5 +104,28 @@ console.log('\n=== A day recorded as later than today counts as done ===')
     `streak ${s.kids[0].streak.count}`)
 }
 
+/*
+ * A streak that has lapsed is not a streak. The count only resets at the next
+ * approval, so a child who stopped a week ago still had "9" on their home
+ * screen, and the first chore back paid a streak bonus for a run that had
+ * ended. supabase/test/27-family-day.sql checks the database pays the same.
+ */
+console.log('\n=== A lapsed streak pays and shows nothing ===')
+{
+  const { liveStreak } = await import('../src/lib/xp.js')
+  const lapsed = { count: 9, lastDay: dayKey(addDays(new Date(), -5)), freezeTokens: 0 }
+  const alive = { count: 9, lastDay: dayKey(addDays(new Date(), -1)), freezeTokens: 0 }
+  ok('a streak last kept five days ago counts as none', liveStreak(lapsed) === 0)
+  ok('one kept yesterday still counts', liveStreak(alive) === 9)
+  ok('and one kept today', liveStreak({ ...alive, lastDay: today }) === 9)
+  let s = base({ streak: lapsed })
+  s = { ...s, quests: [{ id: 'q1', kidId: AVA, title: 'Feed the cat', xp: 30, difficulty: 'medium', status: 'submitted' }],
+    submissions: [{ id: 's1', questId: 'q1', kidId: AVA, status: 'pending', submittedAt: Date.now() }],
+    family: { ...s.family, tier: 'standard', trialTier: null, trialEndsAt: null } }
+  s = reducer(s, { type: 'APPROVE_SUBMISSION', submissionId: 's1' })
+  ok('the first chore after a lapse pays no streak bonus', s.submissions[0].awarded.xp === 30,
+    JSON.stringify(s.submissions[0].awarded.lines))
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL CHECKS PASSED')
 process.exit(fails ? 1 : 0)

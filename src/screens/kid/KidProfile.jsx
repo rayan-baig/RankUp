@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
-import { levelFromXp, formatXp } from '../../lib/xp.js'
+import { levelFromXp, formatXp, liveStreak } from '../../lib/xp.js'
 import { KID_THEME_MAP, nextEvolution } from '../../data/kidThemes.js'
 import { storyProgress } from '../../lib/dragonFight.js'
 import { PROFILE_FRAMES, DROP_SELECTORS } from '../../state/initialState.js'
@@ -107,7 +107,7 @@ export default function KidProfile() {
             }}
           >
             <div className="text-lg leading-none" aria-hidden="true">🔥</div>
-            <div className="font-display font-extrabold text-lg leading-none mt-0.5">{kid.streak.count}</div>
+            <div className="font-display font-extrabold text-lg leading-none mt-0.5">{liveStreak(kid.streak)}</div>
             <div className="text-[9px] uppercase tracking-wider text-muted">Day streak</div>
           </div>
         </div>

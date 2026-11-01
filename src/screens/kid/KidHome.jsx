@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
-import { levelFromXp, formatXp, xpToNext } from '../../lib/xp.js'
+import { levelFromXp, formatXp, xpToNext, liveStreak } from '../../lib/xp.js'
 import { nextEvolution, storyChapters } from '../../data/kidThemes.js'
 import { storyProgress, dragonFight, DRAGON_HP, HERO_HP } from '../../lib/dragonFight.js'
 import { isMarketOpen } from '../../data/marketSkins.js'
@@ -107,7 +107,7 @@ export default function KidHome() {
           >
             <div className="text-lg leading-none" aria-hidden="true">🔥</div>
             <div className="font-display font-extrabold text-lg leading-none mt-0.5">
-              <CountUp value={kid.streak.count} />
+              <CountUp value={liveStreak(kid.streak)} />
             </div>
             <div className="text-[9px] uppercase tracking-wider text-muted">Day streak</div>
           </div>

@@ -14,7 +14,8 @@ globalThis.window = { location: { search: '' }, addEventListener() {}, removeEve
 
 const { reducer, isElite } = await import('../src/state/reducer.js')
 const { createInitialState } = await import('../src/state/initialState.js')
-const { submissionReward } = await import('../src/lib/xp.js')
+const { submissionReward, liveStreak } = await import('../src/lib/xp.js')
+const { dayKey } = await import('../src/lib/dates.js')
 
 let fails = 0
 const ok = (label, cond, detail = '') => {
@@ -29,12 +30,12 @@ const paid = (quest, sub, { tier = 'standard', streak = 0 } = {}) => {
     ...s,
     family: { ...s.family, id: 'fam', tier },
     kids: [{ ...s.kids?.[0], id: AVA, name: 'Ava', xp: 0, coins: 0, bestTimes: {},
-      streak: { count: streak, lastDay: null, freezeTokens: 0 } }],
+      streak: { count: streak, lastDay: dayKey(), freezeTokens: 0 } }],
     quests: [{ id: 'q', kidId: AVA, status: 'submitted', ...quest }],
     submissions: [{ id: 's', questId: 'q', kidId: AVA, status: 'pending', submittedAt: Date.now(), ...sub }],
   }
   // Worked out as the screen does, from the state before the tap.
-  const shown = submissionReward(state.quests[0], state.submissions[0], { elite: isElite(state), streak })
+  const shown = submissionReward(state.quests[0], state.submissions[0], { elite: isElite(state), streak: liveStreak(state.kids[0].streak) })
   state = reducer(state, { type: 'APPROVE_SUBMISSION', submissionId: 's' })
   return { paid: state.submissions[0].awarded, shown }
 }
