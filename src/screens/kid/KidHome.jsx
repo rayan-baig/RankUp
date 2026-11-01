@@ -14,6 +14,7 @@ import { navigate } from '../../lib/router.js'
 import InstallPrompt from '../../components/InstallPrompt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
 import { useKidSchool } from './KidSchool.jsx'
+import { familyGoalProgress } from '../../state/reducer.js'
 
 export default function KidHome() {
   const { state, dispatch } = useApp()
@@ -312,6 +313,19 @@ export default function KidHome() {
           <Button variant="soft" className="w-full mt-2" onClick={() => dispatch({ type: 'MARK_NOTES_READ', kidId: kid.id, as: 'kid' })}>
             Got it
           </Button>
+        </Card>
+      )}
+
+      {state.familyGoal && (
+        <Card className="mb-3">
+          <SectionTitle>Family goal</SectionTitle>
+          <div className="flex justify-between text-sm mb-2">
+            <span className="font-semibold">{state.familyGoal.name}</span>
+            <span className="text-muted">
+              {formatXp(familyGoalProgress(state))} / {formatXp(state.familyGoal.targetXp)} XP
+            </span>
+          </div>
+          <ProgressBar value={familyGoalProgress(state)} max={state.familyGoal.targetXp} height={9} label="Family goal progress" />
         </Card>
       )}
 

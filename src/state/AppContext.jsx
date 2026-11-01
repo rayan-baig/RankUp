@@ -223,8 +223,8 @@ const syncs = (state) =>
     }
     const left = []
     for (const item of state.syncQueue) {
-      const { fn, args } = item
-      const op = { type: 'rpc', fn, args }
+      const { fn, args, foldKey } = item
+      const op = foldKey ? { type: 'rpc', fn, args, foldKey } : { type: 'rpc', fn, args }
       if (!enqueueOp(op)) left.push(item)
     }
     if (left.length < state.syncQueue.length) engineRef.current?.wake()
@@ -235,6 +235,13 @@ const syncs = (state) =>
     queueRetry.current = setTimeout(() => dispatch({ type: 'RETRY_SYNC_QUEUE' }), 15000)
     return () => clearTimeout(queueRetry.current)
   }, [state.syncQueue])
+
+  // A family goal set before goals were shared goes up once (SHARE_FAMILY_GOAL).
+  const goal = state.familyGoal
+  const unsharedGoal = syncing && state.device?.role !== 'kid' && goal && !goal.shared && goal.rev == null
+  useEffect(() => {
+    if (unsharedGoal) dispatch({ type: 'SHARE_FAMILY_GOAL' })
+  }, [unsharedGoal])
 
   /**
    * Send the notifications the reducer asked for.

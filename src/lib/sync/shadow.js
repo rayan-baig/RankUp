@@ -271,6 +271,8 @@ export function pendingRows(ops) {
     else if (op.type === 'delete') { pending.add(`${op.table}:${op.id}`); pending.add(`delete:${op.table}:${op.id}`) }
     // A child's own look travels by function rather than as a row.
     else if (op.type === 'rpc' && op.fn === 'set_kid_look' && op.args?.p_kid_id) pending.add(`kids:${op.args.p_kid_id}`)
+    // A goal this phone has just set must not be put back by an older copy.
+    else if (op.type === 'rpc' && op.fn === 'set_family_goal') pending.add('family_goals')
   }
   return pending
 }

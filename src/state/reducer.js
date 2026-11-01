@@ -4,7 +4,7 @@ import { submissionReward, levelFromXp, liveStreak } from '../lib/xp.js'
 import { createInitialState, TIERS, makeKid } from './initialState.js'
 import { findSkin, isMarketOpen, ticketCost } from '../data/marketSkins.js'
 import { DAILY_COIN_CAP, MAX_TOKENS } from '../data/minigames.js'
-import { ENTITIES } from '../lib/sync/mappers.js'
+import { ENTITIES, familyGoals } from '../lib/sync/mappers.js'
 import { questsDueToReturn, dayOf } from '../lib/recurrence.js'
 import { STICKER_MAP } from '../data/stickers.js'
 
@@ -25,12 +25,14 @@ function mapKid(state, kidId, fn) {
  * provider moves it into the outbox — which keeps this file free of side
  * effects while keeping the arguments where they are actually computed.
  */
-function queueRpc(state, fn, args) {
+function queueRpc(state, fn, args, foldKey = null) {
   // A call that moves a balance carries an id made now, when the thing
   // happened. If the phone sends it, never hears back and sends it again, the
   // server recognises the id and does not charge or pay a second time.
   const withId = RETRY_SAFE.has(fn) && !args?.p_request_id ? { ...args, p_request_id: uid('req') } : args
-  return { ...state, syncQueue: [...(state.syncQueue || []), { fn, args: withId }] }
+  // A fold key: a later call with the same key replaces one still waiting.
+  const item = foldKey ? { fn, args: withId, foldKey } : { fn, args: withId }
+  return { ...state, syncQueue: [...(state.syncQueue || []), item] }
 }
 
 /** Functions that take a request id. Mirrored by rpc_receipts in supabase/sync.sql. */
@@ -191,6 +193,9 @@ export function potFor(state, kidId) {
  */
 export function familyGoalProgress(state) {
   if (!state.familyGoal) return 0
+  // A child's phone holds only its own child, so it cannot add everybody up:
+  // it shows the figure the server added up (see family_goal_since).
+  if (state.device?.role === 'kid') return Math.max(0, state.familyGoal.progress || 0)
   const total = (state.kids || []).reduce((sum, k) => sum + (k.xp || 0), 0)
   return Math.max(0, total - (state.familyGoal.startXp || 0))
 }
@@ -244,6 +249,20 @@ export function reducer(state, action) {
         const entity = Object.values(ENTITIES).find((e) => e.table === deletion.table_name)
         if (!entity) continue
         next = { ...next, [entity.key]: (next[entity.key] || []).filter((i) => i.id !== deletion.row_id) }
+      }
+
+      // The family goal, set or cleared on another phone. A tombstone newer
+      // than the goal row (and than the goal this phone has) means cleared.
+      if (!pending.has('family_goals')) {
+        const goalRow = snap.family_goals?.[0]
+        const goneRev = (snap.deletions || [])
+          .filter((d) => d.table_name === 'family_goals')
+          .reduce((max, d) => Math.max(max, Number(d.rev) || 0), 0)
+        if (goalRow && Number(goalRow.rev) > goneRev) {
+          next = { ...next, familyGoal: familyGoals.fromRow(goalRow) }
+        } else if (goneRev && goneRev > (Number(next.familyGoal?.rev) || 0)) {
+          next = { ...next, familyGoal: null }
+        }
       }
 
       const family = snap.families?.[0]
@@ -1270,15 +1289,44 @@ export function reducer(state, action) {
 
     /* ---------- misc ---------- */
 
+    /*
+     * The family goal is the family's: it goes to the server, which every
+     * other phone pulls it from. It used to stay on the phone that set it, so
+     * the other parent and the children never saw it. The server decides
+     * where the bar starts by the same rule as here; this is the instant copy.
+     */
     case 'SET_FAMILY_GOAL': {
-      if (!action.goal) return { ...state, familyGoal: null }
+      if (!action.goal) {
+        return queueRpc({ ...state, familyGoal: null }, 'set_family_goal', { p_name: null, p_target_xp: null }, 'set_family_goal')
+      }
+      const name = action.goal.name.trim()
+      const targetXp = action.goal.targetXp
       // The same goal edited (a new target, say) keeps what was earned; a new
       // goal starts from where everybody is now.
-      const same = state.familyGoal && state.familyGoal.name.trim() === action.goal.name.trim()
+      const same = state.familyGoal && state.familyGoal.name.trim() === name
       const startXp = same
         ? state.familyGoal.startXp || 0
         : state.kids.reduce((sum, k) => sum + (k.xp || 0), 0)
-      return { ...state, familyGoal: { ...action.goal, startXp, setAt: same ? state.familyGoal.setAt : Date.now() } }
+      const familyGoal = {
+        name, targetXp, startXp,
+        setAt: same ? state.familyGoal.setAt : Date.now(),
+        progress: same ? state.familyGoal.progress || 0 : 0,
+        shared: true,
+      }
+      return queueRpc({ ...state, familyGoal }, 'set_family_goal', { p_name: name, p_target_xp: targetXp }, 'set_family_goal')
+    }
+
+    /*
+     * A goal set on this phone before goals were shared lives only here. It
+     * goes up once, with where it started, and the server takes it only if
+     * the family has no goal yet: one set on another phone since stands.
+     */
+    case 'SHARE_FAMILY_GOAL': {
+      const goal = state.familyGoal
+      if (!goal || goal.shared || goal.rev != null) return state
+      return queueRpc({ ...state, familyGoal: { ...goal, shared: true } }, 'set_family_goal', {
+        p_name: goal.name.trim(), p_target_xp: goal.targetXp, p_start_xp: goal.startXp || 0,
+      }, 'set_family_goal')
     }
 
     case 'CLAIM_LOGIN_BONUS': {

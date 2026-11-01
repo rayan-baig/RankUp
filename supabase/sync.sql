@@ -26,6 +26,10 @@
 
 create sequence if not exists sync_rev;
 
+-- Where everybody's XP stood when the family goal was set; the bar counts from
+-- here. See set_family_goal below.
+alter table family_goals add column if not exists start_xp int not null default 0;
+
 create or replace function bump_rev() returns trigger
 language plpgsql as $$
 begin
@@ -36,7 +40,7 @@ end $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['families','kids','quests','submissions','rewards','redemptions','notes','overrides']
+  foreach t in array array['families','kids','quests','submissions','rewards','redemptions','notes','overrides','family_goals']
   loop
     execute format(
       'alter table %I add column if not exists rev bigint not null default nextval(''sync_rev'')', t);
@@ -103,6 +107,121 @@ begin
 end $$;
 
 /**
+ * The family goal used to live on the phone of the parent who set it. One row
+ * per family, keyed by the family, so a clear is told to the other devices as
+ * a tombstone whose row id is the family's own id.
+ */
+create or replace function record_goal_deletion() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if exists (select 1 from families where id = old.family_id) then
+    insert into deletions (family_id, table_name, row_id)
+    values (old.family_id, 'family_goals', old.family_id);
+  end if;
+  return old;
+end $$;
+drop trigger if exists family_goals_deleted on family_goals;
+create trigger family_goals_deleted after delete on family_goals
+  for each row execute function record_goal_deletion();
+
+/**
+ * The family goal and how far along it is, for family_snapshot.
+ *
+ * Progress is everybody's XP now, less where it stood when the goal was set.
+ * A child's phone can read only its own child's row, so it cannot add that up
+ * itself; this does it for every device, with the rights to see every child
+ * in the caller's family and nobody else's.
+ *
+ * Progress moves whenever any child's XP does, which does not touch the goal's
+ * own row. So the goal is sent again whenever a child's row has changed since
+ * the device last looked (or a child was removed), not only when the goal did.
+ */
+create or replace function family_goal_since(p_since bigint default 0)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'family_id',  g.family_id,
+           'name',       g.name,
+           'target_xp',  g.target_xp,
+           'start_xp',   g.start_xp,
+           'created_at', g.created_at,
+           'rev',        g.rev,
+           'progress',   greatest(0, (select coalesce(sum(k.xp), 0) from kids k
+                                       where k.family_id = g.family_id) - g.start_xp))), '[]'::jsonb)
+    from family_goals g
+   where g.family_id = current_family_id()
+     and (g.rev > coalesce(p_since, 0)
+          or exists (select 1 from kids k
+                      where k.family_id = g.family_id and k.rev > coalesce(p_since, 0))
+          or exists (select 1 from deletions d
+                      where d.family_id = g.family_id and d.table_name = 'kids'
+                        and d.rev > coalesce(p_since, 0)));
+$$;
+revoke all on function family_goal_since(bigint) from public;
+grant execute on function family_goal_since(bigint) to authenticated;
+
+/**
+ * Set, change or clear the family goal. Parent only.
+ *
+ * Where the bar starts is decided here, from the children's XP as the server
+ * has it, not from a phone that may not have synced for a day (which would
+ * start the bar low and hand the family XP they earned before the goal).
+ * The same goal saved again (a new target, say) keeps what was earned; a goal
+ * with a different name starts again from where everybody is now.
+ *
+ * p_start_xp is only for a goal set before goals were shared, which a phone
+ * sends up once: it is taken only if the family has no goal yet, so it cannot
+ * overwrite one another parent has set since, and it is held to what the
+ * children actually have.
+ */
+create or replace function set_family_goal(p_name text, p_target_xp int, p_start_xp int default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_family uuid := current_family_id();
+  v_name   text := left(btrim(coalesce(p_name, '')), 80);
+  v_total  int;
+  v_goal   family_goals%rowtype;
+begin
+  if v_family is null or not is_parent() then
+    return jsonb_build_object('ok', false, 'reason', 'not_parent');
+  end if;
+
+  if v_name = '' then
+    delete from family_goals where family_id = v_family;
+    return jsonb_build_object('ok', true, 'cleared', true);
+  end if;
+  if p_target_xp is null or p_target_xp <= 0 or p_target_xp > 10000000 then
+    return jsonb_build_object('ok', false, 'reason', 'bad_target');
+  end if;
+
+  select coalesce(sum(xp), 0) into v_total from kids where family_id = v_family;
+  select * into v_goal from family_goals where family_id = v_family for update;
+
+  if p_start_xp is not null then
+    if found then
+      -- Theirs stands. Touch it so the phone that sent this is sent it back.
+      update family_goals set name = name where family_id = v_family;
+      return jsonb_build_object('ok', true, 'kept', true);
+    end if;
+    insert into family_goals (family_id, name, target_xp, start_xp)
+    values (v_family, v_name, p_target_xp, least(greatest(p_start_xp, 0), v_total));
+    return jsonb_build_object('ok', true);
+  end if;
+
+  if found and btrim(v_goal.name) = v_name then
+    update family_goals set target_xp = p_target_xp where family_id = v_family;
+  else
+    insert into family_goals (family_id, name, target_xp, start_xp, created_at)
+    values (v_family, v_name, p_target_xp, v_total, now())
+    on conflict (family_id) do update
+      set name = excluded.name, target_xp = excluded.target_xp,
+          start_xp = excluded.start_xp, created_at = excluded.created_at;
+  end if;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke all on function set_family_goal(text, int, int) from public;
+grant execute on function set_family_goal(text, int, int) to authenticated;
+
+/**
  * Everything this family's devices need, limited to what changed since `p_since`.
  *
  * Row level security still applies inside this function because it is NOT
@@ -167,6 +286,7 @@ begin
     'redemptions', coalesce((select jsonb_agg(to_jsonb(r)) from redemptions r where r.rev > cutoff), '[]'::jsonb),
     'notes',       coalesce((select jsonb_agg(to_jsonb(n)) from notes n       where n.rev > cutoff), '[]'::jsonb),
     'overrides',   coalesce((select jsonb_agg(to_jsonb(o)) from overrides o   where o.rev > cutoff), '[]'::jsonb),
+    'family_goals', family_goal_since(cutoff),
     'deletions',   coalesce((select jsonb_agg(to_jsonb(d)) from deletions d   where d.rev > cutoff), '[]'::jsonb)
   );
 end $$;

@@ -278,6 +278,24 @@ export const overrides = {
   }),
 }
 
+/**
+ * The family goal: one per family, and not diffed like the rows above. It is
+ * set by set_family_goal, which decides where the bar starts, and it arrives
+ * with `progress` already added up, because a child's phone cannot see its
+ * brothers' and sisters' XP to add it up itself.
+ */
+export const familyGoals = {
+  fromRow: (row) => ({
+    name: row.name,
+    targetXp: row.target_xp,
+    startXp: row.start_xp ?? 0,
+    setAt: ms(row.created_at),
+    progress: row.progress ?? 0,
+    shared: true,
+    rev: row.rev,
+  }),
+}
+
 /** Which app collection each snapshot key maps onto. */
 export const ENTITIES = {
   kids: { key: 'kids', mapper: kids, table: 'kids' },

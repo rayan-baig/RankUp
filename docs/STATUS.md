@@ -29,7 +29,7 @@ Legend: ✅ genuinely works · 🟡 works but only on this device · ❌ looks r
 | Test-score quests | ✅ | 80%+ earns a bonus |
 | Surprise 2× XP quests | ✅ | Randomly flagged when adding a pack, or set by hand |
 | Rewards catalogue and redemption | ✅ | Parent marks a reward as given |
-| Family goal | ✅ | Combined XP toward one shared reward |
+| Family goal | ✅ | Combined XP toward one shared reward, counted from when it was set. Synced: both parents and every child's phone see the same goal and bar |
 | Daily login bonus | ✅ | |
 | Standard / Elite feature differences | ✅ | Both the features and the billing. The tier is written by Stripe's webhook and by nothing else |
 | Elite 1.5× XP boost | ✅ | Applied in the reward calculation |

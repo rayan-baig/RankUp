@@ -35,5 +35,39 @@ ok('a different goal starts again', familyGoalProgress(state) === 0, String(fami
 state = reducer(state, { type: 'SET_FAMILY_GOAL', goal: null })
 ok('clearing it clears it', state.familyGoal === null && familyGoalProgress(state) === 0)
 
+console.log('\n=== The goal is the family\'s, not this phone\'s ===')
+state = reducer({ ...state, syncQueue: [] }, { type: 'SET_FAMILY_GOAL', goal: { name: ' Zoo day ', targetXp: 800 } })
+const call = state.syncQueue.at(-1)
+ok('setting it asks the server to set it for the family',
+  call?.fn === 'set_family_goal' && call.args.p_name === 'Zoo day' && call.args.p_target_xp === 800, JSON.stringify(call))
+state = reducer({ ...state, syncQueue: [] }, { type: 'SET_FAMILY_GOAL', goal: null })
+ok('and clearing it does too', state.syncQueue.at(-1)?.fn === 'set_family_goal' && state.syncQueue.at(-1).args.p_name === null)
+
+const row = { family_id: 'f', name: 'Zoo day', target_xp: 800, start_xp: 2520, created_at: new Date().toISOString(), rev: 50, progress: 70 }
+state = reducer(state, { type: 'MERGE_SNAPSHOT', snapshot: { family_goals: [row] } })
+ok('a goal set on another phone arrives', state.familyGoal?.name === 'Zoo day' && state.familyGoal.targetXp === 800)
+ok('counting from where the server says it started', familyGoalProgress(state) === 0, String(familyGoalProgress(state)))
+const kidPhone = { ...state, device: { role: 'kid', linkedKidId: 'a' }, kids: [state.kids[0]] }
+ok('a child\'s phone, which sees only its own child, shows the family\'s progress',
+  familyGoalProgress(kidPhone) === 70, String(familyGoalProgress(kidPhone)))
+
+let held = reducer(state, { type: 'MERGE_SNAPSHOT', pending: ['family_goals'], snapshot: { family_goals: [{ ...row, name: 'Old', rev: 40 }] } })
+ok('a goal waiting to go is not put back by an older copy', held.familyGoal?.name === 'Zoo day')
+
+held = reducer(state, { type: 'MERGE_SNAPSHOT', snapshot: { deletions: [{ table_name: 'family_goals', row_id: 'f', rev: 60 }] } })
+ok('cleared on another phone, it is cleared here', held.familyGoal === null)
+held = reducer(state, { type: 'MERGE_SNAPSHOT', snapshot: { deletions: [{ table_name: 'family_goals', row_id: 'f', rev: 30 }] } })
+ok('an older clear does not take away a newer goal', held.familyGoal?.name === 'Zoo day')
+held = reducer(state, { type: 'MERGE_SNAPSHOT', snapshot: {
+  family_goals: [{ ...row, name: 'Cinema', rev: 70 }], deletions: [{ table_name: 'family_goals', row_id: 'f', rev: 65 }] } })
+ok('cleared and set again since: the new goal stands', held.familyGoal?.name === 'Cinema')
+
+console.log('\n=== A goal from before goals were shared goes up once ===')
+let legacy = { ...state, syncQueue: [], familyGoal: { name: 'Aquarium trip', targetXp: 2000, startXp: 1200 } }
+legacy = reducer(legacy, { type: 'SHARE_FAMILY_GOAL' })
+const up = legacy.syncQueue.at(-1)
+ok('it is sent with where it started', up?.fn === 'set_family_goal' && up.args.p_start_xp === 1200, JSON.stringify(up))
+ok('only once', reducer(legacy, { type: 'SHARE_FAMILY_GOAL' }).syncQueue.length === 1)
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL CHECKS PASSED')
 process.exit(fails ? 1 : 0)

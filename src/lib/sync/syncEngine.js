@@ -260,7 +260,7 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare }) {
     // row is the ONLY thing that moves. Leaving it out meant an upgrade landed
     // in the browser only when some unrelated row happened to change too.
     const changed =
-      ['families', 'kids', 'quests', 'submissions', 'rewards', 'redemptions', 'notes', 'overrides', 'deletions']
+      ['families', 'kids', 'quests', 'submissions', 'rewards', 'redemptions', 'notes', 'overrides', 'family_goals', 'deletions']
         .reduce((n, key) => n + (snapshot[key]?.length || 0), 0)
 
     if (changed > 0) dispatch({ type: 'MERGE_SNAPSHOT', snapshot })

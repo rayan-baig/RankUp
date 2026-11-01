@@ -84,7 +84,7 @@ error messages, the link itself, and the fact that a kid's device has no Parent
 Mode. `tests/pairing.mjs` drives it as two separate devices and checks all of it.
 
 **Also working, with Supabase:** the sync *after* pairing. Quests, submissions,
-approvals, XP and rewards travel between the parent's and the child's phones,
+approvals, XP, rewards and the family goal travel between the parent's and the child's phones,
 offline-first through an outbox; `tests/sync.mjs` drives it end to end.
 
 **A second phone for the same child.** A profile that already has a phone keeps
