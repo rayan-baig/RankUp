@@ -62,8 +62,12 @@ export function choreEvents(state) {
  * (rewards, overrides, themes...) from this device's own log. Oldest first.
  */
 export function activityFeed(state) {
+  // A chore entry in this phone's log whose quest has no submissions left is
+  // one whose quest was deleted (deleting a quest takes its submissions with
+  // it). The log is all that remembers it, so it stays.
+  const known = new Set((state.submissions || []).map((s) => s.questId))
   return [
-    ...(state.events || []).filter((e) => !CHORE_EVENT_TYPES.has(e.type)),
+    ...(state.events || []).filter((e) => !CHORE_EVENT_TYPES.has(e.type) || !known.has(e.meta?.questId)),
     ...choreEvents(state),
   ].sort((a, b) => a.at - b.at)
 }
