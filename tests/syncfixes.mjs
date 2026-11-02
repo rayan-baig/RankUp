@@ -284,5 +284,44 @@ console.log('\n=== A level reached by sync is celebrated on the child\'s own pho
   ok('a parent\'s phone is not interrupted by a level reached elsewhere', !onParent.pendingLevelUp)
 }
 
+/*
+ * A pull that was already on its way when a parent tapped Accept.
+ *
+ * It carried the chore as it was a moment before — still waiting — and the
+ * merge put it back in the review queue, with the child's XP back where it
+ * was. A second tap on Accept then paid it again on this phone and sent the
+ * child a second "Approved!".
+ */
+console.log('\n=== An approval still on its way is not undone by a pull ===')
+reset()
+{
+  const Q = '00000000-0000-4000-8000-0000000000q1'.replace('q', 'a')
+  const S = '00000000-0000-4000-8000-0000000000s1'.replace('s', 'b')
+  const b0 = base()
+  let st = {
+    ...b0,
+    kids: [{ ...b0.kids[0], streak: { count: 0, lastDay: null, freezeTokens: 0 }, bestTimes: {}, playTokens: 0 }],
+    quests: [{ id: Q, kidId: AVA, title: 'Make the bed', xp: 30, status: 'submitted' }],
+    submissions: [{ id: S, questId: Q, kidId: AVA, status: 'pending', submittedAt: Date.now() }],
+  }
+  st = reducer(st, { type: 'APPROVE_SUBMISSION', submissionId: S })
+  const paid = st.kids[0].xp
+  for (const item of st.syncQueue) enqueue({ type: 'rpc', fn: item.fn, args: item.args })
+  const before = {
+    quests: [{ id: Q, family_id: FAMILY, kid_id: AVA, title: 'Make the bed', xp: 30, status: 'submitted', rev: 10 }],
+    submissions: [{ id: S, family_id: FAMILY, quest_id: Q, kid_id: AVA, status: 'pending', rev: 11 }],
+    kids: [serverKid({ rev: 12 })],
+  }
+  const waitingNow = pendingRows(readOutbox(), st)
+  const merged = reducer(st, { type: 'MERGE_SNAPSHOT', snapshot: before, pending: [...waitingNow] })
+  ok('the chore stays accepted', merged.submissions.find((x) => x.id === S)?.status === 'approved',
+    merged.submissions.find((x) => x.id === S)?.status)
+  ok('its quest stays done', merged.quests.find((x) => x.id === Q)?.status === 'approved')
+  ok('and the child keeps the XP on screen', merged.kids[0].xp === paid && paid > 0, `${merged.kids[0].xp} vs ${paid}`)
+  const again = reducer({ ...merged, syncQueue: [], noticeQueue: [] }, { type: 'APPROVE_SUBMISSION', submissionId: S })
+  ok('so it cannot be accepted twice', again.syncQueue.length === 0 && again.kids[0].xp === paid)
+  clearOutbox()
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL CHECKS PASSED')
 process.exit(fails ? 1 : 0)

@@ -108,7 +108,7 @@ const syncs = (state) =>
           let pending = new Set()
           if (syncs(current)) {
             queueChanges(current, { photoFor, role: current.device?.role })
-            pending = pendingRows(readOutbox())
+            pending = pendingRows(readOutbox(), current)
             recordDelivered(current, action.snapshot, { photoFor, skip: pending })
           }
           dispatch({ ...action, pending: [...pending] })

@@ -235,7 +235,8 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare, sendN
           const { dead } = recordFailure(op.id, { retryable: true, auth: Boolean(err.auth) })
           // Given up after a day. Pulls skipped this row while it waited, so
           // fetch everything again rather than keep a copy the server never had.
-          if (dead && (op.type === 'upsert' || op.type === 'patch' || op.type === 'delete')) resetCursor()
+          // A call may have held rows too (see pendingRows), so any op but a notice.
+          if (dead && op.type !== 'notice') resetCursor()
           return { sent, error: err }
         }
         // A rejected write is not going to start working. Drop it rather than

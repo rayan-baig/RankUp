@@ -262,8 +262,9 @@ export function queueChanges(state, { photoFor, role } = {}) {
  * play or are approved. A parent tapping "Lift now" a moment before such a
  * pull landed saw the lockdown come straight back, and it stayed back.
  */
-export function pendingRows(ops) {
+export function pendingRows(ops, state = null) {
   const pending = new Set()
+  const submission = (id) => (state?.submissions || []).find((s) => s.id === id)
   for (const op of ops) {
     if ((op.type === 'upsert' || op.type === 'patch') && op.row?.id) pending.add(`${op.table}:${op.row.id}`)
     // A delete is marked twice: as a row with a change waiting, and as a
@@ -273,6 +274,24 @@ export function pendingRows(ops) {
     else if (op.type === 'rpc' && op.fn === 'set_kid_look' && op.args?.p_kid_id) pending.add(`kids:${op.args.p_kid_id}`)
     // A goal this phone has just set must not be put back by an older copy.
     else if (op.type === 'rpc' && op.fn === 'set_family_goal') pending.add('family_goals')
+    /*
+     * A chore sent, accepted or sent back, still on its way. A pull already in
+     * flight carries the rows as they were a moment before, and merging it
+     * put an accepted chore back in the review queue with the child's XP
+     * undone, where a second tap on Accept paid it again on this phone and
+     * sent a second "Approved!". Only rows the call itself writes are held,
+     * so each comes back with the pull after it lands.
+     */
+    else if (op.type === 'rpc' && op.fn === 'submit_quest' && op.args?.p_submission_id) {
+      pending.add(`submissions:${op.args.p_submission_id}`)
+      if (op.args.p_quest_id) pending.add(`quests:${op.args.p_quest_id}`)
+    } else if (op.type === 'rpc' && (op.fn === 'approve_submission' || op.fn === 'reject_submission') && op.args?.p_submission_id) {
+      pending.add(`submissions:${op.args.p_submission_id}`)
+      const decided = submission(op.args.p_submission_id)
+      if (decided?.questId) pending.add(`quests:${decided.questId}`)
+      // Only an approval writes the child's row (XP, coins, streak).
+      if (op.fn === 'approve_submission' && decided?.kidId) pending.add(`kids:${decided.kidId}`)
+    }
   }
   return pending
 }
