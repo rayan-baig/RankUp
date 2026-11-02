@@ -62,6 +62,12 @@ held = reducer(state, { type: 'MERGE_SNAPSHOT', snapshot: {
   family_goals: [{ ...row, name: 'Cinema', rev: 70 }], deletions: [{ table_name: 'family_goals', row_id: 'f', rev: 65 }] } })
 ok('cleared and set again since: the new goal stands', held.familyGoal?.name === 'Cinema')
 
+console.log('\n=== A child removed does not take the family\'s progress ===')
+let two = { ...state, familyGoal: { name: 'Zoo day', targetXp: 800, startXp: 2400, shared: true } }
+ok('the bar starts where it was', familyGoalProgress(two) === 120, String(familyGoalProgress(two)))
+two = reducer(two, { type: 'REMOVE_KID', kidId: 'b' })
+ok('and stays there when a child is removed', familyGoalProgress(two) === 120, String(familyGoalProgress(two)))
+
 console.log('\n=== A goal from before goals were shared goes up once ===')
 let legacy = { ...state, syncQueue: [], familyGoal: { name: 'Aquarium trip', targetXp: 2000, startXp: 1200 } }
 legacy = reducer(legacy, { type: 'SHARE_FAMILY_GOAL' })

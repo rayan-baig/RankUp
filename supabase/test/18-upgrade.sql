@@ -43,6 +43,14 @@ begin
                   where table_name = 'families' and column_name = 'timezone') then
     missing := missing || 'families.timezone ';
   end if;
+  if not exists (select 1 from information_schema.columns
+                  where table_name = 'family_goals' and column_name = 'start_xp') then
+    missing := missing || 'family_goals.start_xp ';
+  end if;
+  if not exists (select 1 from information_schema.columns
+                  where table_name = 'family_goals' and column_name = 'rev') then
+    missing := missing || 'family_goals.rev ';
+  end if;
   perform ok('every column added since the first release is present', missing = '',
              'missing: ' || missing);
 end $$;

@@ -125,6 +125,24 @@ create trigger family_goals_deleted after delete on family_goals
   for each row execute function record_goal_deletion();
 
 /**
+ * A child removed takes their XP out of the total, so it comes out of where
+ * the goal started too. Otherwise the whole balance came off the top and the
+ * bar fell to nothing, though the others had earned XP since. What the child
+ * earned towards it before leaving stays counted.
+ */
+create or replace function goal_without_kid() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  update family_goals
+     set start_xp = greatest(0, start_xp - coalesce(old.xp, 0))
+   where family_id = old.family_id;
+  return old;
+end $$;
+drop trigger if exists kids_leave_goal on kids;
+create trigger kids_leave_goal after delete on kids
+  for each row execute function goal_without_kid();
+
+/**
  * The family goal and how far along it is, for family_snapshot.
  *
  * Progress is everybody's XP now, less where it stood when the goal was set.

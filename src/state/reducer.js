@@ -517,6 +517,15 @@ export function reducer(state, action) {
     case 'REMOVE_KID':
       return {
         ...state,
+        // Their XP leaves the total, so it leaves where the goal started too
+        // (as goal_without_kid does on the server), or the bar would drop.
+        familyGoal: state.familyGoal
+          ? {
+              ...state.familyGoal,
+              startXp: Math.max(0, (state.familyGoal.startXp || 0)
+                - (state.kids.find((k) => k.id === action.kidId)?.xp || 0)),
+            }
+          : state.familyGoal,
         kids: state.kids.filter((k) => k.id !== action.kidId),
         quests: state.quests.filter((q) => q.kidId !== action.kidId),
         submissions: state.submissions.filter((s) => s.kidId !== action.kidId),

@@ -193,6 +193,26 @@ begin
     (select start_xp from family_goals where family_id = '8a222222-0000-0000-0000-00000000000a') = 2550);
 end $$;
 
+-- ---------- a child removed does not take the family's progress with them ----------
+-- The bar is everybody's XP less where it stood when the goal was set, so
+-- removing a child took their whole balance off the top and the bar fell to
+-- nothing, though the others had earned XP since.
+reset role;
+update kids set xp = xp + 40 where id = '8a444444-0000-0000-0000-0000000000a1';
+set role app_user;
+create temp table goal_before (progress int);
+grant all on goal_before to app_user;
+do $$ begin
+  perform become('8a111111-0000-0000-0000-00000000000a');
+  insert into goal_before values ((family_snapshot(0)->'family_goals'->0->>'progress')::int);
+  perform ok('the bar has moved before anyone is removed', (select progress from goal_before) = 40,
+    (select progress from goal_before)::text);
+  delete from kids where id = '8a444444-0000-0000-0000-0000000000a2';
+  perform ok('removing a child leaves the family''s progress where it was',
+    (family_snapshot(0)->'family_goals'->0->>'progress')::int = (select progress from goal_before),
+    (family_snapshot(0)->'family_goals'->0)::text);
+end $$;
+
 -- ---------- deleting the family takes the goal with it ----------
 reset role;
 delete from families where id = '8a222222-0000-0000-0000-00000000000a';
