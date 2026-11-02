@@ -71,9 +71,6 @@ day. Change any of them only if a real school runs into it.
 
 ### 8. Housekeeping
 
-- **ESLint 8 to 9.** `npm audit` reports a moderate advisory in `minimatch`,
-  used only by ESLint while checking the code, never in the app. Fixing it
-  means ESLint 9 and its new configuration format.
 - **HANDOFF.md and ESSAY.md** are a snapshot from 25 October 2026 and still
   describe the photo check, which has since been removed. The files under
   `docs/` are current.
