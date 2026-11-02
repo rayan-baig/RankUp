@@ -215,6 +215,116 @@ await db.query('delete from push_sends where family_id = $1', [FAMILY])
 await db.query('delete from kids where family_id = $1 and user_id = any($2)', [FAMILY, KID_PHONES])
 await db.query('delete from parents where user_id = $1', [COPARENT])
 
+console.log('\n=== A child asking to join a guild: the parents who must say yes are told ===')
+// A guild spans two families: the child's own parent and the parent of the
+// family whose guild it is both have to approve. The child's phone is in one
+// of them, so it names the guild and the server finds the rest.
+const G = {
+  ownerFamily: 'a0000000-0000-4000-8000-0000000c0f01',
+  askingFamily: 'a0000000-0000-4000-8000-0000000c0f02',
+  ownerParent: 'a0000000-0000-4000-8000-0000000c0001',
+  ownerSupporter: 'a0000000-0000-4000-8000-0000000c0002',
+  ownerKidUser: 'a0000000-0000-4000-8000-0000000c0003',
+  askingParent: 'a0000000-0000-4000-8000-0000000c0004',
+  askingKidUser: 'a0000000-0000-4000-8000-0000000c0005',
+  leader: 'a0000000-0000-4000-8000-0000000c0c01',
+  kid: 'a0000000-0000-4000-8000-0000000c0c02',
+  guild: 'a0000000-0000-4000-8000-0000000c0e01',
+}
+await db.query(`insert into auth.users (id, email) values ($1, 'push-g-owner@example.com'), ($2, 'push-g-supporter@example.com'),
+                ($3, 'push-g-leader@example.com'), ($4, 'push-g-asker@example.com'), ($5, 'push-g-kid@example.com')
+                on conflict do nothing`, [G.ownerParent, G.ownerSupporter, G.ownerKidUser, G.askingParent, G.askingKidUser])
+await db.query(`insert into families (id, name, tier) values ($1, 'Guild Owners', 'elite'), ($2, 'Guild Askers', 'elite')
+                on conflict do nothing`, [G.ownerFamily, G.askingFamily])
+await db.query(`insert into parents (user_id, family_id, name, role) values ($1, $2, 'Olu', 'parent'), ($3, $2, 'Gramps', 'supporter'),
+                ($4, $5, 'Ade', 'parent') on conflict do nothing`, [G.ownerParent, G.ownerFamily, G.ownerSupporter, G.askingParent, G.askingFamily])
+for (const [family, parent] of [[G.ownerFamily, G.ownerParent], [G.askingFamily, G.askingParent]]) {
+  await db.query(`insert into parental_consents (family_id, parent_id, version, method, signed_name)
+                  select $1, id, '2026-01', 'payment_card', 'Test' from parents where user_id = $2
+                   and not exists (select 1 from parental_consents where family_id = $1)`, [family, parent])
+}
+await db.query(`insert into kids (id, family_id, user_id, name) values ($1, $2, $3, 'Lee'), ($4, $5, $6, 'Juno')
+                on conflict do nothing`, [G.leader, G.ownerFamily, G.ownerKidUser, G.kid, G.askingFamily, G.askingKidUser])
+await db.query(`insert into guilds (id, name, crest, capacity, leader_kid_id, invite_code, owner_family_id)
+                values ($1, 'Sock Hunters', '🛡️', 10, $2, 'PSHG23', $3) on conflict do nothing`, [G.guild, G.leader, G.ownerFamily])
+await db.query(`insert into guild_members (guild_id, kid_id, family_id, role, status, approved_by_own_parent, approved_by_owner)
+                values ($1, $2, $3, 'leader', 'active', true, true) on conflict do nothing`, [G.guild, G.leader, G.ownerFamily])
+// Juno asks, as the app does, over the API with her own sign-in.
+const asked = await fetch('http://localhost:54321/rest/v1/rpc/request_guild_join', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: `Bearer ${G.askingKidUser}` },
+  body: JSON.stringify({ p_kid_id: G.kid, p_invite_code: 'PSHG23' }),
+}).then((r) => r.json()).catch((err) => ({ error: err.message }))
+ok('the child asks to join', asked?.ok === true && asked.guild_id === G.guild, JSON.stringify(asked))
+
+const phoneAt = (name) => `http://127.0.0.1:${PORT}/push/guild-${name}`
+const subscribe = (name, family, user, role, kid = null) => db.query(
+  `insert into push_subscriptions (endpoint, keys, family_id, kid_id, user_id, role) values ($1, $2, $3, $4, $5, $6)
+   on conflict (endpoint) do update set failures = 0`, [phoneAt(name), JSON.stringify(keys), family, kid, user, role])
+await subscribe('owner', G.ownerFamily, G.ownerParent, 'parent')
+await subscribe('supporter', G.ownerFamily, G.ownerSupporter, 'parent')
+await subscribe('asker', G.askingFamily, G.askingParent, 'parent')
+await subscribe('kid', G.askingFamily, G.askingKidUser, 'kid', G.kid)
+const guildSend = (token, extra = {}) => fetch(`${BASE}/api/send-push`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+  // The words the phone puts in are ignored: the server writes them.
+  body: JSON.stringify({ familyId: G.askingFamily, role: 'parent', kind: 'guildRequest', kidId: G.kid, guildId: G.guild,
+                         args: ['Mallory', 'Call 0800 123 4567'], ...extra }),
+})
+const guildPaths = () => received.map((r) => r.path).filter((p) => p.includes('/guild-')).sort()
+
+received.length = 0
+const told = await guildSend(G.askingKidUser)
+const toldBody = await told.json().catch(() => ({}))
+ok('the child\'s phone asks, and the server sends', told.status === 200 && toldBody.sent === 2, `${told.status} ${JSON.stringify(toldBody)}`)
+ok('to a parent of the child\'s own family and a parent of the guild\'s family',
+  JSON.stringify(guildPaths()) === JSON.stringify(['/push/guild-asker', '/push/guild-owner']), guildPaths().join())
+ok('not to a supporter, who cannot approve, nor to the child', !guildPaths().some((p) => /supporter|kid/.test(p)))
+const ownerCopy = received.find((r) => r.path.endsWith('/guild-owner'))
+let guildNotice = null
+try {
+  guildNotice = JSON.parse(ece.decrypt(ownerCopy.body, { version: 'aes128gcm', privateKey: phone, authSecret }).toString('utf8'))
+} catch (err) { guildNotice = { error: err.message } }
+ok('the other family reads the database\'s names, not what the phone sent',
+  guildNotice?.title === 'A guild request needs you' && guildNotice.body === 'Juno wants to join Sock Hunters. Nobody joins without you.'
+  && guildNotice.url === '/#/parent/guilds', JSON.stringify(guildNotice))
+
+received.length = 0
+const again = await guildSend(G.askingKidUser)
+const againBody = await again.json().catch(() => ({}))
+ok('asking for it again buzzes nobody', again.status === 200 && againBody.sent === 0 && guildPaths().length === 0,
+  `${again.status} ${JSON.stringify(againBody)} ${guildPaths().join()}`)
+
+ok('a family that is not the child\'s cannot ask for it', (await guildSend(PARENT, { familyId: FAMILY })).status === 403)
+ok('nor can a supporter of the guild\'s family, naming theirs',
+  (await guildSend(G.ownerSupporter, { familyId: G.ownerFamily })).status === 403)
+ok('a guild request without the guild is turned away', (await guildSend(G.askingKidUser, { guildId: undefined })).status === 400)
+
+await db.query('update guild_members set request_told_at = null where guild_id = $1 and kid_id = $2', [G.guild, G.kid])
+await db.query('delete from push_sends where family_id = any($1)', [[G.ownerFamily, G.askingFamily]])
+await db.query(`insert into push_sends (family_id) select $1 from generate_series(1, 60)`, [G.askingFamily])
+received.length = 0
+const capped = await guildSend(G.askingKidUser)
+ok('over the asking family\'s hourly ceiling it is refused', capped.status === 429 && guildPaths().length === 0, `status ${capped.status}`)
+const stillUntold = (await db.query('select request_told_at from guild_members where guild_id = $1 and kid_id = $2', [G.guild, G.kid])).rows[0]
+ok('and the request is not marked as told', stillUntold && stillUntold.request_told_at === null, JSON.stringify(stillUntold))
+
+await db.query('delete from push_sends where family_id = $1', [G.askingFamily])
+await db.query(`insert into push_sends (family_id) select $1 from generate_series(1, 60)`, [G.ownerFamily])
+received.length = 0
+const ownersFull = await guildSend(G.askingKidUser)
+ok('with the guild\'s family over its own ceiling, only the child\'s own parents are told',
+  ownersFull.status === 200 && JSON.stringify(guildPaths()) === JSON.stringify(['/push/guild-asker']),
+  `status ${ownersFull.status} ${guildPaths().join()}`)
+const ownerCount = (await db.query('select count(*)::int as n from push_sends where family_id = $1', [G.ownerFamily])).rows[0].n
+ok('and the guild\'s family\'s count does not go past its ceiling', ownerCount === 60, `count ${ownerCount}`)
+
+await db.query('delete from push_sends where family_id = any($1)', [[G.ownerFamily, G.askingFamily]])
+await db.query('delete from push_subscriptions where family_id = any($1)', [[G.ownerFamily, G.askingFamily]])
+await db.query('delete from guilds where id = $1', [G.guild])
+await db.query('delete from families where id = any($1)', [[G.ownerFamily, G.askingFamily]])
+
 await db.query('delete from push_subscriptions where family_id = $1', [FAMILY])
 server.close()
 await db.end()

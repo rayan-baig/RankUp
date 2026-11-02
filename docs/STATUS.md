@@ -103,12 +103,12 @@ Known limits, decided rather than missed:
 | Thing | Status | Notes |
 |---|---|---|
 | On this phone, while RankUp is open | ✅ | Parent Settings → Notifications |
-| Push to the family's other phones | ✅ needs VAPID keys | A chore done (to the parents), accepted or sent back (to the child), reminders and the weekly digest (to the parents). Exact words, limits and hold times: [NOTIFICATIONS.md](NOTIFICATIONS.md) |
+| Push to the family's other phones | ✅ needs VAPID keys | A chore done (to the parents), accepted or sent back (to the child), a guild request (to the parents on both sides), reminders and the weekly digest (to the parents). Exact words, limits and hold times: [NOTIFICATIONS.md](NOTIFICATIONS.md) |
 | Daily reminders with the app closed | ✅ | `api/send-reminders.js`, on each family's own clock. **You have to schedule it** |
 | Weekly digest | ✅ | `api/send-digests.js`, Sunday evening in each family's time zone. **You have to schedule it** |
 | A real phone receiving a push | 🟡 | Proven end to end against a stand-in push service (`tests/push.mjs`); not yet on a real phone |
 | Notifications on a child's phone | ❌ | Only a parent's phone has the switch, so "Approved!" and "Sent back" reach no phone yet ([ROADMAP.md](ROADMAP.md)) |
-| Guild request notice | ❌ | The words exist; nothing sends them |
+| Guild request notice | ✅ needs VAPID keys | When a child asks to join a guild, the parents whose yes is still missing are told, in the child's family and in the guild's. Once per request; counted against each family's hourly ceiling |
 
 ## Not built
 

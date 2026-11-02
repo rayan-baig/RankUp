@@ -34,6 +34,7 @@ most two values (a name, a chore); it cannot supply its own sentence.
 | A parent sends it back | That child's phones | `Sent back to redo` | `"Make your bed" needs another go. Tap to see why.` | The child's quests |
 | A daily reminder is due (server job) | Every parent's phone | The reminder's name, e.g. `Morning quests` | `Time to check in on today's quests.` | Approvals |
 | A daily reminder is due (RankUp open) | This phone | `RankUp` | The reminder's name | Quests |
+| A child asks to join a guild | The parents whose yes is still missing: in the child's family, and in the family whose guild it is. Not supporters | `A guild request needs you` | `Juno wants to join Sock Hunters. Nobody joins without you.` | Guilds |
 | The weekly digest (server job) | Every parent's phone | `Your week in RankUp` | e.g. `9 chores done, up from 5 last week. Ava led with 6. Quietest day: Wednesday. 2 chores are waiting for you to check.` | Approvals if chores are waiting, otherwise Behaviour Blueprint |
 | **Send me a test notification** (Settings) | This phone | `Someone finished a quest` | `"a test quest" is waiting for you to review.` | Approvals |
 
@@ -46,6 +47,14 @@ characters.
 Names and chore titles put into a notice are cut to 40 characters, put on one
 line, and have links and phone numbers removed, so a notice cannot be made to
 look like a message from somebody else.
+
+A guild request reaches a family the asking phone is not in, so that phone
+names only the guild and the child. The server asks the database
+(`claim_guild_request_notice`, `supabase/guilds.sql`) whether that child's
+request is really waiting, whose yes is still missing, and what the child and
+the guild are called; the names the phone sent are not used. The request is
+marked as told there, so asking for the notice again buzzes nobody, and
+cancelling and asking again is told at most once a day.
 
 **Not sent:**
 
@@ -67,6 +76,7 @@ look like a message from somebody else.
 | Limit | Value | Where |
 |---|---|---|
 | Notices per family per hour | **60.** Counted per request, and a request goes to all of that role's phones at once, so four parent phones receiving one notice count as one. The 61st in an hour is refused (`too_many_notices`) and not retried. | `claim_push_send`, `supabase/notifications.sql` |
+| ... a guild request | Counted against the asking family, and refused over its 60. Counted against the guild's family too, which is skipped (the asking family's parents are still told) once that family is over its own 60, so no family's phones get more than 60 an hour | `api/send-push.js` |
 | A reminder | **Once a day** each, on the family's own date, however often the job runs | `due_reminders`, `supabase/reminders.sql` |
 | Reminders in a list | 24, each name up to 40 characters | `save_reminder_schedule` |
 | The digest | **Once a week** per family, in that family's own time zone | `claim_digest`, `supabase/digests.sql` |
@@ -77,8 +87,8 @@ look like a message from somebody else.
 | A phone the push service says is gone (404 or 410) | Deleted at once | `record_push_failure` |
 | A phone the push service refuses for another reason | Deleted after 5 refusals. "Slow down" (429), the push service's own trouble (5xx) and no network are not counted against the phone. | `failureFor`, `api/_shared/push.js` |
 
-Notices share a **tag** per kind (`submission`, `decision`, `reminder`,
-`digest`), so a newer one replaces the older one on the phone instead of
+Notices share a **tag** per kind (`submission`, `decision`, `guild`,
+`reminder`, `digest`), so a newer one replaces the older one on the phone instead of
 stacking up.
 
 ### When a phone is offline
@@ -142,6 +152,11 @@ Without this anyone could buzz any family's phones by guessing an id.
 whether the caller is a parent; a child's phone cannot send a sibling
 "Approved!".
 
+**A guild request is the child's, or their parent's, to send.** The database
+is asked whether the caller may act for that child (`may_act_for_kid`), and
+whether that child's request to that guild is waiting. Another family, or a
+supporter, cannot send one.
+
 **Push addresses are never readable from a browser.** Whoever holds one can
 make that phone buzz. `push_subscriptions` has no read policy, and the
 functions that list them are revoked from `PUBLIC` (Postgres grants new
@@ -161,11 +176,14 @@ nothing — `supabase/test/06-notifications.sql` caught exactly that once).
   out, and the body decrypts with the phone's keys to the right words. A 410
   drops the phone; no answer at all does not count against it. Four phones in
   one family sending at once get sixty notices an hour between them, no more.
+  A child's guild request reaches a parent in each family, not a supporter,
+  in the database's words, once, and within both families' ceilings.
 - **In Postgres** (`06-notifications.sql`, `11-reminders.sql`,
-  `17-digests.sql`, `34-scheduled-jobs.sql`): a phone can register and remove
-  only itself, nobody can list subscriptions, the hourly cap counts per
-  family, reminders fire once a day on the family's own clock, the digest goes
-  once a week in each family's own evening.
+  `17-digests.sql`, `34-scheduled-jobs.sql`, `39-guild-request-notice.sql`):
+  a phone can register and remove only itself, nobody can list subscriptions,
+  the hourly cap counts per family, reminders fire once a day on the family's
+  own clock, the digest goes once a week in each family's own evening, and a
+  guild request is told once, to the parents whose yes is missing.
 - **Not checked: a real phone.** No real push service (Google's, Apple's,
   Mozilla's) is reachable from where this was built. Send one real push to an
   Android phone and to an iPhone on the home screen before relying on it.
@@ -181,9 +199,6 @@ nothing — `supabase/test/06-notifications.sql` caught exactly that once).
   RankUp. Reminders are only ever saved for parents. Fixing this needs a
   switch on the child's phone (and a parent's say on whether a child's phone
   may buzz at all) — see [ROADMAP.md](ROADMAP.md).
-- **No guild notice.** The wording for "A guild request needs you" exists, but
-  nothing sends it: a parent finds a join request by opening Guilds. Guilds are
-  off by default.
 - **No quiet hours.** A reminder goes at the time the family chose. Once a
   child's phone can receive pushes, decide whether anything may buzz it late
   at night.

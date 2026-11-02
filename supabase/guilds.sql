@@ -46,6 +46,10 @@ alter table guild_members add column if not exists requested_at timestamptz not 
 -- again. See block_guild_member.
 alter table guild_members add column if not exists blocked_at timestamptz;
 
+-- When the parents were last told about this request: see
+-- claim_guild_request_notice.
+alter table guild_members add column if not exists request_told_at timestamptz;
+
 alter table guild_messages add column if not exists reported_by uuid references kids(id) on delete set null;
 alter table guild_messages add column if not exists reported_at timestamptz;
 
@@ -506,6 +510,61 @@ begin
                 from guilds g where g.id = v_member.guild_id));
 end $$;
 
+/**
+ * The "A guild request needs you" notice: whom to tell, in whose words, once.
+ *
+ * Called by api/send-push.js with the service key, never from a browser: it
+ * names the parents of another family. send-push has already checked that the
+ * caller is in p_family_id and may act for the child; this checks the request
+ * is that child's, still waiting, and not already announced.
+ *
+ * Told once per request. A notice that could be asked for again and again
+ * would let a child in one family buzz another family's phones at will, so the
+ * request is marked as told here, under the row's lock. Asking again after
+ * cancelling is a new request, but is told no more than once a day.
+ *
+ * The parents told are the ones whose yes is still missing, on each side, and
+ * only parents: a supporter cannot approve, so is not asked to.
+ */
+create or replace function claim_guild_request_notice(p_guild_id uuid, p_kid_id uuid, p_family_id uuid)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_member   guild_members;
+  v_guild    guilds;
+  v_families uuid[] := '{}';
+begin
+  select * into v_member from guild_members
+   where guild_id = p_guild_id and kid_id = p_kid_id and family_id = p_family_id
+     and status = 'invited' and blocked_at is null
+   for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_request'); end if;
+
+  if v_member.request_told_at is not null
+     and (v_member.request_told_at >= v_member.requested_at
+          or v_member.request_told_at > now() - interval '1 day') then
+    return jsonb_build_object('ok', false, 'reason', 'already_told');
+  end if;
+
+  update guild_members set request_told_at = now()
+   where guild_id = p_guild_id and kid_id = p_kid_id;
+
+  select * into v_guild from guilds where id = p_guild_id;
+  if not v_member.approved_by_own_parent then v_families := v_families || v_member.family_id; end if;
+  if not v_member.approved_by_owner and v_guild.owner_family_id is not null
+     and not v_guild.owner_family_id = any(v_families) then
+    v_families := v_families || v_guild.owner_family_id;
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'kid_name', (select name from kids where id = p_kid_id),
+    'guild_name', v_guild.name,
+    'families', to_jsonb(v_families),
+    'approvers', coalesce((select jsonb_agg(p.user_id) from parents p
+                            where p.role = 'parent' and p.family_id = any(v_families)), '[]'::jsonb));
+end $$;
+
 grant execute on function create_guild(uuid, text, text) to authenticated;
 grant execute on function request_guild_join(uuid, text) to anon, authenticated;
 grant execute on function approve_guild_member(uuid, uuid) to authenticated;
@@ -522,3 +581,6 @@ grant execute on function my_guild(uuid) to anon, authenticated;
 -- a browser's: given any guild and child it said whether they were in it.
 revoke execute on function is_guild_member(uuid, uuid) from public, anon, authenticated;
 grant execute on function may_act_for_kid(uuid) to anon, authenticated;
+-- The server's alone: it names another family's parents, and marks a request
+-- as told. See api/send-push.js.
+revoke execute on function claim_guild_request_notice(uuid, uuid, uuid) from public, anon, authenticated;

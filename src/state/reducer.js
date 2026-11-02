@@ -1093,6 +1093,24 @@ export function reducer(state, action) {
     case 'DRAIN_NOTICE_QUEUE':
       return { ...state, noticeQueue: [] }
 
+    /**
+     * A child's request to join a guild reached the server. Their parents,
+     * and the parents of the family whose guild it is, have to say yes: tell
+     * them. The server decides who they are and what the notice says (see
+     * api/send-push.js); the name here is only for this phone's own copy.
+     */
+    case 'GUILD_JOIN_REQUESTED': {
+      if (!action.guildId || !action.kidId) return state
+      const asking = state.kids.find((k) => k.id === action.kidId)
+      return queueNotice(state, {
+        role: 'parent',
+        kidId: action.kidId,
+        guildId: action.guildId,
+        kind: 'guildRequest',
+        args: [asking?.name || 'Your child', action.guildName || 'a guild'],
+      })
+    }
+
     /* ---------- rewards ---------- */
 
     /* ---------- pocket money ---------- */

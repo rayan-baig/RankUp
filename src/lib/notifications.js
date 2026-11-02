@@ -184,7 +184,7 @@ const SEND_URL = import.meta.env?.VITE_PUSH_SEND_URL || '/api/send-push'
  * decided and the notice is worth sending again; see sendNotice in the sync
  * engine, which is what calls this.
  */
-export async function notifyRemote({ familyId, role, kidId, kind, args }) {
+export async function notifyRemote({ familyId, role, kidId, kind, args, guildId }) {
   if (!pushConfigured() || !familyId) return { ok: false, reason: 'not_configured' }
   const token = await freshAccessToken()
   if (!token) return { ok: false, reason: 'signed_out' }
@@ -193,7 +193,7 @@ export async function notifyRemote({ familyId, role, kidId, kind, args }) {
     const res = await fetch(SEND_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ familyId, role, kidId, kind, args }),
+      body: JSON.stringify({ familyId, role, kidId, kind, args, ...(guildId ? { guildId } : {}) }),
     })
     if (!res.ok) return { ok: false, reason: `http_${res.status}` }
     return { ok: true, ...(await res.json()) }
@@ -224,6 +224,24 @@ export function routeNotice(notice, { deviceRole, showHere, pushReady }) {
     (notice.role === 'parent' && deviceRole !== 'kid') ||
     (notice.role === 'kid' && deviceRole === 'kid')
   return { local: showHere && forThisDevice ? payload : null, remote: Boolean(pushReady) }
+}
+
+/**
+ * What goes in the outbox to ask for a push: which notice, for whom, and the
+ * ids the server needs to check it. Never the sentence itself.
+ *
+ * A guild request carries the guild as well: the server works out from it
+ * which parents, in which families, still have to say yes.
+ */
+export function pushRequest(notice, familyId) {
+  return {
+    familyId,
+    role: notice.role,
+    kidId: notice.kidId,
+    kind: notice.kind,
+    args: notice.args || [],
+    ...(notice.guildId ? { guildId: notice.guildId } : {}),
+  }
 }
 
 /**

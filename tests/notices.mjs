@@ -128,6 +128,48 @@ ok('a child is not told "Approved!" again when another parent got there first', 
 ok('a call that went through still sends its notice', calls.includes('notice:rejected'), calls.join())
 ok('and nothing is left waiting', readOutbox().length === 0, JSON.stringify(readOutbox()))
 
+console.log('\n=== A child asking to join a guild tells the parents who must say yes ===')
+// It was never sent: the words existed, but nothing raised the notice, so a
+// parent found a request only by opening Guilds.
+const { reducer } = await import('../src/state/reducer.js')
+const { createInitialState } = await import('../src/state/initialState.js')
+const family = { ...createInitialState(), kids: [{ id: 'kid-1', name: 'Juno' }] }
+const asked = reducer(family, { type: 'GUILD_JOIN_REQUESTED', kidId: 'kid-1', guildId: 'guild-1', guildName: 'Sock Hunters' })
+const guildNotice = asked.noticeQueue?.at(-1)
+ok('the request raises a notice for the parents',
+  guildNotice?.kind === 'guildRequest' && guildNotice.role === 'parent' && guildNotice.guildId === 'guild-1',
+  JSON.stringify(asked.noticeQueue))
+ok('with the child\'s and the guild\'s names for a phone that shows it itself',
+  JSON.stringify(guildNotice?.args) === '["Juno","Sock Hunters"]', JSON.stringify(guildNotice?.args))
+ok('and nothing without a guild to name',
+  reducer(family, { type: 'GUILD_JOIN_REQUESTED', kidId: 'kid-1' }) === family)
+if (guildNotice) {
+  const onKidPhone = routeNotice(guildNotice, { deviceRole: 'kid', showHere: true, pushReady: true })
+  ok('a child\'s own phone asks for the push, and does not show it to the child',
+    onKidPhone.remote === true && onKidPhone.local === null, JSON.stringify(onKidPhone))
+  const onShared = routeNotice(guildNotice, { deviceRole: 'parent', showHere: true, pushReady: false })
+  ok('on a phone the family shares, the parent sees it there',
+    onShared.local?.title === 'A guild request needs you' && onShared.local.body.includes('Sock Hunters'),
+    JSON.stringify(onShared))
+  const request = notifications.pushRequest(guildNotice, 'fam-1')
+  ok('the push request names the guild, so the server can find the other family',
+    request.guildId === 'guild-1' && request.kidId === 'kid-1' && request.familyId === 'fam-1' && request.kind === 'guildRequest',
+    JSON.stringify(request))
+  ok('other notices carry no guild', !('guildId' in notifications.pushRequest({ role: 'parent', kind: 'submission', args: [] }, 'f')))
+
+  clearOutbox()
+  calls.length = 0
+  const seen = []
+  const guildEngine = createSyncEngine({
+    dispatch() {}, onStatus() {}, onRefused() {},
+    sendNotice: async (n) => { seen.push(n); return { ok: true, sent: 2 } },
+  })
+  enqueue({ type: 'notice', notice: request })
+  await guildEngine.push()
+  ok('and it goes out from the outbox like any other notice', seen[0]?.guildId === 'guild-1' && readOutbox().length === 0,
+    JSON.stringify(seen))
+}
+
 clearOutbox()
 console.log(fails ? `\n${fails} FAILED` : '\nALL CHECKS PASSED')
 process.exit(fails ? 1 : 0)

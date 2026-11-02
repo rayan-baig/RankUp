@@ -91,6 +91,21 @@ const clean = (value) => String(value ?? '')
 /** Telling a child their work was approved or sent back is a parent's to do. */
 const PARENT_ONLY = new Set(['approved', 'rejected'])
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * One notice against a family's hourly ceiling (claim_push_send). Not being
+ * able to count is not a reason to stop a real notice.
+ */
+async function claimSend(familyId) {
+  try {
+    return (await rpc('claim_push_send', { p_family_id: familyId }, SERVICE_KEY)) !== false
+  } catch (err) {
+    console.error('[send-push] could not count sends:', err.message)
+    return true
+  }
+}
+
 function configured() {
   return Boolean(SUPABASE_URL && SERVICE_KEY && VAPID_PUBLIC && VAPID_PRIVATE)
 }
@@ -147,9 +162,12 @@ export default async function handler(req, res) {
   if (typeof body === 'string') {
     try { body = JSON.parse(body) } catch { body = null }
   }
-  const { familyId, role, kidId, kind, args } = body || {}
+  const { familyId, role, kidId, kind, args, guildId } = body || {}
   if (!familyId || !ALLOWED_ROLES.has(role) || !NOTICES[kind]) {
     return res.status(400).json({ error: 'familyId, role and a known kind are required.' })
+  }
+  if (kind === 'guildRequest' && !(UUID.test(String(guildId)) && UUID.test(String(kidId)))) {
+    return res.status(400).json({ error: 'A guild request names the guild and the child.' })
   }
   const message = NOTICES[kind](...(Array.isArray(args) ? args.slice(0, 2).map(clean) : []))
 
@@ -167,19 +185,12 @@ export default async function handler(req, res) {
     if (!parent) return res.status(403).json({ error: 'Only a parent can send that.' })
   }
 
+  if (kind === 'guildRequest') return sendGuildRequest(res, token, { familyId, kidId, guildId })
+
   // A ceiling per family per hour, kept in the database so every instance
   // shares it. A stuck loop, or a child who has found the button, would
   // otherwise put hundreds of notices on a parent's phone.
-  let allowed = true
-  try {
-    allowed = await rpc('claim_push_send', { p_family_id: familyId }, SERVICE_KEY)
-  } catch (err) {
-    // Not able to count is not a reason to stop a real notice.
-    console.error('[send-push] could not count sends:', err.message)
-  }
-  if (allowed === false) return res.status(429).json({ error: 'too_many_notices' })
-
-  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
+  if (!(await claimSend(familyId))) return res.status(429).json({ error: 'too_many_notices' })
 
   let targets
   try {
@@ -189,16 +200,21 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: 'lookup_failed' })
   }
 
+  return res.status(200).json(await deliver(targets || [], message))
+}
+
+/**
+ * One notice to these phones. A 404 or 410 means that phone is gone for good:
+ * it is dropped rather than tried for ever.
+ */
+async function deliver(targets, message) {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
   const wire = JSON.stringify(message)
 
   const results = await Promise.allSettled(
-    (targets || []).map((t) =>
-      sendPush({ endpoint: t.endpoint, keys: t.keys }, wire),
-    ),
+    targets.map((t) => sendPush({ endpoint: t.endpoint, keys: t.keys }, wire)),
   )
 
-  // A 404 or 410 means that phone is gone for good — drop it rather than
-  // retrying forever.
   await Promise.allSettled(
     results.map((result, i) => {
       if (result.status === 'fulfilled') return null
@@ -208,8 +224,57 @@ export default async function handler(req, res) {
     }),
   )
 
-  return res.status(200).json({
+  return {
     sent: results.filter((r) => r.status === 'fulfilled').length,
     failed: results.filter((r) => r.status === 'rejected').length,
-  })
+  }
+}
+
+/**
+ * "A guild request needs you", to the parents who have to say yes.
+ *
+ * A guild spans families: a child asking to join needs a parent of their own
+ * AND a parent of the family whose guild it is. The asking phone is in only
+ * one of them, so it cannot name the other family, the parents, or the words.
+ * It names the guild and the child; the database says whether that child's
+ * request is really waiting, whose yes is still missing, and what the child
+ * and the guild are called. It also marks the request as told, so asking for
+ * the notice again buzzes nobody.
+ *
+ * Counted against the asking family's hourly ceiling, like any notice it
+ * sends; and the guild's family is told only while that family is under its
+ * own, so no family's phones get more than the ceiling in an hour.
+ */
+async function sendGuildRequest(res, token, { familyId, kidId, guildId }) {
+  // A parent, or the child themselves; not a supporter, and not another child.
+  let mayAct = false
+  try { mayAct = Boolean(await rpc('may_act_for_kid', { p_kid_id: kidId }, token)) } catch { mayAct = false }
+  if (!mayAct) return res.status(403).json({ error: 'Not your child.' })
+
+  if (!(await claimSend(familyId))) return res.status(429).json({ error: 'too_many_notices' })
+
+  let claim
+  try {
+    claim = await rpc('claim_guild_request_notice',
+      { p_guild_id: guildId, p_kid_id: kidId, p_family_id: familyId }, SERVICE_KEY)
+  } catch (err) {
+    console.error('[send-push] could not read the guild request:', err.message)
+    return res.status(502).json({ error: 'lookup_failed' })
+  }
+  // Nothing waiting, or already told: an answer, not a failure to retry.
+  if (!claim?.ok) return res.status(200).json({ sent: 0, failed: 0, skipped: claim?.reason || 'no_request' })
+
+  const message = NOTICES.guildRequest(clean(claim.kid_name), clean(claim.guild_name))
+  const approvers = new Set(claim.approvers || [])
+  const targets = []
+  for (const family of claim.families || []) {
+    if (family !== familyId && !(await claimSend(family))) continue
+    try {
+      const phones = await rpc('push_targets', { p_family_id: family, p_role: 'parent', p_kid_id: null }, SERVICE_KEY)
+      targets.push(...(phones || []).filter((t) => approvers.has(t.user_id)))
+    } catch (err) {
+      console.error('[send-push] could not read targets:', err.message)
+    }
+  }
+  return res.status(200).json(await deliver(targets, message))
 }

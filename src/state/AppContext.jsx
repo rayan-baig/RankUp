@@ -8,7 +8,7 @@ import { createSyncEngine, SYNC_STATUS, resetCursor } from '../lib/sync/syncEngi
 import { queueChanges, recordDelivered, pendingRows } from '../lib/sync/shadow.js'
 import { enqueue as enqueueOp, readOutbox } from '../lib/sync/outbox.js'
 import { transport } from '../lib/sync/transport.js'
-import { NOTICES, notifyLocally, notifyRemote, routeNotice, pushConfigured, remindersToFire, getPrefs as notificationPrefs, disable as disableNotifications } from '../lib/notifications.js'
+import { NOTICES, notifyLocally, notifyRemote, pushRequest, routeNotice, pushConfigured, remindersToFire, getPrefs as notificationPrefs, disable as disableNotifications } from '../lib/notifications.js'
 import { resolveKidTheme } from '../data/kidThemes.js'
 import { storyProgress } from '../lib/dragonFight.js'
 import { resolveParentTheme } from '../data/parentThemes.js'
@@ -343,13 +343,7 @@ const syncs = (state) =>
       const sent = enqueueOp({
         type: 'notice',
         ...(notice.ref ? { ref: notice.ref } : {}),
-        notice: {
-          familyId: state.family.id,
-          role: notice.role,
-          kidId: notice.kidId,
-          kind: notice.kind,
-          args: notice.args || [],
-        },
+        notice: pushRequest(notice, state.family.id),
       })
       if (sent) queued += 1
     })

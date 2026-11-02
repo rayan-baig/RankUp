@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useKid, useElite } from '../../state/AppContext.jsx'
+import { useApp, useKid, useElite } from '../../state/AppContext.jsx'
 import { guilds, guildError } from '../../lib/guilds.js'
 import { levelFromXp, formatXp } from '../../lib/xp.js'
 import { relativeTime } from '../../lib/dates.js'
@@ -15,6 +15,7 @@ import { navigate } from '../../lib/router.js'
  * showing a roster that is not yet real.
  */
 export default function KidGuild() {
+  const { dispatch } = useApp()
   const kid = useKid()
   const elite = useElite()
   const [state, setState] = useState({ loading: true })
@@ -139,7 +140,14 @@ export default function KidGuild() {
           />
           {error && <p className="text-sm mt-2" style={{ color: 'var(--bad)' }} role="alert">{error}</p>}
           <Button className="w-full mt-3" disabled={code.length < 6 || busy}
-                  onClick={() => act(() => guilds.requestJoin(kid.id, code))}>
+                  onClick={() => act(async () => {
+                    const result = await guilds.requestJoin(kid.id, code)
+                    // The parents on both sides have to say yes: tell them.
+                    if (result.ok) {
+                      dispatch({ type: 'GUILD_JOIN_REQUESTED', kidId: kid.id, guildId: result.guild_id, guildName: result.guild_name })
+                    }
+                    return result
+                  })}>
             {busy ? 'Asking…' : 'Ask to join'}
           </Button>
         </Card>

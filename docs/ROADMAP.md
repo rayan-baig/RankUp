@@ -56,26 +56,20 @@ a starting point for a small Worker with Cron Triggers; putting that Worker in
 this repository, with its own test, would make the recommended host work
 without an outside scheduler.
 
-### 6. The guild request notice
-
-The wording for "A guild request needs you" exists, but nothing sends it: a
-parent finds a request only by opening Guilds. Wire it up before switching
-guilds on (they are off by default).
-
-### 7. Before switching guilds on
+### 6. Before switching guilds on
 
 Human moderation of guild chat beyond the contact-detail guard, reporting and
 the owner's parent removing a child. Who reads reports, how fast, and what
 happens to a child who is reported repeatedly. A lawyer's view on child-to-child
 contact across families (LAUNCH.md section 8).
 
-### 8. School League limits, if schools ask
+### 7. School League limits, if schools ask
 
 Decided rather than missed (STATUS.md): membership is counted when the month is
 closed, five students can be one family, and the 8-a-day cap is by approval
 day. Change any of them only if a real school runs into it.
 
-### 9. Housekeeping
+### 8. Housekeeping
 
 - **ESLint 8 to 9.** `npm audit` reports a moderate advisory in `minimatch`,
   used only by ESLint while checking the code, never in the app. Fixing it
