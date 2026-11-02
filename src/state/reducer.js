@@ -810,6 +810,9 @@ export function reducer(state, action) {
       const notified = queueNotice(withRpc, {
         role: 'parent',
         kind: 'submission',
+        // Which submission it is about: a notice is not sent for one the
+        // server turned down (see the sync engine).
+        ref: submission.id,
         args: [kidForNotice?.name || 'Your kid', questForNotice?.title || 'a quest'],
       })
 
@@ -925,6 +928,7 @@ export function reducer(state, action) {
         role: 'kid',
         kidId: kid.id,
         kind: 'approved',
+        ref: action.submissionId,
         args: [quest.title, xp],
       })
 
@@ -996,6 +1000,7 @@ export function reducer(state, action) {
         role: 'kid',
         kidId: submission.kidId,
         kind: 'rejected',
+        ref: submission.id,
         args: [questRejected?.title || 'a quest'],
       })
       const rejected = queueRpc(next, 'reject_submission', {

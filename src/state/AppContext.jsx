@@ -291,6 +291,7 @@ const syncs = (state) =>
       // somebody else's lock screen.
       const sent = enqueueOp({
         type: 'notice',
+        ...(notice.ref ? { ref: notice.ref } : {}),
         notice: {
           familyId: state.family.id,
           role: notice.role,

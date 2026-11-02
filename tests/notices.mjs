@@ -106,7 +106,28 @@ await engine.push()
 ok('an answer from the push sender, even a refusal, is final', !readOutbox().some((o) => o.type === 'notice'), JSON.stringify(readOutbox()))
 ok('and what was queued behind it still goes', calls.includes('rpc:approve_submission'), calls.join())
 
+console.log('\n=== No notice about something the server turned down ===')
 clearOutbox()
+calls.length = 0
 noticeAnswer = 'sent'
+transport.rpc = async (fn) => {
+  calls.push(`rpc:${fn}`)
+  if (fn === 'submit_quest') return { ok: false, reason: 'not_open' }
+  if (fn === 'approve_submission') throw Object.assign(new Error('submission already decided'), { status: 400, retryable: false })
+  return { ok: true }
+}
+enqueue({ type: 'rpc', fn: 'submit_quest', args: { p_submission_id: 's-refused' } })
+enqueue({ type: 'notice', ref: 's-refused', notice: { familyId: 'f', role: 'parent', kind: 'submission', args: ['Ava', 'Bed'] } })
+enqueue({ type: 'rpc', fn: 'approve_submission', args: { p_submission_id: 's-twice' } })
+enqueue({ type: 'notice', ref: 's-twice', notice: { familyId: 'f', role: 'kid', kind: 'approved', args: ['Bed', 30] } })
+enqueue({ type: 'rpc', fn: 'reject_submission', args: { p_submission_id: 's-fine' } })
+enqueue({ type: 'notice', ref: 's-fine', notice: { familyId: 'f', role: 'kid', kind: 'rejected', args: ['Bed'] } })
+await engine.push()
+ok('a parent is not told about a chore the server did not take', !calls.includes('notice:submission'), calls.join())
+ok('a child is not told "Approved!" again when another parent got there first', !calls.includes('notice:approved'), calls.join())
+ok('a call that went through still sends its notice', calls.includes('notice:rejected'), calls.join())
+ok('and nothing is left waiting', readOutbox().length === 0, JSON.stringify(readOutbox()))
+
+clearOutbox()
 console.log(fails ? `\n${fails} FAILED` : '\nALL CHECKS PASSED')
 process.exit(fails ? 1 : 0)

@@ -198,8 +198,22 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare, sendN
     // to delete it — see enqueue.
     markSending(ops.map((op) => op.id))
     let sent = 0
+    /**
+     * A notice about a call the server turned down is not sent: the parent
+     * would be told about a chore that never arrived, or a child told
+     * "Approved!" twice when two parents tapped Accept at once.
+     */
+    const dropped = new Set()
+    const dropNoticesFor = (rpc) => {
+      const ref = rpc.args?.p_submission_id
+      if (!ref) return
+      const ids = readOutbox().filter((o) => o.type === 'notice' && o.ref === ref).map((o) => o.id)
+      ids.forEach((id) => dropped.add(id))
+      if (ids.length) removeOps(ids)
+    }
 
     for (const op of ops) {
+      if (dropped.has(op.id)) continue
       try {
         if (op.type === 'upsert') await transport.upsert(op.table, op.row)
         else if (op.type === 'patch') await transport.patch(op.table, op.row.id, op.row)
@@ -217,6 +231,7 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare, sendN
           if (refused) {
             console.warn(`[RankUp] The server turned down ${op.fn}:`, refused.reason || 'no reason given')
             removeOps([op.id])
+            dropNoticesFor(op)
             onRefused?.({ fn: op.fn, args: op.args, reason: refused.reason || null })
             continue
           }
@@ -244,7 +259,10 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare, sendN
         console.warn(`[RankUp] Server rejected ${op.type} on ${op.table || op.fn}:`, err.message)
         const { dead } = recordFailure(op.id)
         if (!dead) removeOps([op.id])
-        if (op.type === 'rpc') onRefused?.({ fn: op.fn, args: op.args, reason: err.message || null })
+        if (op.type === 'rpc') {
+          dropNoticesFor(op)
+          onRefused?.({ fn: op.fn, args: op.args, reason: err.message || null })
+        }
         // A refused row change: the server kept its own copy, and pulls
         // skipped this row while the change was waiting. Fetch everything
         // again so this phone shows what the server actually has.
