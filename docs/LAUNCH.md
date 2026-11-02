@@ -69,6 +69,30 @@ charity and referrals each live in their own file.)
 - [ ] `supabase/health.sql`
 - No storage bucket is needed: RankUp keeps no photos.
 
+## 2a. Sign-in protection (five minutes, in the Supabase dashboard)
+
+Parent sign-in, sign-up and password resets are Supabase Auth's, not code in
+this repository, so their limits are set in the dashboard, not here. Nothing
+in the app throttles sign-in itself (a limit in the browser would be no limit).
+
+- [ ] **Authentication → Rate Limits.** Supabase limits per IP address out of
+      the box (sign-ins and sign-ups, token refreshes, verifications, emails
+      sent, anonymous sign-ins — the last is how a child's phone signs in, so
+      do not set it below a few an hour). Check the numbers there; there is no
+      per-account lockout, so a slow guesser spread over many addresses is
+      limited only by password strength.
+- [ ] **Authentication → Providers → Email:** minimum password length 10, and
+      turn on leaked-password protection if your plan has it.
+- [ ] **Do not turn on CAPTCHA yet.** The app does not send a CAPTCHA token, so
+      every sign-in would be refused.
+- [ ] **Password resets.** The app has no "forgot password" screen yet; a parent
+      who forgets theirs needs a reset link sent from the dashboard (Users →
+      Send password recovery). Set **Email OTP expiration** to 15 minutes. A
+      recovery link works once. Check on the live project, once, that a link is
+      dead after the password has been changed: send one, change the password,
+      then open the link. This cannot be tested locally — the local stand-in
+      does not implement auth.
+
 ## 2b. Schedule the jobs — none of them are optional
 
 Set `CRON_SECRET` to a long random string. Each job is one HTTP request with

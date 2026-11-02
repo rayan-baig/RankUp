@@ -2,12 +2,12 @@ import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useS
 import { reducer, isElite, guildCapacity, activeLockout } from './reducer.js'
 import { createInitialState, TIERS } from './initialState.js'
 import { buildDemoFamily, DEMO_VERSION } from '../lib/demoFamily.js'
-import { loadState, saveState, clearState, purgeOrphanPhotos, getPhoto } from '../lib/storage.js'
+import { loadState, saveState, clearState, purgeOrphanPhotos, getPhoto, wipeDevice } from '../lib/storage.js'
 import { createSyncEngine, SYNC_STATUS, resetCursor } from '../lib/sync/syncEngine.js'
 import { queueChanges, recordDelivered, pendingRows } from '../lib/sync/shadow.js'
 import { enqueue as enqueueOp, readOutbox } from '../lib/sync/outbox.js'
 import { transport } from '../lib/sync/transport.js'
-import { NOTICES, notifyLocally, notifyRemote, routeNotice, pushConfigured, remindersToFire, getPrefs as notificationPrefs } from '../lib/notifications.js'
+import { NOTICES, notifyLocally, notifyRemote, routeNotice, pushConfigured, remindersToFire, getPrefs as notificationPrefs, disable as disableNotifications } from '../lib/notifications.js'
 import { resolveKidTheme } from '../data/kidThemes.js'
 import { storyProgress } from '../lib/dragonFight.js'
 import { resolveParentTheme } from '../data/parentThemes.js'
@@ -77,6 +77,8 @@ const syncs = (state) =>
   /** The state as last rendered, for the engine, which lives outside React. */
   const latest = useRef(state)
   latest.current = state
+  /** The last save to this phone's storage failed (it is full). See StorageFullBanner. */
+  const [storageFull, setStorageFull] = useState(false)
   const [sync, setSync] = useState({
     status: transport.isConfigured() ? SYNC_STATUS.IDLE : SYNC_STATUS.DISABLED,
     error: null,
@@ -128,6 +130,25 @@ const syncs = (state) =>
       prepare: async (op) => (op.fn === 'submit_quest' && op.args?.p_payload?.photo_data
         ? { ...op.args, p_payload: { ...op.args.p_payload, photo_data: null } }
         : op.args),
+      /*
+       * The server says this signed-in phone is in no family. A child's phone
+       * that was paired (so it was unlinked, or its child deleted), or a
+       * parent's that had a family (so they were removed from it, or it was
+       * deleted): erased, sign-in and all. A phone that never had a family —
+       * a supporter's, or one still being set up — is left alone.
+       */
+      onNoFamily: () => {
+        const s = latest.current
+        const pairedKid = s.device?.role === 'kid' && Boolean(s.device?.pairedAt)
+        const formerParent = s.device?.role !== 'kid' && s.onboarded && !s.demo && Boolean(s.lastSyncedAt)
+        if (!pairedKid && !formerParent) return
+        engineRef.current?.stop()
+        disableNotifications().catch(() => {})
+        wipeDevice()
+        transport.signOut()
+        dispatch({ type: 'DEVICE_WIPED', reason: pairedKid ? 'unlinked' : 'removed' })
+        window.location.hash = '/'
+      },
       // A push to the family's other phones, sent from the outbox in its turn.
       // Not reaching the server is worth another try; any answer from it is
       // final, because a push that cannot be sent must never hold up the
@@ -244,6 +265,7 @@ const syncs = (state) =>
     if (left.length < state.syncQueue.length) engineRef.current?.wake()
     dispatch({ type: 'DRAIN_SYNC_QUEUE', keep: left })
     if (!left.length) return undefined
+    setStorageFull(true)
     console.warn(`[RankUp] ${left.length} change(s) could not be saved for sending yet (storage is full); retrying.`)
     clearTimeout(queueRetry.current)
     queueRetry.current = setTimeout(() => dispatch({ type: 'RETRY_SYNC_QUEUE' }), 15000)
@@ -351,7 +373,9 @@ const syncs = (state) =>
   useEffect(() => {
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
-      saveState(state)
+      // A full phone is told so, rather than losing everything since the last
+      // good save without a word. The app keeps going on what is in memory.
+      setStorageFull(!saveState(state))
       // Drop photos nothing points at any more — see purgeOrphanPhotos.
       purgeOrphanPhotos(state)
 
@@ -372,8 +396,8 @@ const syncs = (state) =>
   }, [state])
 
   const value = useMemo(
-    () => ({ state, dispatch, sync, syncNow: () => engineRef.current?.sync() }),
-    [state, sync],
+    () => ({ state, dispatch, sync, storageFull, syncNow: () => engineRef.current?.sync() }),
+    [state, sync, storageFull],
   )
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

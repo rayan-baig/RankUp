@@ -111,7 +111,22 @@ export function submissionReward(quest, submission, { elite = false, streak = 0 
  */
 export function liveStreak(streak, today = dayKey()) {
   if (!streak?.count || !streak.lastDay) return 0
-  return daysBetween(streak.lastDay, today) <= 1 ? streak.count : 0
+  const gap = daysBetween(streak.lastDay, today)
+  if (gap <= 1) return streak.count
+  // One missed day with a streak freeze in hand: the next approval spends the
+  // freeze and carries the run on, so it is still alive. See bumpStreak.
+  if (gap === 2 && (streak.freezeTokens || 0) >= 1) return streak.count
+  return 0
+}
+
+/**
+ * A timed chore is on time if it was finished within its time, the deadline
+ * itself included: a child who stops the clock at exactly 5:00 on a
+ * five-minute chore beat it.
+ */
+export function finishedOnTime(timerSeconds, elapsedMs) {
+  if (!timerSeconds) return true
+  return elapsedMs > 0 && elapsedMs <= timerSeconds * 1000
 }
 
 /** Streaks add up to +25%, capped so they never dwarf the quest itself. */

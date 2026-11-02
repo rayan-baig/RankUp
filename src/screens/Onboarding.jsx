@@ -18,7 +18,7 @@ import { navigate } from '../lib/router.js'
 const STEPS = ['Welcome', 'Your family', 'Add a kid', 'Pick a theme']
 
 export default function Onboarding() {
-  const { dispatch } = useApp()
+  const { state, dispatch } = useApp()
   // null until someone says whose phone this is. A parent sets up the family;
   // a kid's phone joins one with a pairing code and never creates an account.
   const [mode, setMode] = useState(null)
@@ -108,6 +108,7 @@ export default function Onboarding() {
   if (mode === null) {
     return (
       <Welcome
+        wiped={state.deviceWiped}
         onLookAround={() => {
           dispatch({ type: 'START_DEMO', state: buildDemoFamily() })
           navigate('/parent')

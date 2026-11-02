@@ -88,6 +88,33 @@ export function clearState() {
 }
 
 /**
+ * Erase everything RankUp keeps on this device, the sign-in included.
+ *
+ * For a phone that no longer belongs to a family: a child's phone the parent
+ * unlinked (or whose child was deleted), or a parent removed from the family.
+ * Unlinking used to cut the phone off on the server and leave the child's
+ * name, chores, notes and progress on it, readable by whoever has the phone.
+ *
+ * Every key this device namespace wrote, not a list of known ones, so a key
+ * added later cannot be forgotten here. With `?device=` (development only)
+ * that is the keys ending in the device's name; without, every key that does
+ * not belong to some other named device.
+ */
+export function wipeDevice() {
+  const mine = (k) => {
+    if (!k || !k.startsWith('rankup.')) return false
+    if (DEVICE_NAME) return k.endsWith(`.${DEVICE_NAME}`)
+    return !/\.v\d+\.[a-z0-9_-]+$/i.test(k)
+  }
+  clearState()
+  const keys = []
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) keys.push(localStorage.key(i))
+  } catch { /* storage unreadable: clearState above did what it could */ }
+  keys.filter(mine).forEach((k) => { try { localStorage.removeItem(k) } catch { /* ignore */ } })
+}
+
+/**
  * Photos are kept in a separate bucket so the main state object stays small and
  * fast to serialise. In the Supabase version these become Storage objects and
  * the state only holds their URLs.

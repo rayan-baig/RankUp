@@ -50,6 +50,22 @@ family (no backend needed) and checks that it reports in, sends its score
 back, stays sandboxed, trips no policy, and still opens once the server is
 gone. `npm run test:built`; `BUILT_DIR=dist` serves an existing build instead.
 
+**`guarantees.mjs`** (database) and **`offline.mjs`** (the phone, run under a
+time zone with clock changes) check the promises about XP, sync and accounts:
+levels 1-100 have one curve, two parents accepting at once pay double XP once,
+a streak freeze covers the right day wherever the family is, a daily chore
+comes back once a day across both clock changes, weekly chores come back on
+the family's chosen day, "send back" leaves a chore as it was, two parents'
+edits are last-write-wins with the replaced one kept on record, the cursor
+cannot skip rows written together, thirty days offline loses nothing, a page
+killed mid-send loses nothing, an expired sign-in renews on waking, removing a
+co-parent or deleting a child cuts them off at once, and deleting the account
+or withdrawing consent leaves nothing the privacy policy lists. It also times
+the first sync for a family with a year of history.
+
+**`devicewipe.mjs`** drives two browsers: a full phone says so and keeps
+working, and an unlinked child's phone erases itself.
+
 ## Running them
 
 Playwright is deliberately **not** a dependency of this project — it downloads a

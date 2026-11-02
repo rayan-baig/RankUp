@@ -70,7 +70,12 @@ A streak advances the first time a quest is **approved** on a given day. Approva
 submission — otherwise a kid could keep a streak alive by submitting rubbish.
 
 Missing a day resets it to 1. Each kid starts with one **streak freeze** token that
-covers a single missed day.
+covers a single missed day: the first approval after exactly one missed day spends
+it automatically and the run carries on. Days are the family's days (the approving
+phone's time zone), so a child abroad, or a clock change, does not break a streak.
+
+Weekly chores come back seven days after they were done, or on the day the parent
+picks in Settings → Parent account.
 
 ---
 

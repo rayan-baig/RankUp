@@ -814,11 +814,19 @@ begin
   -- A streak that has lapsed (nothing approved today or yesterday) is not a
   -- streak: the count only resets at this approval, and paying a bonus for
   -- it rewarded the week off. MIRRORS liveStreak in src/lib/xp.js.
+  --
+  -- One missed day with a streak freeze in hand is still a live streak: the
+  -- approval this is for spends the freeze and carries the run on (see
+  -- approve_submission). MIRRORED in liveStreak in src/lib/xp.js.
   v_streak := case
     when coalesce(v_kid.streak_count, 0) < 3 then 0
-    when v_kid.streak_last_day is null
-      or v_kid.streak_last_day < family_today(v_sub.family_id, p_tz) - 1 then 0
-    else least(0.25, floor(v_kid.streak_count / 3.0) * 0.05)
+    when v_kid.streak_last_day is null then 0
+    when v_kid.streak_last_day >= family_today(v_sub.family_id, p_tz) - 1 then
+      least(0.25, floor(v_kid.streak_count / 3.0) * 0.05)
+    when v_kid.streak_last_day = family_today(v_sub.family_id, p_tz) - 2
+      and coalesce(v_kid.streak_freezes, 0) >= 1 then
+      least(0.25, floor(v_kid.streak_count / 3.0) * 0.05)
+    else 0
   end;
   if v_streak > 0 then
     v_xp := v_xp + round(v_xp * v_streak);
@@ -921,6 +929,7 @@ declare
   v_xp int;
   v_coins int;
   v_today date;
+  v_freeze boolean;
 begin
   -- Locked, as reject_submission does: two approvals of the same chore at the
   -- same moment both read it as pending without this, and paid twice.
@@ -976,6 +985,20 @@ begin
 
   update quests set status = 'approved', completed_at = now() where id = v_sub.quest_id;
 
+  /*
+   * The streak freeze.
+   *
+   * Every child starts with one, and it "covers a single missed day" — but
+   * nothing ever spent it: the only way in was a reducer action no screen
+   * dispatched, so a child who missed one day lost their run with the freeze
+   * still in hand. It is spent here, at the approval that follows exactly one
+   * missed day, counted on the family's day (the approving phone's zone), so
+   * it is used on the day it covers wherever the family is.
+   * MIRRORED in bumpStreak in src/state/reducer.js.
+   */
+  select (streak_count > 0 and streak_last_day = v_today - 2 and streak_freezes >= 1)
+    into v_freeze from kids where id = v_sub.kid_id for update;
+
   update kids
      set xp = xp + v_xp,
          coins = coins + v_coins,
@@ -986,10 +1009,17 @@ begin
            -- day recorded in UTC by an older version): not a broken streak.
            when streak_last_day >= v_today then streak_count
            when streak_last_day = v_today - 1 then streak_count + 1
+           when coalesce(v_freeze, false) then streak_count + 1
            else 1
          end,
+         streak_freezes = streak_freezes - case when coalesce(v_freeze, false) then 1 else 0 end,
          streak_last_day = v_today
    where id = v_sub.kid_id;
+
+  if coalesce(v_freeze, false) then
+    insert into events (family_id, kid_id, type, meta)
+    values (v_sub.family_id, v_sub.kid_id, 'streak_freeze', jsonb_build_object('covered', v_today - 1));
+  end if;
 
   insert into events (family_id, kid_id, type, meta)
   values (v_sub.family_id, v_sub.kid_id, 'quest_approved',

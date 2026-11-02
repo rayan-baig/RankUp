@@ -162,3 +162,33 @@ Settings → Link a kid's device → **Unlink** next to the device.
 The device loses access. The child's profile, XP and currency stay with the
 family — unlinking a phone is not the same as deleting a child, and the app
 never conflates the two.
+
+**The unlinked phone erases itself.** Its next syncs are answered with "you are
+in no family"; after two in a row, while signed in, it wipes everything RankUp
+kept on it (the child's name, chores, notes, the sign-in, the outbox) and opens
+at the front door with one sentence saying why. The same happens to a child's
+phone when the child is deleted or consent is withdrawn, and to a parent's
+phone when they are removed from the family or the account is deleted. An
+expired sign-in never triggers it: the server answers that with a 401. It also
+stops receiving the family's notifications at once.
+
+---
+
+## When the phone is offline, full, or disagrees
+
+- **Offline for weeks.** Changes wait in the outbox in order. Having no
+  connection never counts against them; a change is only given up after a day
+  of the server itself refusing to answer, tried at least 30 times. A phone
+  offline for thirty days delivers everything when it is back.
+- **Killed mid-send.** The outbox is in storage; a change that may already have
+  arrived is sent again and recognised (every call is safe to repeat).
+- **Storage full.** The app says so at the top of the screen and keeps working
+  from memory, still sending what it can; the warning goes once a save works.
+- **Two parents edit one chore.** Each phone sends only the fields it changed,
+  so different fields both survive. For the same field, the edit that reaches
+  the server last wins, and every edit is written to the family's history with
+  what it replaced and who wrote that, so nothing vanishes without a trace
+  (Settings → Download my data, under activity).
+
+`tests/offline.mjs`, `tests/guarantees.mjs` and `tests/devicewipe.mjs` check all
+of this.

@@ -334,6 +334,15 @@ export function recordDelivered(state, snapshot, { photoFor, skip = new Set() } 
   const shadow = readShadow()
   const familyId = state.family.id
   for (const [snapshotKey, { key: stateKey, mapper, table }] of Object.entries(ENTITIES)) {
+    // A device never writes these (see FUNCTION_OWNED), so nothing ever reads
+    // their shadow. Keeping one anyway doubled what a family with a year of
+    // chores held in the phone's storage, and pushed it towards full.
+    if (FUNCTION_OWNED.has(table)) {
+      for (const id of Object.keys(shadow)) {
+        if (id.startsWith(`${table}:`) || id.startsWith(`?${table}:`)) delete shadow[id]
+      }
+      continue
+    }
     const rows = snapshot[snapshotKey]
     if (!Array.isArray(rows) || !rows.length) continue
     const local = new Map((state[stateKey] || []).map((item) => [item.id, item]))

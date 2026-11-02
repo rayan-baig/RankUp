@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { STICKER_MAP } from '../../data/stickers.js'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
-import { DIFFICULTY, calcReward, liveStreak } from '../../lib/xp.js'
+import { DIFFICULTY, calcReward, liveStreak, finishedOnTime } from '../../lib/xp.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
 import { formatDuration } from '../../lib/dates.js'
 import { Screen, Card, Button, Banner, Chip, TextInput, Field, SectionTitle } from '../../components/ui.jsx'
@@ -65,7 +65,7 @@ export default function QuestDetail({ questId }) {
   // Only 'assigned' and 'redo' quests can be worked on. Anything else is either
   // sitting with the parent or already paid out.
   const isOpen = quest.status === 'assigned' || quest.status === 'redo'
-  const onTime = quest.timerSeconds ? elapsed > 0 && elapsed <= quest.timerSeconds * 1000 : true
+  const onTime = finishedOnTime(quest.timerSeconds, elapsed)
   const preview = calcReward(quest, { elite, streak: liveStreak(kid.streak), onTime })
 
   const submit = () => {
@@ -194,7 +194,10 @@ export default function QuestDetail({ questId }) {
           <Button
             variant={timerStart ? 'soft' : 'primary'}
             className="w-full mt-3"
-            onClick={() => (timerStart ? setTimerStart(null) : setTimerStart(Date.now()))}
+            onClick={() => {
+              // Stopping records the time at the tap, not the last 200ms tick.
+              if (timerStart) { setElapsed(Date.now() - timerStart); setTimerStart(null) } else setTimerStart(Date.now())
+            }}
           >
             {timerStart ? 'Stop timer' : 'Start timer'}
           </Button>

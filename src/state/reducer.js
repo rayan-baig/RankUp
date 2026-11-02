@@ -53,13 +53,17 @@ function logEvent(state, event) {
 }
 
 /** Advance a kid's streak for a completion recorded today. */
-function bumpStreak(streak) {
-  const today = dayKey()
+export function bumpStreak(streak, today = dayKey()) {
   // Later than today happens when a zone changes; it is not a broken streak.
   if (streak.lastDay && streak.lastDay >= today) return streak
   if (!streak.lastDay) return { ...streak, count: 1, lastDay: today }
   const gap = daysBetween(streak.lastDay, today)
   if (gap === 1) return { ...streak, count: streak.count + 1, lastDay: today }
+  // Exactly one missed day, and a freeze to cover it: spent here, and the run
+  // carries on. MIRRORED in approve_submission.
+  if (gap === 2 && streak.count > 0 && (streak.freezeTokens || 0) >= 1) {
+    return { ...streak, count: streak.count + 1, lastDay: today, freezeTokens: streak.freezeTokens - 1 }
+  }
   return { ...streak, count: 1, lastDay: today }
 }
 
@@ -245,10 +249,16 @@ export function reducer(state, action) {
         next = { ...next, [key]: [...byId.values()] }
       }
 
+      // One pass per table, not one per tombstone: a first sync for a family
+      // with a year behind it carries thousands of each.
+      const gone = new Map()
       for (const deletion of snap.deletions || []) {
-        const entity = Object.values(ENTITIES).find((e) => e.table === deletion.table_name)
-        if (!entity) continue
-        next = { ...next, [entity.key]: (next[entity.key] || []).filter((i) => i.id !== deletion.row_id) }
+        if (!gone.has(deletion.table_name)) gone.set(deletion.table_name, new Set())
+        gone.get(deletion.table_name).add(deletion.row_id)
+      }
+      for (const entity of Object.values(ENTITIES)) {
+        const ids = gone.get(entity.table)
+        if (ids) next = { ...next, [entity.key]: (next[entity.key] || []).filter((i) => !ids.has(i.id)) }
       }
 
       // The family goal, set or cleared on another phone. A tombstone newer
@@ -285,6 +295,8 @@ export function reducer(state, action) {
             subscriptionStatus: family.subscription_status || null,
             lastPaidTier: family.last_paid_tier || null,
             subscriptionEndsAt: family.subscription_ends_at || null,
+            // The day weekly chores come back; see recurrenceDue.
+            weekResetsOn: family.week_resets_on ?? null,
           },
         }
       }
@@ -331,6 +343,14 @@ export function reducer(state, action) {
 
     case 'RESET':
       return createInitialState()
+
+    /**
+     * This phone no longer belongs to a family and has been erased (see
+     * wipeDevice). A fresh start, with one sentence saying why, which names
+     * nobody: whoever picks the phone up next learns nothing from it.
+     */
+    case 'DEVICE_WIPED':
+      return { ...createInitialState(), deviceWiped: action.reason === 'removed' ? 'removed' : 'unlinked' }
 
     /* ---------- device pairing ---------- */
 
@@ -576,6 +596,17 @@ export function reducer(state, action) {
       return { ...state, family: { ...state.family, ...action.patch } }
 
     /**
+     * The day a family's weekly chores come back (Monday 1 to Sunday 7), or
+     * null for "seven days after it was done". The database decides which
+     * chores reopen, so it has to know the day too.
+     */
+    case 'SET_WEEK_RESET_DAY': {
+      const day = action.day >= 1 && action.day <= 7 ? Math.round(action.day) : null
+      return queueRpc({ ...state, family: { ...state.family, weekResetsOn: day } },
+        'set_week_reset_day', { p_day: day }, 'set_week_reset_day')
+    }
+
+    /**
      * Buy a Sunday Market skin with the child's own currency.
      *
      * Refused unless the market is actually open, so a tampered clock in the
@@ -746,7 +777,7 @@ export function reducer(state, action) {
      */
     case 'RETURN_RECURRING': {
       const today = action.today || dayOf(new Date())
-      const due = questsDueToReturn(state.quests, today)
+      const due = questsDueToReturn(state.quests, today, state.family?.weekResetsOn ?? null)
       if (!due.length) return state
       const ids = new Set(due.map((q) => q.id))
       const next = {
@@ -972,6 +1003,10 @@ export function reducer(state, action) {
           },
         })
       }
+
+      // The approval spent a streak freeze to cover yesterday; see bumpStreak.
+      const spent = (kid.streak.freezeTokens || 0) - (next.kids.find((k) => k.id === kid.id)?.streak.freezeTokens || 0)
+      if (spent > 0) next = logEvent(next, { type: 'streak_freeze', kidId: kid.id })
 
       next = logEvent(next, {
         type: 'quest_approved',

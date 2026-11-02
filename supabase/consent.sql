@@ -121,6 +121,54 @@ end $$;
  * children, which cascades to their quests, submissions and photos. It is not
  * a flag that quietly leaves the data in place.
  */
+/**
+ * What is left of a family's children once their rows are deleted.
+ *
+ * Deleting the kids rows cascades to their chores, history, notes, guilds and
+ * schools. Three things did not go with them, and each still named or pointed
+ * at a child after the parent had been told it was all gone:
+ *   - the pairing codes their phones showed, which carry the child's first
+ *     name and the family's name, kept until the retention job a day or two
+ *     later;
+ *   - the receipts for retried coin calls, keyed by the child, for a month;
+ *   - the sign-in each child's phone had, which outlived the child for good.
+ * Called before the rows go (it reads which phones were theirs). Not callable
+ * from a browser.
+ */
+create or replace function erase_child_traces(p_family uuid)
+returns int language plpgsql security definer set search_path = public as $$
+declare
+  v_kids uuid[];
+  v_devices uuid[];
+  v_n int;
+begin
+  select coalesce(array_agg(id), '{}'), coalesce(array_agg(user_id) filter (where user_id is not null), '{}')
+    into v_kids, v_devices from kids where family_id = p_family;
+
+  delete from pairing_codes
+   where claimed_by_family_id = p_family or kid_id = any(v_kids) or kid_user_id = any(v_devices);
+  delete from rpc_receipts where kid_id = any(v_kids);
+
+  -- A child's phone signs in anonymously and that sign-in is theirs alone.
+  -- Never an adult's account (a shared phone can play both roles) or staff.
+  v_devices := array(select d from unnest(v_devices) d
+                      where not exists (select 1 from parents p where p.user_id = d)
+                        and not exists (select 1 from school_staff st where st.user_id = d));
+  v_n := coalesce(array_length(v_devices, 1), 0);
+  if v_n > 0 then
+    delete from pairing_claim_attempts where user_id = any(v_devices);
+    begin
+      delete from auth.users where id = any(v_devices);
+    exception when insufficient_privilege then
+      -- The hosted auth schema refused; the rows are already unlinked from
+      -- every child (kids.user_id goes with the child).
+      v_n := 0;
+    end;
+  end if;
+  return v_n;
+end $$;
+revoke all on function erase_child_traces(uuid) from public, anon, authenticated;
+
 create or replace function revoke_parental_consent(p_reason text default '')
 returns jsonb
 language plpgsql security definer set search_path = public as $$
@@ -138,6 +186,9 @@ begin
    where family_id = v_parent.family_id and revoked_at is null;
 
   select count(*) into v_kids from kids where family_id = v_parent.family_id;
+  -- Immediately, in this call: the notice promises the children's data goes
+  -- with the consent, and no later job is relied on for it.
+  perform erase_child_traces(v_parent.family_id);
   delete from kids where family_id = v_parent.family_id;
 
   return jsonb_build_object('ok', true, 'children_deleted', v_kids);
@@ -221,7 +272,20 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'confirmation_required');
   end if;
 
+  perform erase_child_traces(v_family);
+  delete from adult_invite_attempts where user_id = auth.uid();
+  delete from pairing_claim_attempts where user_id = auth.uid();
   delete from families where id = v_family;
+
+  -- The parent's own sign-in, which holds their email address: the privacy
+  -- policy says deleting the account removes it, and it outlived the family.
+  -- Another adult in the family keeps their own account, now empty.
+  begin
+    delete from auth.users where id = auth.uid()
+       and not exists (select 1 from school_staff where user_id = auth.uid());
+  exception when insufficient_privilege then
+    return jsonb_build_object('ok', true, 'sign_in_kept', true);
+  end;
   return jsonb_build_object('ok', true);
 end $$;
 

@@ -16,7 +16,7 @@
  */
 
 import { transport } from './transport.js'
-import { readOutbox, readySlice, removeOps, recordFailure, markSending } from './outbox.js'
+import { readOutbox, readySlice, removeOps, recordFailure, markSending, releaseSending } from './outbox.js'
 
 const CURSOR_KEY = 'rankup.sync.cursor.v1'
 /**
@@ -176,7 +176,11 @@ function refusal(result) {
   return result && typeof result === 'object' && !Array.isArray(result) && result.ok === false ? result : null
 }
 
-export function createSyncEngine({ dispatch, onStatus, onRefused, prepare, sendNotice }) {
+export function createSyncEngine({ dispatch, onStatus, onRefused, prepare, sendNotice, onNoFamily }) {
+  // A page that has just started has nothing in flight. See releaseSending.
+  releaseSending()
+  /** Answers in a row that said "you are in no family", while signed in. */
+  let orphaned = 0
   let running = false
   let timer = null
   let inFlight = false
@@ -247,7 +251,12 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare, sendN
           // struggling server also stopped the device PULLING, so a phone that
           // could not send stopped receiving too, and sat there showing stale
           // chores until the outbox happened to clear.
-          const { dead } = recordFailure(op.id, { retryable: true, auth: Boolean(err.auth) })
+          const { dead } = recordFailure(op.id, {
+            retryable: true,
+            auth: Boolean(err.auth),
+            // No connection at all: the phone is offline, not the write failing.
+            network: err.status === 0,
+          })
           // Given up after a day. Pulls skipped this row while it waited, so
           // fetch everything again rather than keep a copy the server never had.
           // A call may have held rows too (see pendingRows), so any op but a notice.
@@ -277,7 +286,21 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare, sendN
     ageHeads()
     const since = getCursor()
     const snapshot = await transport.rpc('family_snapshot', { p_since: since })
-    if (!snapshot) return { changed: 0 }
+    if (!snapshot) {
+      /*
+       * Signed in, answered, and in no family: this phone was unlinked, its
+       * child deleted, or (a parent's) removed from the family. An expired
+       * sign-in never gets here — the server answers that with a 401, which
+       * throws. Twice in a row before anything is done about it, so a single
+       * odd answer cannot erase a phone.
+       */
+      if (transport.currentUserId()) {
+        orphaned += 1
+        if (orphaned >= 2) onNoFamily?.()
+      }
+      return { changed: 0 }
+    }
+    orphaned = 0
 
     // `families` belongs in this list: when a subscription changes, the family
     // row is the ONLY thing that moves. Leaving it out meant an upgrade landed

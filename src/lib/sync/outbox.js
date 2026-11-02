@@ -32,6 +32,17 @@ const MAX_ATTEMPTS = 8
 const RETRY_BASE_MS = 4000
 const RETRY_MAX_MS = 5 * 60 * 1000
 const GIVE_UP_AFTER_MS = 24 * 60 * 60 * 1000
+/**
+ * And a day is a day of TRYING, not a day on the calendar.
+ *
+ * The clock started at the first failure and nothing else counted, so a phone
+ * that failed once, sat in a drawer for a month and failed once more on
+ * waking threw the write away on that second try. Failing to reach anything
+ * at all (no signal, a captive wifi page) does not start the clock either:
+ * that is the phone being offline, not the write failing, and a phone offline
+ * for thirty days must still deliver everything it did in them.
+ */
+const MIN_TRIES_BEFORE_GIVING_UP = 30
 
 function key() {
   try {
@@ -118,6 +129,25 @@ export function enqueue(op) {
   return writeOutbox(ops) ? entry : null
 }
 
+/**
+ * Nothing is in flight when a page starts.
+ *
+ * `sending` is written to storage, so a browser killed mid-send (a phone
+ * reclaiming memory, a swipe away) left it set for ever: the op was still
+ * sent again, as it must be, but no later edit to that row could ever fold
+ * into it again. Called once, when the engine is made.
+ */
+export function releaseSending() {
+  const ops = readOutbox()
+  if (!ops.some((o) => o.sending)) return
+  writeOutbox(ops.map((o) => {
+    if (!o.sending) return o
+    const { sending: _sending, ...rest } = o
+    void _sending
+    return rest
+  }))
+}
+
 /** Marks the ops push() is about to send, so enqueue will not fold into them. */
 export function markSending(ids) {
   const set = new Set(ids)
@@ -136,7 +166,7 @@ export function removeOps(ids) {
  * `retryable` is the whole point of this function: see MAX_ATTEMPTS above. A
  * retryable failure sets a time to try again rather than spending a life.
  */
-export function recordFailure(id, { retryable = false, auth = false } = {}) {
+export function recordFailure(id, { retryable = false, auth = false, network = false } = {}) {
   const ops = readOutbox()
   const op = ops.find((o) => o.id === id)
   if (!op) return { dead: false }
@@ -148,10 +178,15 @@ export function recordFailure(id, { retryable = false, auth = false } = {}) {
   if (retryable) {
     // Waiting for somebody to sign in again is not the write failing: it
     // must not count towards the day after which the write is given up.
-    if (!auth) op.firstFailedAt = op.firstFailedAt || Date.now()
+    // Nor is having no connection at all; see MIN_TRIES_BEFORE_GIVING_UP.
+    if (!auth && !network) {
+      op.firstFailedAt = op.firstFailedAt || Date.now()
+      op.serverFailures = (op.serverFailures || 0) + 1
+    }
     const wait = Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.min(op.attempts - 1, 10))
     op.nextAttemptAt = Date.now() + wait
     dead = Boolean(op.firstFailedAt) && Date.now() - op.firstFailedAt >= GIVE_UP_AFTER_MS
+      && (op.serverFailures || 0) >= MIN_TRIES_BEFORE_GIVING_UP
     if (dead) {
       console.warn(
         `[RankUp] Giving up on ${op.type} ${op.table || op.fn} after a day of failing to reach the server.`,

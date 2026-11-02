@@ -20,9 +20,17 @@ import { Words } from '../components/Motion.jsx'
  * people should take and it is styled like it; the other two are for people
  * who already know what they are doing.
  */
-export default function Welcome({ onLookAround, onParent, onKid }) {
+export default function Welcome({ onLookAround, onParent, onKid, wiped = null }) {
   return (
     <div className="shell px-5 py-7 min-h-screen flex flex-col">
+      {wiped && (
+        <p role="status" data-testid="device-wiped" className="text-sm text-center mb-4 rounded-xl px-3 py-2"
+          style={{ background: 'var(--card)', border: '1px solid var(--line)' }}>
+          {wiped === 'removed'
+            ? 'This account is no longer part of a family on RankUp, so everything RankUp kept on this phone has been erased.'
+            : 'This phone was unlinked from its family, so everything RankUp kept on it has been erased.'}
+        </p>
+      )}
       <div className="text-center mb-5 anim-slide-up">
         <div className="flex justify-center mb-3">
           <Logo size={68} glow />

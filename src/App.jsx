@@ -20,6 +20,7 @@ import LockoutScreen from './screens/kid/LockoutScreen.jsx'
 import { guildsEnabled } from './lib/guilds.js'
 import ScreenBoundary from './components/ScreenBoundary.jsx'
 import DemoBanner from './components/DemoBanner.jsx'
+import StorageFullBanner from './components/StorageFullBanner.jsx'
 import { buildDemoFamily } from './lib/demoFamily.js'
 import { lazyLoad } from './lib/lazy.js'
 import { Loading } from './components/ui.jsx'
@@ -304,6 +305,7 @@ export default function App() {
       {/* Outside the boundary: if a screen crashes, the way out of the demo
           must still be on screen. */}
       <DemoBanner />
+      <StorageFullBanner />
 
       {/*
         Keyed on the route, so a screen that crashed gets a clean mount when you

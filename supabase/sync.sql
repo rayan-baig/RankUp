@@ -107,6 +107,76 @@ begin
 end $$;
 
 /**
+ * Two parents editing the same chore.
+ *
+ * Each phone sends only the columns it changed, so two edits to different
+ * fields both survive. Two edits to the SAME field: the one that reaches the
+ * server last wins — and the one it replaced used to vanish without a trace,
+ * the parent who typed it none the wiser. Every edit a parent's phone makes
+ * to a chore is now written into the family's history with what it replaced
+ * and who had written that, so a lost edit can always be found (it is in
+ * "Download my data", under activity). The functions that move a chore's
+ * status are not edits and are not recorded.
+ */
+alter table quests add column if not exists edited_by uuid;
+
+/** Writes the history line. Its own function so the trigger can run as the caller. */
+-- Callable from a browser (it has to be, for the trigger), so it writes only
+-- into the caller's own family, as a parent of it.
+create or replace function log_quest_edit(p_family uuid, p_kid uuid, p_meta jsonb) returns void
+language sql security definer set search_path = public as $$
+  insert into events (family_id, kid_id, type, meta)
+  select p_family, p_kid, 'quest_edited', p_meta
+   where exists (select 1 from parents where user_id = auth.uid() and family_id = p_family);
+$$;
+revoke all on function log_quest_edit(uuid, uuid, jsonb) from public;
+grant execute on function log_quest_edit(uuid, uuid, jsonb) to anon, authenticated;
+
+-- Not security definer, on purpose: it has to see who is writing. A database
+-- function (approve_submission and the rest) runs as the table's owner and is
+-- not an edit; a phone writing the table directly is. Same test as
+-- guard_kid_balances.
+create or replace function record_quest_edit() returns trigger
+language plpgsql set search_path = public as $$
+declare
+  v_changes jsonb := '{}'::jsonb;
+  v_old jsonb := to_jsonb(old);
+  v_new jsonb := to_jsonb(new);
+  v_key text;
+begin
+  if current_user = (select tableowner from pg_tables where schemaname = 'public' and tablename = 'quests')
+     or current_user = 'service_role'
+     or (select rolsuper from pg_roles where rolname = current_user) then
+    return new;
+  end if;
+  for v_key in select jsonb_object_keys(v_new) loop
+    if v_key in ('rev', 'edited_by', 'status', 'completed_at', 'redo_note', 'redo_count',
+                 'last_reset_on', 'created_at', 'created_by', 'family_id', 'id') then
+      continue;
+    end if;
+    if v_new -> v_key is distinct from v_old -> v_key then
+      v_changes := v_changes || jsonb_build_object(v_key,
+                     jsonb_build_object('from', v_old -> v_key, 'to', v_new -> v_key));
+    end if;
+  end loop;
+  if v_changes = '{}'::jsonb then return new; end if;
+
+  perform log_quest_edit(new.family_id, new.kid_id, jsonb_build_object(
+    'questId', new.id,
+    'title', new.title,
+    'by', auth.uid(),
+    'changes', v_changes,
+    -- Whose edit this one wrote over, when it was somebody else's.
+    'replaced_edit_by', case when old.edited_by is distinct from auth.uid() then old.edited_by end));
+  new.edited_by := auth.uid();
+  return new;
+end $$;
+
+drop trigger if exists quests_record_edit on quests;
+create trigger quests_record_edit before update on quests
+  for each row execute function record_quest_edit();
+
+/**
  * The family goal used to live on the phone of the parent who set it. One row
  * per family, keyed by the family, so a clear is told to the other devices as
  * a tombstone whose row id is the family's own id.
@@ -297,7 +367,11 @@ begin
      * device that is going to draw it.
      */
     'submissions', coalesce((
-      select jsonb_agg(to_jsonb(s) - 'photo_data'
+      -- Nor the other photo and photo-check columns, which RankUp no longer
+      -- fills: they were a third of every row, and a family with a year of
+      -- chores has thousands of rows. Measured in tests/guarantees.mjs.
+      select jsonb_agg(to_jsonb(s) - array['photo_data', 'photo_path', 'photo_hash', 'ai_report',
+                                           'ai_verdict', 'ai_score', 'photo_deleted_at', 'family_id']
                        || jsonb_build_object('has_photo', s.photo_data is not null))
         from submissions s where s.rev > cutoff), '[]'::jsonb),
     'rewards',     coalesce((select jsonb_agg(to_jsonb(r)) from rewards r     where r.rev > cutoff), '[]'::jsonb),
@@ -305,7 +379,10 @@ begin
     'notes',       coalesce((select jsonb_agg(to_jsonb(n)) from notes n       where n.rev > cutoff), '[]'::jsonb),
     'overrides',   coalesce((select jsonb_agg(to_jsonb(o)) from overrides o   where o.rev > cutoff), '[]'::jsonb),
     'family_goals', family_goal_since(cutoff),
-    'deletions',   coalesce((select jsonb_agg(to_jsonb(d)) from deletions d   where d.rev > cutoff), '[]'::jsonb)
+    -- Only what a device reads from a tombstone.
+    'deletions',   coalesce((select jsonb_agg(jsonb_build_object('rev', d.rev, 'table_name', d.table_name,
+                                                                 'row_id', d.row_id))
+                               from deletions d where d.rev > cutoff), '[]'::jsonb)
   );
 end $$;
 
@@ -656,15 +733,25 @@ end $$;
  * runs this and the app's version over every combination and fails if they
  * ever disagree.
  *
- * `p_last` is the day the chore was last finished or last came back. A chore
- * that is not finished is never due: the child still owes it, and bringing it
- * back would quietly wipe a send-back a parent had just written.
+ * `p_last` is the day the chore was last finished or last came back, whichever
+ * is later. A chore that is not finished is never due: the child still owes
+ * it, and bringing it back would quietly wipe a send-back a parent had just
+ * written.
+ *
+ * `p_week_day` is the family's chosen day for weekly chores (ISO: Monday 1 to
+ * Sunday 7). A weekly chore comes back on the first such day after it was
+ * finished. Without one it comes back seven days after it was finished.
+ *
+ * Gained p_week_day: the four-argument version is dropped so the two cannot
+ * both exist.
  */
+drop function if exists recurring_quest_due(text, text, date, date);
 create or replace function recurring_quest_due(
   p_recurrence text,
   p_status text,
   p_last date,
-  p_today date
+  p_today date,
+  p_week_day int default null
 ) returns boolean
 language sql immutable set search_path = public as $$
   select case
@@ -675,10 +762,37 @@ language sql immutable set search_path = public as $$
     -- Monday is 1 and Friday is 5 in ISO terms. A chore set for weekdays does
     -- not reappear on a Saturday, which is the entire point of the option.
     when p_recurrence = 'weekdays' then p_today > p_last and extract(isodow from p_today) between 1 and 5
+    when p_recurrence = 'weekly' and p_week_day between 1 and 7 then
+      -- The first chosen weekday strictly after the day it was finished.
+      p_today >= p_last + (case when ((p_week_day - extract(isodow from p_last)::int + 7) % 7) = 0 then 7
+                                else (p_week_day - extract(isodow from p_last)::int + 7) % 7 end)
     when p_recurrence = 'weekly'   then p_today >= p_last + 7
     else false
   end;
 $$;
+
+/*
+ * The day a family's weekly chores come back. Null keeps "seven days after it
+ * was done". Set by a parent through set_week_reset_day below.
+ */
+alter table families add column if not exists week_resets_on smallint
+  check (week_resets_on between 1 and 7);
+
+create or replace function set_week_reset_day(p_day int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_family uuid := current_family_id();
+begin
+  if v_family is null or not is_parent() then
+    return jsonb_build_object('ok', false, 'reason', 'not_parent');
+  end if;
+  if p_day is not null and (p_day < 1 or p_day > 7) then
+    return jsonb_build_object('ok', false, 'reason', 'bad_day');
+  end if;
+  update families set week_resets_on = p_day where id = v_family;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke all on function set_week_reset_day(int) from public;
+grant execute on function set_week_reset_day(int) to authenticated;
 
 /**
  * Bring back every repeating chore in the caller's family that is due.
@@ -724,14 +838,26 @@ begin
   exception when others then
     -- Not a zone Postgres knows. (Looking it up in pg_timezone_names first
     -- read the whole time zone database on every call.)
+    v_tz := 'UTC';
     v_today := (now() at time zone 'UTC')::date;
   end;
 
+  /*
+   * The day it was finished is the family's day, not the server's. A bare
+   * completed_at::date is the UTC date, so a chore approved on a Los Angeles
+   * evening counted as done "tomorrow" and then skipped the next day.
+   *
+   * And it is the later of that and the day it last came back: a daily chore
+   * that came back on Monday but was only done on Wednesday came straight
+   * back again on Wednesday, so it could be done and paid twice in one day.
+   */
   with due as (
     select q.id from quests q
      where q.family_id = v_family
        and recurring_quest_due(q.recurrence, q.status,
-                               coalesce(q.last_reset_on, q.completed_at::date), v_today)
+                               greatest(q.last_reset_on, (q.completed_at at time zone v_tz)::date),
+                               v_today,
+                               (select week_resets_on from families where id = v_family))
      for update
   ), reopened as (
     update quests q
@@ -750,7 +876,7 @@ begin
 end $$;
 
 grant execute on function reset_due_recurring_quests(text) to authenticated;
-revoke execute on function recurring_quest_due(text, text, date, date) from public;
+revoke execute on function recurring_quest_due(text, text, date, date, int) from public;
 
 /**
  * A child changing how their own app looks.

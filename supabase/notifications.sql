@@ -79,11 +79,21 @@ end $$;
 create or replace function push_targets(p_family_id uuid, p_role text, p_kid_id uuid default null)
 returns setof push_subscriptions
 language sql security definer set search_path = public as $$
-  select * from push_subscriptions
-   where family_id = p_family_id
-     and role = p_role
-     and (p_kid_id is null or kid_id = p_kid_id)
-     and failures < 5;
+  select s.* from push_subscriptions s
+   where s.family_id = p_family_id
+     and s.role = p_role
+     and (p_kid_id is null or s.kid_id = p_kid_id)
+     and s.failures < 5
+     -- Only a phone whose account still belongs here. A subscription keeps
+     -- the family it was saved under, so a co-parent who was removed, or a
+     -- child's phone that was unlinked, went on being told about the
+     -- family's chores on its lock screen.
+     and case s.role
+           when 'parent' then exists (select 1 from parents p
+                                       where p.user_id = s.user_id and p.family_id = s.family_id)
+           else exists (select 1 from kids k
+                         where k.id = s.kid_id and k.user_id = s.user_id and k.family_id = s.family_id)
+         end;
 $$;
 
 /** A push service reporting an endpoint is gone. Dead ones are dropped. */

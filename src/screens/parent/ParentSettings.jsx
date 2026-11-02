@@ -322,6 +322,17 @@ export default function ParentSettings() {
             inputMode="numeric"
           />
         </Field>
+        <Field label="Weekly chores come back" hint="A chore set to repeat every week returns on this day.">
+          <Select
+            value={state.family.weekResetsOn ?? ''}
+            onChange={(e) => dispatch({ type: 'SET_WEEK_RESET_DAY', day: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">Seven days after it was done</option>
+            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((name, i) => (
+              <option key={name} value={i + 1}>Every {name}</option>
+            ))}
+          </Select>
+        </Field>
         <Chip>Plan: {state.family.tier === 'elite' ? 'Elite Pass' : 'Standard'}</Chip>
       </Card>
 
