@@ -99,6 +99,29 @@ gets a picture from the child's own camera app, by message, and taps Accept in R
 
 ---
 
+## Consent notice versions
+
+The words a parent signs are kept in the database by version
+(`consent_notices` in `supabase/consent.sql`) and match `CONSENT_NOTICE` in
+`src/data/legalText.js`; `tests/consent.mjs` fails if they differ. A
+published version is never edited (the database refuses), because it is the
+record of what the parents who signed it agreed to. A change is a new
+version, and the newest is the only one a new parent can sign.
+
+- **2026-01**, the first, still describes photographs taken in the app and an
+  AI photo check. RankUp has neither now. It stays as it was.
+- **2026-11** is the same notice without them, and is what new parents sign.
+
+A new version does not undo the consents already given: a version that only
+collects **less** (as 2026-11 does) needs nobody to consent again, so families
+who signed 2026-01 carry on. A version that collects **more** would need every
+existing parent asked again before the new collection starts. That is not
+built: it needs `has_valid_consent` to require the new version and a screen
+that asks existing parents. Ask the lawyer whether any change you plan is of
+that kind.
+
+---
+
 ## The School League: questions to add for the lawyer
 
 The School League shows a school some information about children whose parents
@@ -109,7 +132,8 @@ chose to join it. The in-app privacy policy and terms describe it (see
   child's first name only where the parent switched that on. Is the parent's
   explicit choice on the School League screen enough consent for that under
   COPPA, or should the main consent notice (`CONSENT_VERSION`) be reissued to
-  cover it? Changing that version asks every parent to consent again.
+  cover it? A new version on its own is only shown to new parents (see
+  below); asking every existing parent again needs building.
 - **FERPA and state student-privacy laws.** RankUp is not given records by the
   school; parents bring the data. Confirm that this keeps RankUp outside FERPA,
   and check states with their own student-data laws (for example California's

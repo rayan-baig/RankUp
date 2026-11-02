@@ -4,9 +4,8 @@
 -- Run after schema.sql.
 --
 -- COPPA requires verifiable parental consent BEFORE a service collects
--- anything from a child under 13. RankUp collects a first name, activity, and
--- photographs taken inside the child's home — about as sensitive as children's
--- data gets.
+-- anything from a child under 13. RankUp collects a first name and the child's
+-- chores and progress. It takes and keeps no photographs.
 --
 -- So consent is not a checkbox the app remembers. It is a row, and the database
 -- REFUSES TO CREATE A CHILD without one. That is the difference between a
@@ -20,10 +19,17 @@
 /**
  * The wording each parent agreed to, kept forever and by version.
  *
- * If you change what you collect, you publish a new version and ask again. The
- * old rows stay, because "what exactly did this parent agree to, and when" is
- * the question a regulator asks, and pointing at today's policy is not an
- * answer.
+ * A published version is never edited: "what exactly did this parent agree
+ * to, and when" is the question a regulator asks, and pointing at today's
+ * policy is not an answer. A change of wording is a new row. The newest
+ * published row is the one new parents read and sign (current_consent_version).
+ *
+ * A new version does not by itself undo the consents given to older ones:
+ * has_valid_consent counts any consent not withdrawn. That is right when a
+ * version collects the same or less (2026-11 only removed photographs). A
+ * version that collects MORE needs every existing parent asked again, which
+ * means changing has_valid_consent to require it and building the screen that
+ * asks; neither exists yet. See docs/LEGAL.md.
  */
 create table if not exists consent_notices (
   version      text primary key,
@@ -58,6 +64,31 @@ create table if not exists parental_consents (
 );
 
 create index if not exists parental_consents_family_idx on parental_consents (family_id, revoked_at);
+
+/*
+ * The wording of a published notice cannot be changed, only added to. A
+ * version is what a parent signed; rewriting it afterwards would make the
+ * record say they agreed to words they never saw.
+ */
+create or replace function consent_notice_is_fixed() returns trigger
+language plpgsql as $$
+begin
+  if new.version is distinct from old.version or new.summary is distinct from old.summary
+     or new.body is distinct from old.body or new.published_at is distinct from old.published_at then
+    raise exception 'consent notice % is published and cannot be changed; publish a new version', old.version;
+  end if;
+  return new;
+end $$;
+drop trigger if exists consent_notices_fixed on consent_notices;
+create trigger consent_notices_fixed before update on consent_notices
+  for each row execute function consent_notice_is_fixed();
+
+/** The version a new parent is shown and signs: the newest published. */
+create or replace function current_consent_version()
+returns text
+language sql stable security definer set search_path = public as $$
+  select version from consent_notices order by published_at desc, version desc limit 1;
+$$;
 
 alter table consent_notices enable row level security;
 alter table parental_consents enable row level security;
@@ -104,6 +135,14 @@ begin
   end if;
   if not exists (select 1 from consent_notices where version = p_version) then
     return jsonb_build_object('ok', false, 'reason', 'unknown_version');
+  end if;
+  -- New consent is to the wording in force. An app open since before a new
+  -- version was published is showing the old words, and recording them as
+  -- agreed to now would be wrong; it is told to reload and show the new ones.
+  -- Consents already given to an older version are untouched.
+  if p_version is distinct from current_consent_version() then
+    return jsonb_build_object('ok', false, 'reason', 'outdated_version',
+                              'current', current_consent_version());
   end if;
 
   insert into parental_consents (family_id, parent_id, version, method, method_detail, signed_name)
@@ -322,7 +361,9 @@ grant execute on function export_family_data() to authenticated;
 grant execute on function delete_family_account(text) to authenticated;
 revoke execute on function purge_stale_photos(int) from public;
 
--- The wording in force. Change what you collect, publish a new version, ask again.
+-- The first published wording. Superseded by 2026-11 below and kept exactly as
+-- it was, because it is what the parents who signed it agreed to. Do not edit
+-- it (the trigger above refuses): publish a new version instead.
 insert into consent_notices (version, summary, body) values (
   '2026-01',
   'What RankUp collects about your child, and your rights.',
@@ -354,3 +395,62 @@ By signing you confirm you are this child's parent or legal guardian and that
 you agree to RankUp collecting the above.
 $notice$
 ) on conflict (version) do nothing;
+
+-- The wording in force from November 2026: the same as src/data/legalText.js
+-- (CONSENT_NOTICE), which is what the app shows. 2026-01 still described
+-- photographs and an AI photo check that RankUp no longer has. This version
+-- only collects less, so consents given to 2026-01 stay valid and nobody is
+-- asked again; new parents sign this one. tests/consent.mjs checks the app's
+-- words and these agree.
+insert into consent_notices (version, summary, body) values (
+  '2026-11',
+  'What RankUp collects about your child, and your rights.',
+  $notice$
+What RankUp collects about your child
+
+What we collect
+
+  * The first name you enter for your child. Nothing else identifying — no
+    surname, no birthday, no email address, no home address.
+  * The chores you assign, and whether they were completed.
+  * The theme they choose, and their XP, level and in-app currency.
+
+No photographs
+
+  * RankUp never takes, sends or keeps photographs. If you want to see that
+    a chore is done, your child can send you a picture from their own
+    phone's camera app, the way you already message each other. It never
+    passes through RankUp.
+
+What we never do
+
+  * We do not sell your data or your child's data. To anyone. Ever.
+  * We show no advertising to children.
+  * Your child is never asked for an email address, a password or a phone
+    number.
+  * We do not track your child across other websites or apps.
+
+Guilds, if you use them
+
+  * A guild lets your child see other children's first names, levels and
+    weekly XP, and exchange short messages with them.
+  * Nobody joins a guild until a parent on each side has agreed — yours, and
+    the other child's.
+  * Phone numbers, email addresses and links are blocked in guild chat. Any
+    child can report a message, which hides it immediately and shows it to
+    both parents.
+  * You can remove your child from a guild at any moment.
+
+Your rights, at any time
+
+  * See everything held about your child — Settings → Download my data.
+  * Delete all of it — Settings → Delete account. It is immediate and
+    permanent.
+  * Withdraw this consent, which deletes your children's data with it.
+
+I confirm I am the parent or legal guardian of the children I add to this
+account, and I consent to RankUp collecting the information described above.
+$notice$
+) on conflict (version) do nothing;
+
+grant execute on function current_consent_version() to anon, authenticated;

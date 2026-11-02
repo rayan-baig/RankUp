@@ -3,8 +3,9 @@
  *
  * Kept as content rather than a linked PDF so it ships with the app, is
  * versioned with the code, and can be read on a phone. `CONSENT_VERSION` must
- * match a row in the database's `consent_notices` table — if you change what
- * you collect, publish a new version in both places and ask every parent again.
+ * be the newest row in the database's `consent_notices` table, with the same
+ * words: the database refuses a new consent to any other version. Change the
+ * notice by publishing a new version in both places, never by editing one.
  *
  * THIS IS NOT LEGAL ADVICE AND HAS NOT BEEN REVIEWED BY A LAWYER. It is a
  * complete, honest starting draft written from what the app actually does, so
@@ -12,11 +13,18 @@
  * scratch. Do not launch on it unread.
  */
 
-export const CONSENT_VERSION = '2026-01'
+export const CONSENT_VERSION = '2026-11'
 export const LAST_UPDATED = 'October 2026'
 /*
- * The policy and terms were updated for the School League. The consent notice
- * itself is unchanged (still CONSENT_VERSION above): joining a school is a
+ * 2026-11 is the notice below, word for word as supabase/consent.sql stores
+ * it (tests/consent.mjs checks). 2026-01, the first version, still described
+ * photographs and an AI photo check that RankUp no longer has. Removing data
+ * collection does not need anyone to consent again, so parents who signed
+ * 2026-01 stay signed; only new parents see and sign 2026-11. A version that
+ * collects MORE would need every parent asked again; see docs/LEGAL.md.
+ *
+ * The policy and terms were updated for the School League without a new
+ * consent version: joining a school is a
  * separate, explicit choice a parent makes on the School League screen, which
  * says there exactly what the school will see, in the same way a guild needs
  * a parent's yes before a child joins one.

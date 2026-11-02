@@ -45,14 +45,22 @@ begin
   end;
 
   -- A signature is required, and it has to be a real one.
-  res := record_parental_consent('2026-01', 'payment_card', ' ');
+  res := record_parental_consent('2026-11', 'payment_card', ' ');
   perform ok('an empty signature is refused', res->>'reason' = 'signature_required');
 
   res := record_parental_consent('does-not-exist', 'payment_card', 'Dana Example');
   perform ok('consent to an unpublished notice version is refused',
     res->>'reason' = 'unknown_version');
 
+  -- The notice in force is the one a new parent signs.
+  perform ok('the notice new parents are shown is 2026-11', current_consent_version() = '2026-11');
   res := record_parental_consent('2026-01', 'payment_card', 'Dana Example');
+  perform ok('a NEW consent to the superseded 2026-01 wording is refused, and names the current one',
+    res->>'reason' = 'outdated_version' and res->>'current' = '2026-11');
+  perform ok('and records nothing',
+    not exists (select 1 from parental_consents where family_id = 'd2222222-0000-0000-0000-000000000001'));
+
+  res := record_parental_consent('2026-11', 'payment_card', 'Dana Example');
   perform ok('a parent can give consent', (res->>'ok')::boolean);
   perform ok('and it is now on file',
     has_valid_consent('d2222222-0000-0000-0000-000000000001'));
@@ -63,7 +71,69 @@ begin
 
   perform ok('the exact wording agreed to is kept, by version',
     (select version from parental_consents
-      where family_id = 'd2222222-0000-0000-0000-000000000001') = '2026-01');
+      where family_id = 'd2222222-0000-0000-0000-000000000001') = '2026-11');
+end $$;
+
+-- The two published notices: what each says, and that neither can be edited.
+do $$
+declare v_old text; v_new text;
+begin
+  select body into v_old from consent_notices where version = '2026-01';
+  select body into v_new from consent_notices where version = '2026-11';
+  perform ok('2026-01 is still there, word for word as parents signed it (photographs, the AI check)',
+    v_old like '%Photographs your child takes in the app%' and v_old like '%AI photo check%'
+    and v_old like '%Anthropic%');
+  perform ok('2026-11 says RankUp takes no photographs',
+    v_new like '%RankUp never takes, sends or keeps photographs.%');
+  perform ok('2026-11 mentions no AI check, no Anthropic, and no photograph taken in the app',
+    v_new not like '%AI %' and v_new not ilike '%Anthropic%' and v_new not ilike '%photo check%'
+    and v_new not ilike '%takes in the app%' and v_new not ilike '%proof%');
+  perform ok('2026-11 was published after 2026-01',
+    (select published_at from consent_notices where version = '2026-11')
+      >= (select published_at from consent_notices where version = '2026-01'));
+  -- As the owner: a browser cannot reach the table to try (no update policy).
+  set local role postgres;
+  begin
+    update consent_notices set body = 'rewritten' where version = '2026-01';
+    raise exception 'FAIL a published notice was rewritten';
+  exception when others then
+    if sqlerrm like 'FAIL%' then raise; end if;
+    raise notice '  PASS a published notice CANNOT be rewritten, even by the owner (%)', left(sqlerrm, 40);
+  end;
+  perform ok('so 2026-01 is unchanged', (select body from consent_notices where version = '2026-01') = v_old);
+end $$;
+reset role;
+-- Applying consent.sql again (the upgrade path) changes neither notice.
+\ir ../consent.sql
+set role app_user;
+do $$
+begin
+  perform ok('re-applying the schema leaves 2026-01 and 2026-11 as they were, and 2026-11 current',
+    (select count(*) from consent_notices) = 2 and current_consent_version() = '2026-11'
+    and (select body from consent_notices where version = '2026-01') like '%AI photo check%');
+end $$;
+
+-- A family that signed 2026-01 before 2026-11 was published. Removing
+-- photographs collects less, so its consent stands: nobody is asked again.
+reset role;
+insert into auth.users (id, email) values ('d8888888-8888-8888-8888-888888888888', 'signed-old@example.com');
+insert into families (id, name) values ('d8888888-0000-0000-0000-0000000000f1', 'Signed The Old Notice');
+insert into parents (user_id, family_id, name)
+values ('d8888888-8888-8888-8888-888888888888', 'd8888888-0000-0000-0000-0000000000f1', 'Early');
+insert into parental_consents (family_id, parent_id, version, method, signed_name, granted_at)
+select 'd8888888-0000-0000-0000-0000000000f1', id, '2026-01', 'payment_card', 'Early Parent', now() - interval '200 days'
+  from parents where user_id = 'd8888888-8888-8888-8888-888888888888';
+set role app_user;
+do $$
+begin
+  perform become('d8888888-8888-8888-8888-888888888888');
+  perform ok('a consent given to 2026-01 is still valid after 2026-11 is published',
+    has_valid_consent('d8888888-0000-0000-0000-0000000000f1'));
+  insert into kids (family_id, name) values ('d8888888-0000-0000-0000-0000000000f1', 'Early Kid');
+  perform ok('and that family can still add a child without consenting again',
+    exists (select 1 from kids where name = 'Early Kid'));
+  perform ok('its record still says 2026-01, the words that parent actually read',
+    (select version from parental_consents where family_id = 'd8888888-0000-0000-0000-0000000000f1') = '2026-01');
 end $$;
 
 -- Consent belongs to one family and does not cover another.

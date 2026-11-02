@@ -6,6 +6,7 @@
  */
 import { chromium } from 'playwright'
 import { reporter, finish, BASE } from './helpers.mjs'
+import { CONSENT_NOTICE, CONSENT_VERSION } from '../src/data/legalText.js'
 
 const { fails, pass, fail } = reporter()
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined })
@@ -42,6 +43,14 @@ await page.waitForTimeout(1200)
   ? pass('the consent notice appears before any child is added')
   : fail('consent gate appears', await page.locator('body').innerText().then((t) => t.slice(0, 150)))
 
+const shown = await page.locator('body').innerText()
+;/No photographs/i.test(shown) && /never takes, sends or keeps photographs/.test(shown)
+  ? pass('it says RankUp takes no photographs')
+  : fail('no-photos wording shown', shown.slice(0, 200))
+;!/\bAI\b|Anthropic|photo check/i.test(shown)
+  ? pass('and mentions no AI check')
+  : fail('no AI check mentioned', shown.match(/.{0,40}(\bAI\b|Anthropic|photo check).{0,40}/i)?.[0])
+
 const blocked = await page.getByRole('button', { name: /I agree/ }).isDisabled()
 blocked ? pass('you cannot agree without ticking and signing')
         : fail('agree is gated', 'button was enabled with nothing filled in')
@@ -72,10 +81,40 @@ const recorded = await page.evaluate(async () => {
     body: '{}',
   })
   const data = await res.json()
-  return { consents: data?.consents?.length ?? 0, signed: data?.consents?.[0]?.signed_name }
+  return { consents: data?.consents?.length ?? 0, signed: data?.consents?.[0]?.signed_name, version: data?.consents?.[0]?.version }
 })
 recorded.consents === 1
   ? pass(`the consent is on the server, signed "${recorded.signed}"`)
   : fail('consent recorded server-side', JSON.stringify(recorded))
+recorded.version === CONSENT_VERSION && CONSENT_VERSION === '2026-11'
+  ? pass(`against the notice in force, ${CONSENT_VERSION}`)
+  : fail('signed the current version', JSON.stringify(recorded))
+
+console.log('\n=== The words signed are the words stored ===')
+// What the database keeps as the record of what this parent agreed to must be
+// what the screen showed them, line for line.
+const stored = await page.evaluate(async (version) => {
+  const res = await fetch(`http://localhost:54321/rest/v1/consent_notices?version=eq.${version}`,
+    { headers: { apikey: 'local-anon-key' } })
+  const current = await fetch('http://localhost:54321/rest/v1/rpc/current_consent_version', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key' }, body: '{}',
+  })
+  return { rows: await res.json(), current: await current.json() }
+}, CONSENT_VERSION)
+const flat = (t) => String(t || '').replace(/\s+/g, ' ').trim()
+const storedBody = flat(stored.rows?.[0]?.body)
+const lines = [CONSENT_NOTICE.title, ...CONSENT_NOTICE.sections.flatMap((x) => [x.heading, ...x.body]), CONSENT_NOTICE.affirmation]
+const missing = lines.filter((line) => !storedBody.includes(flat(line)))
+stored.current === CONSENT_VERSION
+  ? pass('the database shows new parents the same version the app does')
+  : fail('current version agrees', JSON.stringify(stored.current))
+storedBody && missing.length === 0
+  ? pass(`every line the app shows is in the stored ${CONSENT_VERSION} notice`)
+  : fail('stored notice matches the app', missing[0] || 'no stored notice')
+const leftover = storedBody.replace(new RegExp(lines.map((l) => flat(l).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'g'), '')
+  .replace(/[\s*]/g, '')
+leftover === ''
+  ? pass('and nothing else: no photographs taken in the app, no AI check')
+  : fail('stored notice has nothing extra', leftover.slice(0, 120))
 
 await finish(errors, fails, browser)
