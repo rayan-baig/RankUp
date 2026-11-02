@@ -75,6 +75,11 @@ begin
 end $$;
 
 -- ---------- due, once, and only once ----------
+-- "A minute ago" is yesterday in the first minutes after midnight, and the
+-- check below would then fail with nothing wrong. Wait those minutes out,
+-- in a statement of its own so the block below starts on the later clock.
+select pg_sleep(greatest(0, 181 - extract(epoch from (clock_timestamp() at time zone 'UTC')::time)))
+ where (clock_timestamp() at time zone 'UTC')::time < time '00:03';
 do $$
 declare
   v_due   jsonb;
@@ -179,6 +184,9 @@ begin
 end $$;
 
 -- ---------- local time, not UTC ----------
+-- The same midnight edge, on Tokyo's clock.
+select pg_sleep(greatest(0, 181 - extract(epoch from (clock_timestamp() at time zone 'Asia/Tokyo')::time)))
+ where (clock_timestamp() at time zone 'Asia/Tokyo')::time < time '00:03';
 do $$
 declare
   v_due jsonb;
