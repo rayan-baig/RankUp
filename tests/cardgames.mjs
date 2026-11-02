@@ -25,24 +25,32 @@ await page.getByRole('button', { name: /Have a look around/ }).click()
 await page.waitForFunction(() => document.body.innerText.includes('Rivera'), null, { timeout: 8000 })
 
 /**
- * Open a game from the arcade by its name.
+ * Open a game from the arcade by its name, and wait until it is on screen.
  *
  * Setting the hash is not enough on its own: the previous game's result
  * screen is still mounted over the arcade, so the tiles are not there to
  * click. Anything offering a way out gets pressed first.
+ *
+ * Each game's code arrives in its own chunk the first time it is opened, and
+ * until it lands the arcade shows a loading face where the game will be. A
+ * fixed pause read the screen in that gap on a slow load ("it deals a hand"
+ * failed reading "👀"), so this waits for the tile to be there and then for
+ * `ready`, the game's own first screen. What the tests then assert about that
+ * screen is unchanged.
  */
-async function open(name) {
+async function open(name, ready) {
   for (let i = 0; i < 4; i += 1) {
     const back = page.getByRole('button', { name: /Back|Done|Finish|Arcade|Nice/i }).first()
     if (await back.count()) await back.click({ timeout: 2000 }).catch(() => {})
     await page.evaluate(() => { window.location.hash = '/kid/arcade' })
-    await page.waitForTimeout(700)
     const tile = page.getByRole('button', { name: new RegExp(name, 'i') }).first()
-    if (await tile.count()) {
+    const shown = await tile.waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false)
+    if (shown) {
       await tile.click()
-      await page.waitForTimeout(600)
       const play = page.getByRole('button', { name: /^(Play|Start|Deal)$/ }).first()
-      if (await play.count()) { await play.click(); await page.waitForTimeout(500) }
+      if (await play.count()) await play.click()
+      await page.waitForFunction((source) => new RegExp(source).test(document.body.innerText), ready.source,
+        { timeout: 15000 }).catch(() => {})
       return
     }
   }
@@ -77,7 +85,7 @@ async function playOut(labels, maxClicks = 120) {
 
 console.log('\n=== Blackjack ===')
 {
-  await open('Blackjack')
+  await open('Blackjack', /Hand \d+ of 6/)
   const before = await page.evaluate(() => document.body.innerText)
   ok('it deals a hand', /Hand 1 of 6/.test(before), before.slice(0, 120))
   // Stand every time: six hands, no bust loops, and the dealer has to
@@ -89,7 +97,7 @@ console.log('\n=== Blackjack ===')
 
 console.log("\n=== Texas Hold'em ===")
 {
-  await open("Texas Hold")
+  await open("Texas Hold", /Hand \d+ of 5/)
   const before = await page.evaluate(() => document.body.innerText)
   ok('it deals a hand', /Hand 1 of 5/.test(before), before.slice(0, 120))
   const out = await playOut([/^Stay in$/, /^Deal$/])
@@ -99,7 +107,7 @@ console.log("\n=== Texas Hold'em ===")
 
 console.log('\n=== Go Fish ===')
 {
-  await open('Go Fish')
+  await open('Go Fish', /in the pond/)
   const before = await page.evaluate(() => document.body.innerText)
   ok('it deals both hands', /in the pond/.test(before), before.slice(0, 120))
   // Only ranks the player actually holds are offered, so clicking any
