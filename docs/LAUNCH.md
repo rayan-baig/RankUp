@@ -34,6 +34,107 @@ When something goes wrong after launch, see
 - [ ] **Stripe** — [stripe.com](https://stripe.com). It needs business details
       and a bank account, so start early: checking them can take days.
 
+## 1a. The address: `rankup.<your domain>` (half an hour, most of it waiting)
+
+RankUp is a product of **MTRX Horizon**. The company has the one domain, and
+RankUp lives on a subdomain of it: `rankup.<your domain>` (`<your domain>` is
+whatever the company's domain turns out to be). The company's console and its
+other products sit beside it as siblings.
+
+A **subdomain, not a path** (`<your domain>/rankup`). A browser keeps cookies,
+`localStorage`, IndexedDB and the service worker per origin, and a subdomain is
+an origin of its own: nothing on a sibling can read a RankUp phone's family
+data, its session or its offline copy. Under a path, every app on the domain
+would share all of it. RankUp keeps it that way from its side: it sets no
+cookie (so none with `Domain=<your domain>`), its functions send no CORS
+header, its Content-Security-Policy names no other site of the company, its
+service worker answers only its own origin, and a payment always comes back to
+`PUBLIC_SITE_URL`, whatever a request claims. `tests/isolation.mjs` and
+`tests/api.mjs` check each of these.
+
+- [ ] **Point the subdomain at the host.** At the DNS provider for
+      `<your domain>`, add one record:
+
+      | Type | Name | Target |
+      |---|---|---|
+      | `CNAME` | `rankup` | Cloudflare Pages: `<your project>.pages.dev`. Vercel: the target Vercel shows you, `cname.vercel-dns.com` at the time of writing |
+
+      Only this one name. No wildcard (`*.<your domain>`), and nothing at the
+      bare domain for RankUp: those belong to the company.
+- [ ] **Tell the host the name.** Cloudflare: Workers & Pages → the project →
+      **Custom domains** → **Set up a custom domain** → `rankup.<your domain>`.
+      If the domain's DNS is on Cloudflare it adds the CNAME itself; if not, it
+      shows the record to add. Vercel: Project → Settings → **Domains** → add
+      `rankup.<your domain>`.
+- [ ] **HTTPS.** Both hosts issue and renew the certificate themselves once
+      the CNAME resolves. Wait until the domain shows as **Active** (Cloudflare)
+      or **Valid Configuration** (Vercel), then open
+      `https://rankup.<your domain>`. Phones only install the app, and only
+      allow notifications, over https.
+- [ ] **`PUBLIC_SITE_URL=https://rankup.<your domain>`** on the host (section
+      4), no trailing slash. Every way back from Stripe is built from it.
+- [ ] **Supabase → Authentication → URL Configuration.** Site URL:
+      `https://rankup.<your domain>`. Redirect URLs: `https://rankup.<your domain>/**`
+      only. Not `https://*.<your domain>/**`: a sign-up confirmation or a
+      password reset link must never be able to land on a sibling. (A local
+      address such as `http://localhost:5173/**` belongs on a test project,
+      not the live one.)
+- [ ] **Stripe.** Nothing to type for the way back: checkout returns to
+      `https://rankup.<your domain>/#/parent/plan?checkout=success` (or
+      `=cancelled`), Flash Tickets to `/#/parent/settings?tickets=…`, a
+      school to `/#/school?checkout=…`, all built from `PUBLIC_SITE_URL`. What
+      you do set, in section 3: the webhook endpoint
+      `https://rankup.<your domain>/api/stripe-webhook`, and the customer
+      portal's default return link `https://rankup.<your domain>/#/parent/plan`.
+      Under Settings → **Business → Public details**, the business name is
+      **MTRX Horizon**: it is what checkout pages and card statements show.
+- [ ] **The MTRX Horizon console.** In the console's settings:
+      `RANKUP_URL=https://rankup.<your domain>` (its **Open app** button) and
+      `RANKUP_STATS_URL=https://rankup.<your domain>/api/stats`, with the
+      console's `MTRX_STATS_KEY` the same value as RankUp's `STATS_KEY`. The
+      console asks from its server, not from a browser, so RankUp needs no
+      CORS for it and has none.
+
+### Email from the shared domain
+
+The only email RankUp sends is Supabase's: the sign-up confirmation (if
+**Confirm email** is on) and the password reset links you send from the
+dashboard. Supabase's built-in sender is for testing (a handful an hour, and
+only to your own team), so a live project needs its own:
+
+- [ ] An email-sending provider, with the company's domain verified **once**.
+      Each product sends from its own address on its own subdomain; RankUp's
+      is **`no-reply@rankup.<your domain>`**, sender name **RankUp**.
+- [ ] Supabase → Authentication → **Emails → SMTP Settings**: the provider's
+      SMTP host, port, user and password; sender email
+      `no-reply@rankup.<your domain>`; sender name `RankUp`.
+- [ ] Supabase → Authentication → **Emails → Templates**: end each template
+      (Confirm sign up, Reset password, and any other you turn on) with the
+      line `RankUp is a product of MTRX Horizon.`, the same words as the
+      privacy policy and terms. The company's name only: no person's name or
+      address goes in an email.
+- [ ] **SPF, DKIM and DMARC, set once on the parent domain**, not per product:
+      - **DKIM**: the record(s) the provider gives you, at
+        `<selector>._domainkey.<your domain>`. Mail it signs for
+        `<your domain>` passes DMARC for `rankup.<your domain>` too, because
+        DMARC's default (relaxed) alignment accepts any subdomain of the
+        signing domain.
+      - **SPF**: one TXT record at `<your domain>`,
+        `v=spf1 include:<the provider's> ~all` (or the `include:` added to the
+        one already there: a name may have only one SPF record). SPF is
+        checked against the bounce address, which the provider sets; if it
+        asks for a custom bounce domain under
+        `rankup.<your domain>`, add that one record it names.
+      - **DMARC**: one TXT record at `_dmarc.<your domain>`, starting with
+        `v=DMARC1; p=none; rua=mailto:<a company address for reports>` and
+        moving to `p=quarantine` once the reports show only your own mail.
+        Subdomains, `rankup.<your domain>` included, follow it unless an
+        `sp=` tag says otherwise, so no product needs a DMARC record of its
+        own.
+- [ ] Send yourself a reset link (Users → Send password recovery) and check,
+      in the received message's headers, `spf=pass`, `dkim=pass` and
+      `dmarc=pass`, and that the link opens on `https://rankup.<your domain>`.
+
 ## 2. Set up the database (about fifteen minutes)
 
 In the Supabase SQL editor, run these files **in this order**. It is the order
@@ -122,7 +223,7 @@ here):
 // A separate Worker. Its wrangler.toml needs:
 //   [triggers]
 //   crons = ["*/15 * * * *", "5 * * * *", "20 3 * * *", "40 4 2 * *"]
-// and two settings: SITE (https://your-site) and CRON_SECRET (the same value).
+// and two settings: SITE (https://rankup.<your domain>) and CRON_SECRET (the same value).
 const JOBS = {
   '*/15 * * * *': ['send-reminders'],
   '5 * * * *': ['send-digests'],
@@ -146,8 +247,8 @@ Every job records each run, and `/api/health` reports how long each has been
 quiet. Silence is how these fail: no error, just reminders that stop arriving.
 
 ```
-GET https://your-site/api/health                                        -> {"ok":true}, or 503
-GET https://your-site/api/health  (Authorization: Bearer CRON_SECRET)   -> the detail, 503 if anything is wrong
+GET https://rankup.<your domain>/api/health                                        -> {"ok":true}, or 503
+GET https://rankup.<your domain>/api/health  (Authorization: Bearer CRON_SECRET)   -> the detail, 503 if anything is wrong
 ```
 
 Point a free uptime monitor at the first. It is public on purpose and says
@@ -201,7 +302,7 @@ cancellation still waiting for Stripe is never deleted.
       message that was meant to upgrade them. How many tickets a pack gives,
       and what each skin costs, are fixed on the server: a buyer cannot pay for
       the small pack and be given the large one.
-- [ ] Stripe → Developers → Webhooks → add `https://your-site/api/stripe-webhook`,
+- [ ] Stripe → Developers → Webhooks → add `https://rankup.<your domain>/api/stripe-webhook`,
       and copy its signing secret. Send it **these events**:
       - `checkout.session.completed`
       - `checkout.session.async_payment_succeeded`
@@ -215,7 +316,12 @@ cancellation still waiting for Stripe is never deleted.
 
       [PAYMENTS.md](PAYMENTS.md) says what each one does to a family.
 - [ ] Stripe → Settings → Billing → **Customer portal**: turn it on. Cancelling
-      and changing cards happen there.
+      and changing cards happen there. Its default return link:
+      `https://rankup.<your domain>/#/parent/plan`.
+- [ ] Stripe → Settings → Business → **Public details**: the business name
+      **MTRX Horizon**, the company's support email, and a statement
+      descriptor that says RankUp (for example `MTRX RANKUP`), so a parent
+      recognises the charge.
 
 ## 4. Set the settings on your host
 
@@ -231,9 +337,9 @@ every phone downloads. A secret in a `VITE_` name is a published secret.
 |---|---|---|
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | The project's address and public key, for the app. The server functions read the anon key too, when they ask the database something as the signed-in parent, so it must be set on the host, not only in a local file. | No |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | The same address, and the key that bypasses every database rule | **Yes** |
-| `PUBLIC_SITE_URL` | Your public https address. Stripe sends people back here; without it checkout and the billing portal refuse to start. | No |
+| `PUBLIC_SITE_URL` | `https://rankup.<your domain>` (section 1a), no trailing slash. Stripe sends people back here; without it checkout and the billing portal refuse to start. | No |
 | `VITE_VAPID_PUBLIC_KEY` and `VAPID_PUBLIC_KEY` | The public push key, twice (the app and the server both need it) | No |
-| `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | The private push key, and `mailto:` your address | Private key: **yes** |
+| `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | The private push key, and `mailto:` a company address, e.g. `mailto:no-reply@rankup.<your domain>` | Private key: **yes** |
 | `VITE_STRIPE_ENABLED` | `true` to switch billing on | No |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe's secret key and the webhook's signing secret | **Yes** |
 | `STRIPE_PRICE_*` | The price ids from section 3 | No |
@@ -263,8 +369,14 @@ the phone.
 
 ## 5. Fill in the placeholders
 
-- [ ] `src/data/legalText.js` → `OPERATOR`: your name, contact email and postal
-      address. The app shows a warning banner until you do.
+- [ ] `src/data/legalText.js` → `OPERATOR`. The name is already **MTRX
+      Horizon**: the privacy policy and terms say "RankUp is a product of MTRX
+      Horizon", and "we" means the company. Fill in the company's contact
+      email (an address on `<your domain>`) and its registered postal
+      address. The company's, never a person's: this repository and the app
+      are public. The app shows a warning banner until both are filled in.
+      The consent notice does not name the operator, so this needs no new
+      consent version.
 - [ ] Read the privacy policy and terms in that file from start to finish. They
       describe what the app does today. If you change what it does, change
       them.
@@ -272,8 +384,8 @@ the phone.
 ## 6. Deploy and check it on real phones
 
 - [ ] Run the SQL files (section 2), then push to GitHub; the host builds it.
-- [ ] Open the site on a **real phone**, not a desktop browser, and add it to
-      the home screen (Share → Add to Home Screen).
+- [ ] Open `https://rankup.<your domain>` on a **real phone**, not a desktop
+      browser, and add it to the home screen (Share → Add to Home Screen).
 - [ ] Walk the whole loop: sign up → consent → add a child → assign a chore →
       link a second phone with its code → tap "I did it!" on it → Accept → check
       the XP arrives on the child's phone.
@@ -369,7 +481,7 @@ The full list, in order: [ROADMAP.md](ROADMAP.md).
 bash supabase/test/up.sh       # Postgres, the schema, the stand-in API, the dev server
 npm run test:db                # the SQL suite: about 1,000 checks, no browser
 npm run test:refusals          # every refusal reason in the SQL is given by a test
-npm run test:static            # settings, routes, jobs and SQL order agree
+npm run test:static            # settings, routes, jobs and SQL order agree; nothing shared with sibling sites
 npm run test:awards            # the rules, in Node, against Postgres
 npm run test:smoke             # the app in a real browser
 npm run test:sync              # two and three phones against Postgres

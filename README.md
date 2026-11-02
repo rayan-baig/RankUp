@@ -2,6 +2,10 @@
 
 Chores turned into a game, so parents stop nagging and kids stop dreading them.
 
+RankUp is a product of **MTRX Horizon**. It lives at `rankup.<your domain>`, a
+subdomain of the company's domain, so it is a site of its own beside the
+company's others.
+
 A parent assigns a quest. The kid does it and taps **I did it!** If the parent wants
 proof, the kid sends a photo from their own camera app, by message — RankUp itself
 never takes or keeps photos. The parent taps **Accept** or sends it back. Accepting
@@ -98,9 +102,19 @@ backend, reaches the server through the outbox in `src/lib/sync/`
 ## Deploying it
 
 To go live for real families, follow **[docs/LAUNCH.md](docs/LAUNCH.md)** from the
-top: accounts, database, settings, scheduled jobs, legal. Cloudflare Pages is the
-recommended host there. [docs/DEPLOY.md](docs/DEPLOY.md) covers a quick preview deploy
-only.
+top: accounts, the address, database, settings, scheduled jobs, legal. Cloudflare
+Pages is the recommended host there. [docs/DEPLOY.md](docs/DEPLOY.md) covers a quick
+preview deploy only.
+
+**The address** is `https://rankup.<your domain>`: a `CNAME` named `rankup` at the
+company domain's DNS, pointed at the host, then the host's custom-domain step, which
+also issues the https certificate. A subdomain rather than a path, so RankUp's
+storage, sign-in and service worker are its own; RankUp sets no cookie and trusts no
+sibling site (`tests/isolation.mjs`). Everything that names the address
+(`PUBLIC_SITE_URL`, Supabase's Site URL and redirect URLs, the Stripe webhook, the
+MTRX Horizon console's `RANKUP_URL` and `RANKUP_STATS_URL`, and email sent from
+`no-reply@rankup.<your domain>` with SPF, DKIM and DMARC set once on the parent
+domain) is listed in [LAUNCH.md, section 1a](docs/LAUNCH.md#1a-the-address-rankupyour-domain-half-an-hour-most-of-it-waiting).
 
 ---
 

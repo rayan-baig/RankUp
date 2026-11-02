@@ -120,7 +120,7 @@ permission. **Send me a test notification** checks it works.
    ```
 2. **Settings** on the host (see [LAUNCH.md](LAUNCH.md) section 4):
    `VITE_VAPID_PUBLIC_KEY` and `VAPID_PUBLIC_KEY` (the same public key),
-   `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (`mailto:` your address),
+   `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (`mailto:` a company address, e.g. `mailto:no-reply@rankup.<your domain>`),
    `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. The service role key and the
    private key never go in a `VITE_` name.
 3. **The database:** `supabase/notifications.sql`, with the rest of the files
