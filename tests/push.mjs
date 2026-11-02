@@ -174,6 +174,47 @@ const flood = await fetch(`${BASE}/api/send-push`, {
 ok('the sixty-first notice in an hour is refused', flood.status === 429, `status ${flood.status}`)
 await db.query('delete from push_sends where family_id = $1', [FAMILY])
 
+console.log('\n=== ...however many phones it uses ===')
+// A second parent, two children's phones and the first parent: four devices,
+// sending in turn, as fast as they like. The sixty an hour is the family's.
+const COPARENT = 'a0000000-0000-4000-8000-0000000b0002'
+const KID_PHONES = ['a0000000-0000-4000-8000-0000000b0003', 'a0000000-0000-4000-8000-0000000b0004']
+await db.query(`update families set tier = 'elite' where id = $1`, [FAMILY])
+await db.query(`insert into auth.users (id, email) values ($1, 'push-coparent@example.com'), ($2, 'push-kid1@example.com'), ($3, 'push-kid2@example.com')
+                on conflict do nothing`, [COPARENT, ...KID_PHONES])
+await db.query(`insert into parents (user_id, family_id, name) values ($1, $2, 'Pat') on conflict do nothing`, [COPARENT, FAMILY])
+await db.query(`insert into parental_consents (family_id, parent_id, version, method, signed_name)
+                select $1, id, '2026-01', 'payment_card', 'Pia' from parents where user_id = $2
+                 and not exists (select 1 from parental_consents where family_id = $1)`, [FAMILY, PARENT])
+for (const [i, kid] of KID_PHONES.entries()) {
+  await db.query(`insert into kids (family_id, user_id, name) values ($1, $2, $3)
+                  on conflict (user_id) do nothing`, [FAMILY, kid, `Phone kid ${i}`])
+}
+const devices = [PARENT, COPARENT, ...KID_PHONES]
+const statuses = []
+for (let i = 0; i < 64; i += 1) {
+  const res = await fetch(`${BASE}/api/send-push`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${devices[i % devices.length]}` },
+    // To the children's side, where no phone is registered: nothing is
+    // actually sent, but every request is counted.
+    body: JSON.stringify({ familyId: FAMILY, role: 'kid', kind: 'submission', args: ['Ava', `Flood ${i}`] }),
+  })
+  statuses.push(res.status)
+}
+ok('four phones in one family get sixty notices an hour between them, not sixty each',
+  statuses.slice(0, 60).every((s) => s === 200) && statuses.slice(60).every((s) => s === 429),
+  `accepted ${statuses.filter((s) => s === 200).length}, refused ${statuses.filter((s) => s === 429).length}, other ${statuses.filter((s) => s !== 200 && s !== 429).join(',')}`)
+const outsider = await fetch(`${BASE}/api/send-push`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KID_PHONES[0]}` },
+  body: JSON.stringify({ familyId: 'a0000000-0000-4000-8000-00000000f002', role: 'kid', kind: 'submission', args: ['Ava', 'Elsewhere'] }),
+})
+ok('and naming another family to count against instead is refused', outsider.status === 403, `status ${outsider.status}`)
+await db.query('delete from push_sends where family_id = $1', [FAMILY])
+await db.query('delete from kids where family_id = $1 and user_id = any($2)', [FAMILY, KID_PHONES])
+await db.query('delete from parents where user_id = $1', [COPARENT])
+
 await db.query('delete from push_subscriptions where family_id = $1', [FAMILY])
 server.close()
 await db.end()

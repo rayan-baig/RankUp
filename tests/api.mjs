@@ -103,11 +103,25 @@ ok('while the operator sees the jobs', Boolean(deep.jobs), `keys: ${Object.keys(
 console.log('\n=== The owner\'s console can count families, and nobody else can ===')
 const noKey = await fetch(`${BASE}/api/stats`)
 ok('stats refuse a caller without the key', noKey.status === 401 || noKey.status === 404, `status ${noKey.status}`)
+for (const [who, key] of [['the scheduler\'s key', CRON], ['the operator\'s key', 'test-operator-secret'], ['a parent\'s sign-in', PARENT]]) {
+  const res = await fetch(`${BASE}/api/stats`, { headers: { Authorization: `Bearer ${key}` } })
+  const text = await res.text()
+  ok(`nor to ${who}`, (res.status === 401 || res.status === 404) && !/\d{2,}|families|users/.test(text), `status ${res.status} ${text}`)
+}
 if (process.env.STATS_KEY_FOR_TEST) {
   const counted = await fetch(`${BASE}/api/stats`, { headers: { Authorization: `Bearer ${process.env.STATS_KEY_FOR_TEST}` } })
-  const body = await counted.json().catch(() => ({}))
+  const raw = await counted.text()
+  let body = {}
+  try { body = JSON.parse(raw) } catch { body = {} }
   ok('and answer the console with two numbers only', counted.status === 200 && Number.isInteger(body.users)
-    && Number.isInteger(body.active_users) && Object.keys(body).length === 2, JSON.stringify(body))
+    && Number.isInteger(body.active_users) && Object.keys(body).length === 2, raw)
+  ok('the numbers are counts, not a family\'s anything',
+    body.users === Number((await db.query('select count(*) from families')).rows[0].count), raw)
+  ok('and nothing more rides along in the headers',
+    !Object.keys(Object.fromEntries(counted.headers)).some((h) => /^x-|server-timing|set-cookie/i.test(h)),
+    JSON.stringify(Object.fromEntries(counted.headers)))
+  const posted = await fetch(`${BASE}/api/stats`, { method: 'POST', headers: { Authorization: `Bearer ${process.env.STATS_KEY_FOR_TEST}` } })
+  ok('GET only', posted.status === 405, `status ${posted.status}`)
 }
 
 console.log('\n=== An unsigned Stripe event is never acted on ===')
@@ -194,7 +208,11 @@ const operator = (key, body) => fetch(`${BASE}/api/operator-schools`, {
 })
 ok('nobody without the key sees the schools', (await operator(null)).status === 401)
 ok('not even with the scheduler’s key', (await operator(CRON)).status === 401)
+ok('nor the owner’s console key', (await operator('test-stats-key')).status === 401)
 ok('a signed-in parent’s token is not the key', (await operator(PARENT)).status === 401)
+ok('nor the key with a character missing', (await operator('test-operator-secre')).status === 401)
+const unkeyedVerify = await operator(null, { action: 'unverify', school_id: SCHOOL })
+ok('and without it nothing can be changed either', unkeyedVerify.status === 401)
 const listed = await (await operator('test-operator-secret')).json()
 ok('the operator sees every school, with who signed it up',
   listed.ok && listed.schools.some((s) => s.id === SCHOOL && Array.isArray(s.staff)))
