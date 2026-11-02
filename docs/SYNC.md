@@ -87,6 +87,15 @@ Mode. `tests/pairing.mjs` drives it as two separate devices and checks all of it
 approvals, XP, rewards and the family goal travel between the parent's and the child's phones,
 offline-first through an outbox; `tests/sync.mjs` drives it end to end.
 
+**Coins and rewards on more than one phone.** A purchase takes the coins on
+screen at once and is settled by the server, which takes turns per child: two
+phones buying with the same coins while offline are charged for what the
+balance covers, and the other purchase is refused with the coins handed back
+on that phone and a sentence saying why. A reward a parent deleted meanwhile
+is refused the same way. While a purchase (or a tax, a game, a bonus) is still
+on its way, a pull leaves the child's balance alone, so the coins cannot
+reappear and be spent twice. `tests/rewardraces.mjs` checks all of it.
+
 **A second phone for the same child.** A profile that already has a phone keeps
 it: pairing another phone under the same name makes a new profile, and the
 parent's confirmation says so. To move a child to a new phone (including the

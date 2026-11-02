@@ -280,6 +280,11 @@ export function reducer(state, action) {
             trialTier: family.trial_tier || null,
             trialEndsAt: family.trial_ends_at ? Date.parse(family.trial_ends_at) : null,
             flashTickets: family.flash_tickets ?? next.family.flashTickets ?? 0,
+            // Why a paid plan stopped, if it has: the dashboard says so
+            // rather than simply showing fewer features. See billingNotice.
+            subscriptionStatus: family.subscription_status || null,
+            lastPaidTier: family.last_paid_tier || null,
+            subscriptionEndsAt: family.subscription_ends_at || null,
           },
         }
       }
@@ -1068,7 +1073,15 @@ export function reducer(state, action) {
         const redemption = state.redemptions.find((r) => r.id === args.p_redemption_id)
         next = { ...next, redemptions: next.redemptions.filter((r) => r.id !== args.p_redemption_id) }
         if (redemption) next = mapKid(next, redemption.kidId, (k) => ({ ...k, coins: (k.coins || 0) + (redemption.cost || 0) }))
-        message = `"${redemption?.name || 'A reward'}" could not be claimed, so the coins are back.`
+        const name = `"${redemption?.name || 'A reward'}"`
+        // Said as it is: a parent took the reward off the list while this
+        // purchase was on its way, or the coins had gone on something else
+        // (another phone, a tax) by the time it arrived.
+        message = reason === 'reward_gone'
+          ? `${name} was taken off the rewards list before your purchase arrived, so nothing was spent and the coins are back.`
+          : reason === 'insufficient'
+            ? `${name} could not be bought: by the time it reached the server there were not enough coins left. Nothing was spent.`
+            : `${name} could not be claimed, so the coins are back.`
       } else if (fn === 'mark_redemption_given') {
         next = {
           ...next,
@@ -1173,6 +1186,9 @@ export function reducer(state, action) {
     // Reaches the server now. It used to change this phone only, so the next
     // pull put the reward back to "owed" and every other phone said the same.
     case 'FULFIL_REDEMPTION':
+      // Already given (a second tap, or another parent's tap that synced in):
+      // nothing to send again.
+      if (!state.redemptions.some((r) => r.id === action.redemptionId && r.status !== 'given')) return state
       return queueRpc({
         ...state,
         redemptions: state.redemptions.map((r) => (r.id === action.redemptionId ? { ...r, status: 'given', givenAt: Date.now() } : r)),

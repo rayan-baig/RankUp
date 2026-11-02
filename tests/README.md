@@ -33,6 +33,13 @@ that makes guilds safe to ship: a child does not join until a parent on each
 side has agreed. One parent approving alone is not enough. It also checks the
 contact-detail guard and that a normal message crosses families.
 
+**`rewardraces.mjs`** runs the app's own reducer as two phones against a real
+Postgres, over two connections at once: the same reward bought on both while
+offline (one charge, never below zero), one purchase retried while the first
+try is still running, a purchase racing a tax, a reward deleted while a child
+buys it offline, and "Mark given" tapped on two parents' phones together.
+The one-call-at-a-time versions are `supabase/test/29-money-floor.sql`.
+
 **`builtgames.mjs`** is the one suite that runs against a production build
 rather than the dev server. The arcade's four standalone HTML games run in
 sandboxed srcdoc frames, which live under the built page's

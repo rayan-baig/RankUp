@@ -868,13 +868,11 @@ declare
   v_kid kids;
   v_reward rewards;
 begin
+  -- The child's row is locked first and held to the end, so two phones
+  -- spending the same coins at once take turns: the second sees what the
+  -- first left, and is refused if that is not enough.
   select * into v_kid from kids where id = p_kid_id for update;
-  select * into v_reward from rewards where id = p_reward_id;
-  if v_kid is null or v_reward is null then
-    return jsonb_build_object('ok', false, 'reason', 'not_found');
-  end if;
-  -- A reward from another family would otherwise set the price here.
-  if v_reward.family_id is distinct from v_kid.family_id then
+  if v_kid is null then
     return jsonb_build_object('ok', false, 'reason', 'not_found');
   end if;
 
@@ -891,10 +889,26 @@ begin
   -- Sent again because the phone never heard back: the redemption id is the
   -- request id. Charging first and then inserting "on conflict do nothing"
   -- took the coins a second time and recorded one redemption.
+  --
+  -- Asked before whether the reward still exists. A purchase that landed,
+  -- whose answer was lost, and whose reward a parent then deleted, used to be
+  -- answered "not found" on the retry: the phone gave the child their coins
+  -- back on screen and said so, while the server had (rightly) kept them.
   if exists (select 1 from redemptions where id = p_redemption_id) then
     if exists (select 1 from redemptions where id = p_redemption_id and kid_id = p_kid_id) then
       return jsonb_build_object('ok', true, 'repeat', true);
     end if;
+    return jsonb_build_object('ok', false, 'reason', 'not_found');
+  end if;
+
+  select * into v_reward from rewards where id = p_reward_id;
+  -- Deleted by a parent while this purchase was on its way (a child buying
+  -- offline, say). Nothing is charged, and the phone is told why.
+  if v_reward is null then
+    return jsonb_build_object('ok', false, 'reason', 'reward_gone');
+  end if;
+  -- A reward from another family would otherwise set the price here.
+  if v_reward.family_id is distinct from v_kid.family_id then
     return jsonb_build_object('ok', false, 'reason', 'not_found');
   end if;
   if v_kid.coins < v_reward.cost then

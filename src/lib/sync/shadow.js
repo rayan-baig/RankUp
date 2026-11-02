@@ -262,6 +262,10 @@ export function queueChanges(state, { photoFor, role } = {}) {
  * play or are approved. A parent tapping "Lift now" a moment before such a
  * pull landed saw the lockdown come straight back, and it stayed back.
  */
+/** Database functions that move a child's coins (or the arcade balances beside them). */
+const BALANCE_CALLS = new Set(['redeem_reward', 'apply_currency_tax', 'buy_market_skin', 'play_minigame',
+                               'claim_login_bonus', 'use_streak_freeze'])
+
 export function pendingRows(ops, state = null) {
   const pending = new Set()
   const submission = (id) => (state?.submissions || []).find((s) => s.id === id)
@@ -291,6 +295,22 @@ export function pendingRows(ops, state = null) {
       if (decided?.questId) pending.add(`quests:${decided.questId}`)
       // Only an approval writes the child's row (XP, coins, streak).
       if (op.fn === 'approve_submission' && decided?.kidId) pending.add(`kids:${decided.kidId}`)
+    } else if (op.type === 'rpc' && BALANCE_CALLS.has(op.fn) && op.args?.p_kid_id) {
+      /*
+       * A call that moves the child's coins, still on its way. A pull carries
+       * the row as it was before the call landed, and merging it put the
+       * coins back: a child who had just bought a reward watched their
+       * balance jump up again, and could spend the same coins a second time
+       * on this phone, to be refused (and refunded on screen) once the second
+       * purchase reached the server. The row comes back with the pull after
+       * the call lands.
+       */
+      pending.add(`kids:${op.args.p_kid_id}`)
+      if (op.fn === 'redeem_reward' && op.args.p_redemption_id) pending.add(`redemptions:${op.args.p_redemption_id}`)
+    } else if (op.type === 'rpc' && op.fn === 'mark_redemption_given' && op.args?.p_redemption_id) {
+      // "Mark given" on its way: an older pull would show the reward as owed
+      // again, and invite a second tap.
+      pending.add(`redemptions:${op.args.p_redemption_id}`)
     }
   }
   return pending
