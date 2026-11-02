@@ -2,7 +2,7 @@
  * The everyday paths a family actually walks: sending work back to be redone,
  * and completing a quest that needs no photo.
  */
-import { launch, reporter, readState, setUpFamily, asParent, asKid, submitPhotoProof, finish, SHOT_DIR } from './helpers.mjs'
+import { launch, reporter, readState, setUpFamily, asParent, asKid, sendToParent, finish, SHOT_DIR } from './helpers.mjs'
 
 const { browser, page, errors } = await launch()
 const { fails, pass, fail } = reporter()
@@ -16,7 +16,7 @@ await page.waitForTimeout(500)
 await page.locator('button.card').first().click()
 await page.waitForTimeout(400)
 const questUrl = page.url()
-await submitPhotoProof(page)
+await sendToParent(page)
 
 await asParent(page)
 await page.evaluate(() => { window.location.hash = '/parent/approvals' })
@@ -43,7 +43,7 @@ await page.screenshot({ path: `${SHOT_DIR}/redo-quest.png` })
   ? pass('the parent\'s reason is shown to the kid')
   : fail('the parent\'s reason is shown to the kid', 'note missing')
 
-await submitPhotoProof(page)
+await sendToParent(page)
 state = await readState(page)
 state.submissions.filter((s) => s.status === 'pending').length === 1
   ? pass('a redo creates exactly one new pending submission')

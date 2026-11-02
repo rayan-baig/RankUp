@@ -44,7 +44,6 @@ grant usage on schema public to anon, authenticated;
 grant all on all tables in schema public to anon, authenticated;
 grant all on all sequences in schema public to anon, authenticated;
 select lock_billing_columns();
-revoke all on photo_check_claims from anon, authenticated;
 
 set role app_user;
 

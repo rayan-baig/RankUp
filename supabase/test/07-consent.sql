@@ -171,8 +171,9 @@ begin
     jsonb_array_length(dump->'children') = 1 and dump->'family'->>'name' = 'Consent Family');
   perform ok('the export records what was consented to',
     jsonb_array_length(dump->'consents') = 1);
-  perform ok('the export references photos rather than inlining them',
-    not (dump->'submissions')::text like '%photo_data%');
+  perform ok('the export holds no photo or photo-check field, because there are none',
+    (dump->'submissions')::text !~ '(photo|ai_verdict|ai_score|ai_report|capture_source)'
+    and (dump->'family')::text !~ 'ai_checks');
 
   perform become('d5555555-5555-5555-5555-555555555555');
   dump := export_family_data();
@@ -237,11 +238,8 @@ begin
   set local role app_user;
 end $$;
 
--- Photos.
---
--- The rule is now blunt: a reviewed photo is destroyed at the moment of the
--- decision. Nothing is retained, so there is no library of photographs of
--- children's bedrooms to lose.
+-- No photos. A submission carries none, so deciding one has none to destroy,
+-- and approving and sending back simply work.
 do $$
 declare v_sub uuid := gen_random_uuid(); v_stale uuid := gen_random_uuid();
 begin
@@ -253,52 +251,25 @@ begin
   insert into quests (id, family_id, kid_id, title, xp) values
     ('d6666666-0000-0000-0000-000000000001', 'd2222222-0000-0000-0000-000000000001',
      'd4444444-0000-0000-0000-000000000001', 'Old chore', 10);
-  insert into submissions (id, family_id, quest_id, kid_id, status, photo_data)
+  insert into submissions (id, family_id, quest_id, kid_id, status)
   values (v_sub, 'd2222222-0000-0000-0000-000000000001', 'd6666666-0000-0000-0000-000000000001',
-          'd4444444-0000-0000-0000-000000000001', 'pending', 'base64photo');
-
-  perform ok('a photo waiting for review is still there',
-    (select photo_data from submissions where id = v_sub) is not null);
+          'd4444444-0000-0000-0000-000000000001', 'pending');
   set local role app_user;
 
-  -- Approving destroys it immediately.
   perform become('d1111111-1111-1111-1111-111111111111');
   perform approve_submission(v_sub, 10, 2, 'nice');
-  perform ok('APPROVING destroys the photo on the spot',
-    (select photo_data from submissions where id = v_sub) is null);
-  perform ok('and records when it went',
-    (select photo_deleted_at from submissions where id = v_sub) is not null);
+  perform ok('approving a submission works with no photo columns at all',
+    (select status from submissions where id = v_sub) = 'approved');
 
-  -- So does sending it back.
   set local role postgres;
-  insert into quests (id, family_id, kid_id, title, xp) values
-    ('d6666666-0000-0000-0000-000000000002', 'd2222222-0000-0000-0000-000000000001',
-     'd4444444-0000-0000-0000-000000000001', 'Another chore', 10);
-  insert into submissions (id, family_id, quest_id, kid_id, status, photo_data)
-  values (v_stale, 'd2222222-0000-0000-0000-000000000001', 'd6666666-0000-0000-0000-000000000002',
-          'd4444444-0000-0000-0000-000000000001', 'pending', 'base64photo');
+  insert into submissions (id, family_id, quest_id, kid_id, status)
+  values (v_stale, 'd2222222-0000-0000-0000-000000000001', 'd6666666-0000-0000-0000-000000000001',
+          'd4444444-0000-0000-0000-000000000001', 'pending');
   set local role app_user;
 
   perform reject_submission(v_stale, 'not quite');
-  perform ok('SENDING BACK destroys the photo too',
-    (select photo_data from submissions where id = v_stale) is null);
-end $$;
-
--- The backstop, for photos nobody ever got round to reviewing.
-do $$
-declare v_forgotten uuid := gen_random_uuid();
-begin
-  set local role postgres;
-  insert into submissions (id, family_id, quest_id, kid_id, status, photo_data, submitted_at)
-  values (v_forgotten, 'd2222222-0000-0000-0000-000000000001',
-          'd6666666-0000-0000-0000-000000000001', 'd4444444-0000-0000-0000-000000000001',
-          'pending', 'forgotten photo', now() - interval '30 days');
-
-  perform ok('a photo nobody ever reviewed is swept up eventually',
-    purge_stale_photos(14) = 1);
-  perform ok('and a recent one waiting for review is left alone',
-    purge_stale_photos(14) = 0);
-  set local role app_user;
+  perform ok('and so does sending one back',
+    (select status from submissions where id = v_stale) = 'rejected');
 end $$;
 
 reset role;

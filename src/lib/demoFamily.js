@@ -83,13 +83,7 @@ export function buildDemoFamily() {
 
   s = run(s, assign(ava.id, packFor('kid')), assign(noah.id, packFor('teen')))
 
-  /*
-   * A fortnight of history.
-   *
-   * Approved chores have had their photos destroyed — the app deletes them the
-   * moment a parent decides — so a demo built this way is honest about what is
-   * on screen rather than showing proof photos that would never still exist.
-   */
+  /* A fortnight of history. */
   const finish = (state, title, kidId, daysAgo) => {
     const quest = state.quests.find((q) => q.title === title && q.kidId === kidId)
     if (!quest) return state
@@ -98,12 +92,8 @@ export function buildDemoFamily() {
       submission: {
         questId: quest.id,
         kidId,
-        photoId: null,
-        hash: null,
-        report: null,
         note: '',
         onTime: true,
-        captureSource: 'none',
       },
     })
     const sub = next.submissions[next.submissions.length - 1]
@@ -136,13 +126,9 @@ export function buildDemoFamily() {
       submission: {
         questId: reading.id,
         kidId: ava.id,
-        photoId: null,
-        hash: null,
-        report: null,
         note: 'Finished the last two chapters.',
         elapsedMs: 1200000,
         onTime: true,
-        captureSource: 'timer',
       },
     })
   }

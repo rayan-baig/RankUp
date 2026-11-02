@@ -4,7 +4,7 @@
 -- Run after schema.sql, retention.sql and crashes.sql.
 --
 -- Three jobs have to be scheduled outside this codebase, and the failure mode
--- for all three is silence: reminders stop arriving, photos stop being deleted,
+-- for all three is silence: reminders stop arriving, old rows stop being deleted,
 -- alliance discounts stop being paid, and nothing anywhere says so. I shipped
 -- exactly that bug — POST-only endpoints scheduled by a GET cron would have
 -- 405'd every run and looked perfectly fine on the dashboard.
@@ -58,7 +58,6 @@ create or replace function health_snapshot()
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_jobs    jsonb;
-  v_backlog int;
   v_crashes int;
   v_unbilled int := 0;
 begin
@@ -85,11 +84,6 @@ begin
          ) as j(job, stale_after)
     left join job_runs r on r.job = j.job;
 
-  -- Photos still held on submissions nobody has decided. Climbing here means
-  -- retention is not running, whatever the job row says.
-  select count(*) into v_backlog from submissions
-   where photo_data is not null and submitted_at < now() - interval '21 days';
-
   select count(*) into v_crashes from crash_reports
    where created_at > now() - interval '24 hours';
   -- Deleted families whose Stripe subscription has still not been confirmed
@@ -110,10 +104,9 @@ begin
     'ok', not exists (
       select 1 from jsonb_each(v_jobs) e
        where e.value->>'state' in ('stale', 'never_run')
-    ) and v_backlog = 0 and v_unbilled = 0,
+    ) and v_unbilled = 0,
     'checked_at', now(),
     'jobs', v_jobs,
-    'stale_photo_backlog', v_backlog,
     'crashes_24h', v_crashes,
     'billing_cancellations_overdue', v_unbilled
   );

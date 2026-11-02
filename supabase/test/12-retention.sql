@@ -21,14 +21,15 @@ insert into quests (id, family_id, kid_id, title) values
   ('3c555555-0000-0000-0000-000000000001', '3c222222-0000-0000-0000-000000000001',
    '3c444444-0000-0000-0000-000000000001', 'Bins');
 
--- An old undecided submission still holding its photo, and a fresh one.
-insert into submissions (id, family_id, quest_id, kid_id, status, submitted_at, photo_data) values
+-- An old undecided submission, and a fresh one. Retention keeps both: a chore
+-- is the family's record, and there is no photo on either to clear.
+insert into submissions (id, family_id, quest_id, kid_id, status, submitted_at) values
   ('3c666666-0000-0000-0000-000000000001', '3c222222-0000-0000-0000-000000000001',
    '3c555555-0000-0000-0000-000000000001', '3c444444-0000-0000-0000-000000000001',
-   'pending', now() - interval '40 days', 'data:image/jpeg;base64,AAAA'),
+   'pending', now() - interval '40 days'),
   ('3c666666-0000-0000-0000-000000000002', '3c222222-0000-0000-0000-000000000001',
    '3c555555-0000-0000-0000-000000000001', '3c444444-0000-0000-0000-000000000001',
-   'pending', now() - interval '1 day', 'data:image/jpeg;base64,BBBB');
+   'pending', now() - interval '1 day');
 
 insert into events (family_id, kid_id, type, created_at) values
   ('3c222222-0000-0000-0000-000000000001', '3c444444-0000-0000-0000-000000000001',
@@ -70,13 +71,10 @@ declare v jsonb;
 begin
   v := run_retention(14, 90, 2);
 
-  perform ok('the forty-day-old photo is cleared', (v->>'photos_cleared')::int = 1);
-  perform ok('and yesterday''s is untouched',
-    (select photo_data is not null from submissions
-      where id = '3c666666-0000-0000-0000-000000000002'));
-  perform ok('the submission itself is kept — only the photo goes',
+  perform ok('no photo count is reported, because there are no photos', not (v ? 'photos_cleared'));
+  perform ok('both submissions are kept, old and new',
     (select count(*) from submissions
-      where id = '3c666666-0000-0000-0000-000000000001') = 1);
+      where id in ('3c666666-0000-0000-0000-000000000001', '3c666666-0000-0000-0000-000000000002')) = 2);
 
   perform ok('the two-hundred-day-old event is gone', (v->>'events_deleted')::int = 1);
   perform ok('and the three-day-old one is still there',
@@ -99,7 +97,7 @@ declare v jsonb;
 begin
   v := run_retention(14, 90, 2);
   perform ok('a second run deletes nothing',
-    (v->>'photos_cleared')::int = 0 and (v->>'events_deleted')::int = 0
+    (v->>'events_deleted')::int = 0
     and (v->>'pairing_codes_deleted')::int = 0);
 end $$;
 

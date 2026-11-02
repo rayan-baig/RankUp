@@ -1,8 +1,8 @@
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import {
   MINIGAMES, CATEGORIES, findGame, featuredGame,
-  MAX_TOKENS, DAILY_COIN_CAP, payout,
+  MAX_TOKENS, DAILY_COIN_CAP, payout, possibleScore,
 } from '../../data/minigames.js'
 import { dayKey } from '../../lib/dates.js'
 import { Screen, Card, Button, SectionTitle, Banner, Stat, EmptyState, Segmented, Loading } from '../../components/ui.jsx'
@@ -97,6 +97,10 @@ export default function KidArcade() {
   const [playing, setPlaying] = useState(null)
   const [result, setResult] = useState(null)
   const [shelf, setShelf] = useState('all')
+  // When the open game started: the server holds a score to what the game
+  // allows in the time played (minigame_possible_score), and so does this.
+  const startedAt = useRef(0)
+  useEffect(() => { if (playing) startedAt.current = Date.now() }, [playing])
   if (!kid) return null
 
   // The demo is a shop window: it should not run out of tokens two games in.
@@ -106,9 +110,11 @@ export default function KidArcade() {
   const capped = earnedToday >= DAILY_COIN_CAP
   const bests = kid.bestScores || {}
 
-  const finish = (score) => {
+  const finish = (claimed) => {
+    const elapsedMs = Date.now() - startedAt.current
+    const score = Math.min(claimed, possibleScore(playing, elapsedMs))
     const coins = payout(score, earnedToday)
-    dispatch({ type: 'FINISH_MINIGAME', kidId: kid.id, game: playing, score, coins })
+    dispatch({ type: 'FINISH_MINIGAME', kidId: kid.id, game: playing, score, coins, elapsedMs })
     setResult({ game: playing, score, coins })
     setPlaying(null)
   }

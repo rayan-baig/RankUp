@@ -227,9 +227,8 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare, sendN
         // it waits out no signal like any other change rather than being lost.
         else if (op.type === 'notice') { if (sendNotice) await sendNotice(op.notice) }
         else if (op.type === 'rpc') {
-          // A photo travels by reference in the outbox and is attached here,
-          // at the moment of sending: a second copy of every proof photo in
-          // the outbox is what filled the storage quota.
+          // A last look at the arguments before they leave (AppContext strips
+          // what an older version queued about a photo).
           const args = prepare ? await prepare(op) : op.args
           const refused = refusal(await transport.rpc(op.fn, args))
           if (refused) {

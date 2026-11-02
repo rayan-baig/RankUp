@@ -1,7 +1,7 @@
 /**
  * Ready-made quest packs so a parent can fill a kid's list in one tap instead of
- * typing eight chores. `doneMeans` matters: it is what the AI photo check and
- * the parent both read when deciding whether a submission counts.
+ * typing eight chores. `doneMeans` matters: it is what the child and the
+ * parent both read when deciding whether a chore counts.
  */
 
 export const CATEGORIES = [

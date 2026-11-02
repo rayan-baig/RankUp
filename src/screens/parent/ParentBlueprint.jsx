@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useApp, useElite, useParentTheme } from '../../state/AppContext.jsx'
-import { lastSevenDays, shortDayName, dayKey } from '../../lib/dates.js'
+import { lastSevenDays, shortDayName } from '../../lib/dates.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
 import { formatXp, levelFromXp, liveStreak } from '../../lib/xp.js'
 import { DailyBars, StackedBars, HorizontalBars, StatTile } from '../../components/charts/Charts.jsx'
@@ -70,11 +70,6 @@ export default function ParentBlueprint({ initialKidId }) {
     const decided = approved.length + rejected.length
     const approvalRate = decided ? Math.round((approved.length / decided) * 100) : null
 
-    const scores = state.submissions
-      .filter((s) => s.kidId === kid.id && s.report && window.has(dayKey(new Date(s.submittedAt))))
-      .map((s) => s.report.score)
-    const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null
-
     const adaptiveCount = approved.filter((e) => e.meta?.adaptive).length
     const activeDays = new Set(approved.map((e) => e.day)).size
 
@@ -84,7 +79,6 @@ export default function ParentBlueprint({ initialKidId }) {
       bySlot,
       byCategory,
       approvalRate,
-      avgScore,
       adaptiveCount,
       activeDays,
       totalXp: xpByDay.reduce((s, d) => s + d.value, 0),
@@ -99,7 +93,7 @@ export default function ParentBlueprint({ initialKidId }) {
       <EliteGate
         perk="blueprint"
         icon="📊"
-        title="Advanced AI Behaviour Blueprints"
+        title="Behaviour Blueprints"
         body="Weekly chart breakdowns tracking your child's focus patterns and chore-completion history, built from what actually happened in the app."
       />
     )
@@ -202,7 +196,7 @@ export default function ParentBlueprint({ initialKidId }) {
             )}
           </Card>
 
-          <Banner tone="info" icon="🤖" title="How this is built">
+          <Banner tone="info" icon="📊" title="How this is built">
             The charts and the read-out are computed from this family's own activity log on this
             device. Nothing is sent anywhere.
           </Banner>

@@ -78,7 +78,6 @@ export default function QuestDetail({ questId }) {
         testScore: quest.testScore ? Math.min(100, Number(score) || 0) : null,
         elapsedMs: quest.timerSeconds ? elapsed : null,
         onTime,
-        captureSource: 'none',
       },
     })
     navigate('/kid/quests')

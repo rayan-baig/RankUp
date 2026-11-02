@@ -3,7 +3,7 @@
  * they did not earn, a lockout can outlast its timer, or a deleted child's
  * photos can survive on the device. Those are the failures worth a browser.
  */
-import { launch, reporter, readState, setUpFamily, asParent, asKid, submitPhotoProof, finish, SHOT_DIR } from './helpers.mjs'
+import { launch, reporter, readState, setUpFamily, asParent, asKid, sendToParent, finish, SHOT_DIR } from './helpers.mjs'
 
 const { browser, page, errors } = await launch()
 const { fails, pass, fail } = reporter()
@@ -17,7 +17,7 @@ await page.waitForTimeout(500)
 await page.locator('button.card').first().click()
 await page.waitForTimeout(400)
 const questUrl = page.url()
-await submitPhotoProof(page)
+await sendToParent(page)
 
 let state = await readState(page)
 const questId = state.submissions[0].questId
@@ -115,7 +115,7 @@ await page.evaluate(() => { window.location.hash = '/kid/quests' })
 await page.waitForTimeout(600)
 await page.locator('button.card').first().click()
 await page.waitForTimeout(400)
-await submitPhotoProof(page)
+await sendToParent(page)
 await asParent(page)
 const before = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('rankup.photos.v1') || '{}')).length)
 await page.evaluate(() => {

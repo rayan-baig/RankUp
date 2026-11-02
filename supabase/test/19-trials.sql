@@ -87,9 +87,7 @@ begin
 
   perform become('3a111111-1111-1111-1111-111111111111');
 
-  -- Starter: one child, no AI check, no guild.
-  perform ok('on Starter the AI check is not included',
-    (claim_photo_check()->>'reason') = 'not_on_this_plan');
+  -- Starter: one child, no guild.
   res := create_guild(kid, 'Trial Guild');
   perform ok('on Starter there is no guild either',
     (res->>'ok')::boolean = false and res->>'reason' = 'plan_has_no_guilds');
@@ -99,8 +97,6 @@ begin
   set local role app_user;
   perform become('3a111111-1111-1111-1111-111111111111');
 
-  perform ok('the trial turns the AI check on for real',
-    (claim_photo_check()->>'ok')::boolean = true);
   res := create_guild(kid, 'Trial Guild');
   perform ok('and the guild opens, at the Elite size',
     (res->>'ok')::boolean = true);

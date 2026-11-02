@@ -34,6 +34,7 @@ export const CATEGORIES = [
 export const MINIGAMES = [
   {
     id: 'sports',
+    minMs: 5000,
     name: 'SportsMania',
     icon: '🏆',
     category: 'sports',
@@ -43,6 +44,7 @@ export const MINIGAMES = [
   },
   {
     id: 'tennis',
+    minMs: 30000,
     name: 'Tennis Tour',
     icon: '🎾',
     category: 'sports',
@@ -53,6 +55,7 @@ export const MINIGAMES = [
   },
   {
     id: 'turbo',
+    minMs: 70000,
     name: 'Turbo Ball',
     icon: '🚗',
     category: 'sports',
@@ -62,6 +65,7 @@ export const MINIGAMES = [
   },
   {
     id: 'blocks',
+    minMs: 8000,
     name: 'Block Drop',
     icon: '🟦',
     category: 'puzzle',
@@ -71,6 +75,7 @@ export const MINIGAMES = [
   },
   {
     id: 'sweets',
+    minMs: 10000,
     name: 'Sweet Swap',
     icon: '🍬',
     category: 'puzzle',
@@ -80,6 +85,7 @@ export const MINIGAMES = [
   },
   {
     id: 'impostor',
+    minMs: 3000,
     name: 'Find the Impostor',
     icon: '🕵️',
     category: 'brain',
@@ -89,6 +95,7 @@ export const MINIGAMES = [
   },
   {
     id: 'track',
+    minMs: 10000,
     name: 'Trackstar',
     icon: '🛹',
     category: 'arcade',
@@ -98,6 +105,7 @@ export const MINIGAMES = [
   },
   {
     id: 'wildfire',
+    minMs: 5000,
     name: 'Wildfire',
     icon: '🔥',
     category: 'cards',
@@ -107,6 +115,7 @@ export const MINIGAMES = [
   },
   {
     id: 'royal',
+    minMs: 5000,
     name: 'Royal Draw',
     icon: '♠️',
     category: 'cards',
@@ -116,6 +125,7 @@ export const MINIGAMES = [
   },
   {
     id: 'holdem',
+    minMs: 8000,
     name: "Texas Hold'em",
     icon: '🃏',
     category: 'cards',
@@ -125,6 +135,7 @@ export const MINIGAMES = [
   },
   {
     id: 'blackjack',
+    minMs: 8000,
     name: 'Blackjack',
     icon: '🂡',
     category: 'cards',
@@ -134,6 +145,7 @@ export const MINIGAMES = [
   },
   {
     id: 'gofish',
+    minMs: 5000,
     name: 'Go Fish',
     icon: '🐟',
     category: 'cards',
@@ -143,6 +155,7 @@ export const MINIGAMES = [
   },
   {
     id: 'snake',
+    minMs: 6000,
     name: 'Snake',
     icon: '🐍',
     category: 'arcade',
@@ -152,6 +165,7 @@ export const MINIGAMES = [
   },
   {
     id: 'merge',
+    minMs: 60000,
     name: '2048',
     icon: '🔢',
     category: 'puzzle',
@@ -161,6 +175,7 @@ export const MINIGAMES = [
   },
   {
     id: 'bricks',
+    minMs: 8000,
     name: 'Brick Breaker',
     icon: '🏓',
     category: 'arcade',
@@ -170,6 +185,7 @@ export const MINIGAMES = [
   },
   {
     id: 'sweeper',
+    minMs: 2000,
     name: 'Minesweeper',
     icon: '💣',
     category: 'brain',
@@ -179,6 +195,7 @@ export const MINIGAMES = [
   },
   {
     id: 'sky',
+    minMs: 15000,
     name: 'Sky Hop',
     icon: '🚀',
     category: 'arcade',
@@ -188,6 +205,7 @@ export const MINIGAMES = [
   },
   {
     id: 'four',
+    minMs: 3000,
     name: 'Four in a Row',
     icon: '🔴',
     category: 'versus',
@@ -197,6 +215,7 @@ export const MINIGAMES = [
   },
   {
     id: 'slide',
+    minMs: 8000,
     name: 'Slide Puzzle',
     icon: '🧩',
     category: 'puzzle',
@@ -206,6 +225,7 @@ export const MINIGAMES = [
   },
   {
     id: 'chain',
+    minMs: 8000,
     name: 'Colour Chain',
     icon: '🟢',
     category: 'brain',
@@ -215,6 +235,7 @@ export const MINIGAMES = [
   },
   {
     id: 'lights',
+    minMs: 1500,
     name: 'Lights Out',
     icon: '💡',
     category: 'puzzle',
@@ -224,6 +245,7 @@ export const MINIGAMES = [
   },
   {
     id: 'catch',
+    minMs: 28000,
     name: 'Star Catcher',
     icon: '⭐',
     category: 'arcade',
@@ -233,6 +255,7 @@ export const MINIGAMES = [
   },
   {
     id: 'stack',
+    minMs: 3000,
     name: 'Stacker',
     icon: '🧱',
     category: 'arcade',
@@ -242,6 +265,7 @@ export const MINIGAMES = [
   },
   {
     id: 'memory',
+    minMs: 4000,
     name: 'Memory Match',
     icon: '🃏',
     category: 'brain',
@@ -279,6 +303,21 @@ export function findGame(id) {
 export function coinsForScore(score) {
   const s = Math.max(0, Math.min(100, Math.round(score || 0)))
   return Math.max(1, Math.min(5, Math.round(s / 20)))
+}
+
+/**
+ * The best score a round of this game could have reached in `elapsedMs`.
+ *
+ * `minMs` on each game is the quickest a perfect round can be played; a score
+ * is possible only in proportion to the time played. Mirrored exactly in
+ * minigame_possible_score() in supabase/sync.sql, which is the authority —
+ * tests/gameids.mjs fails if the floors disagree. No time at all allows 50.
+ */
+export function possibleScore(gameId, elapsedMs) {
+  const game = findGame(gameId)
+  if (!game?.minMs) return 0
+  if (elapsedMs == null || !Number.isFinite(elapsedMs)) return 50
+  return Math.min(100, Math.floor((100 * Math.max(0, elapsedMs)) / game.minMs))
 }
 
 /** Clamped to whatever is left of today's cap. */

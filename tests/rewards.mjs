@@ -8,7 +8,7 @@
  * spent their coins on "Pick Friday's film" waited for a parent who had no way
  * of knowing.
  */
-import { launch, reporter, readState, setUpFamily, asParent, asKid, submitPhotoProof, finish } from './helpers.mjs'
+import { launch, reporter, readState, setUpFamily, asParent, asKid, sendToParent, finish } from './helpers.mjs'
 
 const { browser, page, errors } = await launch()
 const { fails, pass, fail } = reporter()
@@ -40,7 +40,7 @@ await page.evaluate(() => { window.location.hash = '/kid/quests' })
 await page.waitForTimeout(500)
 await page.locator('button.card').first().click()
 await page.waitForTimeout(400)
-await submitPhotoProof(page)
+await sendToParent(page)
 await asParent(page)
 await page.evaluate(() => { window.location.hash = '/parent/approvals' })
 await page.waitForTimeout(600)

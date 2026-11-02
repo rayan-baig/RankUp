@@ -36,6 +36,7 @@ function deviceSuffix() {
 export const DEVICE_NAME = deviceSuffix().replace(/^\./, '') || null
 
 const KEY = `rankup.state.v1${deviceSuffix()}`
+// Where an older version kept proof photos. Only ever deleted now.
 const PHOTO_KEY = `rankup.photos.v1${deviceSuffix()}`
 
 export function loadState() {
@@ -53,7 +54,7 @@ export function saveState(state) {
     localStorage.setItem(KEY, JSON.stringify(state))
     return true
   } catch (err) {
-    // Most likely the 5MB localStorage quota, usually from stored photos.
+    // Most likely the 5MB localStorage quota.
     console.warn('[RankUp] Could not save data:', err)
     return false
   }
@@ -115,103 +116,25 @@ export function wipeDevice() {
 }
 
 /**
- * Photos are kept in a separate bucket so the main state object stays small and
- * fast to serialise. In the Supabase version these become Storage objects and
- * the state only holds their URLs.
- */
-function readPhotos() {
-  try {
-    return JSON.parse(localStorage.getItem(PHOTO_KEY) || '{}')
-  } catch {
-    return {}
-  }
-}
-
-export function putPhoto(id, dataUrl) {
-  const photos = readPhotos()
-  photos[id] = dataUrl
-  try {
-    localStorage.setItem(PHOTO_KEY, JSON.stringify(photos))
-  } catch {
-    // Out of space: drop the oldest half and retry once.
-    const keys = Object.keys(photos)
-    keys.slice(0, Math.ceil(keys.length / 2)).forEach((k) => delete photos[k])
-    photos[id] = dataUrl
-    try {
-      localStorage.setItem(PHOTO_KEY, JSON.stringify(photos))
-    } catch {
-      console.warn('[RankUp] Photo storage full; this photo was not saved.')
-      return false
-    }
-  }
-  return true
-}
-
-export function getPhoto(id) {
-  if (!id) return null
-  return readPhotos()[id] || null
-}
-
-export function deletePhoto(id) {
-  const photos = readPhotos()
-  delete photos[id]
-  localStorage.setItem(PHOTO_KEY, JSON.stringify(photos))
-}
-
-/**
- * Delete any stored photo that no submission points at any more.
+ * Delete the photos an older version of RankUp kept on this device.
  *
- * Deleting a kid or a quest removes their submissions, which used to leave the
- * photos behind forever — invisible, taking up the storage budget, and (the part
- * that actually matters) keeping pictures of a child's home on the device after
- * the parent thought they had deleted them.
- *
- * Called after every save, so it self-heals no matter which path removed the
- * submission. Returns the number of photos removed.
+ * RankUp takes no photos now, and nothing reads this bucket. A phone that ran
+ * an older version may still hold proof pictures of a child's room in it, so
+ * it is removed whole the first time this version starts. Returns whether
+ * there was anything to remove.
  */
-export function purgeOrphanPhotos(state) {
-  const photos = readPhotos()
-  const ids = Object.keys(photos)
-  if (!ids.length) return 0
-
-  const referenced = new Set(
-    (state.submissions || []).map((s) => s.photoId).filter(Boolean),
-  )
-
-  /*
-   * A photo that has arrived but not yet been claimed is not an orphan.
-   *
-   * A picture from the child's phone travels inside the submission row as
-   * `photoData`. The provider writes it to this store and then dispatches
-   * ATTACH_SYNCED_PHOTOS to set `photoId` — two steps, and this function runs
-   * on a timer that can land between them. It would see a photo in the store
-   * that nothing points at yet and delete it, and a moment later the submission
-   * would be pointing at a picture that no longer existed. The parent opens the
-   * review screen to approve a chore and there is no photo to look at.
-   *
-   * Only photos whose submission is still carrying its data are spared, which
-   * is why approving still deletes: approval clears photoData and photoId
-   * together, and the very next sweep takes the image with it.
-   */
-  const awaitingAttach = new Set(
-    (state.submissions || []).filter((s) => s.photoData).map((s) => `photo_${s.id}`),
-  )
-
-  const orphans = ids.filter((id) => !referenced.has(id) && !awaitingAttach.has(id))
-  if (!orphans.length) return 0
-
-  orphans.forEach((id) => delete photos[id])
+export function dropOldPhotos() {
   try {
-    localStorage.setItem(PHOTO_KEY, JSON.stringify(photos))
-  } catch (err) {
-    console.warn('[RankUp] Could not purge old photos:', err)
-    return 0
+    if (localStorage.getItem(PHOTO_KEY) == null) return false
+    localStorage.removeItem(PHOTO_KEY)
+    return true
+  } catch {
+    return false
   }
-  return orphans.length
 }
 
 export function storageUsageBytes() {
   let total = 0
-  for (const k of [KEY, PHOTO_KEY]) total += (localStorage.getItem(k) || '').length * 2
+  total += (localStorage.getItem(KEY) || '').length * 2
   return total
 }

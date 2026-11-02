@@ -18,9 +18,8 @@ const fails = []
 const pass = n => console.log('  PASS', n)
 const fail = (n,d) => { fails.push(n); console.log('  FAIL', n, '—', d) }
 
-const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--use-fake-ui-for-media-stream','--use-fake-device-for-media-stream'] })
-const ctx = await b.newContext({ viewport:{width:390,height:844}, deviceScaleFactor:2, permissions:['camera'] })
+const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined })
+const ctx = await b.newContext({ viewport:{width:390,height:844}, deviceScaleFactor:2 })
 const errors = []
 const track = (p, tag) => {
   p.on('pageerror', e => errors.push(`${tag}: ${e.message}`))

@@ -23,6 +23,14 @@ export const kids = {
     id: row.id,
     name: row.name,
     themeId: row.theme_id,
+    /*
+     * When the server saw this theme chosen. The dragon fight starts no
+     * earlier than this, so every phone has to use the same moment: the
+     * server's, null included (the fight then starts at the chore that took
+     * the child to the dragon). Only a server too old to send the column
+     * leaves this phone's own.
+     */
+    themeChosenAt: row.theme_chosen_at !== undefined ? ms(row.theme_chosen_at) : existing.themeChosenAt ?? null,
     avatarHue: row.avatar_hue ?? existing.avatarHue ?? 200,
     xp: row.xp,
     coins: row.coins,
@@ -168,30 +176,10 @@ export const submissions = {
     id: row.id,
     questId: row.quest_id,
     kidId: row.kid_id,
-    photoId: existing.photoId || null,
-    /*
-     * The image itself no longer travels in the snapshot — it was 96% of the
-     * payload, delivered to every device including the one that took it. What
-     * arrives is a flag; AppContext fetches the picture once, only on a device
-     * that is going to draw it. See submission_photo in supabase/sync.sql.
-     *
-     * `photo_data` is still read because the submitting device's own row still
-     * carries it for the moment between capture and the photo store.
-     */
-    hasPhoto: row.has_photo ?? Boolean(row.photo_data),
-    photoData: row.photo_data || null,
-    // When the photo was destroyed, and why it is gone. Without this the review
-    // screen cannot tell a purged photo from a quest that never wanted one, and
-    // tells the parent their child submitted no proof.
-    photoDeletedAt: ms(row.photo_deleted_at),
-    photoUnavailable: existing.photoUnavailable ?? false,
-    hash: row.photo_hash || null,
-    captureSource: row.capture_source || 'none',
     note: row.note || '',
     testScore: row.test_score,
     elapsedMs: row.elapsed_ms,
     onTime: row.on_time,
-    report: row.ai_report || existing.report || null,
     status: row.status,
     decidedAt: ms(row.decided_at),
     parentNote: row.parent_note || '',
@@ -204,21 +192,15 @@ export const submissions = {
     rev: row.rev,
   }),
 
-  toRow: (s, familyId, photoData) => ({
+  toRow: (s, familyId) => ({
     id: s.id,
     family_id: familyId,
     quest_id: s.questId,
     kid_id: s.kidId,
-    photo_hash: s.hash || null,
-    photo_data: photoData ?? s.photoData ?? null,
-    capture_source: s.captureSource || 'none',
     note: s.note || '',
     test_score: typeof s.testScore === 'number' ? s.testScore : null,
     elapsed_ms: s.elapsedMs ?? null,
     on_time: s.onTime !== false,
-    ai_verdict: s.report?.verdict || null,
-    ai_score: s.report?.score ?? null,
-    ai_report: s.report || null,
     status: s.status || 'pending',
     parent_note: s.parentNote || '',
     submitted_at: iso(s.submittedAt),

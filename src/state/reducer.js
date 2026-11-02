@@ -3,7 +3,7 @@ import { dayKey, daysBetween, deviceZone } from '../lib/dates.js'
 import { submissionReward, levelFromXp, liveStreak } from '../lib/xp.js'
 import { createInitialState, TIERS, makeKid } from './initialState.js'
 import { findSkin, isMarketOpen, ticketCost } from '../data/marketSkins.js'
-import { DAILY_COIN_CAP, MAX_TOKENS } from '../data/minigames.js'
+import { DAILY_COIN_CAP, MAX_TOKENS, possibleScore, coinsForScore } from '../data/minigames.js'
 import { ENTITIES, familyGoals } from '../lib/sync/mappers.js'
 import { questsDueToReturn, dayOf } from '../lib/recurrence.js'
 import { STICKER_MAP } from '../data/stickers.js'
@@ -221,7 +221,7 @@ export function reducer(state, action) {
      *     device's own copy is a guess that may be behind.
      *   - Everything else merges field by field onto whatever is already here,
      *     which preserves the local-only bits the server does not store (a
-     *     kid's best times, a cached photo, an AI report's detail).
+     *     kid's best times).
      *   - Rows the server reports as deleted are removed.
      *
      * There is deliberately no "last write wins on the whole row": that is how
@@ -323,22 +323,6 @@ export function reducer(state, action) {
       }
 
       return { ...next, lastSyncedAt: Date.now() }
-    }
-
-    /**
-     * A photo taken on a kid's phone travels inside the submission row and
-     * arrives here as raw data. Once the device has written it to its own photo
-     * store it is addressed by id like any other, and the copy in state is
-     * dropped so the same image is not held twice.
-     */
-    case 'ATTACH_SYNCED_PHOTOS': {
-      const byId = new Map(action.photos.map((p) => [p.submissionId, p.photoId]))
-      return {
-        ...state,
-        submissions: (state.submissions || []).map((s) =>
-          byId.has(s.id) ? { ...s, photoId: byId.get(s.id), photoData: null } : s,
-        ),
-      }
     }
 
     case 'RESET':
@@ -698,8 +682,12 @@ export function reducer(state, action) {
       const today = dayKey()
       // A day later than today (a zone change) is still today's tally.
       const earned = kid.gameDay && kid.gameDay >= today ? kid.gameCoinsToday || 0 : 0
-      const coins = Math.max(0, Math.min(action.coins || 0, DAILY_COIN_CAP - earned))
-      const score = Math.max(0, Math.min(100, Math.round(action.score || 0)))
+      // Held to what the game allows in the time played, as the server does.
+      const timed = typeof action.elapsedMs === 'number' && Number.isFinite(action.elapsedMs)
+      const elapsedMs = timed ? Math.max(0, Math.min(2 ** 31 - 1, Math.round(action.elapsedMs))) : null
+      const claimed = Math.max(0, Math.min(100, Math.round(action.score || 0)))
+      const score = timed ? Math.min(claimed, possibleScore(action.game, elapsedMs)) : claimed
+      const coins = Math.max(0, Math.min(action.coins || 0, coinsForScore(score), DAILY_COIN_CAP - earned))
       const next = mapKid(state, kid.id, (k) => ({
         ...k,
         playTokens: unlimited ? k.playTokens : k.playTokens - 1,
@@ -710,6 +698,7 @@ export function reducer(state, action) {
       }))
       return logEvent(queueRpc(next, 'play_minigame', {
         p_kid_id: kid.id, p_game: action.game, p_score: score, p_tz: deviceZone(),
+        ...(timed ? { p_elapsed_ms: elapsedMs } : {}),
       }), { type: 'minigame_played', kidId: kid.id, meta: { game: action.game, score, coins } })
     }
 
@@ -805,7 +794,7 @@ export function reducer(state, action) {
 
     case 'SUBMIT_QUEST': {
       // One pending submission per quest, ever. Without this a kid can open an
-      // already-submitted quest, send a second photo, and have a parent approve
+      // already-submitted quest, send it again, and have a parent approve
       // both — awarding the XP twice for one chore.
       const alreadyPending = state.submissions.some(
         (s) => s.questId === action.submission.questId && s.status === 'pending',
@@ -814,9 +803,13 @@ export function reducer(state, action) {
       if (alreadyPending || !quest || quest.status === 'approved') return state
 
       // No photo, ever: RankUp does not take or keep pictures. A parent who
-      // wants proof gets it from the child's own camera app, by message.
-      const { photoData: _ignored, ...fields } = action.submission
-      void _ignored
+      // wants proof gets it from the child's own camera app, by message. Only
+      // what a submission is made of is kept from what the screen sent.
+      const fields = Object.fromEntries(
+        ['questId', 'kidId', 'note', 'testScore', 'elapsedMs', 'onTime']
+          .filter((key) => action.submission[key] !== undefined)
+          .map((key) => [key, action.submission[key]]),
+      )
       // A score is a percentage: 999 typed by mistake paid the top bonus here
       // and was refused by the server, bouncing the chore.
       if (typeof fields.testScore === 'number') {
@@ -838,16 +831,10 @@ export function reducer(state, action) {
         p_quest_id: submission.questId,
         p_kid_id: submission.kidId,
         p_payload: {
-          photo_data: null,
-          photo_hash: null,
-          capture_source: submission.captureSource || 'none',
           note: submission.note || '',
           test_score: submission.testScore ?? null,
           elapsed_ms: submission.elapsedMs ?? null,
           on_time: submission.onTime !== false,
-          ai_verdict: submission.report?.verdict || null,
-          ai_score: submission.report?.score ?? null,
-          ai_report: submission.report || null,
         },
       })
       const questForNotice = state.quests.find((q) => q.id === submission.questId)
@@ -864,11 +851,7 @@ export function reducer(state, action) {
       return logEvent(notified, {
         type: 'quest_submitted',
         kidId: submission.kidId,
-        meta: {
-          questId: submission.questId,
-          verdict: submission.report?.verdict || null,
-          score: submission.report?.score ?? null,
-        },
+        meta: { questId: submission.questId },
       })
     }
 
@@ -901,11 +884,6 @@ export function reducer(state, action) {
                 parentNote: action.note || '',
                 sticker: STICKER_MAP[action.sticker] ? action.sticker : null,
                 awarded: { xp, coins, lines },
-                // Dropping photoId is what actually deletes the image: the
-                // provider's purge sweeps any photo no submission points at.
-                photoId: null,
-                photoData: null,
-                photoDeletedAt: Date.now(),
               }
             : s,
         ),
@@ -977,32 +955,6 @@ export function reducer(state, action) {
         args: [quest.title, xp],
       })
 
-      /*
-       * The parent disagreed with the check.
-       *
-       * Synthetic images can show the rules are not obviously wrong; only
-       * real families can show how often they are wrong in practice, and
-       * nothing in the app was recording it. A parent who looks at a flagged
-       * photo and approves it anyway has just told us, for free and with no
-       * survey, that the check got this one wrong.
-       *
-       * Recorded as an ordinary event, so it stays on the device and in the
-       * family's own history like everything else here. What it is for is
-       * tuning a threshold against reality instead of against six pictures
-       * drawn in a test.
-       */
-      if (submission.report?.flags?.length) {
-        next = logEvent(next, {
-          type: 'ai_overruled',
-          kidId: kid.id,
-          meta: {
-            questId: quest.id,
-            score: submission.report.score,
-            verdict: submission.report.verdict,
-            flags: submission.report.flags.map((f) => f.id),
-          },
-        })
-      }
 
       // The approval spent a streak freeze to cover yesterday; see bumpStreak.
       const spent = (kid.streak.freezeTokens || 0) - (next.kids.find((k) => k.id === kid.id)?.streak.freezeTokens || 0)
@@ -1033,9 +985,6 @@ export function reducer(state, action) {
                 status: 'rejected',
                 decidedAt: Date.now(),
                 parentNote: action.note || '',
-                photoId: null,
-                photoData: null,
-                photoDeletedAt: Date.now(),
               }
             : s,
         ),

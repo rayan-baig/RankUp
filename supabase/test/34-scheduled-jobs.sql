@@ -58,11 +58,12 @@ insert into quests (id, family_id, kid_id, title) values
 
 -- One of each thing the job may delete, old enough to go, and one just young
 -- enough to stay.
-insert into submissions (id, family_id, quest_id, kid_id, status, submitted_at, photo_data) values
+-- Submissions are never deleted by retention, old or new.
+insert into submissions (id, family_id, quest_id, kid_id, status, submitted_at) values
   ('34a00000-0000-4000-8000-0000000000d1', '34a00000-0000-4000-8000-00000000000f', '34a00000-0000-4000-8000-0000000000e1',
-   '34a00000-0000-4000-8000-00000000000c', 'pending', now() - interval '15 days', 'data:image/jpeg;base64,OLD'),
+   '34a00000-0000-4000-8000-00000000000c', 'pending', now() - interval '400 days'),
   ('34a00000-0000-4000-8000-0000000000d2', '34a00000-0000-4000-8000-00000000000f', '34a00000-0000-4000-8000-0000000000e1',
-   '34a00000-0000-4000-8000-00000000000c', 'pending', now() - interval '13 days', 'data:image/jpeg;base64,NEW');
+   '34a00000-0000-4000-8000-00000000000c', 'pending', now() - interval '13 days');
 insert into events (family_id, kid_id, type, created_at) values
   ('34a00000-0000-4000-8000-00000000000f', '34a00000-0000-4000-8000-00000000000c', 'quest_approved', now() - interval '91 days'),
   ('34a00000-0000-4000-8000-00000000000f', '34a00000-0000-4000-8000-00000000000c', 'quest_approved', now() - interval '89 days');
@@ -85,13 +86,9 @@ insert into billing_cancellations (family_key, stripe_customer_id, stripe_subscr
   ('t34-still-waiting', 'cus_t34c', 'sub_t34c', now() - interval '400 days', null);
 
 /*
- * Every table, fingerprinted without the rows the job may delete (and, for
- * submissions, without the photo column it may clear: an older version kept
- * photos, RankUp keeps none). Generated from the catalogue, so a table added
- * later is covered too. Run before and after; they must match exactly.
- *
- * The sync revision of a submission is left out too: clearing a photo bumps
- * it, and that is checked on its own.
+ * Every table, fingerprinted without the rows the job may delete. Generated
+ * from the catalogue, so a table added later is covered too. Run before and
+ * after; they must match exactly, column for column (sync revisions too).
  *
  * What the job may delete is exactly the list in docs/LAUNCH.md ("Retention
  * keeps the database small"), with the limits api/run-retention.js passes by
@@ -106,7 +103,7 @@ begin
     select string_agg(format('x.%I', attname), ', ' order by attnum) into v_cols
       from pg_attribute
      where attrelid = t.rel and attnum > 0 and not attisdropped
-       and not (t.relname = 'submissions' and attname in ('photo_data', 'photo_deleted_at', 'rev'));
+       ;
     execute format('select md5(coalesce(string_agg(r::text, ''|'' order by r::text), '''')) from (select %s from %s x where %s) r',
                    v_cols, t.rel, coalesce('not (' || (p_goes ->> t.relname) || ')', 'true')) into v_hash;
     v_out := v_out || jsonb_build_object(t.relname, v_hash);
@@ -130,7 +127,6 @@ declare
   v_changed text[] := '{}';
   v_left text[] := '{}';
   v_vacuous text[] := '{}';
-  v_photos_before jsonb;
 begin
   -- Each category has something to delete, or this proves nothing.
   for k in select jsonb_object_keys(v_goes) loop
@@ -141,13 +137,6 @@ begin
              array_to_string(v_vacuous, ', '));
 
   v_before := t34_kept(v_goes);
-  -- Clearing a photo bumps that submission's sync revision (so phones hear of
-  -- it); no other submission's may move.
-  create temp table t34_revs on commit drop as
-    select id, rev, (photo_data is not null and submitted_at < now() - interval '14 days') as purged from submissions;
-  select jsonb_object_agg(id, photo_data) into v_photos_before
-    from submissions where photo_data is not null and submitted_at >= now() - interval '14 days';
-
   perform run_retention(14, 90, 2);
 
   v_after := t34_kept(v_goes);
@@ -164,13 +153,8 @@ begin
   perform ok('and deletes everything in each category that is past its limit',
              cardinality(v_left) = 0, 'still there: ' || array_to_string(v_left, ', '));
 
-  perform ok('no submission but those whose photo was cleared has changed',
-    not exists (select 1 from t34_revs r join submissions s using (id) where s.rev <> r.rev and not r.purged));
-  perform ok('an old photo left by an older version is cleared, the submission kept',
-    (select photo_data is null from submissions where id = '34a00000-0000-4000-8000-0000000000d1'));
-  perform ok('and one younger than the limit is not',
-    (select jsonb_object_agg(id, photo_data) from submissions
-      where photo_data is not null and submitted_at >= now() - interval '14 days') = v_photos_before);
+  perform ok('a submission four hundred days old is kept: it is the family''s record',
+    exists (select 1 from submissions where id = '34a00000-0000-4000-8000-0000000000d1'));
   perform ok('a Stripe cancellation still waiting is kept however old it is',
     exists (select 1 from billing_cancellations where family_key = 't34-still-waiting'));
 end $$;

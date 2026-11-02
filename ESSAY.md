@@ -305,9 +305,10 @@ If you work on this project, treat that rule as fixed. Do not make the checker
 auto-reject, however confident it becomes. If a future version is ninety-nine
 per cent accurate, the one per cent is a child in tears.
 
-The checks are also rationed per family and require a signed-in caller, with a
-`refund_photo_check` function that returns the quota when a call fails — because
-a failed call that still consumed the allowance is a bug the user pays for.
+The checks were also rationed per family and required a signed-in caller, with a
+function that returned the quota when a call failed — because a failed call that
+still consumed the allowance is a bug the user pays for. (All of it, the photo
+check included, has since been removed: RankUp takes no photos.)
 
 ## Approving
 

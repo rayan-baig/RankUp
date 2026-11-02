@@ -159,9 +159,9 @@ exactly these, and nothing else:
 | Pairing guess counts (the rate limit) | 2 days (the same setting) |
 | Retry receipts (what stops a resent purchase charging twice) | 30 days |
 | The record of a deleted family's Stripe cancellation, once Stripe confirmed it | 30 days (7 if there was nothing to cancel) |
-| A photo left on an undecided chore by an older version of the app (the chore itself stays) | 14 days (`RETENTION_PHOTO_DAYS`) |
 
-RankUp keeps no photos; the last line only clears ones an older version left.
+RankUp keeps no photos, so there are none to clear: the columns an older
+version kept them in are dropped when you re-run the SQL files.
 `supabase/test/34-scheduled-jobs.sql` checks that the job deletes all of
 these and changes not one other row in any table.
 

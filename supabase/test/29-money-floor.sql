@@ -36,7 +36,6 @@ grant usage on schema public to anon, authenticated;
 grant all on all tables in schema public to anon, authenticated;
 grant all on all sequences in schema public to anon, authenticated;
 select lock_billing_columns();
-revoke all on photo_check_claims from anon, authenticated;
 
 create or replace function pg_temp.coins() returns int language sql as $$
   select coins from kids where id = '80444444-0000-0000-0000-0000000000a1' $$;

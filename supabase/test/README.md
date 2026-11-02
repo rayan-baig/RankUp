@@ -51,6 +51,9 @@ reruns, what a school can see, and guild consent, report, remove and block.
 `36-hot-queries.sql` — the sync pull and the per-family and per-child
 queries, EXPLAINed on a generated large family, use their indexes.
 
+`37-games.sql` — the moment a child chose their theme (where the dragon fight
+starts) is stamped by the database alone and sent to every phone.
+
 `backup-drill.sh` — takes a copy as docs/BACKUPS.md says, restores it, runs
 the SQL files over it, and compares every table and every access rule.
 

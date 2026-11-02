@@ -75,14 +75,34 @@ declare
   v_quiet text;
   v_busy  text;
   v_pending int;
+  v_tz    text;
+  -- Where the week starts and ends, as moments: midnight on the Monday WHERE
+  -- THE FAMILY LIVES. Comparing decided_at with a bare date counted the days
+  -- in the server's zone (UTC), so a chore a family in California accepted at
+  -- 7pm on Sunday landed on Monday, in the wrong week, and a family in Sydney
+  -- had its Monday morning counted as Sunday. The job already picks each
+  -- family's own Sunday evening; the days it counts are now theirs too.
+  v_from  timestamptz;
+  v_to    timestamptz;
+  v_prev  timestamptz;
 begin
+  select coalesce(nullif(timezone, ''), 'UTC') into v_tz from families where id = p_family_id;
+  -- A zone the database does not know is counted in UTC rather than failing
+  -- the whole run for every family after this one.
+  if v_tz is null or not exists (select 1 from pg_timezone_names where name = v_tz) then
+    v_tz := 'UTC';
+  end if;
+  v_from := (p_week_start::timestamp) at time zone v_tz;
+  v_to   := ((p_week_start + 7)::timestamp) at time zone v_tz;
+  v_prev := ((p_week_start - 7)::timestamp) at time zone v_tz;
+
   select count(*) into v_this from submissions
    where family_id = p_family_id and status = 'approved'
-     and decided_at >= p_week_start and decided_at < p_week_start + 7;
+     and decided_at >= v_from and decided_at < v_to;
 
   select count(*) into v_last from submissions
    where family_id = p_family_id and status = 'approved'
-     and decided_at >= p_week_start - 7 and decided_at < p_week_start;
+     and decided_at >= v_prev and decided_at < v_from;
 
   select coalesce(jsonb_agg(jsonb_build_object('name', name, 'done', done) order by done desc, name), '[]'::jsonb)
     into v_kids
@@ -90,18 +110,20 @@ begin
       select k.name,
              (select count(*) from submissions s
                where s.kid_id = k.id and s.status = 'approved'
-                 and s.decided_at >= p_week_start and s.decided_at < p_week_start + 7) as done
+                 and s.decided_at >= v_from and s.decided_at < v_to) as done
         from kids k where k.family_id = p_family_id
     ) t;
 
   -- The busiest and quietest days, named. A parent can act on "Wednesdays are
-  -- where it falls apart" in a way they cannot act on a total.
+  -- where it falls apart" in a way they cannot act on a total. Each day runs
+  -- from the family's own midnight to the next, so a clock change (a 23- or
+  -- 25-hour day) is still one day.
   select to_char(d, 'FMDay') into v_busy from (
     select (p_week_start + i) as d,
            (select count(*) from submissions s
              where s.family_id = p_family_id and s.status = 'approved'
-               and s.decided_at >= (p_week_start + i)
-               and s.decided_at < (p_week_start + i + 1)) as n
+               and s.decided_at >= ((p_week_start + i)::timestamp at time zone v_tz)
+               and s.decided_at < ((p_week_start + i + 1)::timestamp at time zone v_tz)) as n
       from generate_series(0, 6) i
   ) days order by n desc, d asc limit 1;
 
@@ -109,8 +131,8 @@ begin
     select (p_week_start + i) as d,
            (select count(*) from submissions s
              where s.family_id = p_family_id and s.status = 'approved'
-               and s.decided_at >= (p_week_start + i)
-               and s.decided_at < (p_week_start + i + 1)) as n
+               and s.decided_at >= ((p_week_start + i)::timestamp at time zone v_tz)
+               and s.decided_at < ((p_week_start + i + 1)::timestamp at time zone v_tz)) as n
       from generate_series(0, 6) i
   ) days order by n asc, d asc limit 1;
 

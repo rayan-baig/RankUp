@@ -12,15 +12,16 @@
  *                                        says nothing an outsider could use.
  *
  *   GET /api/health  + CRON_SECRET     — deep. Which scheduled jobs have gone
- *                                        quiet, how big the undeleted-photo
- *                                        backlog is, how many crashes today.
+ *                                        quiet, whether a deleted family's
+ *                                        billing is still waiting to be
+ *                                        cancelled, how many crashes today.
  *
  * The split matters: crash counts and job names are operational detail, and a
  * health endpoint that hands them to anybody is a free map of your weak points.
  *
  * "Stale" is the thing this exists to catch. All three jobs are scheduled
  * outside this codebase and all three fail by going silent — no error, no
- * alert, just reminders that stop arriving and photos that stop being deleted.
+ * alert, just reminders that stop arriving and old rows that stop being deleted.
  */
 
 import { makeServiceRpc, secretMatches } from './_shared/job.js'

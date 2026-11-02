@@ -313,7 +313,7 @@ begin
   -- changes what someone has paid for.
   foreach f in array array[
     'usage_counts()', 'operator_schools()', 'verify_school(uuid,boolean)', 'set_school_status(uuid,text)',
-    'unsuspend_school(uuid)', 'run_retention(integer,integer,integer)', 'purge_stale_photos(integer)',
+    'unsuspend_school(uuid)', 'run_retention(integer,integer,integer)',
     'due_reminders(integer)', 'mark_reminder_sent(uuid)', 'due_digests(integer,integer)',
     'mark_digest_sent(uuid,text)', 'family_week_digest(uuid,date)', 'push_targets(uuid,text,uuid)',
     'record_push_failure(text,boolean)', 'claim_push_send(uuid,integer)', 'settle_alliances(date)',

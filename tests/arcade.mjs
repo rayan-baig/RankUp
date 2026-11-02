@@ -4,7 +4,7 @@
  * The rule being proved is the economic one: a token comes from a chore, and
  * grinding games can never out-earn doing them.
  */
-import { launch, reporter, setUpFamily, readState, asKid, asParent, submitPhotoProof, finish, setKidInDatabase, SHOT_DIR } from './helpers.mjs'
+import { launch, reporter, setUpFamily, readState, asKid, asParent, sendToParent, finish, setKidInDatabase, SHOT_DIR } from './helpers.mjs'
 
 const { browser, page, errors } = await launch()
 const { fails, pass, fail } = reporter()
@@ -33,7 +33,7 @@ await page.evaluate(() => { window.location.hash = '/kid/quests' })
 await page.waitForTimeout(500)
 await page.locator('button.card').first().click()
 await page.waitForTimeout(400)
-await submitPhotoProof(page)
+await sendToParent(page)
 await asParent(page)
 await page.evaluate(() => { window.location.hash = '/parent/approvals' })
 await page.waitForTimeout(700)

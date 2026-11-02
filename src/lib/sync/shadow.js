@@ -113,7 +113,7 @@ const KID_WRITABLE = new Set(['notes'])
  * Tables no device ever writes directly, whatever role it is in.
  *
  * A submission is created by submit_quest and a redemption by redeem_reward —
- * both carry the whole row, photo included — because the outcome has to be
+ * both carry the whole row — because the outcome has to be
  * decided by the server rather than by the phone claiming it. Pushing the same
  * row again afterwards can only be an update, which row level security allows
  * to a parent and refuses to a kid; either way it changes nothing. It matters
@@ -177,9 +177,8 @@ function queueKidLook(state, shadow, familyId) {
 
 /**
  * Compare state against the shadow and queue whatever changed.
- * `photoFor` supplies a submission's image, which lives outside the state object.
  */
-export function queueChanges(state, { photoFor, role } = {}) {
+export function queueChanges(state, { role } = {}) {
   if (!state.family?.id) return 0
   const shadow = readShadow()
   const familyId = state.family.id
@@ -196,9 +195,7 @@ export function queueChanges(state, { photoFor, role } = {}) {
     for (const item of rows) {
       const row = stripServerOwned(
         table,
-        table === 'submissions'
-          ? mapper.toRow(item, familyId, photoFor?.(item))
-          : mapper.toRow(item, familyId),
+        mapper.toRow(item, familyId),
       )
       const shadowId = `${table}:${item.id}`
       seen.add(shadowId)
@@ -229,7 +226,7 @@ export function queueChanges(state, { photoFor, role } = {}) {
       // Only remember it as sent if it was actually queued. enqueue returns
       // null when localStorage refused the write, and recording the shadow
       // anyway meant the change was skipped from then on — silently lost to a
-      // full quota, which this app hits routinely because photos live there.
+      // full quota.
       if (!enqueue(op)) continue
       shadow[shadowId] = serialised
       if (op.type === 'upsert') shadow[`?${shadowId}`] = true
@@ -329,7 +326,7 @@ export function pendingRows(ops, state = null) {
  * Rows in `skip` have a change of the device's own still waiting to go; their
  * shadow already describes that change and is left alone.
  */
-export function recordDelivered(state, snapshot, { photoFor, skip = new Set() } = {}) {
+export function recordDelivered(state, snapshot, { skip = new Set() } = {}) {
   if (!state.family?.id || !snapshot) return
   const shadow = readShadow()
   const familyId = state.family.id
@@ -351,9 +348,7 @@ export function recordDelivered(state, snapshot, { photoFor, skip = new Set() } 
       const item = mapper.fromRow(delivered, local.get(delivered.id) || {})
       const row = stripServerOwned(
         table,
-        table === 'submissions'
-          ? mapper.toRow(item, familyId, photoFor?.(item))
-          : mapper.toRow(item, familyId),
+        mapper.toRow(item, familyId),
       )
       shadow[`${table}:${item.id}`] = JSON.stringify(row)
       delete shadow[`?${table}:${item.id}`]   // the server has it
@@ -373,7 +368,7 @@ export function recordDelivered(state, snapshot, { photoFor, skip = new Set() } 
 }
 
 /** After a pull, record what the server now holds so we do not echo it back. */
-export function recordServerState(state, { photoFor, only } = {}) {
+export function recordServerState(state, { only } = {}) {
   if (!state.family?.id) return
   const shadow = readShadow()
   const familyId = state.family.id
@@ -389,9 +384,7 @@ export function recordServerState(state, { photoFor, only } = {}) {
       if (only && !only.has(`${table}:${item.id}`)) continue
       const row = stripServerOwned(
         table,
-        table === 'submissions'
-          ? mapper.toRow(item, familyId, photoFor?.(item))
-          : mapper.toRow(item, familyId),
+        mapper.toRow(item, familyId),
       )
       shadow[`${table}:${item.id}`] = JSON.stringify(row)
       // The look is tracked separately because it is pushed separately. Without

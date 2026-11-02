@@ -27,9 +27,6 @@ create table if not exists families (
   -- Flash Tickets the family has left. Written only by the Stripe webhook and
   -- by buy_market_skin spending one; never by a device.
   flash_tickets   int not null default 0 check (flash_tickets >= 0),
-  -- AI photo checks used this month. Only claim_photo_check() moves these.
-  ai_checks_month date,
-  ai_checks_used  int not null default 0,
   -- Subscription state is written by the Stripe webhook, never by the browser.
   stripe_customer_id      text,
   stripe_subscription_id  text,
@@ -198,12 +195,6 @@ create table if not exists submissions (
   quest_id      uuid not null references quests(id) on delete cascade,
   kid_id        uuid not null references kids(id) on delete cascade,
 
-  -- Path into the `proof-photos` Storage bucket, not the image itself.
-  photo_path      text,
-  photo_hash      text,        -- perceptual fingerprint, for duplicate detection
-  capture_source  text not null default 'live-camera'
-                  check (capture_source in ('live-camera','upload','none')),
-
   note          text not null default '',
   -- A parent's one-tap reaction on approval. A fixed list rather than free
   -- text: a child reads this, so it must not be a field anything can write a
@@ -213,11 +204,6 @@ create table if not exists submissions (
   test_score    int check (test_score between 0 and 100),
   elapsed_ms    int,
   on_time       boolean not null default true,
-
-  -- The advisory photo report. Advisory only: it never decides anything.
-  ai_verdict    text check (ai_verdict in ('looks_good','needs_review','suspicious')),
-  ai_score      int check (ai_score between 0 and 100),
-  ai_report     jsonb,
 
   status        text not null default 'pending'
                 check (status in ('pending','approved','rejected')),
@@ -229,6 +215,25 @@ create table if not exists submissions (
 
   submitted_at  timestamptz not null default now()
 );
+
+/*
+ * The photo and photo-check columns, from when RankUp took photos. It takes
+ * none now, and nothing reads or writes these. Every phone sends a submission
+ * through submit_quest, whose payload is a JSON object: an older phone that
+ * still puts a photo or a capture source in it has those keys ignored, so
+ * dropping the columns breaks nobody. No device writes a submission row
+ * directly (FUNCTION_OWNED in src/lib/sync/shadow.js).
+ *
+ * Safe to re-run: `if exists` does nothing once they are gone.
+ */
+alter table submissions drop column if exists photo_data;
+alter table submissions drop column if exists photo_deleted_at;
+alter table submissions drop column if exists photo_path;
+alter table submissions drop column if exists photo_hash;
+alter table submissions drop column if exists capture_source;
+alter table submissions drop column if exists ai_verdict;
+alter table submissions drop column if exists ai_score;
+alter table submissions drop column if exists ai_report;
 
 /*
  * Measured on a family with 60,000 chores among 3,000 other families
@@ -1003,10 +1008,6 @@ begin
   v_xp    := coalesce((v_award->>'xp')::int, 0);
   v_coins := coalesce((v_award->>'coins')::int, 0);
 
-  -- The photo is destroyed at the moment of the decision, not kept and tidied
-  -- up later. A parent has just looked at it; that was its whole job. Holding a
-  -- library of photographs of children's bedrooms is the one thing here that
-  -- turns a breach into a catastrophe, so we simply do not hold one.
   update submissions
      set status = 'approved',
          decided_at = now(),
@@ -1019,9 +1020,7 @@ begin
                      ('proud','spotless','fast','effort','kind','above','funny','thanks')
                    then p_sticker else null end,
          awarded_xp = v_xp,
-         awarded_coins = v_coins,
-         photo_data = null,
-         photo_deleted_at = now()
+         awarded_coins = v_coins
    where id = p_submission_id;
 
   update quests set status = 'approved', completed_at = now() where id = v_sub.quest_id;
@@ -1077,18 +1076,6 @@ begin
   perform qualify_referral(v_sub.family_id);
 end;
 $$;
-
--- ---------------------------------------------------------------------------
--- Storage
---
--- Create a bucket named `proof-photos` in the Supabase dashboard and leave it
--- PRIVATE. Serve images through signed URLs; a public bucket would put photos
--- of children's bedrooms on the open internet.
---
--- Also decide a retention policy before launch. Deleting a photo once the
--- parent has reviewed it removes most of the risk in this whole system.
--- See docs/LEGAL.md.
--- ---------------------------------------------------------------------------
 
 -- ---------------------------------------------------------------------------
 -- Device pairing
@@ -1495,18 +1482,8 @@ begin
     new.decided_at    := old.decided_at;
     new.awarded_xp    := old.awarded_xp;
     new.awarded_coins := old.awarded_coins;
-    -- What the child sent, and the photo and photo-check columns RankUp no
-    -- longer fills. A parent's browser could otherwise store anything at all
-    -- in them, a picture included, in an app that keeps none.
+    -- What the child sent.
     new.note             := old.note;
-    new.capture_source   := old.capture_source;
-    new.photo_data       := old.photo_data;
-    new.photo_path       := old.photo_path;
-    new.photo_hash       := old.photo_hash;
-    new.photo_deleted_at := old.photo_deleted_at;
-    new.ai_verdict       := old.ai_verdict;
-    new.ai_score         := old.ai_score;
-    new.ai_report        := old.ai_report;
     new.elapsed_ms       := old.elapsed_ms;
     new.on_time          := old.on_time;
   end if;

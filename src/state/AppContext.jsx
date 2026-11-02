@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useS
 import { reducer, isElite, guildCapacity, activeLockout } from './reducer.js'
 import { createInitialState, TIERS } from './initialState.js'
 import { buildDemoFamily, DEMO_VERSION } from '../lib/demoFamily.js'
-import { loadState, saveState, clearState, purgeOrphanPhotos, getPhoto, wipeDevice } from '../lib/storage.js'
+import { loadState, saveState, clearState, dropOldPhotos, wipeDevice } from '../lib/storage.js'
 import { createSyncEngine, SYNC_STATUS, resetCursor } from '../lib/sync/syncEngine.js'
 import { queueChanges, recordDelivered, pendingRows } from '../lib/sync/shadow.js'
 import { enqueue as enqueueOp, readOutbox } from '../lib/sync/outbox.js'
@@ -21,9 +21,40 @@ function localZone() {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null } catch { return null }
 }
 
+/** What an older version's submit_quest carried about a photo, which none now has. */
+const OLD_PHOTO_KEYS = ['photo_data', 'photo_hash', 'capture_source', 'ai_verdict', 'ai_score', 'ai_report']
+function withoutPhoto(payload) {
+  const copy = { ...payload }
+  OLD_PHOTO_KEYS.forEach((key) => delete copy[key])
+  return copy
+}
+
+/** The photo and photo-check fields an older version kept on a submission. */
+const OLD_SUBMISSION_FIELDS = ['photoId', 'photoData', 'hasPhoto', 'photoDeletedAt', 'photoUnavailable',
+  'hash', 'captureSource', 'report']
+function forgetPhotos(saved) {
+  if (!Array.isArray(saved.submissions)) return saved
+  return {
+    ...saved,
+    submissions: saved.submissions.map((s) => {
+      if (!s || !OLD_SUBMISSION_FIELDS.some((key) => key in s)) return s
+      const copy = { ...s }
+      OLD_SUBMISSION_FIELDS.forEach((key) => delete copy[key])
+      return copy
+    }),
+  }
+}
+
 function init() {
-  const saved = loadState()
-  if (!saved) return createInitialState()
+  /*
+   * RankUp takes no photos. A phone that ran an older version may still hold
+   * proof pictures, and photo-check verdicts on its submissions: both go the
+   * first time this version starts, rather than sitting on the phone for ever.
+   */
+  dropOldPhotos()
+  const loaded = loadState()
+  if (!loaded) return createInitialState()
+  const saved = forgetPhotos(loaded)
 
   /*
    * A saved look-around is rebuilt when it is out of date, and otherwise
@@ -87,7 +118,6 @@ const syncs = (state) =>
 
   // One engine for the life of the app.
   if (!engineRef.current) {
-    const photoFor = (submission) => (submission.photoId ? getPhoto(submission.photoId) : null)
     engineRef.current = createSyncEngine({
       dispatch: (action) => {
         /*
@@ -109,9 +139,9 @@ const syncs = (state) =>
           const current = latest.current
           let pending = new Set()
           if (syncs(current)) {
-            queueChanges(current, { photoFor, role: current.device?.role })
+            queueChanges(current, { role: current.device?.role })
             pending = pendingRows(readOutbox(), current)
-            recordDelivered(current, action.snapshot, { photoFor, skip: pending })
+            recordDelivered(current, action.snapshot, { skip: pending })
           }
           dispatch({ ...action, pending: [...pending] })
           return
@@ -125,10 +155,12 @@ const syncs = (state) =>
         dispatch({ type: 'RPC_REFUSED', ...refusal })
         resetCursor()
       },
-      // A submission queued by an older version may still carry a picture:
-      // it is dropped here, before it can leave the phone.
-      prepare: async (op) => (op.fn === 'submit_quest' && op.args?.p_payload?.photo_data
-        ? { ...op.args, p_payload: { ...op.args.p_payload, photo_data: null } }
+      // A submission queued by an older version may still carry a picture
+      // and the photo check's verdict: they are dropped here, before they can
+      // leave the phone. The server would ignore them; the picture should
+      // never cross the network at all.
+      prepare: async (op) => (op.fn === 'submit_quest' && op.args?.p_payload
+        ? { ...op.args, p_payload: withoutPhoto(op.args.p_payload) }
         : op.args),
       /*
        * The server says this signed-in phone is in no family. A child's phone
@@ -233,17 +265,10 @@ const syncs = (state) =>
   }, [state.device?.pairedAt])
 
   /*
-   * Photos: RankUp no longer handles any. A submission carries no picture and
-   * none is fetched; a parent who wants proof gets it from the child's own
-   * camera app, by message. Pictures saved on this device by an older version
-   * are deleted by purgeOrphanPhotos once nothing points at them.
-   */
-
-  /*
    * Move any server calls the reducer asked for into the outbox.
    *
    * Only the ones that actually made it in leave the queue. The outbox lives in
-   * localStorage, which fills up (proof photos live there too), and when it
+   * localStorage, which fills up, and when it
    * refused the write this used to drain the queue anyway: a child's chore
    * submission vanished while their phone said "waiting for approval" for
    * ever, and could not be sent again because one was already waiting.
@@ -376,18 +401,14 @@ const syncs = (state) =>
       // A full phone is told so, rather than losing everything since the last
       // good save without a word. The app keeps going on what is in memory.
       setStorageFull(!saveState(state))
-      // Drop photos nothing points at any more — see purgeOrphanPhotos.
-      purgeOrphanPhotos(state)
-
       if (syncs(state)) {
-        const photoFor = (submission) => (submission.photoId ? getPhoto(submission.photoId) : null)
         // Rows the server sent were recorded as the server's when they arrived
         // (see the engine's dispatch above); everything else goes out.
         //
         // Anything queued should go now rather than wait out the idle backoff —
         // the poll slows down precisely because nothing is happening, and this
         // is something happening.
-        if (queueChanges(state, { photoFor, role: state.device?.role }) > 0) {
+        if (queueChanges(state, { role: state.device?.role }) > 0) {
           engineRef.current?.wake()
         }
       }

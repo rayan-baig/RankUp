@@ -168,111 +168,19 @@ drop trigger if exists kids_enforce_limit on kids;
 create trigger kids_enforce_limit before insert on kids
   for each row execute function enforce_kid_limit();
 
-/**
- * Claim one AI photo check against this family's monthly allowance.
- *
- * The vision endpoint spends real money on every call, so two things have to be
- * true before it runs: a real signed-in family asked for it, and that family
- * has not already had more than a household could plausibly need this month.
- * Without a ceiling a single loop — a bug, or somebody being deliberate — can
- * run up an unbounded bill on an API key that belongs to the operator, not the
- * caller.
- *
- * The allowance is deliberately far above ordinary use: with the on-device
- * checks settling most photos before a call is made, a family doing five chores
- * a day lands near sixty. Anyone hitting two hundred is not doing chores.
- */
-/**
- * Give a check back.
- *
- * A check is claimed before the call to Anthropic is made, which is what stops
- * an unauthenticated flood reaching the API at all. But that means it is spent
- * before anyone knows whether the call will work, so an outage at Anthropic, or
- * a reply that cannot be parsed, used to cost the family one of their two
- * hundred. This hands it back, and never below zero.
- *
- * The request no longer spends one on a malformed image: the endpoint parses
- * the picture first, which costs nothing and needs no permission.
- */
 /*
- * Every claimed check gets a receipt, and a refund needs the receipt.
+ * The AI photo check is gone, and with it the monthly allowance that capped
+ * what it could spend. RankUp takes no photos. Dropped rather than left
+ * callable: a function nothing calls is still a way in.
  *
- * The refund used to take nothing at all: any signed-in device could call it
- * straight after a check that DID run and get the check back, so the monthly
- * cap (which is what stops a family running up the AI bill) could be skipped
- * for ever. The receipt id goes from claim_photo_check to the server endpoint
- * and is never shown to the browser, so only the endpoint can hand back a
- * check, only once, and only for a call that failed.
+ * Safe to re-run: each line does nothing when the thing is already gone.
  */
-create table if not exists photo_check_claims (
-  id          uuid primary key default gen_random_uuid(),
-  family_id   uuid not null references families(id) on delete cascade,
-  claimed_at  timestamptz not null default now(),
-  refunded_at timestamptz
-);
-alter table photo_check_claims enable row level security;
-revoke all on photo_check_claims from public, anon, authenticated;
-
+drop function if exists claim_photo_check();
+drop function if exists refund_photo_check(uuid);
 drop function if exists refund_photo_check();
-create or replace function refund_photo_check(p_claim_id uuid)
-returns void language plpgsql security definer set search_path = public as $$
-declare
-  v_month  date := date_trunc('month', current_date)::date;
-  v_family uuid;
-begin
-  update photo_check_claims
-     set refunded_at = now()
-   where id = p_claim_id
-     and family_id = current_family_id()
-     and refunded_at is null
-     and claimed_at > now() - interval '10 minutes'
-  returning family_id into v_family;
-  if v_family is null then return; end if;
-
-  update families
-     set ai_checks_used = greatest(0, ai_checks_used - 1)
-   where id = v_family
-     and ai_checks_month = v_month
-     and ai_checks_used > 0;
-end $$;
-
-create or replace function claim_photo_check()
-returns jsonb
-language plpgsql security definer set search_path = public as $$
-declare
-  v_family families;
-  v_month  date := date_trunc('month', current_date)::date;
-  v_used   int;
-  v_cap    int := 200;
-  v_claim  uuid;
-begin
-  select f.* into v_family from families f where f.id = current_family_id() for update;
-  if not found then
-    return jsonb_build_object('ok', false, 'reason', 'no_family');
-  end if;
-
-  -- The cheapest plan does not include the AI check at all.
-  if effective_tier(v_family.id) = 'starter' then
-    return jsonb_build_object('ok', false, 'reason', 'not_on_this_plan');
-  end if;
-
-  v_used := case when v_family.ai_checks_month = v_month then v_family.ai_checks_used else 0 end;
-  if v_used >= v_cap then
-    return jsonb_build_object('ok', false, 'reason', 'monthly_cap', 'used', v_used, 'cap', v_cap);
-  end if;
-
-  update families
-     set ai_checks_month = v_month,
-         ai_checks_used  = v_used + 1
-   where id = v_family.id;
-
-  delete from photo_check_claims where claimed_at < now() - interval '1 day';
-  insert into photo_check_claims (family_id) values (v_family.id) returning id into v_claim;
-
-  return jsonb_build_object('ok', true, 'used', v_used + 1, 'cap', v_cap, 'claim_id', v_claim);
-end $$;
-
-grant execute on function claim_photo_check() to authenticated;
+drop table if exists photo_check_claims;
+alter table families drop column if exists ai_checks_month;
+alter table families drop column if exists ai_checks_used;
 
 /**
  * Credit a pack of Flash Tickets after a one-off payment.
@@ -593,8 +501,6 @@ revoke execute on function apply_subscription_change(uuid, text, text, text, tex
 revoke execute on function family_for_customer(text) from public;
 revoke execute on function stripe_customer_for_family(uuid) from public;
 revoke execute on function attach_stripe_customer(uuid, text) from public;
-revoke execute on function refund_photo_check(uuid) from public, anon;
-grant execute on function refund_photo_check(uuid) to authenticated;
 
 /*
  * Cancelling a deleted family's subscription. The queue is

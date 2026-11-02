@@ -10,8 +10,7 @@ import { navigate } from '../lib/router.js'
  * A countdown on its own is a threat. The thing that makes somebody decide is
  * knowing precisely what they would lose, in the words of the family they
  * actually have — "Noah's profile" reads differently from "unlimited
- * children", and "the check on Ava's photos" differently from "AI photo
- * verification". So the list is built from their own data.
+ * children". So the list is built from their own data.
  *
  * Deliberately not a modal and not dismissable-forever: it sits at the top of
  * the parent's own screen, where it is read by someone already using the app,

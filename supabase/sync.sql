@@ -364,27 +364,9 @@ begin
     'families',    coalesce((select jsonb_agg(to_jsonb(f)) from families f    where f.rev > cutoff), '[]'::jsonb),
     'kids',        coalesce((select jsonb_agg(to_jsonb(k)) from kids k        where k.rev > cutoff), '[]'::jsonb),
     'quests',      coalesce((select jsonb_agg(to_jsonb(q)) from quests q      where q.rev > cutoff), '[]'::jsonb),
-    /*
-     * WITHOUT the photograph, which is 96% of this payload when one is in it.
-     *
-     * A 720px proof photo is about 60KB, and 80KB once it is base64. Carrying
-     * it here sent it to every device on every delivery: to the parent, who
-     * needs it; to the CHILD'S OWN PHONE, which took it and already has it;
-     * and two or three times over, because the cursor deliberately lags so
-     * that nothing committed late is stepped over. One photo crossed the wire
-     * roughly five times to be looked at once.
-     *
-     * The flag is all a device needs to know it should go and fetch one. See
-     * submission_photo below, which hands over exactly one, to exactly the
-     * device that is going to draw it.
-     */
+    -- The family id is the device's already; the row is smaller without it.
     'submissions', coalesce((
-      -- Nor the other photo and photo-check columns, which RankUp no longer
-      -- fills: they were a third of every row, and a family with a year of
-      -- chores has thousands of rows. Measured in tests/guarantees.mjs.
-      select jsonb_agg(to_jsonb(s) - array['photo_data', 'photo_path', 'photo_hash', 'ai_report',
-                                           'ai_verdict', 'ai_score', 'photo_deleted_at', 'family_id']
-                       || jsonb_build_object('has_photo', s.photo_data is not null))
+      select jsonb_agg(to_jsonb(s) - 'family_id')
         from submissions s where s.rev > cutoff), '[]'::jsonb),
     'rewards',     coalesce((select jsonb_agg(to_jsonb(r)) from rewards r     where r.rev > cutoff), '[]'::jsonb),
     'redemptions', coalesce((select jsonb_agg(to_jsonb(r)) from redemptions r where r.rev > cutoff), '[]'::jsonb),
@@ -407,38 +389,9 @@ grant execute on function family_snapshot(bigint) to authenticated;
 -- photos included, to read a single field off the front.
 grant execute on function current_family_id() to authenticated;
 
--- Photo proof.
---
--- The photo travels as base64 in this column, which keeps the loop working
--- across devices without a second service to set up. It no longer bloats the
--- snapshot: family_snapshot returns a flag and submission_photo hands the
--- image over on its own, once, to the device that will draw it.
---
--- Supabase Storage is still the better long-term home — it would keep the
--- bytes out of Postgres entirely and let a CDN serve them — but the thing that
--- made it urgent was the bandwidth, and that is dealt with. See docs/SYNC.md.
-alter table submissions add column if not exists photo_data text;
-alter table submissions add column if not exists photo_deleted_at timestamptz;
-
-/**
- * One proof photograph, for the device that is about to show it.
- *
- * Not security definer: row level security decides. A parent can read their
- * own family's submissions and a child can read their own, and this function
- * inherits exactly that — there is no new way in here, only a narrower way to
- * ask for something the caller could already see.
- *
- * Returns null rather than raising for a photo that is gone. Approving or
- * sending back a chore destroys the image at that moment, so "no longer there"
- * is the normal end state for every photo in the system, not an error.
- */
-create or replace function submission_photo(p_submission_id uuid)
-returns text
-language sql stable as $$
-  select photo_data from submissions where id = p_submission_id;
-$$;
-
-grant execute on function submission_photo(uuid) to authenticated;
+-- RankUp takes no photos. submission_photo handed one proof photo to the
+-- device about to draw it; there are none, and nothing asks for one.
+drop function if exists submission_photo(uuid);
 
 
 -- ---------------------------------------------------------------------------
@@ -492,14 +445,13 @@ begin
   end if;
 
   insert into submissions (
-    id, family_id, quest_id, kid_id, photo_hash, photo_data, capture_source,
-    note, test_score, elapsed_ms, on_time, ai_verdict, ai_score, ai_report, status
+    id, family_id, quest_id, kid_id,
+    note, test_score, elapsed_ms, on_time, status
   ) values (
     p_submission_id, v_family, p_quest_id, p_kid_id,
-    -- No photograph is ever stored: RankUp takes none. A phone running an
-    -- older version may still send one, and it is dropped here.
-    null, null,
-    coalesce(p_payload->>'capture_source', 'none'),
+    -- Only what is read below is kept. A phone running an older version may
+    -- still send a photo, a capture source or a photo check in the payload;
+    -- RankUp takes no photos, and those keys are ignored.
     coalesce(p_payload->>'note', ''),
     -- A score is a percentage. Held to 0..100 rather than refused, so a
     -- typo like 999 from an older phone does not bounce the whole chore.
@@ -509,8 +461,6 @@ begin
     -- How long it took: a day at most, which is longer than any timer.
     least(86400000, greatest(0, nullif(p_payload->>'elapsed_ms', '')::numeric))::int,
     coalesce((p_payload->>'on_time')::boolean, true),
-    -- RankUp has no photo check; what an older phone says about one is not kept.
-    null, null, null,
     'pending'
   ) on conflict (id) do nothing;
 
@@ -571,9 +521,71 @@ begin
 end $$;
 revoke execute on function keep_rpc_receipt(uuid, uuid, text, jsonb) from public, anon, authenticated;
 
+/*
+ * How long a round of each game takes at the very least, in milliseconds,
+ * to score 100: a full-length timed game, or the quickest a perfect round
+ * could physically be played (the moves it needs, and the pauses the game
+ * itself puts between them). Generous on purpose, well under any real
+ * player: what this stops is a score sent straight to the server, or a
+ * round "finished" seconds after it began, not a quick child.
+ *
+ * A score is only possible in proportion to the time played: half the time
+ * buys at most 50. Mirrored as `minMs` on each game in src/data/minigames.js;
+ * tests/gameids.mjs fails if the two disagree. Null is a game that does not
+ * exist.
+ */
+create or replace function minigame_floor_ms(p_game text) returns int
+language sql immutable as $$
+  select case p_game
+    -- Timed: the round ends when the clock does.
+    when 'turbo'     then 70000   -- 75 seconds of football
+    when 'catch'     then 28000   -- 30 seconds of catching
+    -- Long climbs.
+    when 'merge'     then 60000   -- hundreds of moves to reach 2048
+    when 'tennis'    then 30000   -- a match, best of three sets
+    when 'sky'       then 15000   -- every gate, at the game's own speed
+    -- Rounds the game paces itself, with pauses between hands or turns.
+    when 'holdem'    then 8000    -- five hands, two seconds between each
+    when 'blackjack' then 8000    -- six hands, over a second and a half apart
+    when 'chain'     then 8000    -- ten playbacks of a growing sequence
+    when 'blocks'    then 8000    -- ten lines is at least 25 pieces
+    when 'bricks'    then 8000    -- thirty-five bricks off one ball
+    when 'slide'     then 8000    -- a scrambled 4x4 puzzle put back
+    when 'snake'     then 6000    -- twenty-two apples, each a few moves away
+    when 'track'     then 10000
+    when 'sweets'    then 10000
+    when 'sports'    then 5000
+    when 'royal'     then 5000    -- five hands, deal and draw
+    when 'wildfire'  then 5000    -- seven cards played, with turns between
+    when 'gofish'    then 5000
+    when 'memory'    then 4000    -- sixteen flips
+    when 'stack'     then 3000    -- twelve rows
+    when 'impostor'  then 3000    -- three meetings
+    when 'four'      then 3000    -- four in a row needs four moves
+    when 'sweeper'   then 2000
+    when 'lights'    then 1500
+  end
+$$;
+
+/*
+ * The best score a round of this game could have reached in this long.
+ * Without a length of time (a phone too old to send one) at most 50: such a
+ * phone is still paid, just never the top of the scale on its word alone.
+ */
+create or replace function minigame_possible_score(p_game text, p_elapsed_ms int) returns int
+language sql immutable as $$
+  select case
+    when minigame_floor_ms(p_game) is null then 0
+    when p_elapsed_ms is null then 50
+    else least(100, floor(100.0 * greatest(0, p_elapsed_ms) / minigame_floor_ms(p_game)))::int
+  end
+$$;
+
 drop function if exists play_minigame(uuid, text, int);
 -- Gained p_tz; the old signature has to go or the two would sit side by side.
 drop function if exists play_minigame(uuid, text, int, uuid);
+-- Gained p_elapsed_ms, for the same reason.
+drop function if exists play_minigame(uuid, text, int, uuid, text);
 create or replace function play_minigame(
   p_kid_id uuid,
   p_game   text,
@@ -581,7 +593,10 @@ create or replace function play_minigame(
   p_request_id uuid default null,
   -- The phone's time zone: the daily cap resets on the family's day, which
   -- is the day the phone shows. See family_today.
-  p_tz text default null
+  p_tz text default null,
+  -- How long the round lasted on the phone. A score is held to what the game
+  -- allows in that time (minigame_possible_score).
+  p_elapsed_ms int default null
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -593,6 +608,7 @@ declare
   v_best   int;
   v_prior  jsonb;
   v_day    date;
+  v_held   boolean;
 begin
   select * into v_kid from kids where id = p_kid_id for update;
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
@@ -631,8 +647,12 @@ begin
   end if;
 
   -- A score arriving from a phone is a claim, not a fact. Clamping it is what
-  -- stops "I scored 4 billion" from being worth anything.
+  -- stops "I scored 4 billion" from being worth anything; holding it to what
+  -- this game allows in the time played is what stops "100" sent a second
+  -- after the game opened, or sent with no game played at all.
   v_score := greatest(0, least(100, coalesce(p_score, 0)));
+  v_held  := v_score > minigame_possible_score(p_game, p_elapsed_ms);
+  if v_held then v_score := minigame_possible_score(p_game, p_elapsed_ms); end if;
 
   -- Reset the day's tally when the family's date rolls over.
   v_day   := family_today(v_kid.family_id, p_tz);
@@ -653,17 +673,21 @@ begin
 
   insert into events (family_id, kid_id, type, meta)
   values (v_kid.family_id, p_kid_id, 'minigame_played',
-          jsonb_build_object('game', p_game, 'score', v_score, 'coins', v_paid));
+          jsonb_build_object('game', p_game, 'score', v_score, 'coins', v_paid, 'held', v_held));
 
   return keep_rpc_receipt(p_request_id, p_kid_id, 'play_minigame', jsonb_build_object(
     'ok', true, 'coins', v_paid, 'score', v_score, 'best', v_best,
     'capped', v_paid < v_wanted,
+    -- The score sent was more than this game allows in the time played.
+    'held', v_held,
     'tokens_left', v_kid.play_tokens - 1,
     'earned_today', v_today + v_paid
   ));
 end $$;
 
-grant execute on function play_minigame(uuid, text, int, uuid, text) to authenticated;
+grant execute on function play_minigame(uuid, text, int, uuid, text, int) to authenticated;
+grant execute on function minigame_floor_ms(text) to authenticated;
+grant execute on function minigame_possible_score(text, int) to authenticated;
 
 /** The parent sends work back to be redone. */
 create or replace function reject_submission(
@@ -682,10 +706,8 @@ begin
     raise exception 'only a parent in this family can send work back';
   end if;
 
-  -- Same as approving: the photo goes the instant it has been looked at.
   update submissions
-     set status = 'rejected', decided_at = now(), parent_note = coalesce(p_note, ''),
-         photo_data = null, photo_deleted_at = now()
+     set status = 'rejected', decided_at = now(), parent_note = coalesce(p_note, '')
    where id = p_submission_id;
 
   update quests
@@ -891,6 +913,44 @@ end $$;
 
 grant execute on function reset_due_recurring_quests(text) to authenticated;
 revoke execute on function recurring_quest_due(text, text, date, date, int) from public;
+
+/*
+ * When the child chose the theme they are on, as the server saw it.
+ *
+ * Block Craft's dragon fight counts only the chores after the fight began, and
+ * a fight begins no earlier than the moment the child chose Block Craft
+ * (src/lib/dragonFight.js). That moment lived only on the phone that made the
+ * choice, so the parent's phone, or a second phone for the same child, started
+ * the fight somewhere else and showed the dragon on different health. Kept
+ * here, and stamped by the database alone, every phone counts from the same
+ * moment.
+ *
+ * Added without a default first, so children who already exist keep a null
+ * (their phones fall back to the chore that took them to the dragon, which
+ * every phone agrees on) rather than all being stamped with the moment this
+ * file ran, which would restart every fight under way. New children get now().
+ * Safe to re-run.
+ */
+alter table kids add column if not exists theme_chosen_at timestamptz;
+alter table kids alter column theme_chosen_at set default now();
+
+create or replace function stamp_theme_chosen() returns trigger
+language plpgsql as $$
+begin
+  if tg_op = 'INSERT' then
+    new.theme_chosen_at := now();
+  elsif new.theme_id is distinct from old.theme_id then
+    new.theme_chosen_at := now();
+  else
+    -- Nobody sets this but the database, whatever a phone sends.
+    new.theme_chosen_at := old.theme_chosen_at;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists kids_stamp_theme_chosen on kids;
+create trigger kids_stamp_theme_chosen before insert or update on kids
+  for each row execute function stamp_theme_chosen();
 
 /**
  * A child changing how their own app looks.
@@ -1136,12 +1196,12 @@ begin
    * A fortnight of the real thing, with no card asked for.
    *
    * Nobody buys a chore app on a feature list. They buy it the first time
-   * their child photographs a made bed and it lands on their phone. Asking for
+   * their child taps "I did it!" on a made bed and it lands on their phone. Asking for
    * a card before that moment is asking someone to pay for a promise, and
    * almost nobody does.
    *
    * Elite rather than Standard, and deliberately: the parts worth paying for —
-   * the AI check on the photo, a second child, the behaviour charts — are the
+   * a second child, guilds, the behaviour charts — are the
    * parts that have to be felt during the fortnight, not read about after it.
    * What they fall back to is Starter, which is free and still runs the whole
    * loop, so the end of a trial is a smaller app rather than a locked one.

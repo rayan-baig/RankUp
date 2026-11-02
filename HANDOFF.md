@@ -324,7 +324,7 @@ school_top_students`
 | `claim_pairing_code` / `record_pairing_attempt` | rate-limited, attempts exhausted after N |
 | `may_act_for_kid` / `is_parent` / `current_family_id` | the authorisation spine |
 | `delete_family_account` / `export_family_data` | GDPR rights, really implemented |
-| `run_retention` / `purge_stale_photos` | scheduled cleanup |
+| `run_retention` | scheduled cleanup |
 
 **36 RLS policies.** Every table is deny-by-default; one family can never read
 another's rows. There are tests that attempt exactly that and assert failure.
@@ -631,8 +631,8 @@ Hardened over several explicit adversarial passes — see commits
 3. **The kid limit is a database trigger**, not a screen check.
 4. **Pairing and invites are rate-limited** with attempt tables, and codes are
    revocable.
-5. **Photos are destroyed on review.** Plus `purge_stale_photos` and
-   `run_retention` for anything that slips through.
+5. **No photos are kept at all.** RankUp takes none; the photo columns, the
+   photo check and its allowance were dropped from the database in November 2026.
 6. **Parental consent is real** (`supabase/consent.sql`), as are data export and
    account deletion.
 7. **No secret may carry a `VITE_` prefix.** Anything `VITE_` is compiled into

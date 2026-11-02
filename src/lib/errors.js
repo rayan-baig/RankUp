@@ -47,25 +47,3 @@ export function humanError(err, fallback = 'That did not work. Please try again.
   }
   return fallback
 }
-
-/**
- * Camera failures are reported by name rather than by message, and the names
- * are precise — which is worth using, because "you have blocked the camera" and
- * "this device has no camera" need completely different things from the person.
- */
-export function cameraError(err) {
-  const name = err?.name || ''
-  if (/NotAllowedError|PermissionDenied/.test(name)) {
-    return 'RankUp does not have permission to use the camera. Allow it in your browser settings, then try again.'
-  }
-  if (/NotFoundError|DevicesNotFound|OverconstrainedError/.test(name)) {
-    return 'No camera was found on this device. You can use your phone’s own camera app instead.'
-  }
-  if (/NotReadableError|TrackStartError/.test(name)) {
-    return 'Something else is using the camera. Close it and try again.'
-  }
-  if (/SecurityError/.test(name)) {
-    return 'The camera only works on a secure (https) connection.'
-  }
-  return humanError(err, 'The camera could not be started.')
-}

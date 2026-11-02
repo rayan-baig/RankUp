@@ -96,32 +96,13 @@ begin
     (v->'jobs'->'settle-alliances'->>'state') = 'ok');
 end $$;
 
--- ---------- the backlog check catches a job that lies ----------
+-- ---------- no photo backlog to report ----------
 do $$
 declare v jsonb;
 begin
   update job_runs set last_ok_at = now();
-  insert into auth.users (id, email) values ('9f111111-0000-0000-0000-000000000001','h@example.com');
-  insert into families (id, name) values ('9f222222-0000-0000-0000-000000000001','The Hales');
-  insert into parents (user_id, family_id, name) values
-    ('9f111111-0000-0000-0000-000000000001','9f222222-0000-0000-0000-000000000001','H');
-  perform seed_consent('9f222222-0000-0000-0000-000000000001','9f111111-0000-0000-0000-000000000001');
-  insert into kids (id, family_id, name) values
-    ('9f444444-0000-0000-0000-000000000001','9f222222-0000-0000-0000-000000000001','Hal');
-  insert into quests (id, family_id, kid_id, title) values
-    ('9f555555-0000-0000-0000-000000000001','9f222222-0000-0000-0000-000000000001',
-     '9f444444-0000-0000-0000-000000000001','Q');
-  insert into submissions (family_id, quest_id, kid_id, status, submitted_at, photo_data)
-  values ('9f222222-0000-0000-0000-000000000001','9f555555-0000-0000-0000-000000000001',
-          '9f444444-0000-0000-0000-000000000001','pending', now() - interval '30 days','data:x');
-
   v := health_snapshot();
-  perform ok('an old undeleted photo shows up as a backlog',
-    (v->>'stale_photo_backlog')::int = 1);
-  perform ok('and fails the check even though every job claims to have run',
-    (v->>'ok')::boolean = false);
-
-  perform run_retention(14, 90, 2);
-  perform ok('once retention actually runs, health goes green again',
-    (health_snapshot()->>'ok')::boolean);
+  perform ok('there is no photo backlog in the report: RankUp keeps no photos',
+    not (v ? 'stale_photo_backlog'));
+  perform ok('and with every job run, health is green', (v->>'ok')::boolean);
 end $$;

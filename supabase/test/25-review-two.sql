@@ -53,7 +53,6 @@ grant usage on schema public to anon, authenticated;
 grant all on all tables in schema public to anon, authenticated;
 grant all on all sequences in schema public to anon, authenticated;
 select lock_billing_columns();
-revoke all on photo_check_claims from anon, authenticated;
 
 set role app_user;
 
@@ -196,28 +195,6 @@ begin
   values ('7e222222-0000-0000-0000-00000000000a', 'Rich Kid', 50000, 50000);
   perform ok('and a new child starts with nothing, whatever the request says',
     (select xp = 0 and coins = 0 from kids where name = 'Rich Kid'));
-end $$;
-
--- ---------- the AI check allowance ----------
-do $$
-declare r jsonb; v_used int;
-begin
-  perform become('7e111111-0000-0000-0000-00000000000a');
-  r := claim_photo_check();
-  perform ok('claiming a check returns a receipt', (r->>'claim_id') is not null);
-  v_used := (r->>'used')::int;
-  perform refund_photo_check(gen_random_uuid());
-  r := claim_photo_check();
-  perform ok('a refund without the right receipt hands nothing back', (r->>'used')::int = v_used + 1);
-  perform refund_photo_check((r->>'claim_id')::uuid);
-  perform refund_photo_check((r->>'claim_id')::uuid);
-  perform ok('with it, exactly one check comes back, however often it is asked',
-    (claim_photo_check()->>'used')::int = v_used + 1);
-
-  perform become('7e111111-0000-0000-0000-0000000000c1');
-  perform refund_photo_check((r->>'claim_id')::uuid);
-  perform ok('and a receipt already used stays used',
-    (select ai_checks_used from families where id = '7e222222-0000-0000-0000-00000000000a') = v_used + 1);
 end $$;
 
 reset role;

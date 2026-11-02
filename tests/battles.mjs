@@ -138,5 +138,28 @@ console.log('\n=== Chapters are only ever the ones reached ===')
   ok('a theme with no story has no chapters', storyChapters('apex', 400).length === 0)
 }
 
+console.log('\n=== A phone that cannot keep up gets fewer pixels to fill ===')
+{
+  // The real loop, driven by a pretend clock: frames arriving every `gap` ms.
+  const run = (gap, frames = 200) => {
+    const queue = []
+    globalThis.requestAnimationFrame = (cb) => { queue.push(cb); return queue.length }
+    globalThis.cancelAnimationFrame = () => {}
+    const canvas = fakeCanvas()
+    canvas.width = 716; canvas.height = 403
+    const b = createBattle(canvas, { chapter: 'raid', makeBuffer: fakeCanvas })
+    let now = 1000
+    for (let i = 0; i < frames && queue.length; i++) { now += gap; queue.shift()(now) }
+    b.destroy()
+    return { width: canvas.width, height: canvas.height, shrunk: b.shrunk() }
+  }
+  const fast = run(16.7)
+  ok('at sixty frames a second the scene keeps every pixel', fast.width === 716 && !fast.shrunk, String(fast.width))
+  const slow = run(45)
+  ok('at twenty-two frames a second it draws smaller', slow.shrunk && slow.width < 716, String(slow.width))
+  ok('but never below twice its own size, and still 16:9',
+    slow.width >= 512 && Math.abs(slow.height - Math.round((slow.width * 9) / 16)) <= 1, `${slow.width}x${slow.height}`)
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL CHECKS PASSED')
 process.exit(fails ? 1 : 0)

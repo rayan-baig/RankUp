@@ -291,7 +291,7 @@ begin
     'children',    coalesce((select jsonb_agg(to_jsonb(k)) from kids k where k.family_id = v_family), '[]'::jsonb),
     'quests',      coalesce((select jsonb_agg(to_jsonb(q)) from quests q where q.family_id = v_family), '[]'::jsonb),
     'submissions', coalesce((
-        select jsonb_agg(to_jsonb(s) - 'photo_data' || jsonb_build_object('photo_included', s.photo_data is not null))
+        select jsonb_agg(to_jsonb(s))
           from submissions s where s.family_id = v_family), '[]'::jsonb),
     'rewards',     coalesce((select jsonb_agg(to_jsonb(r)) from rewards r where r.family_id = v_family), '[]'::jsonb),
     'notes',       coalesce((select jsonb_agg(to_jsonb(n)) from notes n where n.family_id = v_family), '[]'::jsonb),
@@ -398,31 +398,9 @@ begin
   return v_out;
 end $$;
 
-/**
- * The photo backstop.
- *
- * Reviewed photos are already gone — approve_submission and reject_submission
- * destroy them at the moment of the decision. This exists for the ones nobody
- * ever decided: a parent who never got round to it, a quest abandoned halfway.
- * Those would otherwise sit there for ever.
- *
- * Run on a schedule (Supabase pg_cron, or any external scheduler).
- */
-create or replace function purge_stale_photos(p_keep_days int default 14)
-returns int
-language plpgsql security definer set search_path = public as $$
-declare v_count int;
-begin
-  with cleared as (
-    update submissions
-       set photo_data = null, photo_deleted_at = now()
-     where photo_data is not null
-       and submitted_at < now() - make_interval(days => greatest(1, p_keep_days))
-    returning 1
-  )
-  select count(*) into v_count from cleared;
-  return v_count;
-end $$;
+-- RankUp takes no photos, so there is none left to purge. Dropped; see
+-- run_retention in retention.sql.
+drop function if exists purge_stale_photos(int);
 
 -- The database's own question, asked by the trigger on `kids`. Not a
 -- browser's: given any family's id it said whether that family had signed.
@@ -431,7 +409,6 @@ grant execute on function record_parental_consent(text, text, text, text) to aut
 grant execute on function revoke_parental_consent(text) to authenticated;
 grant execute on function export_family_data() to authenticated;
 grant execute on function delete_family_account(text) to authenticated;
-revoke execute on function purge_stale_photos(int) from public;
 
 -- The first published wording. Superseded by 2026-11 below and kept exactly as
 -- it was, because it is what the parents who signed it agreed to. Do not edit
