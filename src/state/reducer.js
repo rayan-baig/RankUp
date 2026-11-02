@@ -5,6 +5,7 @@ import { createInitialState, TIERS, makeKid } from './initialState.js'
 import { findSkin, isMarketOpen, ticketCost } from '../data/marketSkins.js'
 import { DAILY_COIN_CAP, MAX_TOKENS, possibleScore, coinsForScore } from '../data/minigames.js'
 import { ENTITIES, familyGoals } from '../lib/sync/mappers.js'
+import { pendingRows } from '../lib/sync/shadow.js'
 import { questsDueToReturn, dayOf } from '../lib/recurrence.js'
 import { STICKER_MAP } from '../data/stickers.js'
 
@@ -235,7 +236,18 @@ export function reducer(state, action) {
       // Rows with a change of this device's still waiting to go are left as
       // they are: the server's copy is older. They come back with the next
       // pull once the change has landed. See the engine's dispatch.
+      //
+      // The provider works that list out from the outbox, but a call the
+      // reducer has only just asked for (state.syncQueue) is not in the
+      // outbox yet: the provider moves it there after the next render. A pull
+      // landing in that gap, or dispatched in the same batch as the tap, put
+      // the coins of a purchase straight back on screen until the next pull.
+      // So the calls still waiting here hold their rows too.
       const pending = new Set(action.pending || [])
+      if (state.syncQueue?.length) {
+        const queued = state.syncQueue.map((item) => ({ type: 'rpc', fn: item.fn, args: item.args }))
+        for (const row of pendingRows(queued, state)) pending.add(row)
+      }
       for (const [snapshotKey, { key, mapper, table }] of Object.entries(ENTITIES)) {
         const incoming = snap[snapshotKey]
         if (!incoming?.length) continue

@@ -141,7 +141,10 @@ const syncs = (state) =>
           let pending = new Set()
           if (syncs(current)) {
             queueChanges(current, { role: current.device?.role })
-            pending = pendingRows(readOutbox(), current)
+            // Calls the reducer has asked for but that are not in the outbox
+            // yet hold their rows as well; the reducer holds the same ones.
+            const queued = (current.syncQueue || []).map((item) => ({ type: 'rpc', fn: item.fn, args: item.args }))
+            pending = pendingRows([...readOutbox(), ...queued], current)
             recordDelivered(current, action.snapshot, { skip: pending })
           }
           dispatch({ ...action, pending: [...pending] })

@@ -186,6 +186,14 @@ console.log('\n=== A pull while a purchase is still on its way ===')
   ok('so an older pull does not hand the 30 coins back on screen', coinsOn(s) === 20, String(coinsOn(s)))
   ok('and a second purchase with the same coins is refused on the phone itself',
     coinsOn(reducer(s, { type: 'REDEEM_REWARD', rewardId: FILM, kidId: KID })) === 20)
+  // The tap and the pull in the same moment: the purchase is still in the
+  // reducer's own queue, not yet in the outbox, so the provider found nothing
+  // pending. The reducer has to hold the row by itself.
+  await setCoins(50)
+  let gap = reducer(phone(50, 'kid'), { type: 'REDEEM_REWARD', rewardId: FILM, kidId: KID })
+  gap = reducer(gap, { type: 'MERGE_SNAPSHOT', snapshot: { kids: [await serverKidRow()] }, pending: [] })
+  ok('a pull merged before the purchase reaches the outbox does not flash the coins back',
+    coinsOn(gap) === 20, String(coinsOn(gap)))
   const tax = reducer(phone(50), { type: 'APPLY_OVERRIDE', kidId: KID, kind: 'tax', percent: 50 })
   ok('a tax on its way holds the row too',
     pendingRows(tax.syncQueue.map((q) => ({ type: 'rpc', fn: q.fn, args: q.args })), tax).has(`kids:${KID}`))
