@@ -33,6 +33,16 @@ that makes guilds safe to ship: a child does not join until a parent on each
 side has agreed. One parent approving alone is not enough. It also checks the
 contact-detail guard and that a normal message crosses families.
 
+**`builtgames.mjs`** is the one suite that runs against a production build
+rather than the dev server. The arcade's four standalone HTML games run in
+sandboxed srcdoc frames, which live under the built page's
+Content-Security-Policy — and the dev server has no policy, so a game the
+policy refuses looks fine everywhere else. It builds the app into a scratch
+folder, serves it with `vite preview`, plays each game in the look-around
+family (no backend needed) and checks that it reports in, sends its score
+back, stays sandboxed, trips no policy, and still opens once the server is
+gone. `npm run test:built`; `BUILT_DIR=dist` serves an existing build instead.
+
 ## Running them
 
 Playwright is deliberately **not** a dependency of this project — it downloads a
