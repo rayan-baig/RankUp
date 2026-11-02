@@ -1,194 +1,212 @@
-# Linking a kid's device
+# Linking phones, and how a family's data travels between them
 
-A kid's phone shows a **six-digit code**. The parent types it into their own
-phone. That is the whole pairing flow, and it is built and working, as is the
-sync that follows it (with Supabase configured).
+A child's phone shows a **six-digit code**. A parent types it into their own
+phone. After that, everything the family does travels between their phones
+through the server, and keeps working with no signal.
+
+All of this needs Supabase (see [BACKEND.md](BACKEND.md)). Without it, each
+phone is a separate copy of the app and "pairing" links two tabs of one
+browser, for trying it out.
 
 ---
 
-## How it works from the outside
+## Linking a child's phone
 
-**On the kid's phone**
+**On the child's phone**
 
-1. They open RankUp and choose **"I'm a kid"**.
-2. They type their first name and pick a theme.
-3. They get a six-digit code and a "waiting for your grown-up" screen.
+1. Open RankUp and choose **"I'm a kid"**.
+2. Type a first name and pick a theme.
+3. A six-digit code appears, with a "waiting for your grown-up" screen.
 
 **On the parent's phone**
 
 4. Settings → **Link a kid's device**.
-5. Type in the six digits.
-6. Done — the kid joins the family, and their phone switches to their own home
-   screen in the theme they chose.
+5. Type the six digits.
+6. Done: the child joins the family and their phone opens on their own home
+   screen, in the theme they chose.
 
-A kid's phone **never creates an account**. No email, no password. The parent's
-account is the account; the kid's device joins it. That is deliberate — see the
-consent section below.
+A child's phone **never creates an account**: no email, no password. It signs
+in anonymously, and the parent's family is the account.
 
----
-
-## Why a six-digit code is safe enough
-
-Six digits is only a million combinations, which sounds weak. The code alone is
-not the security; four rules around it are:
+### Why six digits is safe enough
 
 | Rule | Why |
 |---|---|
-| Expires after **10 minutes** | The window to attack is tiny |
-| Dies after **5 wrong guesses** | Five tries out of a million, not unlimited |
-| Works **exactly once** | A code seen over someone's shoulder is useless afterwards |
-| Generated with `crypto.getRandomValues` | Not `Math.random`, so seeing old codes tells you nothing about the next one |
+| Expires after **10 minutes** | The window to try codes is short. (The server refuses anything outside 1 to 30 minutes.) |
+| Dead after **5 wrong guesses** | Five tries out of a million |
+| Works **once** | A code seen over someone's shoulder is useless afterwards |
+| A parent's phone may try **10 codes in 10 minutes** | Guessing across many codes is slow too |
+| Drawn with `crypto.getRandomValues`, by rejection sampling | Old codes say nothing about the next one, and no code is likelier than another |
 
-Together: an attacker gets five guesses out of a million, inside a ten-minute
-window, against a specific kid's phone that has to be sitting on the pairing
-screen at that exact moment. That is not a practical attack.
+Every rule is enforced in the database (`claim_pairing_code`), so a changed app
+cannot skip them, and two parents cannot claim one code at the same moment.
+`pairing_codes` has no read policy at all: a readable table would hand out
+every live code.
 
-The code is also drawn with **rejection sampling** rather than `random % 1000000`,
-because the modulo version makes low codes very slightly more likely — exactly
-the sort of bias that makes a short code easier to attack.
+### Nothing is kept before a parent says yes
 
-**All four rules are enforced in the database, not in the browser.** Claiming a
-code is a single Postgres function call (`claim_pairing_code`), so a tampered
-app cannot skip the attempt counter, and two parents cannot claim the same code
-in the same instant.
+During the waiting screen the child's phone holds a first name and a theme,
+nothing else: no chores, no XP, nothing sent anywhere. The moment a parent
+enters the code is the moment consent exists ([LEGAL.md](LEGAL.md)). Keep this
+rule if you change the screen.
 
----
+### A second phone for the same child
 
-## Why the kid generates the code, and what that would otherwise break
-
-You asked for kid-generates, parent-enters, and that is what is built. It is the
-right way round for setup: the kid's phone is the one physically in front of you,
-and reading six digits aloud is easier than typing them onto a child's device.
-
-But it has an obvious hazard worth naming: it means a child could go through
-setup on their own, with no parent involved. For a children's app that inverts
-the legal requirement — under COPPA, verifiable parental consent must come
-*before* you collect anything about a child.
-
-**So the kid's device stores nothing until a parent claims it.** During the
-waiting screen the app holds the child's first name and a theme id, and that is
-all. No quests, no photos, no XP, no account, nothing sent anywhere. The moment
-a parent enters the code is the moment consent exists, and only then does the
-app begin holding anything.
-
-That is what makes the flow you asked for safe rather than a compliance problem.
-Keep the rule if you change this screen. → [LEGAL.md](LEGAL.md)
+A profile that already has a phone keeps it. Pairing another phone under the
+same name makes a **new** profile, and the parent's confirmation says so. To
+move a child to a new phone (including the same phone after "Add to Home
+Screen", which starts with empty storage): unlink the old phone first, then
+link the new one.
 
 ---
 
-## What is actually working right now
+## What travels, and how
 
-**Working and tested:** the whole flow above. Code generation, expiry, the
-five-attempt limit, one-time use, "New code", the parent's entry screen and its
-error messages, the link itself, and the fact that a kid's device has no Parent
-Mode. `tests/pairing.mjs` drives it as two separate devices and checks all of it.
+Chores, submissions, accepts and send-backs, XP and coins, rewards and
+redemptions, notes, overrides (taxes and lockouts), the family's plan, and the
+**family goal** all travel between every phone in the family.
 
-**Also working, with Supabase:** the sync *after* pairing. Quests, submissions,
-approvals, XP, rewards and the family goal travel between the parent's and the child's phones,
-offline-first through an outbox; `tests/sync.mjs` drives it end to end.
+**Every change is saved on the phone first** and put in the phone's
+**outbox**, then sent in order. Each phone asks the server for "everything
+since I last looked" every 8 seconds while things are happening, slowing to
+every 20 seconds when nothing is, and once a minute with the app in the
+background. Touching the screen, coming back online or switching back to the
+tab asks at once.
 
-**Coins and rewards on more than one phone.** A purchase takes the coins on
-screen at once and is settled by the server, which takes turns per child: two
-phones buying with the same coins while offline are charged for what the
-balance covers, and the other purchase is refused with the coins handed back
-on that phone and a sentence saying why. A reward a parent deleted meanwhile
-is refused the same way. While a purchase (or a tax, a game, a bonus) is still
-on its way, a pull leaves the child's balance alone, so the coins cannot
-reappear and be spent twice. `tests/rewardraces.mjs` checks all of it.
+Some things are only ever decided by the server, never by a phone: XP, coins,
+streaks, arcade tokens and skins, whether a chore is accepted, and what it
+paid. A phone asks (submit, accept, buy, play) and the server answers. A
+phone cannot write those numbers directly, so editing them in a browser
+changes nothing.
 
-**A second phone for the same child.** A profile that already has a phone keeps
-it: pairing another phone under the same name makes a new profile, and the
-parent's confirmation says so. To move a child to a new phone (including the
-same phone after "Add to Home Screen", which starts with empty storage),
-unlink the old phone first, then link the new one.
+### The outbox rules
 
-There are two backends behind the same interface:
+- **In order.** Nothing overtakes a change that is waiting to be retried: a
+  submission and the accept that answers it arrive in that order.
+- **No signal never counts.** A phone with no connection simply waits. A phone
+  offline for thirty days delivers everything when it is back.
+- **The server having trouble** (no answer, 5xx, an expired sign-in) means
+  "wait and try again": after 4 seconds, then twice as long each time, up to 5
+  minutes between tries. A change is given up only after **a full day of the
+  server failing and at least 30 tries**. Waiting for somebody to sign in again
+  does not count towards that day. When one is given up, the phone fetches the
+  family afresh so it shows what the server really has.
+- **The server saying no** (the change is not allowed) drops that change at
+  once, says so on the phone where it matters (coins handed back, "already
+  decided on another device"), and the phone fetches the family afresh.
+- **Edits fold together.** Ten quick edits to one chore send one change, and
+  only the fields that changed. A change already on its way is never folded
+  into, so a slow connection cannot lose the second edit.
+- **Every call is safe to send twice.** A phone killed mid-send sends again on
+  restart; purchases, games, taxes and payouts carry an id the server
+  recognises, so nothing is charged or paid twice.
+- **Storage full.** The app says so at the top of the screen and keeps working
+  from memory, still sending what it can; the warning goes once a save works.
+- **A pull never undoes a change still waiting to go.** If the server's copy of
+  a row arrives while this phone has a change to that row in its outbox (or
+  just tapped, and it is not in the outbox yet), the phone keeps its own copy;
+  the server's comes back with the next pull, after the change has landed.
+  This is what stops a child's coins jumping back up for a moment after a
+  purchase, and a lifted lockdown coming straight back.
 
-| | When it is used | What it can do |
-|---|---|---|
-| `localAdapter` | No Supabase credentials set (**now**) | Pairs two tabs of the same browser. Cannot reach another phone. |
-| `supabaseAdapter` | `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` set | Pairs real devices. **Written but never run against a live project** — there isn't one yet. |
+### Coins and rewards on more than one phone
 
-The app picks one automatically and says which is active, on both the kid's
-screen and the parent's.
+A purchase takes the coins on screen at once and is settled by the server,
+one at a time per child. Two phones buying with the same coins while offline
+are charged for what the balance covers; the other purchase is refused, the
+coins come back on that phone, and it says why ("by the time it reached the
+server there were not enough coins left", or "taken off the rewards list
+before your purchase arrived"). The balance can never go below zero, on the
+server or on screen. "Mark given" tapped on two parents' phones gives the
+reward once. `tests/rewardraces.mjs` and `supabase/test/29-money-floor.sql`
+check all of it.
 
-### Testing it on one computer
+### The family goal
 
-Two tabs on one machine normally share storage, which would make pairing a
-pantomime. So add `?device=kid` to the address:
+One goal per family, shared by both parents and every child's phone, with the
+same bar on each.
 
-```
-http://localhost:5173/            ← the parent's device
-http://localhost:5173/?device=kid ← the kid's device, separate storage
-```
+- **Set, changed or cleared by a parent** on any phone; the others follow on
+  their next pull. A child's phone shows it and cannot change it.
+- **The bar counts from when the goal was set.** The server records where
+  everybody's XP stood at that moment and counts from there, using its own
+  numbers rather than a phone that may not have synced for a day.
+- **Changing the target keeps progress**; a goal with a new name starts again
+  from now.
+- **Removing a child** takes their XP out of where the goal started too, so the
+  bar does not collapse; what they earned towards it stays counted.
+- **A goal set before goals were shared** (one parent's phone only) is sent up
+  once, and kept only if the family has no goal yet: one set on another phone
+  since stands.
 
-That parameter exists only for development. Two real phones already have
-separate storage.
+`supabase/test/28-family-goal.sql` and `tests/familygoal.mjs` check these.
+
+### Two parents editing one chore: the edit history
+
+Each phone sends only the fields it changed, so two parents changing different
+fields both keep their change. If they change the **same** field, the edit
+that reaches the server last wins.
+
+The one it replaced is not lost: every edit a parent's phone makes to a chore
+is written into the family's activity history, with each changed field's old
+and new value, who made the edit, and whose edit it wrote over (when it was
+somebody else's). It is in **Settings → Download my data**, under activity.
+Accepting, sending back and a chore coming back on its day are not edits and
+are not recorded. Like all activity, the history is deleted after 90 days by
+the retention job (`RETENTION_EVENT_DAYS`).
 
 ---
 
-## Turning on real cross-device pairing
-
-1. Create a Supabase project. → [BACKEND.md](BACKEND.md)
-2. Run **all** of `supabase/schema.sql` in its SQL editor. The pairing part is at
-   the bottom: the `pairing_codes` table and the `create_pairing_code`,
-   `read_pairing_code`, `revoke_pairing_code` and `claim_pairing_code` functions.
-3. Put the project URL and anon key in `.env`:
-   ```
-   VITE_SUPABASE_URL=https://xxxx.supabase.co
-   VITE_SUPABASE_ANON_KEY=eyJ...
-   ```
-4. Restart. The app switches adapters on its own and the "not connected to a
-   real server" warnings disappear.
-
-Then test it properly on two real phones before trusting it, because
-`supabaseAdapter.js` has never run against a live project. Specifically check:
-a wrong code is refused, the fifth wrong guess kills the code, and an expired
-code cannot be claimed. Those are the three that matter.
-
-### One deliberate design note
-
-`pairing_codes` has row level security enabled and **no read policy at all**.
-Nothing reads that table straight from a browser; every interaction goes through
-one of the four functions. A readable pairing table would hand out every live
-code at once.
-
----
-
-## Unlinking
+## Unlinking, and the phone erasing itself
 
 Settings → Link a kid's device → **Unlink** next to the device.
 
-The device loses access. The child's profile, XP and currency stay with the
-family — unlinking a phone is not the same as deleting a child, and the app
-never conflates the two.
+The phone loses access. The child's profile, XP and coins stay with the family:
+unlinking a phone is not deleting a child.
 
-**The unlinked phone erases itself.** Its next syncs are answered with "you are
-in no family"; after two in a row, while signed in, it wipes everything RankUp
-kept on it (the child's name, chores, notes, the sign-in, the outbox) and opens
-at the front door with one sentence saying why. The same happens to a child's
-phone when the child is deleted or consent is withdrawn, and to a parent's
-phone when they are removed from the family or the account is deleted. An
-expired sign-in never triggers it: the server answers that with a 401. It also
-stops receiving the family's notifications at once.
+**The unlinked phone erases itself.** Its next pulls are answered "you are in
+no family"; after **two in a row**, while signed in, it erases everything
+RankUp kept on it (the child's name, chores, notes, the outbox, the sign-in),
+turns its notifications off, and opens at the front door with one sentence
+saying why, naming nobody.
+
+The same happens to:
+
+- a child's phone when the child is deleted, or consent is withdrawn;
+- a parent's phone when that parent is removed from the family, or the account
+  is deleted.
+
+It does **not** happen to an expired sign-in (the server answers that
+differently, and the app asks the person to sign in again), or to a phone that
+never had a family (one still being set up). A phone that has left stops
+receiving the family's notifications at once. `tests/devicewipe.mjs` checks
+both kinds of phone.
 
 ---
 
-## When the phone is offline, full, or disagrees
+## Trying it on one computer
 
-- **Offline for weeks.** Changes wait in the outbox in order. Having no
-  connection never counts against them; a change is only given up after a day
-  of the server itself refusing to answer, tried at least 30 times. A phone
-  offline for thirty days delivers everything when it is back.
-- **Killed mid-send.** The outbox is in storage; a change that may already have
-  arrived is sent again and recognised (every call is safe to repeat).
-- **Storage full.** The app says so at the top of the screen and keeps working
-  from memory, still sending what it can; the warning goes once a save works.
-- **Two parents edit one chore.** Each phone sends only the fields it changed,
-  so different fields both survive. For the same field, the edit that reaches
-  the server last wins, and every edit is written to the family's history with
-  what it replaced and who wrote that, so nothing vanishes without a trace
-  (Settings → Download my data, under activity).
+Two tabs normally share storage. Add `?device=kid` to give one its own:
 
-`tests/offline.mjs`, `tests/guarantees.mjs` and `tests/devicewipe.mjs` check all
-of this.
+```
+http://localhost:5173/            ← the parent's phone
+http://localhost:5173/?device=kid ← the child's phone, separate storage
+```
+
+`supabase/test/up.sh` starts a local Postgres and a stand-in for Supabase's
+API, so this works against a real database ([supabase/test/README.md](../supabase/test/README.md)).
+
+## What is checked, and what is not
+
+- `tests/pairing.mjs`: the whole linking flow as two devices — a wrong code, the
+  fifth wrong guess, a used code, the child's phone having no Parent Mode.
+- `tests/sync.mjs`, `tests/coparents.mjs`, `tests/devicewipe.mjs`: two and three
+  browsers against Postgres.
+- `tests/offline.mjs`, `tests/guarantees.mjs`, `tests/outbox.mjs`,
+  `tests/syncfixes.mjs`: thirty days offline, a page killed mid-send, two parents'
+  edits, the outbox rules above.
+- **Not yet against a live Supabase project.** Everything runs against real
+  Postgres through a local stand-in for Supabase's API. Before real families,
+  link two real phones on the live project and check: a wrong code is refused,
+  the fifth wrong guess kills the code, an expired code cannot be claimed, and a
+  chore travels both ways.

@@ -336,7 +336,7 @@ grant execute on function remove_adult(uuid) to authenticated;
 --
 -- What a supporter can do is deliberately tiny. They see how the children are
 -- getting on and they can put something in a pot. They cannot approve a
--- chore, cannot see a proof photo, cannot read a private note, cannot change
+-- chore, cannot see what a child sent in, cannot read a private note, cannot change
 -- anything. Everything about that is enforced by them having no table access
 -- whatsoever — see current_family_id() in schema.sql — rather than by a list
 -- of screens that remember to check.

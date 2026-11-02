@@ -10,8 +10,8 @@
 -- Paying for signups is how a referral programme turns into a farm. A parent
 -- with five spare email addresses can create five families in ten minutes and
 -- collect five rewards without a single child ever doing anything. Paying on a
--- first approved chore costs the farmer a real photograph of a real task
--- approved by a second real person, which is more work than the reward is
+-- first approved chore costs the farmer a real chore, done on a child's
+-- phone and accepted by a parent, which is more work than the reward is
 -- worth — and it means every reward we hand out is attached to a household
 -- that has actually seen the product work.
 --

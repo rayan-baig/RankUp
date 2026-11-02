@@ -41,7 +41,7 @@ const DIGEST_HOUR = whole(process.env.DIGEST_HOUR, 18, 0, 23)
  *
  * A bare number says nothing — "nine" means nothing, "nine, up from five" is
  * the whole message. And the last sentence is the only part that asks for
- * anything: a parent with photos waiting is the one case where opening the app
+ * anything: a parent with chores waiting to be checked is the one case where opening the app
  * tonight actually matters.
  */
 function digestMessage(d) {
@@ -60,7 +60,8 @@ function digestMessage(d) {
   if (d.quietest_day && done > 0) body += ` Quietest day: ${d.quietest_day}.`
 
   const waiting = Number(d.waiting_for_you) || 0
-  if (waiting > 0) body += ` ${waiting} ${waiting === 1 ? 'photo is' : 'photos are'} waiting for you.`
+  // Chores, not photos: RankUp takes none, and a parent checks the chore itself.
+  if (waiting > 0) body += ` ${waiting} ${waiting === 1 ? 'chore is' : 'chores are'} waiting for you to check.`
 
   return {
     title: 'Your week in RankUp',

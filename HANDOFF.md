@@ -1,5 +1,9 @@
 # RankUp — complete handoff
 
+> **A snapshot from 25 October 2026.** Since then RankUp stopped taking photos
+> altogether: the camera, the photo check and the AI review described below are
+> gone. For what is true now, read [docs/STATUS.md](docs/STATUS.md) and the rest of `docs/`.
+
 Everything needed to pick this project up cold, on a new machine or in a new
 Claude account, and be productive in under an hour.
 

@@ -1,5 +1,9 @@
 # RankUp, explained from the beginning
 
+> **A snapshot from 25 October 2026.** Since then RankUp stopped taking photos
+> altogether: the camera, the photo check and the AI review described below are
+> gone. For what is true now, read [docs/STATUS.md](docs/STATUS.md) and the rest of `docs/`.
+
 *A long plain-English essay about the whole project — what it is, why every
 part of it is the way it is, what works, what does not, and what it cost to
 learn. Written to be pasted into a new Claude account, or read by a person who

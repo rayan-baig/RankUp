@@ -1,54 +1,45 @@
 # Launch checklist
 
-Everything in the code is done. What is left is the things only you can do —
-they need your accounts, your bank details, and a decision about how you want
-to cover the legal side (section 7).
+What is left before real families use RankUp is the part only you can do: it
+needs your accounts, your bank details, and a decision about the legal side
+(section 7). Work down the list in order; nothing here is optional.
 
-Work down the list. Nothing below is optional if real families are going to use
-this.
+When something goes wrong after launch, see
+[IF-SOMETHING-BREAKS.md](IF-SOMETHING-BREAKS.md).
 
 ---
 
 ## 1. Create the accounts (about an hour)
 
-- [ ] **Supabase** — [supabase.com](https://supabase.com), new project, pick a
-      region near your users. The free tier is enough while you build and
-      test (500MB of database, 50,000 monthly users). **Before real families
-      use it, move to the paid plan** (about $25/month): the free plan does not
-      keep backups you can count on, and losing the database loses every
-      family. See docs/BACKUPS.md.
-- [ ] **A host.** Two are configured and the same `/api` handlers run on either:
-      - **Cloudflare Pages** — free, and its free tier permits commercial use.
-        Config is `wrangler.toml`; the Node handlers run through
-        `functions/api/[[route]].js`. This is the cheaper option, by about
-        $240/year.
-      - **Vercel** — [vercel.com](https://vercel.com), config in `vercel.json`.
-        The Hobby tier is free but non-commercial, so taking payments means Pro
-        at about $20/month.
+- [ ] **Supabase** — [supabase.com](https://supabase.com), new project, a
+      region near your families. The free tier is fine while you build and
+      test. **Before real families, move to the paid plan** (about $25/month):
+      the free plan keeps no backups you can count on, and losing the
+      database loses every family. See [BACKUPS.md](BACKUPS.md).
+- [ ] **A host.** Both are set up and run the same `/api` code:
+      - **Cloudflare Pages** (recommended): free, and the free tier allows
+        commercial use. Settings in `wrangler.toml`; the functions are served
+        through `functions/api/[[route]].js`. About $240 a year cheaper.
+      - **Vercel**: settings in `vercel.json`. The free tier does not allow
+        commercial use, so taking payments means Pro, about $20/month.
 
-      Whichever you pick, deploy the other as a fallback before you need one:
-      switching hosts under pressure with a live Stripe webhook is the worst
-      possible time to find out something does not port.
+      Deploy the other one too, as a fallback, before you need it: moving
+      hosts in a hurry with a live Stripe webhook is the worst time to find
+      out something does not move.
 
-      **Not yet verified on Cloudflare:** `web-push` reaches for Node crypto.
-      `nodejs_compat` is enabled for it, but send one real push from a Cloudflare
-      deploy before trusting it. Everything else — Stripe checkout, the billing
-      portal and webhook signature verification — was exercised
-      against the adapter and behaves identically on both.
-- [ ] **Stripe** — [stripe.com](https://stripe.com). Needs business details and
-      a bank account, so start this early; verification can take days.
+      Push notifications are sent with `fetch`, which both hosts have, and
+      `tests/push.mjs` proves one end to end under Cloudflare's runtime
+      against a stand-in push service. A real phone is the one step not tried
+      yet (section 6).
+- [ ] **Stripe** — [stripe.com](https://stripe.com). It needs business details
+      and a bank account, so start early: checking them can take days.
 
 ## 2. Set up the database (about fifteen minutes)
 
-In the Supabase SQL editor, run these **in order**:
-
-**Upgrading later: always run the files again *before* deploying the new app.** A
-newer app calls functions the older database does not have yet, and those calls are
-refused (games, gifts and purchases would show as not accepted).
-
-(The same order the tests use, in `supabase/test/run.sh`. Leaving one out
-breaks that feature for every family: co-parents, the allowance pot,
-charity and referrals each live in their own file.)
+In the Supabase SQL editor, run these files **in this order**. It is the order
+the tests use (`supabase/test/run.sh`), and `tests/wiring.mjs` fails if this
+list and that one ever differ. Leaving one out breaks that feature for every
+family.
 
 - [ ] `supabase/schema.sql`
 - [ ] `supabase/sync.sql`
@@ -67,278 +58,324 @@ charity and referrals each live in their own file.)
 - [ ] `supabase/retention.sql`
 - [ ] `supabase/crashes.sql`
 - [ ] `supabase/health.sql`
-- No storage bucket is needed: RankUp keeps no photos.
+
+No storage bucket is needed: RankUp keeps no photos.
+
+**Upgrading later: run all the files again, in the same order, before the new
+app goes live.** They are written to be safe to run over a live database, and
+that is the whole upgrade procedure. A newer app calling a function the older
+database does not have yet is refused (a game, a gift or a purchase would show
+as not accepted). The test suite applies every file twice and checks that every
+table, row, function, trigger, policy and permission came through the second
+time unchanged (`supabase/test/18-upgrade.sql`).
 
 ## 2a. Sign-in protection (five minutes, in the Supabase dashboard)
 
-Parent sign-in, sign-up and password resets are Supabase Auth's, not code in
-this repository, so their limits are set in the dashboard, not here. Nothing
-in the app throttles sign-in itself (a limit in the browser would be no limit).
+Parent sign-in, sign-up and password resets are Supabase's, not code in this
+repository, so their limits are set in the dashboard.
 
-- [ ] **Authentication → Rate Limits.** Supabase limits per IP address out of
-      the box (sign-ins and sign-ups, token refreshes, verifications, emails
-      sent, anonymous sign-ins — the last is how a child's phone signs in, so
-      do not set it below a few an hour). Check the numbers there; there is no
-      per-account lockout, so a slow guesser spread over many addresses is
-      limited only by password strength.
+- [ ] **Authentication → Rate Limits.** Supabase limits per IP address (sign-ins
+      and sign-ups, token refreshes, verifications, emails, anonymous
+      sign-ins). A child's phone signs in anonymously, so do not set that one
+      below a few an hour. There is no per-account lockout: a slow guesser
+      across many addresses is held back only by password strength.
 - [ ] **Authentication → Providers → Email:** minimum password length 10, and
-      turn on leaked-password protection if your plan has it.
-- [ ] **Do not turn on CAPTCHA yet.** The app does not send a CAPTCHA token, so
-      every sign-in would be refused.
-- [ ] **Password resets.** The app has no "forgot password" screen yet; a parent
+      leaked-password protection if your plan has it.
+- [ ] **Do not turn on CAPTCHA.** The app sends no CAPTCHA token, so every
+      sign-in would be refused.
+- [ ] **Password resets.** The app has no "forgot password" screen. A parent
       who forgets theirs needs a reset link sent from the dashboard (Users →
-      Send password recovery). Set **Email OTP expiration** to 15 minutes. A
-      recovery link works once. Check on the live project, once, that a link is
-      dead after the password has been changed: send one, change the password,
-      then open the link. This cannot be tested locally — the local stand-in
-      does not implement auth.
+      Send password recovery). Set **Email OTP expiration** to 15 minutes. Once,
+      on the live project, check a link is dead after the password has been
+      changed: send one, change the password, then open the link. This cannot
+      be tested locally.
 
 ## 2b. Schedule the jobs — none of them are optional
 
-Set `CRON_SECRET` to a long random string. Each job is one HTTP request with
-`Authorization: Bearer <CRON_SECRET>`; they accept GET or POST, because
-schedulers differ on which they send.
-
-**On Vercel** the schedule ships in `vercel.json` and Vercel sends the header
-itself once `CRON_SECRET` is set in the project — there is nothing else to do.
-
-**On Cloudflare Pages there is no scheduler.** Pages Functions have no
-`scheduled` handler, so these will never fire on their own. Either deploy a
-small Worker with a Cron Trigger that `fetch`es the job URLs below with the header,
-or point any external scheduler at them. Do not assume Pages will run them.
+Set `CRON_SECRET` (section 4) to a long random string. Each job is one HTTP
+request with the header `Authorization: Bearer <CRON_SECRET>`. They accept GET
+or POST, because schedulers differ on which they send.
 
 | Job | How often | What breaks without it |
 |---|---|---|
-| `/api/send-reminders` | every 15 min | Daily reminders never arrive |
-| `/api/send-digests` | hourly | The Sunday digest never goes out |
-| `/api/run-retention` | daily | Old activity records pile up, and a deleted family's Stripe cancellation that failed is never retried |
-| `/api/settle-alliances` | monthly | Nobody is ever paid their discount |
-| `/api/settle-schools` | monthly | No District Champion, no School Stars, no free month |
+| `/api/send-reminders` | every 15 minutes | Daily reminders never arrive |
+| `/api/send-digests` | hourly | The weekly digest never goes out |
+| `/api/run-retention` | daily | Old activity piles up, and a deleted family's Stripe cancellation that failed is never retried |
+| `/api/settle-alliances` | monthly (the 2nd) | Nobody is ever given their 20% discount |
+| `/api/settle-schools` | monthly (the 2nd) | No District Champion, no School Stars, no free month |
 
-The hourly one looks wasteful and is not: the database decides whose Sunday
-evening it actually is, so an hourly run is what makes a digest arrive at six
-in the evening in every time zone instead of six in yours.
+The hourly digest is not wasteful: the database decides whose Sunday evening it
+is, so an hourly run is what makes a digest arrive at six in the evening in every
+time zone.
 
-### Knowing it is all still running
+**On Vercel** the schedule is already in `vercel.json` (`crons`), and Vercel sends
+the header itself once `CRON_SECRET` is set in the project. Nothing else to do.
 
-Every job records that it ran, and `/api/health` reports how long each has been
-quiet. This is the failure mode that matters: all four fail by going SILENT —
-no error, no alert, just reminders that stop arriving. A scheduler that never
-fires looks identical to one that works, which is how the POST-only bug in this
-repo survived as long as it did.
+**On Cloudflare Pages there is no scheduler.** Pages Functions cannot be run on a
+timer, so these will never fire by themselves. Either point any outside scheduler
+(a cron service, GitHub Actions on a schedule) at the five addresses with the
+header, or deploy a small separate Worker with Cron Triggers that calls them. A
+starting point for that Worker (not part of this repository, and not tested
+here):
+
+```js
+// A separate Worker. Its wrangler.toml needs:
+//   [triggers]
+//   crons = ["*/15 * * * *", "5 * * * *", "20 3 * * *", "40 4 2 * *"]
+// and two settings: SITE (https://your-site) and CRON_SECRET (the same value).
+const JOBS = {
+  '*/15 * * * *': ['send-reminders'],
+  '5 * * * *': ['send-digests'],
+  '20 3 * * *': ['run-retention'],
+  '40 4 2 * *': ['settle-alliances', 'settle-schools'],
+}
+export default {
+  async scheduled(event, env, ctx) {
+    for (const job of JOBS[event.cron] || []) {
+      ctx.waitUntil(fetch(`${env.SITE}/api/${job}`, {
+        method: 'POST', headers: { Authorization: `Bearer ${env.CRON_SECRET}` },
+      }))
+    }
+  },
+}
+```
+
+### Knowing they are still running
+
+Every job records each run, and `/api/health` reports how long each has been
+quiet. Silence is how these fail: no error, just reminders that stop arriving.
 
 ```
-GET  https://your-site/api/health                        -> {"ok":true}
-GET  https://your-site/api/health   (with CRON_SECRET)   -> the detail
+GET https://your-site/api/health                                        -> {"ok":true}, or 503
+GET https://your-site/api/health  (Authorization: Bearer CRON_SECRET)   -> the detail, 503 if anything is wrong
 ```
 
-Point any free uptime monitor at the shallow one. It is public on purpose and
-says nothing useful to a stranger; the detail — which job is stale, crashes in the last 24 hours — needs the secret, and
-returns **503** when something is wrong so a monitor treats it as down.
+Point a free uptime monitor at the first. It is public on purpose and says
+nothing useful to a stranger. The second lists each job (`ok`, `stale`, or
+`never_run`), crashes in the last 24 hours, deleted families whose Stripe
+cancellation is more than a day overdue, and which settings are present (as
+yes/no, never the values). What each one means and what to do:
+[IF-SOMETHING-BREAKS.md](IF-SOMETHING-BREAKS.md).
 
-Worth knowing: a job that has **never** run reports `never_run`, not `stale`.
-Before launch that is every job and it is fine. A month in, it means the
-schedule was never set up at all.
+A job that has **never** run says `never_run`, and counts as not healthy. Before
+launch that is every job, and the deep check is red; that is expected. A month
+in, it means the schedule was never set up.
 
-| When | Request | What breaks without it |
-|---|---|---|
-| every 10–15 min | `/api/send-reminders` | reminder times are saved and never delivered |
-| daily | `/api/run-retention` | see below |
-| monthly | `/api/settle-alliances` | families see a leaderboard and never get the discount |
-| monthly | `/api/settle-schools` | schools never get their Champion, Stars or free month |
+### What retention deletes
 
-**Retention keeps the database small.** The activity log keeps every row and
-spent pairing codes never leave unless this job runs. Each day it deletes
-exactly these, and nothing else:
+Each day, exactly these, and nothing else
+(`supabase/test/34-scheduled-jobs.sql` checks it deletes all of them and
+changes no other row in any table):
 
 | What | Once older than |
 |---|---|
-| Activity log entries (`events`) | 90 days (`RETENTION_EVENT_DAYS`) |
+| Activity log entries (`events`), including the chore-edit history | 90 days (`RETENTION_EVENT_DAYS`) |
 | Crash reports | 90 days (the same setting) |
 | Pairing codes, counted from when they expired | 2 days (`RETENTION_PAIRING_DAYS`) |
 | Pairing guess counts (the rate limit) | 2 days (the same setting) |
 | Retry receipts (what stops a resent purchase charging twice) | 30 days |
-| The record of a deleted family's Stripe cancellation, once Stripe confirmed it | 30 days (7 if there was nothing to cancel) |
-
-RankUp keeps no photos, so there are none to clear: the columns an older
-version kept them in are dropped when you re-run the SQL files.
-`supabase/test/34-scheduled-jobs.sql` checks that the job deletes all of
-these and changes not one other row in any table.
+| A deleted family's Stripe cancellation record, once Stripe confirmed it | 30 days (7 if there was nothing to cancel) |
 
 It also cancels, at Stripe, any deleted family's subscription that could not
-be cancelled at the moment of deletion, so it needs `STRIPE_SECRET_KEY` as
-well; see docs/PAYMENTS.md. A cancellation still waiting for Stripe is never
-deleted. `/api/health` turns red if one has waited more than a day.
+be cancelled at the moment of deletion, so it needs `STRIPE_SECRET_KEY` too. A
+cancellation still waiting for Stripe is never deleted.
 
-## 3. Generate the keys
+## 3. Get the keys
 
-- [ ] `npx web-push generate-vapid-keys` → the two VAPID values
-- [ ] Supabase → Settings → API → the project URL, the **anon** key, and the
-      **service role** key
-- [ ] Stripe → the family plans and the ticket packs:
+- [ ] `npx web-push generate-vapid-keys` → the public and private VAPID keys.
+      Once, ever: changing them later stops every phone's notifications.
+- [ ] Supabase → Settings → API → the project URL, the **anon** key and the
+      **service role** key.
+- [ ] Stripe → the plans and the ticket packs:
       - Starter is **free**: no Stripe price.
       - Standard: $9.99 a month **and** $99.90 a year → `STRIPE_PRICE_STANDARD`,
         `STRIPE_PRICE_STANDARD_YEAR`.
       - Elite: $15.99 a month **and** $159.90 a year → `STRIPE_PRICE_ELITE`,
         `STRIPE_PRICE_ELITE_YEAR`.
-      - Three **one-off** Flash Ticket prices ($2.99 / 2, $5.99 / 5,
-        $11.99 / 12) → `STRIPE_PRICE_FLASH_2`, `_FLASH_5`, `_FLASH_12`.
-      - School League: eight prices, see docs/PAYMENTS.md.
-      All the yearly ids must be set if you sell yearly: a missing one means
-      a family who just paid for a year is put back on the free plan.
+      - Three **one-off** Flash Ticket prices ($2.99 for 2, $5.99 for 5,
+        $11.99 for 12) → `STRIPE_PRICE_FLASH_2`, `_FLASH_5`, `_FLASH_12`.
+      - The School League: eight prices, see [PAYMENTS.md](PAYMENTS.md#the-school-league).
 
-      The three ticket packs exist because Stripe's flat 30c is 10% of a $2.99
-      sale and 2.5% of an $11.99 one. They are sized against the shop, not
-      against round numbers: skins cost 1-3 tickets by rarity and the whole set
-      is eleven, so twelve is "everything" and anything larger would be selling
-      a family something they cannot spend. The ticket count for each pack, and
-      the price of each rarity, are both fixed server-side — a caller can
-      neither buy the small pack and be credited the large one, nor claim the
-      legendary for the price of a common.
-- [ ] Stripe → Developers → Webhooks → add `https://YOURDOMAIN/api/stripe-webhook`
-      → the signing secret. Subscribe it to the events listed in
-      [PAYMENTS.md](PAYMENTS.md) step 4, `charge.refunded` included: without
-      it a refunded plan or ticket pack is never taken back.
+      Set every yearly id if you sell yearly: a missing one means a family who
+      has just paid for a year is put back on the free plan by the very
+      message that was meant to upgrade them. How many tickets a pack gives,
+      and what each skin costs, are fixed on the server: a buyer cannot pay for
+      the small pack and be given the large one.
+- [ ] Stripe → Developers → Webhooks → add `https://your-site/api/stripe-webhook`,
+      and copy its signing secret. Send it **these events**:
+      - `checkout.session.completed`
+      - `checkout.session.async_payment_succeeded`
+      - `customer.subscription.created`, `customer.subscription.updated`,
+        `customer.subscription.deleted`
+      - `invoice.paid` and `invoice.payment_succeeded`
+      - `invoice.payment_failed` (received and deliberately ignored: the
+        subscription's own status change is what moves the plan)
+      - `charge.refunded` — without it a refunded plan or ticket pack is never
+        taken back
 
-## 4. Set the environment variables in Vercel
+      [PAYMENTS.md](PAYMENTS.md) says what each one does to a family.
+- [ ] Stripe → Settings → Billing → **Customer portal**: turn it on. Cancelling
+      and changing cards happen there.
 
-Copy from `.env.example`. **The rule that matters:** anything named `VITE_*` is
-compiled into the JavaScript every phone downloads. A secret in a `VITE_` name
-is a published secret.
+## 4. Set the settings on your host
 
-Safe in `VITE_`: the Supabase URL, the Supabase **anon** key, the VAPID
-**public** key, `VITE_STRIPE_ENABLED`.
+Copy from `.env.example`, which lists every setting the code reads and nothing
+else (`tests/config.mjs` fails otherwise). On Cloudflare Pages: the project's
+Settings → Environment variables (they reach both the build and the functions).
+On Vercel: Project Settings → Environment Variables.
 
-Never in `VITE_`: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`,
-`STRIPE_WEBHOOK_SECRET`, `VAPID_PRIVATE_KEY`.
+**The rule that matters:** anything named `VITE_*` is built into the JavaScript
+every phone downloads. A secret in a `VITE_` name is a published secret.
 
-The app checks for this at start-up and shouts in the console if it finds a
-secret-shaped value in a public name. `npm run test:smoke` checks the other
-direction — that every setting the code reads is actually in `.env.example`,
-so the file you are copying from is never missing one.
+| Setting | What it is | Secret? |
+|---|---|---|
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | The project's address and public key, for the app. The server functions read the anon key too, when they ask the database something as the signed-in parent, so it must be set on the host, not only in a local file. | No |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | The same address, and the key that bypasses every database rule | **Yes** |
+| `PUBLIC_SITE_URL` | Your public https address. Stripe sends people back here; without it checkout and the billing portal refuse to start. | No |
+| `VITE_VAPID_PUBLIC_KEY` and `VAPID_PUBLIC_KEY` | The public push key, twice (the app and the server both need it) | No |
+| `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | The private push key, and `mailto:` your address | Private key: **yes** |
+| `VITE_STRIPE_ENABLED` | `true` to switch billing on | No |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe's secret key and the webhook's signing secret | **Yes** |
+| `STRIPE_PRICE_*` | The price ids from section 3 | No |
+| `CRON_SECRET` | One long random string (`openssl rand -hex 32`) that protects all five scheduled jobs and the detailed health check | **Yes** |
+| `OPERATOR_SECRET` | A different long random string: your key to `/#/operator`, where you check each school is real | **Yes** |
+| `STATS_KEY` | Optional. Lets your own console read two counts (families, active families) from `/api/stats`. Unset, that address does not exist. | **Yes** |
+| `VITE_GUILDS_ENABLED` | Leave unset for launch (section 7) | No |
+| `RETENTION_*`, `REMINDER_GRACE_MINUTES`, `DIGEST_WEEKDAY`, `DIGEST_HOUR` | Optional; the defaults are in `.env.example` | No |
 
-**Two that are easy to miss**, because nothing breaks until somebody real hits
-them:
+Leave `VITE_DEMO_ON_BOOT` and `STRIPE_API_BASE` unset: one is for the shareable
+preview build, the other for the tests.
 
-- [ ] `PUBLIC_SITE_URL` — your public https address. Stripe sends people back
-      here after paying. Without it, checkout and the billing portal refuse to
-      start rather than sending a paying parent to a broken page.
-- [ ] `CRON_SECRET` — one long random string (`openssl rand -hex 32`) for all
-      three scheduled jobs. Without it they refuse every caller including your
-      own scheduler, and reminders and digests never go out.
+**Deleting an account** goes through `/api/delete-account`, which needs
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `VITE_SUPABASE_ANON_KEY` and
+`STRIPE_SECRET_KEY`: it deletes the family as the parent and then cancels the
+family's Stripe subscription at once. If Stripe is down the account is still
+deleted, and the daily retention job finishes the cancellation.
 
-`GET /api/health` with that secret lists all of these as booleans, so you can
-check the deploy rather than guess at it.
+The app checks at start-up and shouts in the console if it finds a
+secret-shaped value in a `VITE_` name, and `tests/bundle.mjs` builds the app
+with every server setting given a fake value and checks none of them reached
+the phone.
 
-## 5. Fill in the things marked as placeholders
+**Check the deploy instead of guessing:** `GET /api/health` with the
+`CRON_SECRET` lists `database`, `payments`, `push`, `scheduled_jobs` and
+`site_url` as true or false.
 
-- [ ] `src/data/legalText.js` → `OPERATOR` — your name, contact email, postal
+## 5. Fill in the placeholders
+
+- [ ] `src/data/legalText.js` → `OPERATOR`: your name, contact email and postal
       address. The app shows a warning banner until you do.
-- [ ] Read the privacy policy and terms in that file end to end. They describe
-      what the app actually does today. If you change anything, change them.
+- [ ] Read the privacy policy and terms in that file from start to finish. They
+      describe what the app does today. If you change what it does, change
+      them.
 
-## 6. Deploy and check it
+## 6. Deploy and check it on real phones
 
-**Every update after launch:** run the SQL files again, in the order in
-`docs/BACKEND.md`, *before* the new app build goes live. They are safe to run
-over a live database, and a new app talking to an old database fails on the
-functions that changed.
-
-- [ ] Push to GitHub; Vercel builds automatically.
-- [ ] Open the site on a **real phone**, not a desktop browser.
-- [ ] Add it to the home screen (Share → Add to Home Screen).
-- [ ] Walk the whole loop: sign up → consent → add a kid → assign a quest →
-      pair a second device → tap "I did it!" → accept → check the XP lands.
-- [ ] Turn on notifications and confirm one actually arrives.
-- [ ] In Stripe **test mode**, subscribe with `4242 4242 4242 4242`, then check
-      the family really becomes Elite. Then use `4000 0000 0000 0341` and check
-      a failed payment really drops them to Standard.
+- [ ] Run the SQL files (section 2), then push to GitHub; the host builds it.
+- [ ] Open the site on a **real phone**, not a desktop browser, and add it to
+      the home screen (Share → Add to Home Screen).
+- [ ] Walk the whole loop: sign up → consent → add a child → assign a chore →
+      link a second phone with its code → tap "I did it!" on it → Accept → check
+      the XP arrives on the child's phone.
+- [ ] Turn notifications on (on the parent's phone) and check one really
+      arrives, on Android and on an iPhone added to the home screen.
+- [ ] In Stripe **test mode**, subscribe with card `4242 4242 4242 4242` and
+      check the family becomes Elite. Then make a renewal fail (a test clock,
+      with the card changed to `4000 0000 0000 0341`) and check the family
+      drops to Starter and the dashboard says "A payment failed".
+- [ ] Refund that test payment in full in Stripe and check the plan says "Your
+      payment was refunded". (Cancel the subscription in Stripe as well: a
+      refund does not.)
+- [ ] Delete a test account (Settings → Delete my account) and check its
+      subscription shows as cancelled in Stripe straight away.
+- [ ] Check `GET /api/health` with the secret: every job `ok` once each has had
+      a chance to run, `billing_cancellations_overdue` 0.
 
 ## 7. Keeping the legal side small
 
-The app is now built so there is very little to be responsible for:
+The app is built so there is little to be responsible for:
 
 - **No photos at all.** RankUp never takes, sends or keeps a picture. A parent
-  who wants proof gets a photo from the child's own camera app, by message,
-  and taps Accept. There is no photograph of a child or their home on any
-  RankUp server to protect or lose.
-- **Guilds are off by default.** Kid-to-kid contact across families is the
+  who wants proof gets a photo from the child's own camera app, by message, and
+  taps Accept. There is no photograph of a child or a home on any RankUp server.
+- **Guilds are off by default.** Child-to-child contact across families is the
   heaviest obligation in the product and nobody subscribes for it. Leave
   `VITE_GUILDS_ENABLED` unset for launch.
 
-That leaves: a first name, chore history, and XP. Still children's data, still
-covered by COPPA — but a far smaller thing to defend.
+That leaves a first name, chore history and XP. Still children's data, still
+covered by COPPA, but a far smaller thing to defend.
 
 **The cheap way to cover it:** an FTC-approved COPPA Safe Harbor programme such
-as **kidSAFE** or **PRIVO**. They exist precisely so small operators do not have
-to hire counsel — they review the app, certify it, and you get a trust badge
-that is genuinely useful marketing to parents. Check their current pricing; it
-is an annual fee rather than an hourly one.
+as **kidSAFE** or **PRIVO**. They review the app and certify it, and the badge is
+useful with parents. Check their current prices; it is a yearly fee.
 
 Free things worth doing first, either way:
 
-- [ ] The **ICO Children's Code self-assessment** (UK) — free, online
-- [ ] The **FTC's COPPA Six-Step Compliance Plan** — short and readable
+- [ ] The **ICO Children's Code self-assessment** (UK), online
+- [ ] The **FTC's COPPA Six-Step Compliance Plan**, short and readable
 
 ## 8. Or the lawyer route ⚠️
 
-**Do this before one real child's data exists.** Not after a pilot, not after
-launch.
+**Before one real child's data exists.** Not after a pilot.
 
 - [ ] One paid consultation with a solicitor or attorney who knows children's
-      apps. Take them: `docs/LEGAL.md`, `src/data/legalText.js`, and this list.
-- [ ] Ask specifically about: whether your consent method is sufficient in your
-      jurisdiction, guild chat between children in
-      different families, and whether you need age verification beyond a
-      parent's word.
+      apps. Take [LEGAL.md](LEGAL.md), `src/data/legalText.js` and this list.
+- [ ] Ask specifically: is the consent method enough where you are; guild chat
+      between children in different families; is age verification needed
+      beyond a parent's word.
 - [ ] Register with the ICO if you are in the UK.
-- [ ] Have them check the privacy policy and terms. They are an honest draft
-      written from what the code does, not a lawyer's document.
+- [ ] Have them check the privacy policy and terms: an honest draft written
+      from what the code does, not a lawyer's document.
 
 ## 9. Before you take money
 
-- [ ] The purchaser must be the parent. A subscription bought by a child is
-      chargeable-back and, in the US, specifically actionable. Flash Tickets are
-      already built this way — the purchase lives behind the parent PIN and a
-      kid's device has no route to a payment screen — but check it yourself on a
-      real kid device before launch.
+- [ ] The purchaser must be the parent. Payments are behind the parent PIN and a
+      child's phone has no way to a payment screen; check that yourself on a
+      real child's phone.
 - [ ] The Sunday Market is a timed-scarcity mechanic aimed at children, and a
       Flash Ticket is a paid way out of missing one. Regulators look hard at
-      that pattern. What keeps it defensible is that the market sells nothing
-      but cosmetics, shows no countdown, and every skin comes back — keep all
-      three true if you change it.
-- [ ] Price, renewal date and cancellation route disclosed before payment.
-- [ ] Refund policy written down and reachable from the app.
+      that. What keeps it defensible: it sells only cosmetics, shows no
+      countdown, and every skin comes back. Keep all three true.
+- [ ] Price, renewal date and how to cancel shown before payment.
+- [ ] A refund policy, written down and reachable from the app.
 - [ ] Stripe Tax switched on.
-- [ ] Cancel a real subscription yourself and confirm it works end to end.
+- [ ] Cancel a real subscription yourself and check it works end to end.
 
-## 10. Then, and this is the important one
+## 10. Then, the important one
 
-**Use it with one real family for a week before telling anyone else about it.**
+**Use it with one real family for a week before telling anyone else.**
 
-Every automated check in this repository passes. None of them can tell you
-whether a parent will actually open the app to approve a chore, which is the
-assumption the entire product rests on. That is worth more than any further
-engineering, and it costs nothing.
+Every automated check here passes. None of them can tell you whether a parent
+will open the app to accept a chore, which is what the whole product rests on.
 
 ---
 
-## What is still not built
+## What is not built yet
 
-Be honest about these when you launch.
+Say so honestly when you launch.
 
 | | Why |
 |---|---|
-| **Reminders with the app closed** | They fire while RankUp is open. Background ones need a scheduled server job. |
-| **Background push, on a real phone** | Proven end to end against a stand-in push service (`tests/push.mjs`): the production build sends it, the signature verifies, and it decrypts with the phone's keys. It sends with `fetch`, because Node's `https` does not exist on Cloudflare and every push failed there before. A real phone's push service is the one step not yet tried. |
-| **Guilds** | Built and tested, but switched OFF by default. Turn them on with `VITE_GUILDS_ENABLED=true` once you are ready for kid-to-kid contact and the moderation it implies. |
+| **Notifications on a child's phone** | Only a parent's phone has the switch, so "Approved!" and "Sent back" reach no phone yet; the child sees them on opening RankUp. See [NOTIFICATIONS.md](NOTIFICATIONS.md). |
+| **A real phone receiving a push** | Proven against a stand-in push service, not yet a real one. Section 6. |
+| **Forgot password** | No screen; you send a reset link from the Supabase dashboard (section 2a). |
+| **Guilds** | Built and tested, switched off. Turn on with `VITE_GUILDS_ENABLED=true` once you are ready for child-to-child contact and the moderation it needs. |
+
+The full list, in order: [ROADMAP.md](ROADMAP.md).
 
 ## Running the tests
 
 ```bash
-npm run test:db      # every database check (about 900) — no browser needed
-npm run test:smoke   # browser checks, no backend required
-npm run test:sync    # browser checks against a real backend
+bash supabase/test/up.sh       # Postgres, the schema, the stand-in API, the dev server
+npm run test:db                # the SQL suite: about 1,000 checks, no browser
+npm run test:refusals          # every refusal reason in the SQL is given by a test
+npm run test:static            # settings, routes, jobs and SQL order agree
+npm run test:awards            # the rules, in Node, against Postgres
+npm run test:smoke             # the app in a real browser
+npm run test:sync              # two and three phones against Postgres
+npm run test:built             # the production build: no secrets, the policy, the framed games
+bash supabase/test/up.sh --cf && npm run test:api   # the server functions under workerd
 ```
 
-`supabase/test/README.md` explains how to stand the local backend up.
+[tests/README.md](../tests/README.md) and
+[supabase/test/README.md](../supabase/test/README.md) say what each one covers.

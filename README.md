@@ -15,27 +15,36 @@ phone browser and can be added to the home screen. That choice is deliberate —
 
 ## Run it on your computer
 
-You need [Node.js](https://nodejs.org) 18 or newer. Then, in a terminal:
+You need [Node.js](https://nodejs.org) 20 or newer and git. Then, in a terminal:
 
 ```bash
-npm install     # once, downloads the libraries
+git clone <this repository's address> rankup
+cd rankup
+npm install     # once: downloads the libraries
 npm run dev     # starts the app
 ```
 
-Open the address it prints (usually `http://localhost:5173`).
+Open the address it prints (`http://localhost:5173`) and tap **Have a look
+around** for a ready-made family, or set one up yourself. Nothing else is
+needed: with no settings, the whole app runs on this one device and keeps its
+data in the browser.
 
-To test on your actual phone, use the "Network" address it prints — your phone must be
-on the same wifi.
+To try it on your phone, start it with `npm run dev -- --host` and open the
+"Network" address it prints; the phone must be on the same wifi.
 
 Other commands:
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Runs the app locally with instant reload while you edit |
+| `npm run dev` | Runs the app locally, reloading as you edit |
 | `npm run build` | Makes the optimised version in `dist/` that gets deployed |
-| `npm run preview` | Serves the built version, to check it before deploying |
+| `npm run preview` | Serves that built version, to check it before deploying |
 | `npm run lint` | Checks the code for obvious mistakes |
-| `npm run test:smoke` | Drives the app in a real browser and checks the rules that keep the game honest — see [tests/README.md](tests/README.md) |
+| `npm run test:static` | Quick checks that need nothing running: every setting is documented, the routes and scheduled jobs line up |
+
+The full test suites (a real Postgres, a browser, the server functions) need a
+little more set up first; [tests/README.md](tests/README.md) says how, and
+[docs/LAUNCH.md](docs/LAUNCH.md#running-the-tests) lists every command.
 
 ---
 
@@ -51,11 +60,13 @@ deliberately fake**. Which is which is written down in
 **[docs/STATUS.md](docs/STATUS.md)** — read that file before demoing, so you never
 accidentally promise something that does not exist.
 
-What is real now: accounts, two-device sync, payments through Stripe, the School
-League, push notifications. What still needs a person rather than code before real
-families use it (the operator's legal details, a lawyer on children's data, a real-phone
-test of notifications) is listed in **[docs/LAUNCH.md](docs/LAUNCH.md)**, which is the
-checklist to follow to go live.
+What is real now: accounts, syncing between phones, payments through Stripe,
+push notifications and reminders, the School League, and deleting an account
+(which cancels its subscription). What still needs a person rather than code
+before real families use it (your legal details, a lawyer or Safe Harbor on
+children's data, a real-phone test of notifications) is in
+**[docs/LAUNCH.md](docs/LAUNCH.md)**, the checklist to follow to go live. If
+something goes wrong after that: **[docs/IF-SOMETHING-BREAKS.md](docs/IF-SOMETHING-BREAKS.md)**.
 
 ---
 
@@ -69,17 +80,18 @@ src/
   state/           the single store: what the app knows and how it changes
   components/      reusable pieces (buttons, cards, avatar, charts)
   screens/         one file per screen, split into kid/ and parent/
-api/
-supabase/
-  schema.sql       the database design, ready for when you wire up a backend
-tests/
-  integrity.mjs    browser tests for the rules that must never break
+api/               the server functions: payments, push, the scheduled jobs, health
+functions/         how Cloudflare Pages serves api/ (Vercel serves it directly)
+supabase/          the database, one .sql file per feature, run in the order in docs/LAUNCH.md
+supabase/test/     the SQL test suite and the local stand-in for Supabase
+tests/             the browser and Node test suites (tests/run-suite.mjs lists them)
 docs/              plain-language explanations of every decision
 ```
 
-The single most useful thing to know: **all saving and loading goes through
-`src/lib/storage.js`**. Moving to a real database means rewriting that one file, not
-the rest of the app.
+The single most useful thing to know: **every change goes through the reducer in
+`src/state/reducer.js`**, is saved on the phone (`src/lib/storage.js`), and, with a
+backend, reaches the server through the outbox in `src/lib/sync/`
+([docs/SYNC.md](docs/SYNC.md)).
 
 ---
 
@@ -99,12 +111,14 @@ only.
 | [docs/STATUS.md](docs/STATUS.md) | What actually works and what is a mockup |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Why web app, why Vite, why localStorage first |
 | [docs/SYNC.md](docs/SYNC.md) | Linking devices, and how data travels between them |
-| [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) | Telling people when something happened |
+| [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) | What RankUp tells people, when, in what words, and the limits |
 | [docs/BACKEND.md](docs/BACKEND.md) | How to add accounts and sync with Supabase |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Getting it online |
-| [docs/PAYMENTS.md](docs/PAYMENTS.md) | What subscriptions would actually take |
+| [docs/PAYMENTS.md](docs/PAYMENTS.md) | Plans, Stripe, refunds, and what happens to billing when a family leaves |
 | [docs/LEGAL.md](docs/LEGAL.md) | COPPA, Kids Category, Play Families |
 | **[docs/LAUNCH.md](docs/LAUNCH.md)** | **The checklist to get live — start here** |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Suggested build order from here |
+| [docs/IF-SOMETHING-BREAKS.md](docs/IF-SOMETHING-BREAKS.md) | What each health signal means, and the first thing to do |
+| [docs/BACKUPS.md](docs/BACKUPS.md) | Backups, and how to practise a restore |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | What is left, in order |
 | [docs/GAME-DESIGN.md](docs/GAME-DESIGN.md) | XP curve, themes, tiers, guilds |
-| [tests/README.md](tests/README.md) | What the smoke tests cover and how to run them |
+| [tests/README.md](tests/README.md) | What each test suite covers and how to run it |

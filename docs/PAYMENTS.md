@@ -98,13 +98,17 @@ parser re-serialises, the bytes change, and the check fails, which people then
 Use Stripe's test mode and the CLI:
 
 ```bash
-stripe listen --forward-to localhost:5173/api/stripe-webhook
+# The functions run on :8788 (see supabase/test/serve-functions.sh; the dev
+# server on :5173 does not serve /api). Give them the STRIPE_WEBHOOK_SECRET
+# and STRIPE_SECRET_KEY that `stripe listen` and your test account use.
+stripe listen --forward-to localhost:8788/api/stripe-webhook
 stripe trigger checkout.session.completed
 ```
 
-Card `4242 4242 4242 4242` succeeds; `4000 0000 0000 0341` fails after
-attaching — use it to check that a failed payment really does drop the family
-to Standard.
+Card `4242 4242 4242 4242` succeeds; `4000 0000 0000 0341` attaches and then
+fails to charge. Put it on a test subscription and make it renew (a test
+clock) to check that a failed renewal really drops the family to Starter and
+the dashboard says "A payment failed" (the table below).
 
 ---
 

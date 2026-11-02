@@ -1,79 +1,98 @@
-# What to build next
+# What to do next
 
-In order. Each step is finishable, and each one is worth demoing before starting the
-next. Resist doing two at once — that is how a project stops having a working version.
+In order. Each item is finishable on its own. Accounts, sync between phones,
+payments, notifications, reminders and the digest, guilds, alliances, the
+School League and account deletion are built (see [STATUS.md](STATUS.md)), so
+none of them is here.
 
 ---
 
-### 1. Use it yourself for a week ← do this first
+### 1. Use it with one real family for a week ← first
 
-Before writing another line: assign real chores to a real kid on one device for seven
-days. You will find out more in that week than in a month of building. Specifically, you
-will find out whether the parent is willing to open the app to approve things, which is
-the whole product's weakest assumption.
+Real chores, a real child, two real phones, seven days. It is the only way to
+find out whether a parent will open the app to accept a chore, which is what
+the whole product rests on. Cost: nothing. Value: more than anything below.
 
-Cost: nothing. Value: highest of anything on this list.
+### 2. The checks only a real phone and a live project can do
 
-### 2. Supabase project, auth, and ONE quest syncing between two devices
+Everything here has been tested against a real Postgres and stand-ins for
+Supabase's API, Stripe and a push service. Before families, on the live
+project:
 
-**Half of this exists already.** Device pairing is built and tested: a kid gets a
-six-digit code, the parent types it in, the two are linked.
-→ [SYNC.md](SYNC.md). What remains is making data actually travel across that link.
+- **One real push**, to an Android phone and to an iPhone added to the home
+  screen.
+- **Two real phones linked** with a code: a wrong code refused, the fifth wrong
+  guess killing it, an expired code refused, a chore travelling both ways.
+- **A password-reset link is dead** after the password has been changed.
+- **Stripe test mode, end to end**: subscribe, a failed renewal, a refund,
+  deleting the account (LAUNCH.md section 6).
 
-Not the whole app. One quest, one parent device, one kid device. → [BACKEND.md](BACKEND.md)
+### 3. Notifications on a child's phone
 
-This is the step that turns a demo into a product, and it is the one most likely to
-throw up surprises. Doing it on the smallest possible slice keeps those surprises cheap.
+Only Parent Settings has the notifications switch, and a child's phone has no
+Parent Mode, so a child's phone never registers for push. "Approved!" and
+"Sent back" are sent to the child's phones and reach none. The server side is
+written: a child's phone registers as the child's (checked in
+`06-notifications.sql`), and the reminder job sends a child's reminders to that
+child's phones. What is missing:
 
-### 3. Move the rest of the data across
+- a switch on the child's phone, and a parent's say on whether that phone may
+  buzz at all;
+- **quiet hours**, decided before the first notice can reach a child late at
+  night;
+- a child's own reminder times, saved as the child's (the server takes them;
+  the app only ever saves the parents').
 
-Rewrite `src/lib/storage.js` properly. Add a loading state on first open, and an error
-state for "that save did not go through". The screens do not change.
+### 4. Forgot password
 
-### 4. Photos: nothing to do
+There is no "forgot password" screen. A parent who forgets theirs needs you to
+send a reset link from the Supabase dashboard. A screen that asks Supabase to
+send it, and a page to set the new password, would take that off you.
 
-RankUp keeps no photos. A parent who wants proof gets one by message from the child's
-own camera app.
+### 5. A ready-made scheduler for Cloudflare
 
-### 5. Multiple kids on multiple devices
+Cloudflare Pages cannot run the five scheduled jobs on a timer. LAUNCH.md gives
+a starting point for a small Worker with Cron Triggers; putting that Worker in
+this repository, with its own test, would make the recommended host work
+without an outside scheduler.
 
-Once one kid syncs, several is mostly repetition — but test the case that actually
-matters: two kids submitting at the same time while a parent approves.
+### 6. The guild request notice
 
-### 6. (Removed: the AI photo check. RankUp keeps no photos.)
+The wording for "A guild request needs you" exists, but nothing sends it: a
+parent finds a request only by opening Guilds. Wire it up before switching
+guilds on (they are off by default).
 
-### 7. Real reminders
+### 7. Before switching guilds on
 
-Push notifications need a server and, on iOS, the app installed to the home screen. This
-is the point at which the "Reminders" mockup stops being a lie.
+Human moderation of guild chat beyond the contact-detail guard, reporting and
+the owner's parent removing a child. Who reads reports, how fast, and what
+happens to a child who is reported repeatedly. A lawyer's view on child-to-child
+contact across families (LAUNCH.md section 8).
 
-Worth doing before payments: a chore app nobody remembers to open is a chore app nobody
-pays for.
+### 8. School League limits, if schools ask
 
-### 8. Real guilds and friends
+Decided rather than missed (STATUS.md): membership is counted when the month is
+closed, five students can be one family, and the 8-a-day cap is by approval
+day. Change any of them only if a real school runs into it.
 
-The hardest and riskiest. Needs shared tables, invitations across families, verified
-consent on both sides, and moderation for chat. Consider shipping guilds *within* a
-family first (siblings competing), which needs none of that and delivers most of the fun.
+### 9. Housekeeping
 
-### 9. Payments
-
-Stripe, Standard tier only, one plan. → [PAYMENTS.md](PAYMENTS.md)
-
-### 10. The tournament discount
-
-Last, and honestly optional. It needs the leaderboard, the billing system, and a monthly
-job that applies coupons to ten separate subscriptions. It is the most complicated
-feature in the product and the least essential.
+- **ESLint 8 to 9.** `npm audit` reports a moderate advisory in `minimatch`,
+  used only by ESLint while checking the code, never in the app. Fixing it
+  means ESLint 9 and its new configuration format.
+- **HANDOFF.md and ESSAY.md** are a snapshot from 25 October 2026 and still
+  describe the photo check, which has since been removed. The files under
+  `docs/` are current.
 
 ---
 
 ## Things worth *not* building
 
-- **A native app**, until the web version has families using it weekly. It costs an
-  Apple Developer account, review cycles, and 15–30% of every subscription.
+- **A native app**, until the web version has families using it every week. It
+  costs an Apple Developer account, review cycles, and 15–30% of every
+  subscription.
 - **More themes.** There are 25. That is not the constraint.
-- **Ads.** Advertising to under-13s is heavily restricted, the revenue at this scale is
-  negligible, and the Elite tier already promises to remove them.
-- **Anything that auto-approves a quest.** It is the one thing that would break the
-  product's actual promise.
+- **Ads.** Advertising to under-13s is heavily restricted, the money at this
+  scale is negligible, and the Elite tier promises none.
+- **Anything that accepts a chore automatically**, or checks a photo. A parent
+  looks and decides; that is the product's promise. RankUp takes no photos.
