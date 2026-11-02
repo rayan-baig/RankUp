@@ -62,38 +62,10 @@ say "mock api" "http://localhost:54321"
 if [ "${1:-}" = "--cf" ]; then
   npm run build >/tmp/rankup-build.log 2>&1 || { say build "FAILED"; tail -5 /tmp/rankup-build.log; exit 1; }
   say build "dist/ ready"
-  [ -f /tmp/rankup-vapid.txt ] || node -e \
-    "const k=require('web-push').generateVAPIDKeys();console.log(k.publicKey);console.log(k.privateKey)" \
-    > /tmp/rankup-vapid.txt
-  VP=$(sed -n 1p /tmp/rankup-vapid.txt); VS=$(sed -n 2p /tmp/rankup-vapid.txt)
   for pid in $(ps -eo pid,args | grep -E "[w]rangler|[w]orkerd" | awk '{print $1}'); do kill -9 "$pid" 2>/dev/null; done
   sleep 2
-  setsid nohup npx wrangler pages dev dist --port 8788 --compatibility-flags nodejs_compat \
-    --binding SUPABASE_URL=http://localhost:54321 \
-    --binding SUPABASE_SERVICE_ROLE_KEY=service-role-key \
-    --binding CRON_SECRET=test-cron-secret \
-    --binding OPERATOR_SECRET=test-operator-secret \
-    --binding STATS_KEY=test-stats-key \
-    --binding STRIPE_SECRET_KEY=sk_test_routing_only \
-    --binding STRIPE_WEBHOOK_SECRET=whsec_test_local_only \
-    --binding STRIPE_PRICE_STANDARD=price_test_standard_only \
-    --binding STRIPE_PRICE_STANDARD_YEAR=price_test_standard_year \
-    --binding STRIPE_PRICE_ELITE=price_test_elite_month \
-    --binding STRIPE_PRICE_ELITE_YEAR=price_test_elite_year \
-    --binding STRIPE_PRICE_FLASH_5=price_test_flash_5 \
-    --binding STRIPE_PRICE_SCHOOL_SMALL=price_test_school_small \
-    --binding STRIPE_PRICE_SCHOOL_SMALL_YEAR=price_test_school_small_year \
-    --binding STRIPE_PRICE_SCHOOL_MEDIUM=price_test_school_medium \
-    --binding STRIPE_PRICE_SCHOOL_MEDIUM_YEAR=price_test_school_medium_year \
-    --binding STRIPE_PRICE_SCHOOL_LARGE=price_test_school_large \
-    --binding STRIPE_PRICE_SCHOOL_LARGE_YEAR=price_test_school_large_year \
-    --binding STRIPE_PRICE_SCHOOL_XL=price_test_school_xl \
-    --binding STRIPE_PRICE_SCHOOL_XL_YEAR=price_test_school_xl_year \
-    --binding STRIPE_API_BASE=http://localhost:12111 \
-    --binding PUBLIC_SITE_URL=http://localhost:8788 \
-    --binding VAPID_PUBLIC_KEY="$VP" \
-    --binding VAPID_PRIVATE_KEY="$VS" \
-    --binding VAPID_SUBJECT=mailto:test@example.com \
+  # The settings live in serve-functions.sh, which CI runs too.
+  setsid nohup bash supabase/test/serve-functions.sh \
     > /tmp/rankup-wrangler.log 2>&1 < /dev/null &
   for _ in $(seq 1 60); do curl -s -o /dev/null -m 1 http://localhost:8788/ && break; sleep 1; done
   say cloudflare "http://localhost:8788 (workerd, production build)"
