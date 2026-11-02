@@ -30,12 +30,27 @@ export const LAST_UPDATED = 'November 2026'
  * a parent's yes before a child joins one.
  */
 
-/** Fill these in before you publish anything. */
+/**
+ * Who runs RankUp. RankUp is a product of MTRX Horizon, the company, and
+ * lives on a subdomain of its domain (rankup.<your domain>). The contact
+ * email and postal address are the company's, filled in once the domain and
+ * the registered address exist; the app shows a warning banner until then.
+ * The company's details only, never a person's.
+ *
+ * The consent notice below does not name the operator, so naming the company
+ * here needed no new consent version.
+ */
 export const OPERATOR = {
-  name: '[YOUR NAME OR COMPANY]',
+  name: 'MTRX Horizon',
   email: '[YOUR CONTACT EMAIL]',
   address: '[YOUR POSTAL ADDRESS]',
 }
+
+/** One sentence, used wherever RankUp says who is behind it. */
+export const PRODUCT_OF = `RankUp is a product of ${OPERATOR.name}.`
+
+/** The fields of OPERATOR still holding a placeholder. */
+export const UNFILLED = Object.entries(OPERATOR).filter(([, v]) => v.startsWith('[')).map(([k]) => k)
 
 export const CONSENT_NOTICE = {
   version: CONSENT_VERSION,
@@ -93,7 +108,7 @@ export const PRIVACY_POLICY = {
     {
       heading: 'Who we are',
       body: [
-        `RankUp is operated by ${OPERATOR.name}. You can reach us at ${OPERATOR.email}.`,
+        `${PRODUCT_OF} ${OPERATOR.name} operates it, and is who "we" means here. You can reach us at ${OPERATOR.email}.`,
       ],
     },
     {
@@ -171,7 +186,7 @@ export const PRIVACY_POLICY = {
 
 export const TERMS = {
   title: 'Terms of Use',
-  intro: `The rules for using RankUp. Last updated ${LAST_UPDATED}.`,
+  intro: `The rules for using RankUp. ${PRODUCT_OF} "We" means ${OPERATOR.name}. Last updated ${LAST_UPDATED}.`,
   sections: [
     {
       heading: 'Who may use RankUp',
