@@ -33,6 +33,23 @@ approving does not get buzzed by their own tap.
 Notifications are tagged, so five approvals replace one another rather than
 stacking into five separate buzzes.
 
+### When a phone is offline
+
+Neither side being out of signal loses a notice:
+
+- **The phone it is for.** Every push says how long the push service may hold
+  it (`TTL`, four weeks for chores and decisions), so a phone that is off gets
+  it when it comes back. A reminder is held only for the grace window: on
+  time, or not at all.
+- **The phone it is from.** The request to send it waits in the outbox, behind
+  the change it is about, and goes when that change does. A child who taps
+  "I did it!" with no signal tells their parent once they are back in signal,
+  and the parent never gets a notice for a chore that has not arrived yet.
+  It does not depend on the sending phone having notifications turned on.
+- **The push service having a bad moment** (429 or 5xx) is not counted
+  against the phone. Five failures leave a phone out, so counting those
+  silenced working phones.
+
 ---
 
 ## Turning it on

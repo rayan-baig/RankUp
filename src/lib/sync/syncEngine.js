@@ -176,7 +176,7 @@ function refusal(result) {
   return result && typeof result === 'object' && !Array.isArray(result) && result.ok === false ? result : null
 }
 
-export function createSyncEngine({ dispatch, onStatus, onRefused, prepare }) {
+export function createSyncEngine({ dispatch, onStatus, onRefused, prepare, sendNotice }) {
   let running = false
   let timer = null
   let inFlight = false
@@ -204,6 +204,10 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare }) {
         if (op.type === 'upsert') await transport.upsert(op.table, op.row)
         else if (op.type === 'patch') await transport.patch(op.table, op.row.id, op.row)
         else if (op.type === 'delete') await transport.delete(op.table, op.id)
+        // A push about something this phone did. It waits its turn behind the
+        // change it reports, so it is sent once that change has landed, and
+        // it waits out no signal like any other change rather than being lost.
+        else if (op.type === 'notice') { if (sendNotice) await sendNotice(op.notice) }
         else if (op.type === 'rpc') {
           // A photo travels by reference in the outbox and is attached here,
           // at the moment of sending: a second copy of every proof photo in
@@ -231,7 +235,7 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare }) {
           const { dead } = recordFailure(op.id, { retryable: true, auth: Boolean(err.auth) })
           // Given up after a day. Pulls skipped this row while it waited, so
           // fetch everything again rather than keep a copy the server never had.
-          if (dead && op.type !== 'rpc') resetCursor()
+          if (dead && (op.type === 'upsert' || op.type === 'patch' || op.type === 'delete')) resetCursor()
           return { sent, error: err }
         }
         // A rejected write is not going to start working. Drop it rather than
@@ -243,7 +247,7 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare }) {
         // A refused row change: the server kept its own copy, and pulls
         // skipped this row while the change was waiting. Fetch everything
         // again so this phone shows what the server actually has.
-        else resetCursor()
+        else if (op.type !== 'notice') resetCursor()
       }
     }
     return { sent }

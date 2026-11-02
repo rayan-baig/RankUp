@@ -7,7 +7,7 @@ import { createSyncEngine, SYNC_STATUS, resetCursor } from '../lib/sync/syncEngi
 import { queueChanges, recordDelivered, pendingRows } from '../lib/sync/shadow.js'
 import { enqueue as enqueueOp, readOutbox } from '../lib/sync/outbox.js'
 import { transport } from '../lib/sync/transport.js'
-import { NOTICES, notifyLocally, notifyRemote, remindersToFire, getPrefs as notificationPrefs } from '../lib/notifications.js'
+import { NOTICES, notifyLocally, notifyRemote, routeNotice, pushConfigured, remindersToFire, getPrefs as notificationPrefs } from '../lib/notifications.js'
 import { resolveKidTheme } from '../data/kidThemes.js'
 import { storyProgress } from '../lib/dragonFight.js'
 import { resolveParentTheme } from '../data/parentThemes.js'
@@ -128,6 +128,20 @@ const syncs = (state) =>
       prepare: async (op) => (op.fn === 'submit_quest' && op.args?.p_payload?.photo_data
         ? { ...op.args, p_payload: { ...op.args.p_payload, photo_data: null } }
         : op.args),
+      // A push to the family's other phones, sent from the outbox in its turn.
+      // Not reaching the server is worth another try; any answer from it is
+      // final, because a push that cannot be sent must never hold up the
+      // family's chores behind it.
+      sendNotice: async (notice) => {
+        const result = await notifyRemote(notice)
+        if (result.reason === 'network' || result.reason === 'signed_out') {
+          const err = new Error('The notice could not be sent yet.')
+          err.retryable = true
+          err.auth = result.reason === 'signed_out'
+          throw err
+        }
+        return result
+      },
     })
   }
 
@@ -250,32 +264,44 @@ const syncs = (state) =>
    * people will actually have. Then the remote push, which reaches the other
    * device when the app is closed — the case that matters for a parent who
    * needs to review something.
+   *
+   * The push goes into the outbox, behind the change it is about, rather than
+   * straight out. Sent on the spot, a child tapping "I did it!" with no signal
+   * lost the notice for good while the chore itself went up later, so the
+   * parent was never told; and even with signal, the push could reach the
+   * parent before the chore did, so tapping it showed nothing to review.
    */
   useEffect(() => {
     if (!state.noticeQueue?.length) return
     const queue = state.noticeQueue
     dispatch({ type: 'DRAIN_NOTICE_QUEUE' })
 
-    if (!notificationPrefs().enabled) return
+    const pushReady = pushConfigured() && syncs(latest.current) && Boolean(state.family.id)
+    let queued = 0
     queue.forEach((notice) => {
-      const payload = NOTICES[notice.kind]?.(...(notice.args || []))
-      if (!payload) return
-      // Do not buzz the device that caused it — only the other side.
-      const forThisDevice =
-        (notice.role === 'parent' && state.device?.role !== 'kid') ||
-        (notice.role === 'kid' && state.device?.role === 'kid')
-      if (!forThisDevice) notifyLocally(payload)
+      const route = routeNotice(notice, {
+        deviceRole: state.device?.role,
+        showHere: notificationPrefs().enabled,
+        pushReady,
+      })
+      if (route.local) notifyLocally(route.local)
+      if (!route.remote) return
       // The words are the server's to write — see api/send-push.js. This only
       // says which notice it is, so a device cannot put its own sentence on
       // somebody else's lock screen.
-      notifyRemote({
-        familyId: state.family.id,
-        role: notice.role,
-        kidId: notice.kidId,
-        kind: notice.kind,
-        args: notice.args || [],
+      const sent = enqueueOp({
+        type: 'notice',
+        notice: {
+          familyId: state.family.id,
+          role: notice.role,
+          kidId: notice.kidId,
+          kind: notice.kind,
+          args: notice.args || [],
+        },
       })
+      if (sent) queued += 1
     })
+    if (queued) engineRef.current?.wake()
   }, [state.noticeQueue, state.device?.role, state.family.id])
 
   /**

@@ -179,6 +179,10 @@ const SEND_URL = import.meta.env?.VITE_PUSH_SEND_URL || '/api/send-push'
  * app has already shown the notification locally where it can. There is no
  * point telling a parent their notification "failed" when the thing they cared
  * about — seeing it — already happened.
+ *
+ * `reason: 'network'` means the server was never reached, so nothing was
+ * decided and the notice is worth sending again; see sendNotice in the sync
+ * engine, which is what calls this.
  */
 export async function notifyRemote({ familyId, role, kidId, kind, args }) {
   if (!pushConfigured() || !familyId) return { ok: false, reason: 'not_configured' }
@@ -194,8 +198,27 @@ export async function notifyRemote({ familyId, role, kidId, kind, args }) {
     if (!res.ok) return { ok: false, reason: `http_${res.status}` }
     return { ok: true, ...(await res.json()) }
   } catch (err) {
-    return { ok: false, reason: err.message }
+    return { ok: false, reason: 'network', detail: err.message }
   }
+}
+
+/**
+ * What to do with one notice the reducer raised, on this device.
+ *
+ * `local` is shown here, and only if this person turned notifications on and
+ * the notice is for this side (the device that caused it is not buzzed).
+ * `remote` says whether to ask for a push to the family's other phones, and
+ * this device's own setting has nothing to do with it: a child's phone has no
+ * notification settings at all, and gating on it meant a child tapping
+ * "I did it!" on their own phone never told a parent.
+ */
+export function routeNotice(notice, { deviceRole, showHere, pushReady }) {
+  const payload = NOTICES[notice.kind]?.(...(notice.args || []))
+  if (!payload) return { local: null, remote: false }
+  const forThisDevice =
+    (notice.role === 'parent' && deviceRole !== 'kid') ||
+    (notice.role === 'kid' && deviceRole === 'kid')
+  return { local: showHere && !forThisDevice ? payload : null, remote: Boolean(pushReady) }
 }
 
 /**
