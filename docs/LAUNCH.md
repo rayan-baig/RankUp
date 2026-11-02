@@ -36,7 +36,7 @@ When something goes wrong after launch, see
 
 ## 1a. The address: `rankup.<your domain>` (half an hour, most of it waiting)
 
-RankUp is a product of **MTRX Horizon**. The company has the one domain, and
+RankUp is a product of **MTRX Horizyn**. The company has the one domain, and
 RankUp lives on a subdomain of it: `rankup.<your domain>` (`<your domain>` is
 whatever the company's domain turns out to be). The company's console and its
 other products sit beside it as siblings.
@@ -87,8 +87,8 @@ service worker answers only its own origin, and a payment always comes back to
       `https://rankup.<your domain>/api/stripe-webhook`, and the customer
       portal's default return link `https://rankup.<your domain>/#/parent/plan`.
       Under Settings → **Business → Public details**, the business name is
-      **MTRX Horizon**: it is what checkout pages and card statements show.
-- [ ] **The MTRX Horizon console.** In the console's settings:
+      **MTRX Horizyn**: it is what checkout pages and card statements show.
+- [ ] **The MTRX Horizyn console.** In the console's settings:
       `RANKUP_URL=https://rankup.<your domain>` (its **Open app** button) and
       `RANKUP_STATS_URL=https://rankup.<your domain>/api/stats`, with the
       console's `MTRX_STATS_KEY` the same value as RankUp's `STATS_KEY`. The
@@ -110,7 +110,7 @@ only to your own team), so a live project needs its own:
       `no-reply@rankup.<your domain>`; sender name `RankUp`.
 - [ ] Supabase → Authentication → **Emails → Templates**: end each template
       (Confirm sign up, Reset password, and any other you turn on) with the
-      line `RankUp is a product of MTRX Horizon.`, the same words as the
+      line `RankUp is a product of MTRX Horizyn.`, the same words as the
       privacy policy and terms. The company's name only: no person's name or
       address goes in an email.
 - [ ] **SPF, DKIM and DMARC, set once on the parent domain**, not per product:
@@ -319,7 +319,7 @@ cancellation still waiting for Stripe is never deleted.
       and changing cards happen there. Its default return link:
       `https://rankup.<your domain>/#/parent/plan`.
 - [ ] Stripe → Settings → Business → **Public details**: the business name
-      **MTRX Horizon**, the company's support email, and a statement
+      **MTRX Horizyn**, the company's support email, and a statement
       descriptor that says RankUp (for example `MTRX RANKUP`), so a parent
       recognises the charge.
 
@@ -370,8 +370,8 @@ the phone.
 ## 5. Fill in the placeholders
 
 - [ ] `src/data/legalText.js` → `OPERATOR`. The name is already **MTRX
-      Horizon**: the privacy policy and terms say "RankUp is a product of MTRX
-      Horizon", and "we" means the company. Fill in the company's contact
+      Horizyn**: the privacy policy and terms say "RankUp is a product of MTRX
+      Horizyn", and "we" means the company. Fill in the company's contact
       email (an address on `<your domain>`) and its registered postal
       address. The company's, never a person's: this repository and the app
       are public. The app shows a warning banner until both are filled in.

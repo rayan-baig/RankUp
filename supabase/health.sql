@@ -116,7 +116,7 @@ revoke execute on function record_job_run(text, boolean, text) from public;
 revoke execute on function health_snapshot() from public;
 
 /**
- * Two numbers for the owner's console (MTRX Horizon): how many families,
+ * Two numbers for the owner's console (MTRX Horizyn): how many families,
  * and how many did anything in the last 30 days. Counts only. Called by
  * api/stats.js with the service key; nobody else may call it.
  */

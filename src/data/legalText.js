@@ -31,7 +31,7 @@ export const LAST_UPDATED = 'November 2026'
  */
 
 /**
- * Who runs RankUp. RankUp is a product of MTRX Horizon, the company, and
+ * Who runs RankUp. RankUp is a product of MTRX Horizyn, the company, and
  * lives on a subdomain of its domain (rankup.<your domain>). The contact
  * email and postal address are the company's, filled in once the domain and
  * the registered address exist; the app shows a warning banner until then.
@@ -41,7 +41,7 @@ export const LAST_UPDATED = 'November 2026'
  * here needed no new consent version.
  */
 export const OPERATOR = {
-  name: 'MTRX Horizon',
+  name: 'MTRX Horizyn',
   email: '[YOUR CONTACT EMAIL]',
   address: '[YOUR POSTAL ADDRESS]',
 }

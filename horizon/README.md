@@ -1,4 +1,4 @@
-# MTRX Horizon
+# MTRX Horizyn
 
 The page published at https://claude.ai/artifact/87BocytnDhYC266rVJqWQh,
 kept here so it is in version control rather than only in an artifact.

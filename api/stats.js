@@ -1,7 +1,7 @@
 /**
  * Serverless function: user counts for the owner's console.
  *
- * MTRX Horizon shows how many people use each app. This answers it with two
+ * MTRX Horizyn shows how many people use each app. This answers it with two
  * numbers, families and families active in the last 30 days, and nothing
  * about any one of them. Off unless STATS_KEY is set; answered only to that
  * key, which is the same value as the console's MTRX_STATS_KEY.

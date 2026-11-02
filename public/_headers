@@ -4,7 +4,7 @@
 # Cloudflare Pages reads this at deploy time. It mirrors the headers block in
 # vercel.json, so the site is equally locked down on either host.
 #
-# RankUp lives at rankup.<your domain>, beside MTRX Horizon's other sites on
+# RankUp lives at rankup.<your domain>, beside MTRX Horizyn's other sites on
 # the same parent domain. It shares nothing with them: no cookie (RankUp sets
 # none), no CORS header (none here, none from /api), no Service-Worker-Allowed
 # (the worker's scope is this site), and Origin-Agent-Cluster keeps the page

@@ -101,5 +101,29 @@ ok('and every guild screen in the app is behind it',
   && /guildsEnabled\(\) && guildsAllowedByPlan\(state\) \? <KidGuild \/>/.test(appSource)
   && /guildsEnabled\(\) \? <ParentGuilds \/>/.test(appSource))
 
+console.log('\n=== The company is MTRX Horizyn, everywhere a person reads it ===')
+{
+  // The legal text, the screens, the notices and emails the server sends, the
+  // host headers, the docs and the company page. Spelled "Horizyn" so it is
+  // not mistaken for other companies; the old spelling must not come back.
+  const { OPERATOR, PRODUCT_OF } = await import('../src/data/legalText.js')
+  ok('the operator in the privacy policy and terms is MTRX Horizyn',
+    OPERATOR.name === 'MTRX Horizyn' && PRODUCT_OF === 'RankUp is a product of MTRX Horizyn.')
+  const SKIP = new Set(['node_modules', 'dist', 'dist-demo', 'preview', '.git', '.wrangler', 'screenshots'])
+  const TEXT = /\.(js|jsx|mjs|json|html|md|sql|css|svg|txt|toml|sh)$|^_headers$|^_redirects$|^\.env\.example$/
+  const OLD = /MTRX\s+HORIZON\b|MTRX\s+Horizon\b/i
+  const found = []
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      if (SKIP.has(name)) continue
+      const path = join(dir, name)
+      if (statSync(path).isDirectory()) walk(path)
+      else if (TEXT.test(name) && OLD.test(readFileSync(path, 'utf8')) && path !== join('tests', 'config.mjs')) found.push(path)
+    }
+  }
+  walk('.')
+  ok('no file anyone reads spells it the old way', found.length === 0, found.join(', '))
+}
+
 console.log(fails === 0 ? '\nALL CHECKS PASSED' : `\n${fails} FAILED`)
 process.exit(fails === 0 ? 0 : 1)

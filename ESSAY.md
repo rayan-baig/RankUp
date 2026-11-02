@@ -1020,7 +1020,7 @@ The camera needs https. That is worth repeating because it is the most common
 
 # Part thirteen — the things around the app
 
-**MTRX Horizon** is the parent company's website: a two-screen page where RankUp
+**MTRX Horizyn** is the parent company's website: a two-screen page where RankUp
 sits alongside two other products, CyberLogix and OmniArmor, neither of which is
 built. The page is supplied artwork shown full-bleed with clickable hot spots
 laid over it in percentages, so they stay on target at any width. The RankUp card
@@ -1033,7 +1033,7 @@ it finished elsewhere, which is the correct outcome — his version is the real
 one. The supplied file is stored with squared copies at 512, 192 and 64 pixels,
 because the original is not square and every place a logo actually goes is. There
 is also a tight crop, where the sphere fills the frame rather than floating in
-padding, used in the Horizon page at small sizes.
+padding, used in the Horizyn page at small sizes.
 
 **The notebook.** There is an ongoing effort to print the logo on a custom
 hardcover journal. The current cover design has exactly the right aspect ratio

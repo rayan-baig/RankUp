@@ -346,7 +346,7 @@ console.log('\n=== The billing portal when Stripe is down ===')
 }
 
 /*
- * RankUp lives at rankup.<your domain>, beside MTRX Horizon's console and its
+ * RankUp lives at rankup.<your domain>, beside MTRX Horizyn's console and its
  * other products on the same parent domain. A sibling is another site: it gets
  * no CORS header and no cookie from any function or page, and a payment it
  * starts still comes back to RankUp. tests/isolation.mjs checks the same in

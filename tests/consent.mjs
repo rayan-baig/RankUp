@@ -24,11 +24,11 @@ await page.waitForTimeout(1000)
   ? pass('a parent can read the privacy policy before signing up')
   : fail('privacy policy is public', await page.locator('body').innerText().then((t) => t.slice(0, 120)))
 
-// RankUp is a product of MTRX Horizon, which is who runs it: both documents
+// RankUp is a product of MTRX Horizyn, which is who runs it: both documents
 // say so, and say nothing about any one person.
 const privacyText = await page.locator('body').innerText()
-;/RankUp is a product of MTRX Horizon\. MTRX Horizon operates it/.test(privacyText)
-  ? pass('the privacy policy names MTRX Horizon as who runs RankUp')
+;/RankUp is a product of MTRX Horizyn\. MTRX Horizyn operates it/.test(privacyText)
+  ? pass('the privacy policy names MTRX Horizyn as who runs RankUp')
   : fail('operator named in the policy', privacyText.match(/Who we are[\s\S]{0,200}/i)?.[0])
 ;!/\[YOUR NAME|operated by \[/.test(privacyText)
   ? pass('with no name placeholder left in it')
@@ -36,7 +36,7 @@ const privacyText = await page.locator('body').innerText()
 await page.goto(`${BASE}#/legal/terms`, { waitUntil: 'networkidle' })
 await page.waitForTimeout(600)
 const termsText = await page.locator('body').innerText()
-;/RankUp is a product of MTRX Horizon\. "We" means MTRX Horizon\./.test(termsText)
+;/RankUp is a product of MTRX Horizyn\. "We" means MTRX Horizyn\./.test(termsText)
   ? pass('and so do the terms')
   : fail('operator named in the terms', termsText.slice(0, 300))
 const unfinished = await page.getByText(/Still to fill in: the company's contact email and postal address/).count()

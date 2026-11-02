@@ -1,7 +1,7 @@
 /**
  * RankUp shares nothing with the sites beside it on its parent domain.
  *
- * RankUp is a product of MTRX Horizon and lives at rankup.<your domain>, a
+ * RankUp is a product of MTRX Horizyn and lives at rankup.<your domain>, a
  * subdomain of the company's one domain, with the company's console and its
  * other products as siblings. A subdomain rather than a path, so that RankUp
  * is an origin of its own: its own localStorage, IndexedDB and service worker,

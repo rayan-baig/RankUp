@@ -56,7 +56,7 @@ listing in the App Store.
 
 ## Custom domain: `rankup.<your domain>`
 
-RankUp is a product of MTRX Horizon. The company has the one domain (not chosen
+RankUp is a product of MTRX Horizyn. The company has the one domain (not chosen
 yet; `<your domain>` below), and RankUp lives on a **subdomain** of it,
 `rankup.<your domain>`, never on the bare domain or under a path. A subdomain is
 an origin of its own, so RankUp's storage, sign-in and service worker are its
@@ -79,7 +79,7 @@ own, and nothing on the company's other sites can read them.
 
 A preview needs nothing more. For a real launch, the rest of what hangs off the
 address (Supabase's Site URL and redirect URLs, the Stripe webhook, the MTRX
-Horizon console's `RANKUP_URL` and `RANKUP_STATS_URL`, and email sent from
+Horizyn console's `RANKUP_URL` and `RANKUP_STATS_URL`, and email sent from
 `no-reply@rankup.<your domain>`) is in
 [LAUNCH.md, section 1a](LAUNCH.md#1a-the-address-rankupyour-domain-half-an-hour-most-of-it-waiting).
 

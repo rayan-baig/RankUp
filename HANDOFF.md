@@ -775,7 +775,7 @@ In the order they are worth doing.
 
 - My two vector MTRX marks were deleted — the owner had GPT finish the logo.
   `src/assets/brand/` now holds the supplied `mtrx-logo.webp` plus squared
-  512/192/64 PNGs and a tight `mtrx-mark-512.png` used in the Horizon page.
+  512/192/64 PNGs and a tight `mtrx-mark-512.png` used in the Horizyn page.
 
 ### Open question with a measured answer
 
@@ -853,7 +853,7 @@ RankUp/
 │                               + mock-server.mjs)
 ├── api/                        10 serverless endpoints + _shared/
 ├── functions/api/[[route]].js  Cloudflare Pages adapter
-├── horizon/                    the MTRX Horizon page, in git
+├── horizon/                    the MTRX Horizyn page, in git
 ├── tests/                      44 suites + helpers.mjs + screenshots/
 ├── scripts/slice-sheet.py      cuts a design sheet into per-tab images
 └── marketing/ · public/
