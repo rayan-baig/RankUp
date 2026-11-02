@@ -3,12 +3,29 @@
 #
 # Cloudflare Pages reads this at deploy time. It mirrors the headers block in
 # vercel.json, so the site is equally locked down on either host.
+#
+# RankUp lives at rankup.<your domain>, beside MTRX Horizon's other sites on
+# the same parent domain. It shares nothing with them: no cookie (RankUp sets
+# none), no CORS header (none here, none from /api), no Service-Worker-Allowed
+# (the worker's scope is this site), and Origin-Agent-Cluster keeps the page
+# in an agent cluster of its own, so document.domain cannot be used to reach
+# into it from a sibling. tests/isolation.mjs checks all of it.
+#
+# "! Access-Control-Allow-Origin" takes away the "*" Cloudflare Pages puts on
+# every static file by default. Those files hold nothing private (anyone can
+# download them, and "*" never covers a request with credentials), but RankUp
+# has no reason to let another site's page read them, a sibling's included.
+# Vercel adds the same "*" to static files and has no way to take it away;
+# the same reasoning makes that harmless, and /api sends no CORS header there
+# either.
 /*
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Origin-Agent-Cluster: ?1
+  ! Access-Control-Allow-Origin
 
 /sw.js
   Cache-Control: no-cache, no-store, must-revalidate

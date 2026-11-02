@@ -13,6 +13,7 @@
 
 import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
 import { userHeaders } from './_shared/job.js'
+import { returnOrigin } from './_shared/site.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -123,24 +124,6 @@ function trialEndFor(billing, now = Date.now()) {
   return Math.floor(end / 1000)
 }
 
-/**
- * Only our own site. PUBLIC_SITE_URL is the authority when set; otherwise the
- * request's own Origin header is allowed, because that is the browser's word
- * rather than the body's. Anything else is refused outright rather than
- * silently rewritten, so a misconfiguration is visible.
- */
-function safeOrigin(candidate) {
-  const allowed = (process.env.PUBLIC_SITE_URL || '').replace(/\/+$/, '')
-  if (allowed) return allowed
-  try {
-    const url = new URL(candidate)
-    if (url.protocol !== 'https:' && url.hostname !== 'localhost') return ''
-    return url.origin
-  } catch {
-    return ''
-  }
-}
-
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' })
@@ -185,7 +168,7 @@ export default async function handler(req, res) {
   // The browser's own Origin header, never the request body: a body that named
   // any https site let a checkout page carrying RankUp's name send the payer
   // on to it afterwards.
-  const origin = safeOrigin(req.headers.origin || '')
+  const origin = returnOrigin(req)
   // No origin means no absolute URL to send Stripe back to. Sending a relative
   // one produced a Stripe 400 reported to the parent as "checkout_failed",
   // which says nothing about the actual problem: PUBLIC_SITE_URL is not set.

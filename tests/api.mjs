@@ -345,6 +345,62 @@ console.log('\n=== The billing portal when Stripe is down ===')
   stripeMode = 'ok'
 }
 
+/*
+ * RankUp lives at rankup.<your domain>, beside MTRX Horizon's console and its
+ * other products on the same parent domain. A sibling is another site: it gets
+ * no CORS header and no cookie from any function or page, and a payment it
+ * starts still comes back to RankUp. tests/isolation.mjs checks the same in
+ * the source; this is the host's runtime answering.
+ */
+console.log('\n=== A sibling on the same parent domain is trusted with nothing ===')
+{
+  const SIBLINGS = ['https://console.example.com', 'https://example.com']
+  const shared = (res) => [...res.headers.keys()].filter((k) => /^access-control-|^set-cookie$|^service-worker-allowed$/i.test(k))
+  const names = readdirSync(new URL('../api/', import.meta.url)).filter((f) => f.endsWith('.js')).map((f) => f.replace(/\.js$/, ''))
+  for (const sibling of SIBLINGS) {
+    const host = new URL(sibling).host
+    const leaks = []
+    for (const name of names) {
+      const asked = await fetch(`${BASE}/api/${name}`, {
+        method: 'OPTIONS',
+        headers: { Origin: sibling, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'authorization, content-type' },
+      })
+      if (shared(asked).length) leaks.push(`${name} (preflight): ${shared(asked).join(', ')}`)
+      const straight = await fetch(`${BASE}/api/${name}`, { headers: { Origin: sibling } })
+      if (shared(straight).length) leaks.push(`${name}: ${shared(straight).join(', ')}`)
+    }
+    ok(`none of the ${names.length} functions answers ${host} with a CORS header or a cookie, preflight or not`,
+      leaks.length === 0, leaks.join('; '))
+    const pages = []
+    const script = (await (await fetch(`${BASE}/`)).text()).match(/src="\/?(assets\/[^"]+\.js)"/)?.[1]
+    for (const path of ['/', '/index.html', '/sw.js', '/manifest.webmanifest', ...(script ? [`/${script}`] : [])]) {
+      const res = await fetch(`${BASE}${path}`, { headers: { Origin: sibling } })
+      if (shared(res).length) pages.push(`${path}: ${shared(res).join(', ')}`)
+    }
+    ok(`nor does any page, script or the service worker (no wider scope for ${host} to borrow)`,
+      Boolean(script) && pages.length === 0, script ? pages.join('; ') : 'no script found in the page')
+  }
+  const front = await fetch(`${BASE}/`)
+  ok('the page refuses to be framed by anyone, a sibling included', front.headers.get('x-frame-options') === 'DENY',
+    `x-frame-options: ${front.headers.get('x-frame-options')}`)
+  ok('and asks for an agent cluster of its own', front.headers.get('origin-agent-cluster') === '?1',
+    `origin-agent-cluster: ${front.headers.get('origin-agent-cluster')}`)
+
+  // The parent's real token, sent from a sibling's page (or by anyone who
+  // writes Origin themselves): the way back from Stripe is still RankUp.
+  const fromSibling = await fetch(`${BASE}/api/billing-portal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: SIBLINGS[0], Authorization: `Bearer ${PARENT}` },
+    body: '{}',
+  })
+  ok('a billing portal opened with a sibling\'s Origin still returns to RankUp',
+    fromSibling.status === 200
+    && lastCall('/v1/billing_portal/sessions')?.params.get('return_url') === 'http://localhost:8788/#/parent/plan',
+    `status ${fromSibling.status} ${lastCall('/v1/billing_portal/sessions')?.params.get('return_url')}`)
+  ok('and its answer carries no CORS header for the sibling to read it by', shared(fromSibling).length === 0,
+    shared(fromSibling).join(', '))
+}
+
 console.log('\n=== A school that changes size is charged for its new size ===')
 {
   const ADMIN = 'a0000000-0000-4000-8000-0000000005a1'

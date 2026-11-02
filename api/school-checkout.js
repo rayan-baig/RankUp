@@ -9,6 +9,7 @@
 import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
 import { schoolCycle, schoolPriceId, schoolTrialEnd } from './_shared/schoolBilling.js'
 import { userHeaders } from './_shared/job.js'
+import { returnOrigin } from './_shared/site.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -49,19 +50,6 @@ async function callerSchool(token) {
   }
 }
 
-/** Same rule as create-checkout: only our own site gets sent back to. */
-function safeOrigin(candidate) {
-  const allowed = (process.env.PUBLIC_SITE_URL || '').replace(/\/+$/, '')
-  if (allowed) return allowed
-  try {
-    const url = new URL(candidate)
-    if (url.protocol !== 'https:' && url.hostname !== 'localhost') return ''
-    return url.origin
-  } catch {
-    return ''
-  }
-}
-
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' })
@@ -82,7 +70,7 @@ export default async function handler(req, res) {
   const price = schoolPriceId(school.band, cycle)
   if (!price) return res.status(503).json({ error: 'not_configured', message: `No ${cycle} price for a ${school.band} school.` })
 
-  const origin = safeOrigin(req.headers.origin || '')
+  const origin = returnOrigin(req)
   if (!origin) {
     return res.status(503).json({
       error: 'not_configured',

@@ -4,7 +4,7 @@ Every suite is listed, file by file, in **`tests/run-suite.mjs`**, which runs it
 
 | Suite | Command | Needs | What it covers |
 |---|---|---|---|
-| static | `npm run test:static` | nothing | Every setting the code reads is in `.env.example`; the Cloudflare route table matches `api/`; the scheduled jobs in `vercel.json`, `/api/health` and the jobs agree; the SQL files are in one order everywhere (`config.mjs`, `wiring.mjs`) |
+| static | `npm run test:static` | nothing | Every setting the code reads is in `.env.example`; the Cloudflare route table matches `api/`; the scheduled jobs in `vercel.json`, `/api/health` and the jobs agree; the SQL files are in one order everywhere (`config.mjs`, `wiring.mjs`); RankUp shares nothing with the sites beside it on its parent domain: no cookie, no CORS, no wildcard in the policy, a service worker and a way back from Stripe that never lead to a sibling (`isolation.mjs`) |
 | smoke | `npm run test:smoke` | the dev server and the stand-in API | The app in a real browser, screen by screen |
 | sync | `npm run test:sync` | the same | Two and three phones against a real Postgres |
 | awards | `npm run test:awards` | Postgres | The rules, in Node, against the app's own code and the database |

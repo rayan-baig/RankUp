@@ -9,28 +9,11 @@
 
 import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
 import { userHeaders } from './_shared/job.js'
+import { returnOrigin } from './_shared/site.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-
-/**
- * Only our own site. Stripe sends the customer here when they close the billing
- * portal, on a page carrying RankUp's name, so an unvalidated origin from the
- * request body is an open redirect wearing our branding. PUBLIC_SITE_URL wins
- * when set; otherwise the browser's own Origin header, never the body alone.
- */
-function safeOrigin(candidate) {
-  const allowed = (process.env.PUBLIC_SITE_URL || '').replace(/\/+$/, '')
-  if (allowed) return allowed
-  try {
-    const url = new URL(candidate)
-    if (url.protocol !== 'https:' && url.hostname !== 'localhost') return ''
-    return url.origin
-  } catch {
-    return ''
-  }
-}
 
 async function schoolPortal(req, res, token) {
   try {
@@ -51,7 +34,7 @@ async function schoolPortal(req, res, token) {
     const customerId = await customerRes.json()
     if (!customerId) return res.status(400).json({ error: 'no_customer' })
 
-    const origin = safeOrigin(req.headers.origin || '')
+    const origin = returnOrigin(req)
     if (!origin) {
       return res.status(503).json({
         error: 'not_configured',
@@ -114,7 +97,7 @@ export default async function handler(req, res) {
     const customerId = await customerRes.json()
     if (!customerId) return res.status(400).json({ error: 'no_customer' })
 
-    const origin = safeOrigin(req.headers.origin || '')
+    const origin = returnOrigin(req)
     // Same as create-checkout: with no origin there is no absolute URL to
     // return to, and Stripe's rejection of a relative one told the parent
     // nothing useful.

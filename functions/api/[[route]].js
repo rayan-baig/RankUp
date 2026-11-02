@@ -92,6 +92,9 @@ export async function onRequest(context) {
   }
 
   const url = new URL(request.url)
+  // Node's request always carries Host; api/_shared/site.js compares the
+  // Origin header against it, so it is filled in here if the runtime left it out.
+  if (!headers.host) headers.host = url.host
   const req = {
     method: request.method,
     headers,

@@ -215,7 +215,14 @@ self.addEventListener('message', (event) => {
  */
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const target = event.notification.data?.url || '/'
+  // Only somewhere in this app. The server sends paths like /#/kid; anything
+  // that resolves to another site, a sibling on the same parent domain
+  // included, opens the app's own front page instead.
+  let target = PAGE_URL()
+  try {
+    const wanted = new URL(event.notification.data?.url || './', scope())
+    if (wanted.origin === self.location.origin) target = wanted.href
+  } catch { /* not an address: the front page */ }
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
