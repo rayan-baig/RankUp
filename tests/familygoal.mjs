@@ -44,6 +44,13 @@ state = reducer({ ...state, syncQueue: [] }, { type: 'SET_FAMILY_GOAL', goal: nu
 ok('and clearing it does too', state.syncQueue.at(-1)?.fn === 'set_family_goal' && state.syncQueue.at(-1).args.p_name === null)
 
 const row = { family_id: 'f', name: 'Zoo day', target_xp: 800, start_xp: 2520, created_at: new Date().toISOString(), rev: 50, progress: 70 }
+// While this phone's own clear is still in its queue, a goal from the server
+// is the older copy and is held back, as it is while the call is in the outbox.
+ok('a goal from the server waits while this phone\'s own change is still queued',
+  reducer(state, { type: 'MERGE_SNAPSHOT', snapshot: { family_goals: [row] } }).familyGoal === null)
+// From here this phone's calls have been sent, as the app's provider does:
+// nothing of its own is waiting.
+state = { ...state, syncQueue: [] }
 state = reducer(state, { type: 'MERGE_SNAPSHOT', snapshot: { family_goals: [row] } })
 ok('a goal set on another phone arrives', state.familyGoal?.name === 'Zoo day' && state.familyGoal.targetXp === 800)
 ok('counting from where the server says it started', familyGoalProgress(state) === 0, String(familyGoalProgress(state)))
