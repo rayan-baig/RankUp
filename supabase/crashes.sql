@@ -36,6 +36,21 @@ alter table crash_reports enable row level security;
 revoke all on crash_reports from public;
 
 /**
+ * The database's own pass over what a phone sent, in case the phone's did not
+ * run (an older version, or a request made by hand): emails, sign-in tokens
+ * and runs of four or more digits come out. The phone takes out more — the
+ * family's names, anything quoted — because only it knows the names.
+ */
+create or replace function crash_scrub(p_text text) returns text
+language sql immutable as $$
+  select regexp_replace(regexp_replace(regexp_replace(regexp_replace(coalesce(p_text, ''),
+    'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', '[token]', 'g'),
+    '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+', '[email]', 'g'),
+    '(access_token|refresh_token|token|code|key|password|pin)=[^&[:space:]]+', '\1=[removed]', 'gi'),
+    '[0-9]{4,}', '[number]', 'g')
+$$;
+
+/**
  * Record one crash.
  *
  * Deliberately callable by anon as well as authenticated: the crashes worth
@@ -64,8 +79,8 @@ begin
       return jsonb_build_object('ok', true, 'recorded', false, 'reason', 'rate_limited');
     end if;
     insert into crash_reports (family_id, where_at, message, stack, agent)
-    values (null, left(coalesce(p_where, 'unknown'), 80), left(coalesce(p_message, ''), 300),
-            left(coalesce(p_stack, ''), 600), left(coalesce(p_agent, ''), 200));
+    values (null, left(crash_scrub(coalesce(p_where, 'unknown')), 80), left(crash_scrub(p_message), 300),
+            left(crash_scrub(p_stack), 600), left(coalesce(p_agent, ''), 200));
     return jsonb_build_object('ok', true, 'recorded', true);
   end if;
 
@@ -78,9 +93,9 @@ begin
 
   insert into crash_reports (family_id, where_at, message, stack, agent)
   values (v_family,
-          left(coalesce(p_where, 'unknown'), 80),
-          left(coalesce(p_message, ''), 300),
-          left(coalesce(p_stack, ''), 600),
+          left(crash_scrub(coalesce(p_where, 'unknown')), 80),
+          left(crash_scrub(p_message), 300),
+          left(crash_scrub(p_stack), 600),
           left(coalesce(p_agent, ''), 200));
 
   return jsonb_build_object('ok', true, 'recorded', true);

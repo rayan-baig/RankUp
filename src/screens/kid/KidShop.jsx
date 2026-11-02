@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import { formatXp } from '../../lib/xp.js'
 import { relativeTime } from '../../lib/dates.js'
@@ -11,7 +12,24 @@ export default function KidShop() {
   const { state, dispatch } = useApp()
   const kid = useKid()
   const theme = useKidTheme()
+  /*
+   * The reward just bought, for a moment. A child taps "buy" twice when the
+   * first tap seems to do nothing, and each tap was a real purchase sent to
+   * the server: the second one spent the coins again. The button now says it
+   * worked and stays still long enough for the second tap to land on nothing.
+   */
+  const [justGot, setJustGot] = useState(null)
+  const settle = useRef(null)
+  useEffect(() => () => clearTimeout(settle.current), [])
   if (!kid) return null
+
+  const redeem = (r) => {
+    if (justGot) return
+    dispatch({ type: 'REDEEM_REWARD', rewardId: r.id, kidId: kid.id })
+    setJustGot(r.id)
+    clearTimeout(settle.current)
+    settle.current = setTimeout(() => setJustGot(null), 1500)
+  }
 
   const mine = state.redemptions.filter((r) => r.kidId === kid.id).sort((a, b) => b.at - a.at)
 
@@ -112,11 +130,12 @@ export default function KidShop() {
               </div>
               <Button
                 variant={affordable ? 'primary' : 'soft'}
-                disabled={!affordable}
+                disabled={!affordable || justGot === r.id}
+                aria-busy={justGot === r.id}
                 className="px-3 py-2 min-h-0 text-sm shrink-0"
-                onClick={() => dispatch({ type: 'REDEEM_REWARD', rewardId: r.id, kidId: kid.id })}
+                onClick={() => redeem(r)}
               >
-                {theme.currency.icon} {r.cost}
+                {justGot === r.id ? 'Got it!' : <>{theme.currency.icon} {r.cost}</>}
               </Button>
             </Card>
           )

@@ -8,7 +8,7 @@
  * spent their coins on "Pick Friday's film" waited for a parent who had no way
  * of knowing.
  */
-import { launch, reporter, readState, setUpFamily, asParent, asKid, sendToParent, finish } from './helpers.mjs'
+import { launch, reporter, readState, setUpFamily, asParent, asKid, sendToParent, finish, setKidInDatabase } from './helpers.mjs'
 
 const { browser, page, errors } = await launch()
 const { fails, pass, fail } = reporter()
@@ -79,4 +79,25 @@ if (await give.count()) {
   fail('"Mark given" is on the dashboard', 'no button')
 }
 
-await finish(errors, fails, browser)
+await console.log('\n=== A double tap is one purchase ===')
+await asKid(page)
+await page.evaluate(() => { window.location.hash = '/kid/shop' })
+await page.waitForTimeout(600)
+// A double tap is one purchase. Each tap used to be a real purchase sent to the
+// server, so a child tapping twice because the first seemed slow paid twice.
+await setKidInDatabase('Ava', { coins: 50 })
+for (let i = 0; i < 40 && (await readState(page)).kids[0].coins !== 50; i += 1) await page.waitForTimeout(500) // eslint-disable-line no-await-in-loop
+{
+  const before = (await readState(page)).redemptions.length
+  const coins = (await readState(page)).kids[0].coins
+  await page.getByRole('button', { name: /3$/ }).first().dblclick()
+  await page.waitForTimeout(900)
+  const after = await readState(page)
+  after.redemptions.length === before + 1 && after.kids[0].coins === coins - 3
+    ? pass('a double tap on a reward buys it once')
+    : fail('double tap buys once', JSON.stringify({ before, after: after.redemptions.length, coins, now: after.kids[0].coins }))
+  const label = await page.getByRole('button', { name: /Got it/ }).count()
+  label > 0 ? pass('and the button says it worked while it waits') : fail('bought state shown', 'no "Got it!"')
+}
+
+finish(errors, fails, browser)

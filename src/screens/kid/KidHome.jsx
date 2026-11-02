@@ -42,6 +42,21 @@ export default function KidHome() {
   const quests = state.quests.filter((q) => q.kidId === kid.id)
   const active = quests.filter((q) => q.status === 'assigned' || q.status === 'redo')
   const waiting = quests.filter((q) => q.status === 'submitted')
+  /*
+   * The way forward, said for where the child actually is. "Nothing left to
+   * do, spend a token in the arcade" was shown to a child in a family that had
+   * just been set up: no chore ever assigned and no token to spend.
+   */
+  const hasTokens = Boolean(state.demo) || (kid.playTokens || 0) > 0
+  const next = active.length
+    ? { icon: '⚔️', to: '/kid/quests', title: 'Ready for the next challenge?', line: "Keep going, you're doing great." }
+    : hasTokens
+      ? { icon: '🎮', to: '/kid/arcade', title: 'Nothing left to do', line: 'Spend a token in the arcade.' }
+      : waiting.length
+        ? { icon: '⏳', to: '/kid/quests', title: 'All sent', line: 'Your parent is checking what you did.' }
+        : quests.length
+          ? { icon: '✅', to: '/kid/quests', title: 'All done for now', line: 'New quests show up here when your parent adds them.' }
+          : { icon: '📜', to: '/kid/quests', title: 'No quests yet', line: 'Ask your parent to give you your first quest.' }
   // A day later than today (the server's, after a zone change) counts as claimed.
   const bonusAvailable = !kid.lastLoginBonus || kid.lastLoginBonus < dayKey()
 
@@ -259,7 +274,7 @@ export default function KidHome() {
         />
         <Stat
           icon="🎯"
-          value={`${waiting.length}/${active.length + waiting.length || 1}`}
+          value={active.length + waiting.length ? `${waiting.length}/${active.length + waiting.length}` : '—'}
           label="Weekly goal"
           tone="var(--accent-2)"
         />
@@ -276,17 +291,13 @@ export default function KidHome() {
       {/* The way forward, which the design puts right under the numbers. */}
       <Card
         className="mb-3 flex items-center gap-3"
-        onClick={() => navigate(active.length ? '/kid/quests' : '/kid/arcade')}
+        onClick={() => navigate(next.to)}
         style={{ cursor: 'pointer', borderColor: 'color-mix(in srgb, var(--accent) 45%, var(--line))' }}
       >
-        <span className="text-2xl shrink-0" aria-hidden="true">{active.length ? '⚔️' : '🎮'}</span>
+        <span className="text-2xl shrink-0" aria-hidden="true">{next.icon}</span>
         <div className="min-w-0 flex-1">
-          <div className="font-semibold text-sm">
-            {active.length ? 'Ready for the next challenge?' : 'Nothing left to do'}
-          </div>
-          <div className="text-xs text-muted">
-            {active.length ? "Keep going, you're doing great." : 'Spend a token in the arcade.'}
-          </div>
+          <div className="font-semibold text-sm">{next.title}</div>
+          <div className="text-xs text-muted">{next.line}</div>
         </div>
         <span className="text-muted shrink-0" aria-hidden="true">›</span>
       </Card>

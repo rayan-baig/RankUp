@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
+import { effectiveTier, onTrial, trialDaysLeft } from '../../state/reducer.js'
 import { TIERS, TIER_LADDER, PLAN_COMPARISON, ELITE_KID_PERKS, ELITE_PARENT_PERKS } from '../../state/initialState.js'
 import { billingLive, startCheckout, openBillingPortal, fetchBillingStatus, billingError, billingNotice } from '../../lib/billing.js'
 import { Screen, Card, Button, SectionTitle, Banner, Chip, Modal } from '../../components/ui.jsx'
@@ -8,6 +9,9 @@ import { Screen, Card, Button, SectionTitle, Banner, Chip, Modal } from '../../c
  * The single sentence that answers "why would I pay more than the tier below".
  * Kept beside the price so the question is answered where it gets asked.
  */
+/** Dollars as a price is written: 99.9 is "99.90", the way docs/PAYMENTS.md and Stripe say it. */
+const usd = (n) => Number(n).toFixed(2)
+
 const UPGRADE_REASON = {
   standard: 'more than one child, and every theme.',
   elite: 'every chore pays 1.5×, the whole app switches to Overdrive, plus the parent tools.',
@@ -15,7 +19,9 @@ const UPGRADE_REASON = {
 
 export default function ParentPlan() {
   const { state, dispatch } = useApp()
-  const current = state.family.tier
+  const current = TIERS[state.family.tier] ? state.family.tier : 'starter'
+  const trialTier = onTrial(state) ? effectiveTier(state.family) : null
+  const trialDays = trialTier ? trialDaysLeft(state.family) : null
   const [confirm, setConfirm] = useState(null)
   /*
    * Monthly or annual. Monthly is the default deliberately: annual is the
@@ -66,7 +72,17 @@ export default function ParentPlan() {
   return (
     <Screen>
       <h1 className="font-display text-2xl font-extrabold mb-1">Plans</h1>
-      <p className="text-sm text-muted mb-3">You are on {TIERS[current].name}.</p>
+      {/*
+        A new family is on a free trial of Elite. This said "You are on
+        Starter" with Starter marked as the current plan, beside a dashboard
+        saying fourteen days of Elite were left: both were true, and together
+        they read as a mistake.
+      */}
+      <p className="text-sm text-muted mb-3">
+        {trialDays
+          ? `You are trying ${TIERS[trialTier].name} free for ${trialDays} more ${trialDays === 1 ? 'day' : 'days'}. After that you are on ${TIERS[current].name} unless you choose a plan.`
+          : `You are on ${TIERS[current].name}.`}
+      </p>
 
       {live ? (
         <>
@@ -142,12 +158,15 @@ export default function ParentPlan() {
                   {tier.price === 0
                     ? 'Free'
                     : cycle === 'year'
-                      ? <>${tier.yearPrice}<span className="text-xs font-normal text-muted">/yr</span></>
-                      : <>${tier.price}<span className="text-xs font-normal text-muted">/mo</span></>}
+                      ? <>${usd(tier.yearPrice)}<span className="text-xs font-normal text-muted">/yr</span></>
+                      : <>${usd(tier.price)}<span className="text-xs font-normal text-muted">/mo</span></>}
                 </span>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                {active && <Chip tone="var(--accent)">Current plan</Chip>}
+                {active && <Chip tone="var(--accent)">{trialTier ? 'Your plan after the trial' : 'Current plan'}</Chip>}
+                {tier.id === trialTier && (
+                  <Chip tone="var(--good)">Free trial · {trialDays} {trialDays === 1 ? 'day' : 'days'} left</Chip>
+                )}
                 <Chip>
                   {tier.price === 0
                     ? 'Free forever · no card'
@@ -193,7 +212,7 @@ export default function ParentPlan() {
                     : tier.price === 0
                       ? `Stay on ${tier.name}`
                       : `${live ? 'Subscribe to' : 'Switch to'} ${tier.name} · `
-                        + (cycle === 'year' ? `$${tier.yearPrice}/yr` : `$${tier.price}/mo`)}
+                        + (cycle === 'year' ? `$${usd(tier.yearPrice)}/yr` : `$${usd(tier.price)}/mo`)}
                 </Button>
               )}
             </Card>
@@ -224,7 +243,7 @@ export default function ParentPlan() {
                     className="block text-[10px] text-muted leading-tight"
                     style={{ fontVariantNumeric: 'tabular-nums' }}
                   >
-                    {t.price === 0 ? 'Free' : `$${t.price}/mo`}
+                    {t.price === 0 ? 'Free' : `$${usd(t.price)}/mo`}
                   </span>
                 </th>
               ))}

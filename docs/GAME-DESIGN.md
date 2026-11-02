@@ -131,7 +131,7 @@ regardless of theme — a chart has to stay readable and colour-blind safe in al
 | XP multiplier | ×1 | **×1.5** permanent |
 | Profile frames & drop selectors | — | **✓** |
 | System Override Protocol | — | **✓** |
-| AI Behaviour Blueprints | — | **✓** |
+| Behaviour Blueprints | — | **✓** |
 | Parent Alliance tournament | — | **✓** |
 
 The Elite XP boost is applied last in the reward calculation, so an Elite kid genuinely

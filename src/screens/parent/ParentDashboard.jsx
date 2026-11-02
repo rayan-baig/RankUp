@@ -7,6 +7,7 @@ import { storyProgress } from '../../lib/dragonFight.js'
 import { findGame } from '../../data/minigames.js'
 import { MARKET_SKINS } from '../../data/marketSkins.js'
 import { activeLockout, familyGoalProgress } from '../../state/reducer.js'
+import { TIERS } from '../../state/initialState.js'
 import Avatar from '../../components/Avatar.jsx'
 import { Screen, Card, Button, SectionTitle, Stat, ProgressBar, EmptyState, Banner, Chip } from '../../components/ui.jsx'
 import SyncBadge from '../../components/SyncBadge.jsx'
@@ -241,6 +242,10 @@ export default function ParentDashboard() {
   )
 }
 
+// The words for what the events store as ids: "Plan changed to elite" and
+// "Override (red)" were the database's words on a parent's screen.
+const OVERRIDE_NAMES = { tax: 'A Currency Tax', dimension: 'A Dimension Lockout', red: 'A Red Security Lockdown' }
+
 function describeEvent(e, kid) {
   const who = kid?.name || 'Someone'
   switch (e.type) {
@@ -250,10 +255,10 @@ function describeEvent(e, kid) {
     case 'quests_assigned': return `📋 ${e.meta?.count} quest(s) assigned to ${who}`
     case 'level_up': return `🎉 ${who} reached level ${e.meta?.to}`
     case 'reward_redeemed': return `🎁 ${who} redeemed ${e.meta?.name}`
-    case 'override_applied': return `🛡️ Override (${e.meta?.kind}) applied to ${who}`
+    case 'override_applied': return `🛡️ ${OVERRIDE_NAMES[e.meta?.kind] || 'An override'} applied to ${who}`
     case 'override_lifted': return `🔓 Override lifted for ${who}`
     case 'login_bonus': return `🎁 ${who} claimed the daily bonus`
-    case 'tier_changed': return `💳 Plan changed to ${e.meta?.tier}`
+    case 'tier_changed': return `💳 Plan changed to ${TIERS[e.meta?.tier]?.name || 'a new plan'}`
     case 'theme_changed': return `🎨 ${who} changed theme`
     case 'kid_added': return `👶 ${who} was added`
     case 'alliance_joined': return '🏆 Joined a Parent Alliance'

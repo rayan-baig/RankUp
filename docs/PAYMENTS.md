@@ -33,12 +33,18 @@ progress does not.
 
 ### 1. Create the products
 
-In the Stripe dashboard, two recurring monthly prices:
+In the Stripe dashboard, two products, each with a monthly and a yearly
+recurring price (the plan screen offers both; a year is ten months' money):
 
 | Product | Price | Note the price id |
 |---|---|---|
 | RankUp Standard | $9.99 / month | `price_...` → `STRIPE_PRICE_STANDARD` |
+| RankUp Standard | $99.90 / year | `price_...` → `STRIPE_PRICE_STANDARD_YEAR` |
 | RankUp Elite Pass | $15.99 / month | `price_...` → `STRIPE_PRICE_ELITE` |
+| RankUp Elite Pass | $159.90 / year | `price_...` → `STRIPE_PRICE_ELITE_YEAR` |
+
+Starter is free and has no Stripe price. `tests/plans.mjs` reads this table
+and fails if a price on the plan screen is not in it.
 
 ### 2. Run the SQL
 
@@ -53,7 +59,9 @@ VITE_STRIPE_ENABLED=true          # turns on real checkout in the app
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_STANDARD=price_...
+STRIPE_PRICE_STANDARD_YEAR=price_...
 STRIPE_PRICE_ELITE=price_...
+STRIPE_PRICE_ELITE_YEAR=price_...
 SUPABASE_SERVICE_ROLE_KEY=...
 ```
 

@@ -3,6 +3,7 @@ import { reducer, isElite, guildCapacity, activeLockout } from './reducer.js'
 import { createInitialState, TIERS } from './initialState.js'
 import { buildDemoFamily, DEMO_VERSION } from '../lib/demoFamily.js'
 import { loadState, saveState, clearState, dropOldPhotos, wipeDevice } from '../lib/storage.js'
+import { setCrashNames } from '../lib/crashReport.js'
 import { createSyncEngine, SYNC_STATUS, resetCursor } from '../lib/sync/syncEngine.js'
 import { queueChanges, recordDelivered, pendingRows } from '../lib/sync/shadow.js'
 import { enqueue as enqueueOp, readOutbox } from '../lib/sync/outbox.js'
@@ -415,6 +416,19 @@ const syncs = (state) =>
     }, 250)
     return () => clearTimeout(saveTimer.current)
   }, [state])
+
+  // A crash report leaves out this family's own names (see lib/crashReport.js).
+  useEffect(() => {
+    setCrashNames(() => {
+      const s = latest.current || {}
+      return [
+        s.family?.name, s.family?.parentName,
+        ...(s.kids || []).map((k) => k.name),
+        ...(s.adults || []).map((a) => a?.name),
+        s.pendingPairing?.kidName,
+      ].filter(Boolean)
+    })
+  }, [])
 
   const value = useMemo(
     () => ({ state, dispatch, sync, storageFull, syncNow: () => engineRef.current?.sync() }),

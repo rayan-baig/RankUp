@@ -248,8 +248,8 @@ export default function KidGuild() {
               </div>
               <p className="text-sm">{m.body}</p>
               {!m.mine && (
-                <button type="button" className="text-[10px] underline text-muted mt-1"
-                        onClick={() => act(() => guilds.report(m.id, kid.id))}>
+                <button type="button" className="text-[10px] underline text-muted mt-1 disabled:opacity-50"
+                        disabled={busy} onClick={() => act(() => guilds.report(m.id, kid.id))}>
                   Report
                 </button>
               )}

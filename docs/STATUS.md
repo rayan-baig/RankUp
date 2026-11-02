@@ -35,7 +35,7 @@ Legend: ✅ genuinely works · 🟡 works but only on this device · ❌ looks r
 | Elite 1.5× XP boost | ✅ | Applied in the reward calculation |
 | Elite 10-slot guilds | ✅ | Real children in other families, once a parent on each side approves. Off unless `VITE_GUILDS_ENABLED=true` |
 | System Override Protocol | ✅ | Currency Tax, Dimension Lockout and Red Security Lockdown all genuinely work |
-| AI Behaviour Blueprints | ✅ | Charts are computed from this family's real activity log |
+| Behaviour Blueprints | ✅ | Charts are computed from this family's real activity log |
 | Elite cosmetics (frames, drop selectors) | ✅ | |
 | Kid-device pairing by 6-digit code | ✅ | Expiry, 5-attempt limit, one-time use — [docs/SYNC.md](SYNC.md). Between two phones it needs Supabase; without it, two tabs of one browser |
 | Cross-device sync | ✅ *with a backend* | Quests, submissions, approvals and XP travel between paired devices. Offline-first with an outbox. Needs Supabase — [docs/SYNC.md](SYNC.md) |

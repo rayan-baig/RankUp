@@ -118,4 +118,45 @@ const back = await page.evaluate(() => document.body.innerText)
   ? pass('landing them back at the front door')
   : fail('back at the door', back.slice(0, 160))
 
+console.log('\n=== A visitor who already has an account cannot touch it from the demo ===')
+{
+  // Signed up, then stepped back to the front door and opened the look-around.
+  // The account's sign-in is still on the phone.
+  const sent = []
+  page.on('request', (r) => {
+    if (/\/api\/|\/rest\/v1\/|\/auth\/v1\//.test(r.url())) sent.push(`${r.method()} ${r.url()}`)
+  })
+  await page.getByRole('button', { name: /I'm a parent/ }).click()
+  await page.waitForTimeout(300)
+  await page.locator('input[type=email]').fill(`visitor${Date.now()}@example.com`)
+  await page.locator('input[type=password]').fill('correct-horse-battery')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await page.waitForTimeout(1600)
+  const session = await page.evaluate(() => localStorage.getItem('rankup.session.v1'))
+  session ? pass('(the visitor is signed in)') : fail('visitor signed in', 'no session')
+  await page.getByRole('button', { name: 'Back' }).click()
+  await page.waitForTimeout(400)
+  await page.getByRole('button', { name: /Have a look around/ }).click()
+  await page.waitForTimeout(1200)
+  sent.length = 0
+
+  await page.evaluate(() => { window.location.hash = '/parent/settings' })
+  await page.waitForTimeout(800)
+  await page.getByText('Your data', { exact: true }).click()
+  await page.waitForTimeout(300)
+  await page.getByRole('button', { name: 'Delete my account' }).click()
+  await page.waitForTimeout(300)
+  await page.locator('input[placeholder="DELETE"]').fill('DELETE')
+  await page.getByRole('button', { name: 'Delete for ever' }).click()
+  await page.waitForTimeout(2500)
+
+  sent.length === 0
+    ? pass("deleting the demo's account sends nothing to any server")
+    : fail('demo delete sends nothing', sent.slice(0, 3).join(' | '))
+  const still = await page.evaluate(() => localStorage.getItem('rankup.session.v1'))
+  still === session
+    ? pass('and the real account is still signed in on this phone')
+    : fail('real account kept', 'the session was cleared')
+}
+
 finish(errors, fails, browser)

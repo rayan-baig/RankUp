@@ -90,3 +90,19 @@ begin
   perform ok('and leaves the recent one alone',
     (select count(*) from crash_reports) = 1);
 end $$;
+
+-- ---------- no personal data is kept, whatever a phone sends ----------
+do $$
+declare v_row crash_reports;
+begin
+  delete from crash_reports;
+  set local role app_user;
+  perform become(null);
+  perform record_crash('/join?code=123456#access_token=eyJabc.eyJdef.ghi',
+    'Login failed for sam.rivera@example.com, PIN 4821', 'at SignIn', 'Mozilla/5.0');
+  set local role postgres;
+  select * into v_row from crash_reports order by id desc limit 1;
+  perform ok('an email in a crash message is not stored', v_row.message !~ '@' and v_row.message like '%[email]%', v_row.message);
+  perform ok('nor a PIN or a code', v_row.message !~ '4821' and v_row.where_at !~ '123456', v_row.message || ' | ' || v_row.where_at);
+  perform ok('nor a sign-in token from the address', v_row.where_at !~ 'eyJ', v_row.where_at);
+end $$;

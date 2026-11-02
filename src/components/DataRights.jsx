@@ -97,7 +97,9 @@ export default function DataRights() {
   const deleteAccount = async () => {
     if (typed !== 'DELETE') return
     setBusy(true)
-    if (transport.isConfigured()) {
+    // The look-around family is nobody's: deleting it deletes nothing on a
+    // server, and must not sign out an account this phone may also hold.
+    if (transport.isConfigured() && !state.demo) {
       try { await deleteOnServer() }
       catch { /* the local wipe below still happens */ }
       transport.signOut()

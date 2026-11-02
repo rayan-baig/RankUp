@@ -75,6 +75,34 @@ the first sync for a family with a year of history.
 **`devicewipe.mjs`** drives two browsers: a full phone says so and keeps
 working, and an unlinked child's phone erases itself.
 
+**`layout.mjs`** walks every parent and kid screen, every folded section
+opened, at 390x844 and 360x740, for a family that has just finished setup and
+for the busy look-around family. It fails on a page wider than the screen,
+anything running off an edge, two controls (or words and a control) on top of
+each other, words cut off without "…", and a code ("not_on_this_plan",
+"undefined", "elite") where words belong; and checks a new family's empty
+screens say something that makes sense for a family with nothing yet.
+
+**`plainsetup.mjs`** starts the app on its own ports with guilds and payments
+switched off, and again with no backend at all, and finishes setup on each.
+
+**`secretworlds.mjs`** takes a Block Craft child past each world's level and
+checks no screen, label or picture description names a world before it is
+reached, Hero's Return included until the dragon falls.
+
+**`oldphone.mjs`** opens a phone that ran a version that took photos: the old
+photo bucket and the photo-check fields are deleted, the chores kept.
+
+**`arcadecap.mjs`** (database) plays the arcade on two phones at once and
+proves the day's cap holds on the server, and that each game's score is held
+to what that game allows in the time played. **`crashreport.mjs`** checks a
+crash report carries no name, email, code, token or typed text.
+
+**`battleperf.mjs`** is a measurement rather than a gate: every battle scene
+with the CPU slowed four times, frame by frame. Run it before and after
+changing how a scene is drawn. (`battles.mjs` checks, without a browser, that
+a scene that cannot keep up draws fewer pixels.)
+
 ## Running them
 
 Playwright is deliberately **not** a dependency of this project — it downloads a

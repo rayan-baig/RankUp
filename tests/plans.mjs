@@ -72,6 +72,25 @@ yearly.includes('Billed yearly')
   ? pass('and says plainly how it will be billed')
   : fail('billed yearly stated', 'phrase missing')
 
+// Every price the screen shows, monthly and yearly, is a price in the table in
+// docs/PAYMENTS.md, written the same way. "$99.9/yr" is not "$99.90 / year".
+{
+  const { readFileSync } = await import('node:fs')
+  const doc = readFileSync(new URL('../docs/PAYMENTS.md', import.meta.url), 'utf8')
+  const table = doc.slice(doc.indexOf('### 1. Create the products'), doc.indexOf('### 2.'))
+  const documented = new Set([...table.matchAll(/\$(\d+\.\d\d) \/ (month|year)/g)].map((m) => `${m[1]}/${m[2] === 'month' ? 'mo' : 'yr'}`))
+  const shownIn = (text) => [...text.matchAll(/\$(\d+(?:\.\d+)?)\s*\/(mo|yr)\b/g)].map((m) => `${m[1]}/${m[2]}`)
+  const shown = new Set([...shownIn(body), ...shownIn(yearly)])
+  const strays = [...shown].filter((p) => !documented.has(p))
+  shown.size >= 4 && strays.length === 0
+    ? pass(`every price on the plan screen is in docs/PAYMENTS.md (${[...shown].join(', ')})`)
+    : fail('plan prices match docs/PAYMENTS.md', `shown ${[...shown].join(', ')}; not in the doc: ${strays.join(', ')}`)
+  const missing = [...documented].filter((p) => !shown.has(p))
+  missing.length === 0
+    ? pass('and every documented price is on the plan screen')
+    : fail('documented prices shown', missing.join(', '))
+}
+
 // Defaulting somebody into the larger charge is what gets refunded.
 await page.reload({ waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(1200)

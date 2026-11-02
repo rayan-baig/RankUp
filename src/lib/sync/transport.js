@@ -47,6 +47,15 @@ export function setSession(session) {
  * does, so an hour-old token fails there too.
  */
 export async function freshAccessToken() {
+  /*
+   * Not while the network is paused for the look-around. The endpoints that
+   * take this token (deleting the account, checkout, a push to the family's
+   * phones) are reached with fetch, not through `request`, so the pause did
+   * not cover them: a visitor who had signed up, stepped back to the welcome
+   * screen and opened the look-around could delete their real account, or
+   * buzz their real family, from the demo's buttons.
+   */
+  if (paused) return null
   await refreshSession()
   return getSession()?.access_token || null
 }

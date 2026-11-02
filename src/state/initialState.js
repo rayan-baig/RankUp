@@ -81,7 +81,7 @@ export const TIERS = {
       '10-player Megacluster guilds',
       'Exclusive profile customisation',
       'The Parental Consequence Engine',
-      'Advanced AI Behaviour Blueprints',
+      'Behaviour Blueprints',
       'The 20% Discount Tournament',
     ],
   },
@@ -140,7 +140,7 @@ export const ELITE_KID_PERKS = [
 
 export const ELITE_PARENT_PERKS = [
   { id: 'override', icon: '🛡️', title: 'The Parental Consequence Engine', body: 'Unlocks the System Override Protocol: custom real-world consequences plus Currency Tax, Dimension Lockout and Red Security Lockdown.' },
-  { id: 'blueprint', icon: '📊', title: 'Advanced AI Behaviour Blueprints', body: 'Weekly chart breakdowns of focus patterns and chore-completion history, built from what actually happened in the app.' },
+  { id: 'blueprint', icon: '📊', title: 'Behaviour Blueprints', body: 'Weekly chart breakdowns of focus patterns and chore-completion history, built from what actually happened in the app.' },
   { id: 'alliance', icon: '🏆', title: 'The 20% Discount Tournament', body: 'Join a ten-family alliance and compete each month on quests approved. The winning family gets 20% off their next bill — earned, not bought.' },
 ]
 

@@ -5,7 +5,7 @@ import { clearState, storageUsageBytes } from '../../lib/storage.js'
 import { relativeTime } from '../../lib/dates.js'
 import { canSyncAcrossDevices } from '../../lib/sync/index.js'
 import { isElite } from '../../state/reducer.js'
-import { billingLive, buyFlashTickets, FLASH_TICKET_PACKS, perTicket, packSaving } from '../../lib/billing.js'
+import { billingLive, buyFlashTickets, billingError, FLASH_TICKET_PACKS, perTicket, packSaving } from '../../lib/billing.js'
 import { guildsEnabled } from '../../lib/guilds.js'
 import { saveReminderSchedule } from '../../lib/notifications.js'
 import { transport } from '../../lib/sync/transport.js'
@@ -19,6 +19,18 @@ import { navigate } from '../../lib/router.js'
 export default function ParentSettings() {
   const { state, dispatch } = useApp()
   const [reset, setReset] = useState(false)
+  // A pack being opened at Stripe: one tap opens one checkout, not two.
+  const [buying, setBuying] = useState(null)
+  const [buyError, setBuyError] = useState('')
+  const buyPack = async (pack) => {
+    if (buying) return
+    if (!billingLive()) { dispatch({ type: 'GRANT_FLASH_TICKETS', count: pack.tickets }); return }
+    setBuying(pack.id)
+    setBuyError('')
+    const result = await buyFlashTickets(pack.id)
+    // On success the page is already on its way to Stripe.
+    if (!result.ok) { setBuyError(billingError(result.reason)); setBuying(null) }
+  }
   const [note, setNote] = useState('')
   const [noteKid, setNoteKid] = useState(state.kids[0]?.id || '')
   const [reward, setReward] = useState({ name: '', cost: 50, description: '', icon: '🎁' })
@@ -363,10 +375,10 @@ export default function ParentSettings() {
             <button
               key={pack.id}
               type="button"
-              onClick={() => (billingLive()
-                ? buyFlashTickets(pack.id)
-                : dispatch({ type: 'GRANT_FLASH_TICKETS', count: pack.tickets }))}
-              className="card-flat w-full flex items-center gap-3 p-3 mb-2 text-left"
+              onClick={() => buyPack(pack)}
+              disabled={Boolean(buying)}
+              aria-busy={buying === pack.id}
+              className="card-flat w-full flex items-center gap-3 p-3 mb-2 text-left disabled:opacity-60"
               style={pack.best ? { borderColor: 'var(--accent)' } : undefined}
             >
               <span className="text-xl" aria-hidden="true">🎟️</span>
@@ -382,12 +394,13 @@ export default function ParentSettings() {
                 <span className="block text-xs text-muted mt-0.5">{pack.note}</span>
               </span>
               <span className="font-display font-extrabold text-sm shrink-0">
-                {billingLive() ? `$${pack.price}` : 'Add (test)'}
+                {buying === pack.id ? 'Opening Stripe…' : billingLive() ? `$${pack.price}` : 'Add (test)'}
               </span>
             </button>
           )
         })}
 
+        {buyError && <p className="text-sm mt-1" style={{ color: 'var(--bad)' }} role="alert">{buyError}</p>}
         {!billingLive() && (
           <p className="text-xs text-muted mt-1">
             Stripe is not configured, so these add tickets locally without charging anything.
