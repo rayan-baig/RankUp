@@ -34,7 +34,9 @@ create table if not exists families (
   stripe_customer_id      text,
   stripe_subscription_id  text,
   subscription_status     text not null default 'none'
-                          check (subscription_status in ('none','trialing','active','past_due','canceled')),
+                          -- The full list, and why it is the full list: billing.sql.
+                          check (subscription_status in ('none','trialing','active','past_due','canceled','unpaid',
+                                                         'incomplete','incomplete_expired','paused','refunded','unknown')),
   subscription_renews_at  timestamptz,
   /*
    * A trial the family has not paid for.

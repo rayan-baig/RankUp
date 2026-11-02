@@ -10,10 +10,15 @@
  *
  * Needs the Cloudflare stack up:  supabase/test/up.sh --cf
  */
+import http from 'node:http'
 import pg from 'pg'
 import Stripe from 'stripe'
+import { billingNotice, billingError } from '../src/lib/billing.js'
 
 const BASE = process.env.API_BASE || 'http://localhost:8788'
+// Stripe ids are made unique per run, so the suite can run again on the same
+// database: a fixed id is "already handled" the second time.
+const RUN = Date.now().toString(36)
 const CRON = 'test-cron-secret'
 
 const fails = []
@@ -172,7 +177,7 @@ for (const type of ['checkout.session.completed', 'checkout.session.async_paymen
   // eslint-disable-next-line no-await-in-loop
   await signed({
     id: `evt_api_${type}_${Date.now()}`, type,
-    data: { object: { id: 'cs_api_bank_debit', object: 'checkout.session', customer: 'cus_api_live',
+    data: { object: { id: `cs_api_bank_debit_${RUN}`, object: 'checkout.session', customer: 'cus_api_live',
                       payment_status: type.endsWith('completed') ? 'unpaid' : 'paid', amount_total: 499, currency: 'usd',
                       metadata: { family_id: FAMILY, product: 'flash_5', ticket_count: '5' } } },
   })
@@ -205,6 +210,276 @@ ok('an unknown action is refused',
   (await operator('test-operator-secret', { action: 'delete', school_id: SCHOOL })).status === 400)
 ok('as is a school that does not exist',
   (await operator('test-operator-secret', { action: 'verify', school_id: '00000000-0000-4000-8000-000000000000' })).status === 404)
+
+/*
+ * A stand-in for Stripe's API, on the address up.sh gives the runtime as
+ * STRIPE_API_BASE. It records what the functions ask Stripe for, and can be
+ * told to fail the way Stripe does when it is down: answering 500, or not
+ * answering at all.
+ */
+const stripeCalls = []
+let stripeMode = 'ok'
+const stripeStandIn = http.createServer((req, res) => {
+  let raw = ''
+  req.on('data', (c) => { raw += c })
+  req.on('end', () => {
+    if (stripeMode === 'drop') { req.socket.destroy(); return }
+    const url = new URL(req.url, 'http://stripe.test')
+    stripeCalls.push({ method: req.method, path: url.pathname, params: new URLSearchParams(raw) })
+    const send = (code, body) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)) }
+    if (stripeMode === 'error500') return send(500, { error: { type: 'api_error', message: 'Stripe is having a bad day' } })
+    if (url.pathname === '/v1/checkout/sessions') {
+      return send(200, { id: `cs_test_${stripeCalls.length}`, object: 'checkout.session', url: `https://checkout.stripe.test/${stripeCalls.length}` })
+    }
+    if (url.pathname === '/v1/billing_portal/sessions') return send(200, { id: 'bps_test', object: 'billing_portal.session', url: 'https://billing.stripe.test/portal' })
+    if (url.pathname === '/v1/subscriptions' && req.method === 'GET') return send(200, { object: 'list', data: [], has_more: false })
+    if (url.pathname.startsWith('/v1/subscriptions/')) return send(200, { id: url.pathname.split('/').pop(), object: 'subscription' })
+    return send(404, { error: { type: 'invalid_request_error', message: 'no such route in the stand-in' } })
+  })
+})
+await new Promise((resolve) => stripeStandIn.listen(12111, resolve))
+const lastCall = (path) => [...stripeCalls].reverse().find((c) => c.path === path)
+const asUser = (path, body, token) => fetch(`${BASE}${path}`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:8788', Authorization: `Bearer ${token}` },
+  body: JSON.stringify(body ?? {}),
+})
+const billingRow = async (id) => (await db.query(
+  'select tier, subscription_status, flash_tickets, last_paid_tier from families where id = $1', [id])).rows[0]
+// What the plan screen is given: billing_status, asked as the parent, through the API.
+const billingAs = async (token) => (await fetch('http://localhost:54321/rest/v1/rpc/billing_status', {
+  method: 'POST', headers: { 'Content-Type': 'application/json', apikey: token, Authorization: `Bearer ${token}` }, body: '{}',
+})).json()
+let clock = Math.floor(Date.now() / 1000) + 60
+const tick = () => { clock += 10; return clock }
+
+console.log('\n=== The billing portal when Stripe is down ===')
+{
+  stripeMode = 'ok'
+  const open = await asUser('/api/billing-portal', {}, PARENT)
+  const body = await open.json().catch(() => ({}))
+  ok('with Stripe up, a parent gets the portal link', open.status === 200 && body.url === 'https://billing.stripe.test/portal',
+    `status ${open.status} ${JSON.stringify(body)}`)
+  ok('for their own customer, coming back to the plan screen',
+    lastCall('/v1/billing_portal/sessions')?.params.get('customer') === 'cus_api_live'
+    && lastCall('/v1/billing_portal/sessions')?.params.get('return_url') === 'http://localhost:8788/#/parent/plan')
+
+  stripeMode = 'error500'
+  const broken = await asUser('/api/billing-portal', {}, PARENT)
+  const brokenBody = await broken.json().catch(() => ({}))
+  ok('Stripe answering 500 gives a plain "Stripe is not answering", not a crash',
+    broken.status === 503 && brokenBody.error === 'stripe_unavailable', `status ${broken.status} ${JSON.stringify(brokenBody)}`)
+
+  stripeMode = 'drop'
+  const started = Date.now()
+  const gone = await asUser('/api/billing-portal', {}, PARENT)
+  const goneBody = await gone.json().catch(() => ({}))
+  ok('Stripe not answering at all says the same', gone.status === 503 && goneBody.error === 'stripe_unavailable',
+    `status ${gone.status} ${JSON.stringify(goneBody)}`)
+  ok('and says it promptly', Date.now() - started < 25000, `${Date.now() - started}ms`)
+  ok('which the app puts in words a parent can act on',
+    /not answering/.test(billingError(goneBody.error)) && /Nothing about your plan has changed/.test(billingError(goneBody.error)))
+  ok('as it does when the host itself answers 502', billingError('http_502') === billingError('stripe_unavailable'))
+  stripeMode = 'ok'
+}
+
+console.log('\n=== A school that changes size is charged for its new size ===')
+{
+  const ADMIN = 'a0000000-0000-4000-8000-0000000005a1'
+  const RESIZED = 'a0000000-0000-4000-8000-0000000005c2'
+  await db.query(`insert into auth.users (id, email) values ($1, 'api-school-admin@example.com') on conflict do nothing`, [ADMIN])
+  await db.query(
+    `insert into schools (id, name, district, district_key, student_count, size_band, status, trial_ends_at)
+     values ($1, 'Resized School', 'API District', 'api district', 200, 'small', 'trial', now() + interval '20 days')
+     on conflict (id) do update set student_count = 200, size_band = 'small', status = 'trial',
+                                    stripe_subscription_id = null, stripe_customer_id = null`, [RESIZED])
+  await db.query(`insert into school_staff (user_id, school_id, name, role) values ($1, $2, 'Admin', 'admin')
+                  on conflict (user_id) do update set school_id = $2, role = 'admin'`, [ADMIN, RESIZED])
+
+  // Checkout opened at the old size, and left open.
+  const early = await asUser('/api/school-checkout', { cycle: 'month' }, ADMIN)
+  ok('a small school is offered the small price', early.status === 200
+    && lastCall('/v1/checkout/sessions')?.params.get('line_items[0][price]') === 'price_test_school_small',
+    `status ${early.status} ${lastCall('/v1/checkout/sessions')?.params.get('line_items[0][price]')}`)
+
+  await db.query(`select set_config('request.jwt.claim.sub', $1, false)`, [ADMIN])
+  const resized = (await db.query('select update_school_size(900) as r')).rows[0].r
+  await db.query(`select set_config('request.jwt.claim.sub', '', false)`)
+  ok('the school corrects its size to 900', resized.ok === true, JSON.stringify(resized))
+
+  const monthly = await asUser('/api/school-checkout', { cycle: 'month' }, ADMIN)
+  const monthCall = lastCall('/v1/checkout/sessions')
+  ok('a fresh checkout charges the large price', monthly.status === 200
+    && monthCall?.params.get('line_items[0][price]') === 'price_test_school_large'
+    && monthCall?.params.get('metadata[band]') === 'large',
+    `${monthCall?.params.get('line_items[0][price]')} / ${monthCall?.params.get('metadata[band]')}`)
+  const yearly = await asUser('/api/school-checkout', { cycle: 'year', band: 'small' }, ADMIN)
+  ok('and the large yearly price for a year, whatever the request says about size', yearly.status === 200
+    && lastCall('/v1/checkout/sessions')?.params.get('line_items[0][price]') === 'price_test_school_large_year')
+
+  // The page opened before the resize is paid on anyway.
+  const before = stripeCalls.length
+  const stale = await signed({
+    id: `evt_api_school_stale_${Date.now()}`, type: 'customer.subscription.created', created: tick(),
+    data: { object: { id: 'sub_api_school_stale', object: 'subscription', status: 'trialing', customer: 'cus_api_resized',
+      metadata: { school_id: RESIZED, band: 'small', cycle: 'month', kind: 'school' },
+      items: { data: [{ id: 'si_api_stale', price: { id: 'price_test_school_small', recurring: { interval: 'month' } } }] } } },
+  })
+  const moved = stripeCalls.slice(before).find((c) => c.path === '/v1/subscriptions/sub_api_school_stale')
+  ok('a subscription paid on the stale page is accepted', stale.status === 200, `status ${stale.status}`)
+  ok('and moved onto the large price from its next invoice',
+    moved?.params.get('items[0][id]') === 'si_api_stale' && moved?.params.get('items[0][price]') === 'price_test_school_large'
+    && moved?.params.get('proration_behavior') === 'none',
+    moved ? [...moved.params].join('&') : 'no update sent')
+  const afterMove = stripeCalls.length
+  await signed({
+    id: `evt_api_school_right_${Date.now()}`, type: 'customer.subscription.updated', created: tick(),
+    data: { object: { id: 'sub_api_school_stale', object: 'subscription', status: 'trialing', customer: 'cus_api_resized',
+      metadata: { school_id: RESIZED, band: 'large', cycle: 'month', kind: 'school' },
+      items: { data: [{ id: 'si_api_stale', price: { id: 'price_test_school_large', recurring: { interval: 'month' } } }] } } },
+  })
+  ok('Stripe saying it is on the right price changes nothing more',
+    !stripeCalls.slice(afterMove).some((c) => c.path.startsWith('/v1/subscriptions/')))
+  await signed({
+    id: `evt_api_school_deal_${Date.now()}`, type: 'customer.subscription.updated', created: tick(),
+    data: { object: { id: 'sub_api_school_stale', object: 'subscription', status: 'active', customer: 'cus_api_resized',
+      metadata: { school_id: RESIZED, cycle: 'month', kind: 'school' },
+      items: { data: [{ id: 'si_api_stale', price: { id: 'price_hand_set_deal', recurring: { interval: 'month' } } }] } } },
+  })
+  ok('nor does a price the operator set by hand',
+    !stripeCalls.slice(afterMove).some((c) => c.path.startsWith('/v1/subscriptions/')))
+}
+
+console.log('\n=== Annual prices map back to the right plan in every subscription event ===')
+{
+  const YEARLY = 'a0000000-0000-4000-8000-00000000f003'
+  await db.query(`insert into families (id, name, tier) values ($1, 'Yearly Family', 'starter')
+                  on conflict (id) do update set tier = 'starter', subscription_status = 'none', billing_event_at = null,
+                                                 stripe_subscription_id = null, stripe_customer_id = 'cus_api_yearly'`, [YEARLY])
+  await db.query(`update families set stripe_customer_id = 'cus_api_yearly' where id = $1`, [YEARLY])
+  const sub = (price, status = 'active', extra = []) => ({
+    id: 'sub_api_yearly', object: 'subscription', status, customer: 'cus_api_yearly',
+    // Metadata left saying "standard", as it does after a plan is changed in
+    // the portal: the price is what was paid for, and it has to win.
+    metadata: { family_id: YEARLY, tier: 'standard', cycle: 'year' },
+    items: { data: [...extra, { id: 'si_api_yearly', price: { id: price, recurring: { interval: 'year' } } }] },
+  })
+  for (const type of ['customer.subscription.created', 'customer.subscription.updated']) {
+    // eslint-disable-next-line no-await-in-loop
+    const r = await signed({ id: `evt_api_yearly_elite_${type}_${Date.now()}`, type, created: tick(), data: { object: sub('price_test_elite_year') } })
+    // eslint-disable-next-line no-await-in-loop
+    const row = await billingRow(YEARLY)
+    ok(`${type}: a yearly Elite price is Elite`, r.status === 200 && row.tier === 'elite', `status ${r.status} ${JSON.stringify(row)}`)
+  }
+  await signed({ id: `evt_api_yearly_std_${Date.now()}`, type: 'customer.subscription.updated', created: tick(),
+    data: { object: { ...sub('price_test_standard_year'), metadata: { family_id: YEARLY, tier: 'elite' } } } })
+  ok('customer.subscription.updated: a yearly Standard price is Standard, whatever the metadata claims',
+    (await billingRow(YEARLY)).tier === 'standard')
+  await signed({ id: `evt_api_yearly_two_${Date.now()}`, type: 'customer.subscription.updated', created: tick(),
+    data: { object: sub('price_test_elite_year', 'active', [{ id: 'si_api_extra', price: { id: 'price_some_other_line' } }]) } })
+  ok('a yearly Elite price is found when it is not the first line', (await billingRow(YEARLY)).tier === 'elite')
+  await signed({ id: `evt_api_yearly_paid_${Date.now()}`, type: 'invoice.paid', created: tick(),
+    data: { object: { id: 'in_api_yearly', object: 'invoice', customer: 'cus_api_yearly', amount_paid: 15990, currency: 'usd',
+      parent: { subscription_details: { metadata: { family_id: YEARLY, tier: 'standard' } } },
+      lines: { data: [{ price: { id: 'price_test_elite_year' } }] } } } })
+  await signed({ id: `evt_api_yearly_cs_${Date.now()}`, type: 'checkout.session.completed', created: tick(),
+    data: { object: { id: 'cs_api_yearly', object: 'checkout.session', mode: 'subscription', customer: 'cus_api_yearly',
+      payment_status: 'paid', metadata: { family_id: YEARLY, tier: 'standard', cycle: 'year' } } } })
+  ok('invoice.paid and checkout.session.completed leave a yearly Elite family on Elite', (await billingRow(YEARLY)).tier === 'elite')
+  const deleted = await signed({ id: `evt_api_yearly_del_${Date.now()}`, type: 'customer.subscription.deleted', created: tick(),
+    data: { object: sub('price_test_elite_year', 'canceled') } })
+  const ended = await billingRow(YEARLY)
+  ok('customer.subscription.deleted: the yearly plan ending drops to Starter', deleted.status === 200
+    && ended.tier === 'starter' && ended.subscription_status === 'canceled', JSON.stringify(ended))
+}
+
+console.log('\n=== A failed renewal drops the plan, and the parent is told why ===')
+{
+  const RENEW_PARENT = 'a0000000-0000-4000-8000-00000000a004'
+  const RENEW = 'a0000000-0000-4000-8000-00000000f004'
+  await db.query(`insert into auth.users (id, email) values ($1, 'api-renew@example.com') on conflict do nothing`, [RENEW_PARENT])
+  await db.query(`insert into families (id, name, tier) values ($1, 'Renewing Family', 'elite') on conflict (id) do nothing`, [RENEW])
+  await db.query(`insert into parents (user_id, family_id, name) values ($1, $2, 'Renewing Parent') on conflict do nothing`, [RENEW_PARENT, RENEW])
+  await db.query(`update families set tier = 'elite', subscription_status = 'active', stripe_subscription_id = 'sub_api_renew',
+                  stripe_customer_id = 'cus_api_renew', billing_event_at = null, last_paid_tier = null where id = $1`, [RENEW])
+  const renewal = (status) => ({ id: 'sub_api_renew', object: 'subscription', status, customer: 'cus_api_renew',
+    metadata: { family_id: RENEW, tier: 'elite' }, items: { data: [{ id: 'si_api_renew', price: { id: 'price_test_elite_month' } }] } })
+
+  const failed = await signed({ id: `evt_api_renew_fail_${Date.now()}`, type: 'invoice.payment_failed', created: tick(),
+    data: { object: { id: 'in_api_renew', object: 'invoice', customer: 'cus_api_renew', metadata: { family_id: RENEW } } } })
+  ok('"payment failed" on its own changes nothing (the subscription event says what happened)',
+    failed.status === 200 && (await billingRow(RENEW)).tier === 'elite')
+
+  await signed({ id: `evt_api_renew_due_${Date.now()}`, type: 'customer.subscription.updated', created: tick(), data: { object: renewal('past_due') } })
+  let row = await billingRow(RENEW)
+  ok('past due: the family drops to Starter at once', row.tier === 'starter' && row.subscription_status === 'past_due', JSON.stringify(row))
+  let notice = billingNotice(await billingAs(RENEW_PARENT))
+  ok('and the plan screen says the card was declined, naming the plan that stopped',
+    notice?.title === 'A payment failed' && /Elite plan/.test(notice.body) && /Manage billing/.test(notice.body), JSON.stringify(notice))
+
+  for (const status of ['unpaid', 'incomplete_expired', 'paused']) {
+    // eslint-disable-next-line no-await-in-loop
+    const r = await signed({ id: `evt_api_renew_${status}_${Date.now()}`, type: 'customer.subscription.updated', created: tick(), data: { object: renewal(status) } })
+    // eslint-disable-next-line no-await-in-loop
+    row = await billingRow(RENEW)
+    ok(`"${status}" is stored rather than refused (the webhook used to answer 500 for ever)`,
+      r.status === 200 && row.subscription_status === status && row.tier === 'starter', `status ${r.status} ${JSON.stringify(row)}`)
+    // eslint-disable-next-line no-await-in-loop
+    notice = billingNotice(await billingAs(RENEW_PARENT))
+    ok(`and "${status}" has words for the parent`, Boolean(notice?.title) && /Starter/.test(notice.body), JSON.stringify(notice))
+  }
+  await signed({ id: `evt_api_renew_back_${Date.now()}`, type: 'customer.subscription.updated', created: tick(), data: { object: renewal('active') } })
+  row = await billingRow(RENEW)
+  ok('a card that goes through puts the plan back', row.tier === 'elite' && row.subscription_status === 'active', JSON.stringify(row))
+  ok('with nothing left to warn about', billingNotice(await billingAs(RENEW_PARENT)) === null)
+
+  console.log('\n=== A refund ===')
+  const refund = (over) => signed({ id: `evt_api_refund_${Date.now()}_${Math.random()}`, type: 'charge.refunded', created: tick(),
+    data: { object: { id: `ch_api_renew_${RUN}`, object: 'charge', customer: 'cus_api_renew', payment_intent: `pi_api_renew_${RUN}`,
+      amount: 1599, amount_refunded: 1599, refunded: true, currency: 'usd', created: Math.floor(Date.now() / 1000), ...over } } })
+  await refund({ id: `ch_api_goodwill_${RUN}`, amount_refunded: 500, refunded: false })
+  ok('a partial refund leaves the plan alone', (await billingRow(RENEW)).tier === 'elite')
+  // This month's renewal has been paid; last month's is refunded in full.
+  await signed({ id: `evt_api_renew_paid_${Date.now()}`, type: 'invoice.paid', created: tick(),
+    data: { object: { id: `in_api_renew_this_month_${RUN}`, object: 'invoice', customer: 'cus_api_renew', amount_paid: 1599, currency: 'usd',
+      parent: { subscription_details: { metadata: { family_id: RENEW } } } } } })
+  await refund({ id: `ch_api_last_month_${RUN}`, created: Math.floor(Date.now() / 1000) - 35 * 86400 })
+  ok('refunding an earlier month leaves the month that is paid for standing', (await billingRow(RENEW)).tier === 'elite',
+    JSON.stringify(await billingRow(RENEW)))
+  const full = await refund({})
+  row = await billingRow(RENEW)
+  ok('a plan payment refunded in full drops the family to Starter', full.status === 200
+    && row.tier === 'starter' && row.subscription_status === 'refunded', JSON.stringify(row))
+  notice = billingNotice(await billingAs(RENEW_PARENT))
+  ok('and the parent is told it was refunded', notice?.title === 'Your payment was refunded', JSON.stringify(notice))
+  await signed({ id: `evt_api_renew_again_${Date.now()}`, type: 'customer.subscription.updated', created: tick(), data: { object: renewal('active') } })
+
+  console.log('\n=== Flash Ticket packs: replayed, refunded ===')
+  await db.query('update families set flash_tickets = 0 where id = $1', [RENEW])
+  const pack = { id: `evt_api_pack_${Date.now()}`, type: 'checkout.session.completed', created: tick(),
+    data: { object: { id: `cs_api_pack_${RUN}`, object: 'checkout.session', mode: 'payment', customer: 'cus_api_renew',
+      payment_status: 'paid', payment_intent: `pi_api_pack_${RUN}`, amount_total: 599, currency: 'usd',
+      metadata: { family_id: RENEW, product: 'flash_5', ticket_count: '5' } } } }
+  await signed(pack)
+  await signed(pack)
+  await Promise.all([signed(pack), signed(pack), signed({ ...pack, id: `${pack.id}_other` })])
+  ok('one pack, delivered five times (twice at once, once under another event id), is five tickets',
+    (await billingRow(RENEW)).flash_tickets === 5, JSON.stringify(await billingRow(RENEW)))
+  await db.query('update families set flash_tickets = 3 where id = $1', [RENEW])   // two spent
+  const packRefund = { id: `evt_api_pack_refund_${Date.now()}`, type: 'charge.refunded', created: tick(),
+    data: { object: { id: `ch_api_pack_${RUN}`, object: 'charge', customer: 'cus_api_renew', payment_intent: `pi_api_pack_${RUN}`,
+      amount: 599, amount_refunded: 599, refunded: true, currency: 'usd' } } }
+  await signed(packRefund)
+  await signed({ ...packRefund, id: `${packRefund.id}_again` })
+  row = await billingRow(RENEW)
+  ok('refunding the pack takes back what is left of it, never below zero', row.flash_tickets === 0, JSON.stringify(row))
+  ok('and leaves the plan alone', row.tier === 'elite' && row.subscription_status === 'active', JSON.stringify(row))
+  await db.query('update families set flash_tickets = 4 where id = $1', [RENEW])
+  await signed({ ...packRefund, id: `${packRefund.id}_late` })
+  ok('a replay of the refund takes nothing more', (await billingRow(RENEW)).flash_tickets === 4)
+}
+
+stripeStandIn.close()
 
 console.log('\n=== A route that does not exist is a 404, not a stack trace ===')
 const missing = await fetch(`${BASE}/api/not-a-real-endpoint`, { method: 'POST' })

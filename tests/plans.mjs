@@ -124,6 +124,45 @@ await page.evaluate(() => {
   ? pass('a second child cannot appear on Starter')
   : fail('kid limit enforced', 'a kid was added')
 
+console.log('\n=== A payment that fails is explained on the dashboard ===')
+{
+  // The webhook's write, made directly: the newest family is this test's.
+  const { default: pg } = await import('pg')
+  const db = new pg.Client({
+    host: process.env.PGHOST || '/tmp',
+    port: Number(process.env.PGPORT || 55432),
+    user: process.env.PGUSER || 'postgres',
+    database: process.env.PGDATABASE || 'rankup_test',
+  })
+  await db.connect()
+  const setStatus = (status) => db.query(
+    `update families set subscription_status = $1, last_paid_tier = 'elite'
+      where id = (select id from families order by created_at desc limit 1)`, [status])
+  // Waits for the sync to bring the family row over, rather than for a time.
+  const dashboardSays = async (pattern, present) => {
+    await page.evaluate(() => { window.location.hash = '/parent' })
+    for (let i = 0; i < 40; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+      // eslint-disable-next-line no-await-in-loop
+      const text = await page.evaluate(() => document.body.innerText)
+      if (pattern.test(text) === present) return true
+      // eslint-disable-next-line no-await-in-loop
+      await page.waitForTimeout(500)
+    }
+    return false
+  }
+  await setStatus('past_due')
+  ;(await dashboardSays(/A payment failed[\s\S]*Elite plan/, true))
+    ? pass('a declined renewal puts "A payment failed" on the dashboard, naming the plan')
+    : fail('payment failure explained', (await page.evaluate(() => document.body.innerText)).slice(0, 200))
+  await setStatus('active')
+  ;(await dashboardSays(/A payment failed/, false))
+    ? pass('and it goes once the payment is through')
+    : fail('notice cleared', 'still showing')
+  await db.end()
+}
+
 console.log('\n=== The Sunday Market ===')
 await page.evaluate(() => { window.location.hash = '/kid/market' })
 await page.waitForTimeout(900)

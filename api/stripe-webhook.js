@@ -21,7 +21,7 @@
  */
 
 import { makeStripe, verifyWebhook } from './_shared/stripe.js'
-import { schoolIdOf } from './_shared/schoolBilling.js'
+import { schoolIdOf, schoolPriceId, schoolCycle } from './_shared/schoolBilling.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -89,8 +89,16 @@ async function serviceRpc(fn, args) {
  * rather than to a plan nobody paid for.
  */
 function tierFor(subscription) {
-  const priceId = subscription?.items?.data?.[0]?.price?.id
-  const byPrice = priceId && PRICE_TIERS.get(priceId)
+  // Every item, not only the first: a subscription can carry more than one
+  // line (a tax or add-on line ahead of the plan), and reading item zero alone
+  // gave a paying family whatever that line happened to be. The best known
+  // plan among them wins. `plan` is the same id on older API versions.
+  const RANK = { starter: 0, standard: 1, elite: 2 }
+  let byPrice = null
+  for (const item of subscription?.items?.data || []) {
+    const tier = PRICE_TIERS.get(item?.price?.id) || PRICE_TIERS.get(item?.plan?.id)
+    if (tier && (!byPrice || RANK[tier] > RANK[byPrice])) byPrice = tier
+  }
   if (byPrice) return byPrice
   const claimed = subscription?.metadata?.tier
   return claimed === 'elite' || claimed === 'standard' ? claimed : 'starter'
@@ -116,6 +124,40 @@ async function schoolIdFor(object) {
     if (String(err.message).endsWith(': 404')) return null
     throw err
   }
+}
+
+/**
+ * Put a school's subscription on the price for the size it is now.
+ *
+ * Checkout picks the price from the school's size at the moment the page is
+ * opened. A school that opened checkout, then corrected its size, then went
+ * back and paid on the page it already had open, was subscribed at the old
+ * band's price for as long as it stayed. So the price on every live school
+ * subscription is checked against the band the database holds, and moved if
+ * it differs — from the next invoice, with no proration, so nobody is charged
+ * a surprise amount today. Stripe's own "subscription updated" that follows
+ * carries the right price and stops here.
+ */
+async function keepSchoolOnItsBand(stripe, schoolId, subscription) {
+  if (!['active', 'trialing', 'past_due'].includes(subscription?.status)) return
+  const item = subscription?.items?.data?.[0]
+  const current = item?.price?.id
+  if (!item?.id || !current) return
+  const band = await serviceRpc('school_band_of', { p_school_id: schoolId })
+  const cycle = schoolCycle(subscription?.metadata?.cycle
+    || (item?.price?.recurring?.interval === 'year' ? 'year' : 'month'))
+  const wanted = band && schoolPriceId(band, cycle)
+  if (!wanted || wanted === current) return
+  // Only ever from one of our own band prices to another. A price the operator
+  // set by hand in Stripe (a size agreed by conversation, a special deal) is
+  // theirs to keep, and is left alone.
+  const ours = ['small', 'medium', 'large', 'xl'].flatMap((b) => [schoolPriceId(b, 'month'), schoolPriceId(b, 'year')])
+  if (!ours.includes(current)) return
+  await stripe.subscriptions.update(subscription.id, {
+    items: [{ id: item.id, price: wanted }],
+    proration_behavior: 'none',
+    metadata: { ...(subscription.metadata || {}), band, cycle },
+  })
 }
 
 async function familyIdFor(object, stripe) {
@@ -174,6 +216,7 @@ export default async function handler(req, res) {
           p_stripe_event: event.id,
           p_payload: { type: event.type },
         })
+        if (event.type !== 'customer.subscription.deleted') await keepSchoolOnItsBand(stripe, schoolId, object)
       } else if (event.type === 'invoice.paid' || event.type === 'invoice.payment_succeeded') {
         const paid = Number(object.amount_paid ?? object.amount_due ?? 0)
         if (paid > 0) {
@@ -218,6 +261,11 @@ export default async function handler(req, res) {
             type: event.type,
             amount_pence: Number(object.amount_total || 0) || null,
             currency: String(object.currency || 'gbp').toUpperCase(),
+            // What a refund of this pack takes back, and how it is recognised:
+            // a refund names the payment, never the checkout session.
+            count: Number(object.metadata?.ticket_count) || 3,
+            payment_intent: typeof object.payment_intent === 'string'
+              ? object.payment_intent : object.payment_intent?.id || null,
           },
         })
       }
@@ -278,6 +326,32 @@ export default async function handler(req, res) {
         })
       }
       return res.status(200).json({ received: true })
+    }
+
+    /*
+     * A payment handed back. A Flash Ticket pack refunded in full takes its
+     * tickets back (never below zero); the plan refunded in full drops the
+     * family to Starter, as an unpaid renewal does; a partial refund changes
+     * nothing. The database tells the two kinds apart by the payment, and
+     * acts once per charge however often this arrives. See apply_charge_refund.
+     */
+    if (event.type === 'charge.refunded') {
+      const familyId = await familyIdFor(object, stripe)
+      if (!familyId) return res.status(200).json({ received: true, ignored: 'no_family' })
+      const amount = Number(object.amount || 0)
+      const full = object.refunded === true || (amount > 0 && Number(object.amount_refunded || 0) >= amount)
+      const result = await serviceRpc('apply_charge_refund', {
+        p_family_id: familyId,
+        p_charge_id: object.id,
+        p_payment_intent: typeof object.payment_intent === 'string'
+          ? object.payment_intent : object.payment_intent?.id || null,
+        p_full: full,
+        p_event_created: event.created ? new Date(event.created * 1000).toISOString() : null,
+        // When the refunded payment was made: refunding last month's charge
+        // after this month's was paid leaves the current period standing.
+        p_charge_created: object.created ? new Date(object.created * 1000).toISOString() : null,
+      })
+      return res.status(200).json({ received: true, refund: result?.kind || result?.tier || result?.ignored || null })
     }
 
     /*

@@ -11,7 +11,7 @@
  * anyone could start a checkout that upgrades somebody else's account.
  */
 
-import { makeStripe } from './_shared/stripe.js'
+import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -228,6 +228,6 @@ export default async function handler(req, res) {
     // Logged here, not returned: Stripe's message can describe this
     // deployment's configuration ("No such price ...").
     console.error('[create-checkout]', err.message)
-    return res.status(502).json({ error: 'checkout_failed' })
+    return res.status(stripeUnavailable(err) ? 503 : 502).json({ error: stripeUnavailable(err) ? 'stripe_unavailable' : 'checkout_failed' })
   }
 }

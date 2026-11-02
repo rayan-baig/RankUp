@@ -1028,6 +1028,16 @@ returns text language sql stable security definer set search_path = public as $$
 $$;
 
 /**
+ * The size band a school is priced at now. For the webhook, which checks the
+ * price on a new subscription against it: a checkout page opened before the
+ * school corrected its size still carries the old band's price.
+ */
+create or replace function school_band_of(p_school_id uuid)
+returns text language sql stable security definer set search_path = public as $$
+  select size_band from schools where id = p_school_id;
+$$;
+
+/**
  * Apply what Stripe says about a school's subscription.
  *
  * Idempotent on the event id, because Stripe retries. A suspension is the
@@ -1106,6 +1116,7 @@ end $$;
 grant execute on function school_checkout_info() to authenticated;
 revoke execute on function attach_school_customer(uuid, text) from public, anon, authenticated;
 revoke execute on function school_for_customer(text) from public, anon, authenticated;
+revoke execute on function school_band_of(uuid) from public, anon, authenticated;
 revoke execute on function stripe_customer_for_school(uuid) from public, anon, authenticated;
 revoke execute on function apply_school_subscription(uuid, text, text, text, text, jsonb) from public, anon, authenticated;
 revoke execute on function record_school_payment(uuid, text, int, text) from public, anon, authenticated;

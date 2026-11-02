@@ -153,7 +153,9 @@ the job also clears any left by an older version.)
       neither buy the small pack and be credited the large one, nor claim the
       legendary for the price of a common.
 - [ ] Stripe → Developers → Webhooks → add `https://YOURDOMAIN/api/stripe-webhook`
-      → the signing secret
+      → the signing secret. Subscribe it to the events listed in
+      [PAYMENTS.md](PAYMENTS.md) step 4, `charge.refunded` included: without
+      it a refunded plan or ticket pack is never taken back.
 
 ## 4. Set the environment variables in Vercel
 

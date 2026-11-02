@@ -15,6 +15,7 @@ import TrialBanner from '../../components/TrialBanner.jsx'
 import { activityFeed } from '../../lib/activity.js'
 import CharityWeek from '../../components/CharityWeek.jsx'
 import InstallPrompt from '../../components/InstallPrompt.jsx'
+import { billingNotice } from '../../lib/billing.js'
 
 export default function ParentDashboard() {
   const { state, dispatch } = useApp()
@@ -41,9 +42,22 @@ export default function ParentDashboard() {
 
   const totalWeekXp = Object.values(weekXp).reduce((a, b) => a + b, 0)
 
+  // A paid plan that stopped because of a payment, said where a parent looks
+  // every day. A plan they cancelled themselves is not news, so not here.
+  const stopped = ['past_due', 'unpaid', 'incomplete', 'incomplete_expired', 'paused', 'refunded']
+    .includes(state.family.subscriptionStatus) && !state.demo
+    ? billingNotice({ status: state.family.subscriptionStatus, paid_tier: state.family.lastPaidTier })
+    : null
+
   return (
     <Screen>
       <TrialBanner />
+      {stopped && (
+        <Banner tone={stopped.tone} icon={stopped.icon} title={stopped.title}>
+          {stopped.body}{' '}
+          <button type="button" className="underline font-semibold" onClick={() => navigate('/parent/plan')}>See your plan</button>
+        </Banner>
+      )}
       <CharityWeek />
       <header className="mb-3">
         <p className="text-xs uppercase tracking-widest text-muted">Parent dashboard</p>

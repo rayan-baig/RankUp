@@ -7,7 +7,7 @@
  * current.
  */
 
-import { makeStripe } from './_shared/stripe.js'
+import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -64,7 +64,7 @@ async function schoolPortal(req, res, token) {
     return res.status(200).json({ url: portal.url })
   } catch (err) {
     console.error('[billing-portal:school]', err.message)
-    return res.status(502).json({ error: 'portal_failed' })
+    return res.status(stripeUnavailable(err) ? 503 : 502).json({ error: stripeUnavailable(err) ? 'stripe_unavailable' : 'portal_failed' })
   }
 }
 
@@ -133,6 +133,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ url: portal.url })
   } catch (err) {
     console.error('[billing-portal]', err.message)
-    return res.status(502).json({ error: 'portal_failed' })
+    return res.status(stripeUnavailable(err) ? 503 : 502).json({ error: stripeUnavailable(err) ? 'stripe_unavailable' : 'portal_failed' })
   }
 }

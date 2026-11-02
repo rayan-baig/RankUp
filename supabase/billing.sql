@@ -19,6 +19,24 @@
 alter table families add column if not exists subscription_ends_at timestamptz;
 alter table families add column if not exists billing_discount_percent int not null default 0;
 
+/*
+ * Every status Stripe gives a subscription, plus two of ours.
+ *
+ * The column used to allow only five of Stripe's eight, so a renewal that
+ * failed for good ("unpaid"), a first payment that never cleared
+ * ("incomplete", "incomplete_expired") or a trial that ended with no card on
+ * file ("paused") made the update below throw. The webhook answered 500,
+ * Stripe retried for three days, and the family kept whatever plan it had
+ * before — Elite, for a paused trial — because the change that should have
+ * dropped it could never be written. "refunded" is a payment handed back in
+ * full (apply_charge_refund); "unknown" is a status Stripe adds after this
+ * was written, stored as such rather than refused.
+ */
+alter table families drop constraint if exists families_subscription_status_check;
+alter table families add constraint families_subscription_status_check
+  check (subscription_status in ('none','trialing','active','past_due','canceled','unpaid',
+                                 'incomplete','incomplete_expired','paused','refunded','unknown'));
+
 create table if not exists billing_events (
   id           bigserial primary key,
   family_id    uuid references families(id) on delete set null,
@@ -41,6 +59,9 @@ alter table billing_events enable row level security;
 -- When the newest Stripe event applied to this family was created. Stripe does
 -- not deliver events in order, and retries any it did not hear back from.
 alter table families add column if not exists billing_event_at timestamptz;
+-- The plan a family last paid for, so a parent dropped to Starter by a failed
+-- or refunded payment is told which plan stopped, not just that one did.
+alter table families add column if not exists last_paid_tier text;
 
 drop function if exists apply_subscription_change(uuid, text, text, text, text, timestamptz, text, jsonb);
 create or replace function apply_subscription_change(
@@ -58,6 +79,9 @@ language plpgsql security definer set search_path = public as $$
 declare
   v_tier text;
   v_fam  families;
+  v_status text := case when p_status in ('trialing','active','past_due','canceled','unpaid','incomplete',
+                                          'incomplete_expired','paused','refunded')
+                        then p_status else 'unknown' end;
 begin
   if p_stripe_event is not null then
     begin
@@ -104,7 +128,8 @@ begin
 
   update families
      set tier = v_tier,
-         subscription_status = p_status,
+         last_paid_tier = case when v_tier <> 'starter' then v_tier else coalesce(nullif(tier, 'starter'), last_paid_tier) end,
+         subscription_status = v_status,
          stripe_customer_id = coalesce(p_customer_id, stripe_customer_id),
          -- Forgotten once the plan has ended, so a new subscription is
          -- accepted as the current one.
@@ -408,6 +433,84 @@ end $$;
 grant execute on function buy_market_skin(uuid, text, int, boolean, uuid) to authenticated;
 
 /**
+ * A payment handed back. Called only by the Stripe webhook, on charge.refunded.
+ *
+ * Two kinds of charge can be refunded, and they are told apart by the payment
+ * itself rather than by guessing from the amount:
+ *
+ *   - a Flash Ticket pack, recognised by the payment its credit recorded
+ *     (credit_flash_tickets keeps it in the payload). The pack's tickets go
+ *     back, or as many as are left: a family that has already spent some is
+ *     not pushed below zero, and the column would refuse it anyway.
+ *   - anything else is the plan. A refund in full means the period was not
+ *     paid for, so the family drops to Starter exactly as for an unpaid
+ *     renewal, with the status "refunded" so the plan screen can say so.
+ *
+ * A partial refund is goodwill on a payment that stands, and changes nothing.
+ * So does a refund of an earlier period's payment, recognised by a later
+ * invoice having been paid more than a week after the refunded charge: the
+ * period the family is in now is paid for. Keyed on the charge, so a replayed event, or a second partial refund event
+ * for the same charge after it was refunded in full, acts once.
+ */
+drop function if exists apply_charge_refund(uuid, text, text, boolean, timestamptz);
+create or replace function apply_charge_refund(
+  p_family_id uuid,
+  p_charge_id text,
+  p_payment_intent text default null,
+  p_full boolean default false,
+  p_event_created timestamptz default null,
+  p_charge_created timestamptz default null
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_credit billing_events;
+  v_count  int;
+  v_before int;
+  v_left   int;
+begin
+  if not coalesce(p_full, false) then
+    return jsonb_build_object('ok', true, 'ignored', 'partial_refund');
+  end if;
+  if p_charge_id is null or p_family_id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no_charge');
+  end if;
+
+  select * into v_credit from billing_events
+   where family_id = p_family_id and type = 'flash_tickets'
+     and p_payment_intent is not null and payload->>'payment_intent' = p_payment_intent
+   limit 1;
+
+  if v_credit.id is null then
+    if p_charge_created is not null and exists (
+         select 1 from billing_events
+          where family_id = p_family_id and stripe_event like 'invoice:%'
+            and received_at > p_charge_created + interval '7 days') then
+      return jsonb_build_object('ok', true, 'ignored', 'earlier_period');
+    end if;
+    return apply_subscription_change(p_family_id, 'refunded', 'starter', null, null, null,
+                                     'refund:' || p_charge_id, jsonb_build_object('type', 'charge.refunded'),
+                                     p_event_created);
+  end if;
+
+  begin
+    insert into billing_events (family_id, stripe_event, type, payload)
+    values (p_family_id, 'refund:' || p_charge_id, 'flash_tickets_refunded',
+            jsonb_build_object('payment_intent', p_payment_intent));
+  exception when unique_violation then
+    return jsonb_build_object('ok', true, 'duplicate', true);
+  end;
+
+  v_count := greatest(0, coalesce(nullif(v_credit.payload->>'count', '')::int, 0));
+  select flash_tickets into v_before from families where id = p_family_id for update;
+  update families set flash_tickets = greatest(0, flash_tickets - v_count)
+   where id = p_family_id
+  returning flash_tickets into v_left;
+  return jsonb_build_object('ok', true, 'kind', 'tickets', 'taken', v_before - v_left, 'flash_tickets', v_left);
+end $$;
+
+revoke execute on function apply_charge_refund(uuid, text, text, boolean, timestamptz, timestamptz) from public, anon, authenticated;
+
+/**
  * The Stripe customer for a family. Server-side only — it is not secret, but
  * there is no reason for a browser to hold it either.
  */
@@ -449,6 +552,7 @@ begin
     'family_id', v_family.id,
     'tier', v_family.tier,
     'status', v_family.subscription_status,
+    'paid_tier', v_family.last_paid_tier,
     'renews_at', v_family.subscription_renews_at,
     'ends_at', v_family.subscription_ends_at,
     'discount_percent', v_family.billing_discount_percent,

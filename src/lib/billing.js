@@ -147,6 +147,7 @@ export const BILLING_ERRORS = {
   no_customer: 'No billing account found for this family.',
   checkout_failed: 'Stripe could not start the checkout. Please try again.',
   portal_failed: 'Could not open the billing portal. Please try again.',
+  stripe_unavailable: 'Stripe, who look after billing, is not answering right now. Nothing about your plan has changed. Try again in a few minutes.',
   not_school_admin: 'Only the school’s admin can manage its plan.',
   suspended: 'This school is suspended. Contact us to sort it out.',
   already_subscribed: 'You already have a plan. Change it from “Manage billing, cancel, or update card”, where Stripe swaps it over without charging you twice.',
@@ -154,5 +155,66 @@ export const BILLING_ERRORS = {
 }
 
 export function billingError(reason) {
-  return BILLING_ERRORS[reason] || 'Something went wrong. Please try again.'
+  if (BILLING_ERRORS[reason]) return BILLING_ERRORS[reason]
+  // The host answering for a function that did not (a 502 or 504 from the
+  // platform, or no connection at all) is Stripe's side being down as far as
+  // a parent can tell, and saying "something went wrong" told them nothing.
+  if (/^http_5\d\d$/.test(String(reason || '')) || /fetch|network/i.test(String(reason || ''))) {
+    return BILLING_ERRORS.stripe_unavailable
+  }
+  return 'Something went wrong. Please try again.'
+}
+
+const PLAN_NAMES = { standard: 'Standard', elite: 'Elite' }
+
+/**
+ * What a parent is told when their plan has stopped, and why.
+ *
+ * The webhook moves the family the moment Stripe says a payment failed or was
+ * handed back, and the app simply showed fewer features: no reason, nothing
+ * to do about it. Only past_due had a banner, and it said "Elite" to a family
+ * that paid for Standard. `status` is billing_status()'s answer, or the
+ * synced family's subscription status as { status }. Null when there is
+ * nothing to say.
+ */
+export function billingNotice(status) {
+  const state = status?.status
+  const kept = 'Nothing your kids have earned has been touched.'
+  const until = status?.ends_at ? new Date(status.ends_at) : null
+  const plan = PLAN_NAMES[status?.paid_tier] || 'paid'
+  switch (state) {
+    case 'past_due':
+      return {
+        tone: 'bad', icon: '⚠️', title: 'A payment failed',
+        body: `Your card was declined when your ${plan} plan renewed, so you are on Starter until it goes through. Update your card in “Manage billing” and Stripe will try again. ${kept}`,
+      }
+    case 'unpaid':
+    case 'incomplete_expired':
+      return {
+        tone: 'bad', icon: '⚠️', title: 'Your plan has stopped',
+        body: `Stripe could not take the payment for your ${plan} plan after several tries, so you are on Starter now. Choose a plan below to start again. ${kept}`,
+      }
+    case 'incomplete':
+      return {
+        tone: 'bad', icon: '⚠️', title: 'Your payment has not gone through yet',
+        body: `Your bank has not confirmed the first payment, so the ${plan} plan has not started. Finish it in “Manage billing”, or choose a plan below to try again. ${kept}`,
+      }
+    case 'paused':
+      return {
+        tone: 'info', icon: '⏸️', title: 'Your plan is paused',
+        body: `Your free trial ended with no card saved, so you are on Starter. Add a card in “Manage billing” to carry on. ${kept}`,
+      }
+    case 'refunded':
+      return {
+        tone: 'info', icon: '↩️', title: 'Your payment was refunded',
+        body: `Your last payment was handed back in full, so that period is not paid for and you are on Starter. Choose a plan below whenever you want it back. ${kept}`,
+      }
+    case 'canceled':
+      return {
+        tone: 'info', icon: 'ℹ️', title: 'Your plan has ended',
+        body: `${until && until.getTime() > Date.now() ? `It runs until ${until.toLocaleDateString()}, then` : 'You are now on'} Starter. Choose a plan below to start again. ${kept}`,
+      }
+    default:
+      return null
+  }
 }

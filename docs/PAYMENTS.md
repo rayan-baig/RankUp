@@ -75,6 +75,7 @@ Subscribe it to:
 - `invoice.paid` and `invoice.payment_succeeded` (record each renewal's money)
 - `invoice.payment_failed` (received and deliberately ignored: the
   subscription's own status change is what moves the plan)
+- `charge.refunded` (a refund: see "Refunds and failed payments" below)
 
 Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
 
@@ -98,6 +99,35 @@ attaching — use it to check that a failed payment really does drop the family
 to Standard.
 
 ---
+
+## Refunds and failed payments
+
+What the webhook does, and what the parent is told. The words are in
+`billingNotice` in `src/lib/billing.js`; they show on the plan screen and,
+for a payment problem, on the parent dashboard.
+
+| Stripe says | Plan | The parent sees |
+|---|---|---|
+| `past_due` (a renewal's card was declined; Stripe is retrying) | Starter at once | "A payment failed", naming the plan that stopped, and "Manage billing" to update the card |
+| `unpaid` / `incomplete_expired` (Stripe gave up) | Starter | "Your plan has stopped" |
+| `paused` (a trial ended with no card) | Starter | "Your plan is paused" |
+| `charge.refunded`, the plan's payment **in full** | Starter, status `refunded` | "Your payment was refunded" |
+| `charge.refunded`, partly, or an earlier period's payment (a later invoice was paid since) | unchanged | nothing |
+| `charge.refunded`, a Flash Ticket pack in full | unchanged | the pack's tickets are taken back, as many as are left (never below zero) |
+| back to `active` | the plan they pay for | the notice goes |
+
+Every status Stripe sends can be stored. The column used to accept only five
+of them, so `unpaid`, `incomplete`, `incomplete_expired` and `paused` made the
+webhook fail on every retry and left the family on the plan they had stopped
+paying for. Each of these, and a refund or a pack credited once however often
+it is replayed, is checked by `tests/api.mjs` through the real runtime.
+
+**A refund in full does not cancel the subscription in Stripe.** Cancel it
+there too, or the next renewal charges the card and puts the plan back.
+
+When Stripe itself is down, checkout and the billing portal answer
+`stripe_unavailable` within about twenty seconds, and the app says Stripe is
+not answering and that nothing about the plan has changed.
 
 ## Cancelling and card changes
 
@@ -180,7 +210,12 @@ it in Stripe too.
 
 - **Checkout** is `api/school-checkout.js`. Only a school's admin can start it,
   and the price is picked from the school's own size, never from the request.
-  Days left on the 30-day free trial carry onto the card.
+  Days left on the 30-day free trial carry onto the card. A checkout page
+  opened before the school corrected its size still carries the old price, so
+  the webhook checks every live school subscription against the school's band
+  and moves it to the right price from the next invoice (no proration). A
+  price you set by hand in Stripe, outside the eight band prices, is left
+  alone.
 - **The webhook** you already have handles schools as well. A school's events
   carry `school_id`; they switch the school on and off and never touch a
   family's plan. A failing card keeps the school playing while Stripe retries.

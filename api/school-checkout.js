@@ -6,7 +6,7 @@
  * travels in the metadata so the webhook knows which school paid.
  */
 
-import { makeStripe } from './_shared/stripe.js'
+import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
 import { schoolCycle, schoolPriceId, schoolTrialEnd } from './_shared/schoolBilling.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -110,6 +110,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ url: session.url })
   } catch (err) {
     console.error('[school-checkout]', err.message)
-    return res.status(502).json({ error: 'checkout_failed' })
+    return res.status(stripeUnavailable(err) ? 503 : 502).json({ error: stripeUnavailable(err) ? 'stripe_unavailable' : 'checkout_failed' })
   }
 }

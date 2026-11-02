@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { TIERS, TIER_LADDER, PLAN_COMPARISON, ELITE_KID_PERKS, ELITE_PARENT_PERKS } from '../../state/initialState.js'
-import { billingLive, startCheckout, openBillingPortal, fetchBillingStatus, billingError } from '../../lib/billing.js'
+import { billingLive, startCheckout, openBillingPortal, fetchBillingStatus, billingError, billingNotice } from '../../lib/billing.js'
 import { Screen, Card, Button, SectionTitle, Banner, Chip, Modal } from '../../components/ui.jsx'
 
 /**
@@ -75,10 +75,10 @@ export default function ParentPlan() {
               Stripe is confirming it now. Your plan updates within a few seconds.
             </Banner>
           )}
-          {status?.status === 'past_due' && (
-            <Banner tone="bad" icon="⚠️" title="A payment failed">
-              Your card was declined, so Elite features are paused. Update your card to restore
-              them — nothing your kids have earned has been touched.
+          {/* Why a paid plan stopped (a failed renewal, a refund), in words. */}
+          {billingNotice(status) && (
+            <Banner tone={billingNotice(status).tone} icon={billingNotice(status).icon} title={billingNotice(status).title}>
+              {billingNotice(status).body}
             </Banner>
           )}
           {status?.has_customer && (
