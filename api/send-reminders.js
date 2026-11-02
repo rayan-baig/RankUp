@@ -123,7 +123,10 @@ export default async function handler(req, res) {
     })
 
     const results = await Promise.allSettled(
-      targets.map((t) => sendPush({ endpoint: t.endpoint, keys: t.keys }, message)),
+      // Held by the push service only as long as it would still be on time:
+      // a phone that was off all morning should not get the breakfast
+      // reminder at lunch. Late, or not at all, as with the grace window.
+      targets.map((t) => sendPush({ endpoint: t.endpoint, keys: t.keys }, message, { ttl: GRACE_MINUTES * 60 })),
     )
 
     // Marked sent even when every push failed. A family with no working phone

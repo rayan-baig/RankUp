@@ -53,8 +53,9 @@ const server = http.createServer((req, res) => {
   req.on('data', (c) => chunks.push(c))
   req.on('end', () => {
     received.push({ path: req.url, headers: req.headers, body: Buffer.concat(chunks) })
-    // One path plays a phone that has been uninstalled.
-    res.writeHead(req.url.endsWith('/gone') ? 410 : 201)
+    // One path plays a phone that has been uninstalled, one a push service
+    // having a bad moment.
+    res.writeHead(req.url.endsWith('/gone') ? 410 : req.url.endsWith('/busy') ? 503 : 201)
     res.end()
   })
 })
@@ -77,7 +78,8 @@ await db.query('delete from push_subscriptions where family_id = $1', [FAMILY])
 const LIVE = `http://127.0.0.1:${PORT}/push/live`
 const GONE = `http://127.0.0.1:${PORT}/push/gone`
 const DEAD = 'http://127.0.0.1:1/push/nothing-listening'
-for (const e of [LIVE, GONE, DEAD]) await register(e)
+const BUSY = `http://127.0.0.1:${PORT}/push/busy`
+for (const e of [LIVE, GONE, DEAD, BUSY]) await register(e)
 
 const sendRes = await fetch(`${BASE}/api/send-push`, {
   method: 'POST',
@@ -90,6 +92,14 @@ console.log('\n=== The notice leaves the server ===')
 ok('the endpoint accepts the send', sendRes.status === 200, `status ${sendRes.status} ${JSON.stringify(sendBody)}`)
 const live = received.find((r) => r.path.endsWith('/live'))
 ok('and the push service receives it', Boolean(live), `received ${received.length}`)
+
+console.log('\n=== A phone that is offline still gets it later ===')
+// A push service holds a message for an offline phone only for as long as the
+// TTL header says; with none, or 0, a phone out of signal never sees it.
+const ttl = Number(live?.headers?.ttl)
+ok('the notice says how long the push service may hold it for an offline phone',
+  Number.isFinite(ttl) && ttl >= 24 * 60 * 60, `TTL ${live?.headers?.ttl}`)
+ok('and how urgent it is', ['normal', 'high'].includes(live?.headers?.urgency), `Urgency ${live?.headers?.urgency}`)
 
 console.log('\n=== The push service can tell who sent it ===')
 let claims = null
@@ -134,6 +144,25 @@ ok('a phone the push service says is gone (410) is dropped', !(GONE in byEndpoin
 ok('a send that failed for a reason that is not the phone’s is not counted against it',
   byEndpoint[DEAD] === 0, JSON.stringify(byEndpoint))
 ok('and the phone that received it is untouched', byEndpoint[LIVE] === 0)
+ok('a push service that is busy (503) is not held against the phone, which would be dropped after five',
+  byEndpoint[BUSY] === 0, JSON.stringify(byEndpoint))
+
+console.log('\n=== A reminder is on time or not at all ===')
+// Due now, where the family lives.
+await db.query('delete from reminder_schedules where family_id = $1', [FAMILY])
+await db.query(
+  `insert into reminder_schedules (family_id, role, label, at_local, timezone)
+   values ($1, 'parent', 'Breakfast check', (now() at time zone 'UTC')::time, 'UTC')`, [FAMILY])
+received.length = 0
+const remind = await fetch(`${BASE}/api/send-reminders`, {
+  method: 'POST', headers: { Authorization: 'Bearer test-cron-secret' },
+})
+const reminder = received.filter((r) => r.path.endsWith('/live')).at(-1)
+ok('the reminder job sends it', remind.status === 200 && Boolean(reminder), `status ${remind.status}, received ${received.length}`)
+const reminderTtl = Number(reminder?.headers?.ttl)
+ok('held for an offline phone no longer than it would still be on time (the grace window)',
+  reminderTtl > 0 && reminderTtl <= 120 * 60, `TTL ${reminder?.headers?.ttl}`)
+await db.query('delete from reminder_schedules where family_id = $1', [FAMILY])
 
 console.log('\n=== A family cannot flood a phone ===')
 await db.query(`insert into push_sends (family_id) select $1 from generate_series(1, 60)`, [FAMILY])
