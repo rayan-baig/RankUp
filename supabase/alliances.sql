@@ -237,22 +237,39 @@ create or replace function settle_alliances(p_month date)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_new jsonb;
+  -- The month, whatever day of it was asked for. A mid-month date used to be
+  -- scored from that day to the same day a month on, under the month's key.
+  v_month date := date_trunc('month', p_month)::date;
 begin
-  with contested as (
+  -- Only a month that is over. Settled early it would be decided on part of
+  -- the month, and the key below would then stop it being settled properly:
+  -- once per alliance per month means the first run is the one that counts.
+  if v_month + interval '1 month' > now() then
+    return jsonb_build_object('ok', false, 'reason', 'month_not_over', 'month', v_month);
+  end if;
+
+  with members as (
+    -- Who was in it during the month. A family that joins on the first of the
+    -- next month, before the job runs, did not compete last month and must
+    -- not win it with chores done before it arrived.
+    select * from alliance_members where joined_at < v_month + interval '1 month'
+  ), contested as (
     -- A tournament needs opponents. Without this floor an Elite parent could
     -- create an alliance nobody else joins and win a real 20% discount every
     -- month for ever, which is a self-service price cut rather than a prize.
-    select alliance_id from alliance_members
+    select alliance_id from members
      group by alliance_id having count(*) >= 2
   ), winners as (
     select distinct on (m.alliance_id)
-           m.alliance_id, m.family_id, alliance_score(m.family_id, p_month) as score
-      from alliance_members m
+           m.alliance_id, m.family_id, alliance_score(m.family_id, v_month) as score
+      from members m
       join contested c on c.alliance_id = m.alliance_id
-     order by m.alliance_id, alliance_score(m.family_id, p_month) desc, m.joined_at asc
+     -- Ties go to whoever joined first, then (two joining in the same
+     -- instant) by id, so a rerun can never pick someone else.
+     order by m.alliance_id, alliance_score(m.family_id, v_month) desc, m.joined_at asc, m.family_id
   ), inserted as (
     insert into alliance_results (alliance_id, month_key, winning_family_id, score)
-    select alliance_id, to_char(p_month, 'YYYY-MM'), family_id, score
+    select alliance_id, to_char(v_month, 'YYYY-MM'), family_id, score
       from winners where score > 0
     on conflict (alliance_id, month_key) do nothing
     returning alliance_id, winning_family_id as family_id, score
@@ -263,7 +280,7 @@ begin
     into v_new
     from inserted i join families f on f.id = i.family_id;
 
-  return jsonb_build_object('ok', true, 'month', p_month, 'awards', v_new);
+  return jsonb_build_object('ok', true, 'month', v_month, 'awards', v_new);
 end $$;
 
 /** Records that Stripe accepted the coupon, so an unapplied award stays visible. */

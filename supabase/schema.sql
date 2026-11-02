@@ -230,8 +230,28 @@ create table if not exists submissions (
   submitted_at  timestamptz not null default now()
 );
 
-create index if not exists submissions_family_pending_idx on submissions(family_id, status);
-create index if not exists submissions_kid_hash_idx on submissions(kid_id, photo_hash);
+/*
+ * Measured on a family with 60,000 chores among 3,000 other families
+ * (supabase/test/36-hot-queries.sql keeps them honest):
+ *
+ *   (family_id, status, decided_at)  a month or a week of a family's approvals
+ *       (the Alliance score, the weekly digest) read ~300 rows, not every
+ *       approval the family ever had. It also serves "what is waiting".
+ *   (kid_id, status, decided_at)     the same for one child: the School
+ *       League's points, worked out for every child in every school whenever
+ *       a league is shown.
+ *   (quest_id)                       "is this chore already waiting?" on every
+ *       submit, which otherwise read every pending chore in the database; and
+ *       deleting a chore, whose submissions went with it by a full scan.
+ *
+ * They replace (family_id, status), which the first now covers, and
+ * (kid_id, photo_hash), for a photo RankUp no longer takes.
+ */
+create index if not exists submissions_family_decided_idx on submissions(family_id, status, decided_at);
+create index if not exists submissions_kid_decided_idx on submissions(kid_id, status, decided_at);
+create index if not exists submissions_quest_idx on submissions(quest_id);
+drop index if exists submissions_family_pending_idx;
+drop index if exists submissions_kid_hash_idx;
 
 -- ---------------------------------------------------------------------------
 -- Rewards, notes, goals
@@ -496,6 +516,22 @@ returns uuid language sql stable security definer set search_path = public as $$
   select id from kids where user_id = auth.uid();
 $$;
 
+/*
+ * Is this child one of the caller's family's? (No child at all also passes.)
+ *
+ * The write policies below checked the row's family and nothing else, so a
+ * parent could write a chore, note or penalty into their OWN family naming
+ * ANOTHER family's child — or move one of their own rows onto that child.
+ * Everything that reads by child (School League points, a guild's weekly XP,
+ * the child's history) then counted it as that child's. Asked of every row a
+ * browser writes that names a child.
+ */
+create or replace function kid_in_caller_family(p_kid_id uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select p_kid_id is null
+      or exists (select 1 from kids where id = p_kid_id and family_id = current_family_id());
+$$;
+
 alter table families        enable row level security;
 alter table parents         enable row level security;
 alter table kids            enable row level security;
@@ -570,7 +606,7 @@ create policy quests_read on quests
 drop policy if exists quests_parent_write on quests;
 create policy quests_parent_write on quests
   for all using (family_id = current_family_id() and is_parent())
-  with check (family_id = current_family_id() and is_parent());
+  with check (family_id = current_family_id() and is_parent() and kid_in_caller_family(kid_id));
 
 -- Submissions: a kid creates their own; only a parent decides one.
 drop policy if exists submissions_read on submissions;
@@ -585,7 +621,8 @@ create policy submissions_read on submissions
 drop policy if exists submissions_kid_insert on submissions;
 drop policy if exists submissions_parent_update on submissions;
 create policy submissions_parent_update on submissions
-  for update using (family_id = current_family_id() and is_parent());
+  for update using (family_id = current_family_id() and is_parent())
+  with check (family_id = current_family_id() and is_parent() and kid_in_caller_family(kid_id));
 
 drop policy if exists rewards_read on rewards;
 create policy rewards_read on rewards
@@ -603,7 +640,8 @@ create policy redemptions_read on redemptions
 drop policy if exists redemptions_kid_insert on redemptions;
 drop policy if exists redemptions_parent_update on redemptions;
 create policy redemptions_parent_update on redemptions
-  for update using (family_id = current_family_id() and is_parent());
+  for update using (family_id = current_family_id() and is_parent())
+  with check (family_id = current_family_id() and is_parent() and kid_in_caller_family(kid_id));
 
 drop policy if exists notes_read on notes;
 create policy notes_read on notes
@@ -618,11 +656,14 @@ drop policy if exists notes_insert on notes;
 create policy notes_insert on notes
   for insert with check (
     family_id = current_family_id()
+    and kid_in_caller_family(kid_id)
     and ((is_parent() and author = 'parent')
          or (author = 'kid' and kid_id = current_kid_id())));
 drop policy if exists notes_update on notes;
 create policy notes_update on notes
-  for update using (family_id = current_family_id() and (is_parent() or kid_id = current_kid_id()));
+  for update using (family_id = current_family_id() and (is_parent() or kid_id = current_kid_id()))
+  with check (family_id = current_family_id() and (is_parent() or kid_id = current_kid_id())
+              and kid_in_caller_family(kid_id));
 
 drop policy if exists goals_read on family_goals;
 create policy goals_read on family_goals
@@ -643,7 +684,7 @@ create policy overrides_read on overrides
 drop policy if exists overrides_parent_write on overrides;
 create policy overrides_parent_write on overrides
   for all using (family_id = current_family_id() and is_parent())
-  with check (family_id = current_family_id() and is_parent());
+  with check (family_id = current_family_id() and is_parent() and kid_in_caller_family(kid_id));
 
 -- Guilds: visible only to members of that guild.
 drop policy if exists guilds_read on guilds;
@@ -1454,6 +1495,20 @@ begin
     new.decided_at    := old.decided_at;
     new.awarded_xp    := old.awarded_xp;
     new.awarded_coins := old.awarded_coins;
+    -- What the child sent, and the photo and photo-check columns RankUp no
+    -- longer fills. A parent's browser could otherwise store anything at all
+    -- in them, a picture included, in an app that keeps none.
+    new.note             := old.note;
+    new.capture_source   := old.capture_source;
+    new.photo_data       := old.photo_data;
+    new.photo_path       := old.photo_path;
+    new.photo_hash       := old.photo_hash;
+    new.photo_deleted_at := old.photo_deleted_at;
+    new.ai_verdict       := old.ai_verdict;
+    new.ai_score         := old.ai_score;
+    new.ai_report        := old.ai_report;
+    new.elapsed_ms       := old.elapsed_ms;
+    new.on_time          := old.on_time;
   end if;
   return new;
 end $$;
@@ -1516,3 +1571,48 @@ end $$;
 drop trigger if exists notes_guard_edits on notes;
 create trigger notes_guard_edits before update on notes
   for each row execute function guard_note_edits();
+
+/*
+ * How long the words a browser writes may be, and how large its numbers.
+ *
+ * A phone writes these columns straight to the table, and the functions copy
+ * the rest from what a caller sends, so nothing held them to any size: one
+ * request could store a 100,000-character chore title, and every phone in the
+ * family then downloaded it on every sync. Each limit is far beyond what any
+ * screen asks for. NOT VALID, so a row already longer is left alone; every
+ * new or changed row is held to it. supabase/test/33-inputs.sql tries them.
+ */
+do $$
+declare c record;
+begin
+  for c in select * from (values
+      ('families', 'families_text_sizes', 'length(name) <= 100 and length(parent_theme_id) <= 64'),
+      ('parents', 'parents_text_sizes', 'length(name) <= 100 and length(email) <= 320'),
+      ('kids', 'kids_text_sizes', 'length(name) <= 100 and length(theme_id) <= 64 and length(profile_frame) <= 64'
+         || ' and length(drop_selector) <= 64 and length(skin_id) <= 64 and length(lockout_reason) <= 500'
+         || ' and length(access_notes) <= 2000'),
+      ('quests', 'quests_text_sizes', 'length(title) <= 200 and length(description) <= 2000 and length(category) <= 64'
+         || ' and length(done_means) <= 1000 and length(why) <= 1000 and length(redo_note) <= 1000'),
+      ('submissions', 'submissions_text_sizes', 'length(note) <= 1000 and length(parent_note) <= 1000'),
+      ('rewards', 'rewards_text_sizes', 'length(name) <= 200 and length(description) <= 1000 and length(icon) <= 64'),
+      ('redemptions', 'redemptions_text_sizes', 'length(name) <= 200'),
+      ('notes', 'notes_text_sizes', 'length(body) <= 2000'),
+      ('family_goals', 'family_goals_text_sizes', 'length(name) <= 200'),
+      ('overrides', 'overrides_text_sizes', 'length(reason) <= 500 and length(consequence) <= 500'),
+      ('guilds', 'guilds_text_sizes', 'length(name) <= 100 and length(crest) <= 16 and length(motto) <= 200'),
+      -- And the numbers, to what each one means.
+      ('quests', 'quests_number_ranges', 'timer_seconds between 0 and 86400 and redo_count between 0 and 10000'),
+      ('submissions', 'submissions_number_ranges', 'elapsed_ms between 0 and 86400000'),
+      ('rewards', 'rewards_number_ranges', 'cost <= 1000000'),
+      ('redemptions', 'redemptions_number_ranges', 'cost between 0 and 1000000'),
+      ('kids', 'kids_number_ranges', 'avatar_hue between 0 and 360'),
+      ('overrides', 'overrides_number_ranges', 'percent between 0 and 100 and amount between 0 and 1000000'
+         || ' and minutes between 0 and 525600'),
+      ('family_goals', 'family_goals_number_ranges', 'target_xp <= 100000000'))
+    as v(tbl, name, expr)
+  loop
+    if not exists (select 1 from pg_constraint where conname = c.name and conrelid = c.tbl::regclass) then
+      execute format('alter table %I add constraint %I check (%s) not valid', c.tbl, c.name, c.expr);
+    end if;
+  end loop;
+end $$;

@@ -72,7 +72,7 @@ outbox. → [docs/SYNC.md](SYNC.md)
 | Thing | What is fake | What it would take |
 |---|---|---|
 | **Guild roster** | ✅ real now — see the working list below | — |
-| **Guild chat** | ✅ real now, with a contact-detail guard and reporting | Human moderation at scale is still an open question |
+| **Guild chat** | ✅ real now, with a contact-detail guard and reporting; the guild owner's parent can remove or block the child who wrote a reported message, and a removed or blocked child cannot be let back in by one side alone | Human moderation at scale is still an open question |
 | **Weekend Challenge** | ✅ gone — the fake event was removed; the kid's home screen now shows the real Sunday Market, and only while it is open | — |
 | **Parent Alliance leaderboard** | ✅ real now — real families, real invite codes, scores counted server-side from approved submissions | — |
 | **Sync after pairing** | ✅ real now — quests, submissions, approvals and XP all travel the link | — |

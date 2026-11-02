@@ -103,8 +103,10 @@ begin
          v_tz,
          coalesce((r->>'on')::boolean, true),
          (v_kept ->> to_char((r->>'time')::time, 'HH24:MI'))::date
-    from jsonb_array_elements(coalesce(p_reminders, '[]'::jsonb)) r
-   where r ? 'time';
+    from jsonb_array_elements(coalesce(p_reminders, '[]'::jsonb)) with ordinality as x(r, n)
+   -- The app has a handful of reminders. A list of thousands is not a
+   -- schedule, and every one would be a push the job sends each day.
+   where r ? 'time' and n <= 24;
 
   return jsonb_build_object('ok', true);
 end $$;
@@ -137,6 +139,17 @@ end $$;
  */
 create or replace function due_reminders(p_grace_minutes int default 120)
 returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  return due_reminders_at(now(), p_grace_minutes);
+end $$;
+
+/*
+ * The same, as of a given moment. The job always asks about now; the tests
+ * ask about the evening before and after a clock change, which is the whole
+ * reason the schedule is kept as a local time and a zone.
+ */
+create or replace function due_reminders_at(p_now timestamptz, p_grace_minutes int default 120)
+returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_rows jsonb;
 begin
   select coalesce(jsonb_agg(jsonb_build_object(
@@ -145,7 +158,7 @@ begin
     into v_rows
     from (
       select r.*,
-             (now() at time zone r.timezone) as local_now
+             (p_now at time zone r.timezone) as local_now
         from reminder_schedules r
        where r.enabled
     ) s
@@ -193,12 +206,18 @@ end $$;
  * it. Same arithmetic as due_reminders, for the same reason.
  */
 create or replace function mark_reminder_sent(p_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform mark_reminder_sent_at(p_id, now());
+end $$;
+
+create or replace function mark_reminder_sent_at(p_id uuid, p_now timestamptz)
 returns void language sql security definer set search_path = public as $$
   update reminder_schedules r
      set last_sent_on = case
-           when r.at_local <= (now() at time zone r.timezone)::time
-             then (now() at time zone r.timezone)::date
-           else (now() at time zone r.timezone)::date - 1
+           when r.at_local <= (p_now at time zone r.timezone)::time
+             then (p_now at time zone r.timezone)::date
+           else (p_now at time zone r.timezone)::date - 1
          end
    where r.id = p_id;
 $$;
@@ -210,3 +229,5 @@ grant execute on function my_reminder_schedule(text, uuid) to anon, authenticate
 -- let any signed-in account enumerate every family id in the database.
 revoke execute on function due_reminders(int) from public;
 revoke execute on function mark_reminder_sent(uuid) from public;
+revoke execute on function due_reminders_at(timestamptz, int) from public;
+revoke execute on function mark_reminder_sent_at(uuid, timestamptz) from public;

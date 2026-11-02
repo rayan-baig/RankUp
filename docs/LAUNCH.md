@@ -148,11 +148,27 @@ schedule was never set up at all.
 | monthly | `/api/settle-schools` | schools never get their Champion, Stars or free month |
 
 **Retention keeps the database small.** The activity log keeps every row and
-spent pairing codes never leave unless this job runs. (RankUp keeps no photos;
-the job also clears any left by an older version.) It also cancels, at Stripe,
-any deleted family's subscription that could not be cancelled at the moment of
-deletion, so it needs `STRIPE_SECRET_KEY` as well; see docs/PAYMENTS.md.
-`/api/health` turns red if one has waited more than a day.
+spent pairing codes never leave unless this job runs. Each day it deletes
+exactly these, and nothing else:
+
+| What | Once older than |
+|---|---|
+| Activity log entries (`events`) | 90 days (`RETENTION_EVENT_DAYS`) |
+| Crash reports | 90 days (the same setting) |
+| Pairing codes, counted from when they expired | 2 days (`RETENTION_PAIRING_DAYS`) |
+| Pairing guess counts (the rate limit) | 2 days (the same setting) |
+| Retry receipts (what stops a resent purchase charging twice) | 30 days |
+| The record of a deleted family's Stripe cancellation, once Stripe confirmed it | 30 days (7 if there was nothing to cancel) |
+| A photo left on an undecided chore by an older version of the app (the chore itself stays) | 14 days (`RETENTION_PHOTO_DAYS`) |
+
+RankUp keeps no photos; the last line only clears ones an older version left.
+`supabase/test/34-scheduled-jobs.sql` checks that the job deletes all of
+these and changes not one other row in any table.
+
+It also cancels, at Stripe, any deleted family's subscription that could not
+be cancelled at the moment of deletion, so it needs `STRIPE_SECRET_KEY` as
+well; see docs/PAYMENTS.md. A cancellation still waiting for Stripe is never
+deleted. `/api/health` turns red if one has waited more than a day.
 
 ## 3. Generate the keys
 
@@ -320,7 +336,7 @@ Be honest about these when you launch.
 ## Running the tests
 
 ```bash
-npm run test:db      # 175 database checks — no browser needed
+npm run test:db      # every database check (about 900) — no browser needed
 npm run test:smoke   # browser checks, no backend required
 npm run test:sync    # browser checks against a real backend
 ```

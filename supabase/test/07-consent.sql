@@ -25,6 +25,14 @@ grant all on all sequences in schema public to anon, authenticated;
 -- The blanket grant above re-opens the billing columns; lock them again.
 select lock_billing_columns();
 
+-- has_valid_consent is the database's own (the trigger on `kids` asks it) and
+-- is not callable from a browser, so these checks ask it through a helper
+-- only the test role may run.
+create or replace function t07_consent_on_file(p uuid) returns boolean
+language sql security definer set search_path = public as $$ select has_valid_consent(p) $$;
+revoke execute on function t07_consent_on_file(uuid) from public;
+grant execute on function t07_consent_on_file(uuid) to app_user;
+
 set role app_user;
 
 do $$
@@ -33,7 +41,7 @@ begin
   perform become('d1111111-1111-1111-1111-111111111111');
 
   perform ok('a new family has no consent on file',
-    has_valid_consent('d2222222-0000-0000-0000-000000000001') = false);
+    t07_consent_on_file('d2222222-0000-0000-0000-000000000001') = false);
 
   -- The gate.
   begin
@@ -63,7 +71,7 @@ begin
   res := record_parental_consent('2026-11', 'payment_card', 'Dana Example');
   perform ok('a parent can give consent', (res->>'ok')::boolean);
   perform ok('and it is now on file',
-    has_valid_consent('d2222222-0000-0000-0000-000000000001'));
+    t07_consent_on_file('d2222222-0000-0000-0000-000000000001'));
 
   insert into kids (family_id, name) values ('d2222222-0000-0000-0000-000000000001', 'Dot');
   perform ok('with consent, a child can be created',
@@ -128,7 +136,7 @@ do $$
 begin
   perform become('d8888888-8888-8888-8888-888888888888');
   perform ok('a consent given to 2026-01 is still valid after 2026-11 is published',
-    has_valid_consent('d8888888-0000-0000-0000-0000000000f1'));
+    t07_consent_on_file('d8888888-0000-0000-0000-0000000000f1'));
   insert into kids (family_id, name) values ('d8888888-0000-0000-0000-0000000000f1', 'Early Kid');
   perform ok('and that family can still add a child without consenting again',
     exists (select 1 from kids where name = 'Early Kid'));
@@ -141,7 +149,7 @@ do $$
 begin
   perform become('d5555555-5555-5555-5555-555555555555');
   perform ok('one family''s consent does not cover another',
-    has_valid_consent('d3333333-0000-0000-0000-000000000002') = false);
+    t07_consent_on_file('d3333333-0000-0000-0000-000000000002') = false);
 
   begin
     insert into kids (family_id, name) values ('d3333333-0000-0000-0000-000000000002', 'Nope');
@@ -178,7 +186,7 @@ begin
   perform ok('the child is really gone',
     not exists (select 1 from kids where name = 'Dot'));
   perform ok('and consent is no longer on file',
-    has_valid_consent('d2222222-0000-0000-0000-000000000001') = false);
+    t07_consent_on_file('d2222222-0000-0000-0000-000000000001') = false);
 end $$;
 
 -- Deleting the account.
@@ -294,3 +302,5 @@ begin
 end $$;
 
 reset role;
+
+drop function t07_consent_on_file(uuid);

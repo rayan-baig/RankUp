@@ -41,6 +41,10 @@ alter table guild_members add column if not exists family_id uuid references fam
 alter table guild_members add column if not exists approved_by_own_parent boolean not null default false;
 alter table guild_members add column if not exists approved_by_owner boolean not null default false;
 alter table guild_members add column if not exists requested_at timestamptz not null default now();
+-- Set when a parent blocks a child from a guild: they are out, and their
+-- requests to come back are refused rather than put in front of the parents
+-- again. See block_guild_member.
+alter table guild_members add column if not exists blocked_at timestamptz;
 
 alter table guild_messages add column if not exists reported_by uuid references kids(id) on delete set null;
 alter table guild_messages add column if not exists reported_at timestamptz;
@@ -111,7 +115,7 @@ begin
   end loop;
 
   insert into guilds (name, crest, capacity, leader_kid_id, invite_code, owner_family_id)
-  values (left(trim(p_name), 40), p_crest, v_cap, p_kid_id, v_code, v_kid.family_id)
+  values (left(trim(p_name), 40), coalesce(nullif(left(trim(p_crest), 16), ''), '🛡️'), v_cap, p_kid_id, v_code, v_kid.family_id)
   returning * into v_guild;
 
   -- The founder is active immediately: both consents are their own parent's.
@@ -156,6 +160,13 @@ begin
       return jsonb_build_object('ok', false, 'reason', 'plan_has_no_guilds');
     end if;
     perform grant_trial(v_kid.family_id, 'elite', 14);
+  end if;
+
+  -- Blocked by a parent on either side: asking again is not a way back in,
+  -- nor a way to keep putting the request in front of the parent who said no.
+  if exists (select 1 from guild_members where guild_id = v_guild.id and kid_id = p_kid_id
+                                         and blocked_at is not null) then
+    return jsonb_build_object('ok', false, 'reason', 'blocked');
   end if;
 
   if exists (select 1 from guild_members where guild_id = v_guild.id and kid_id = p_kid_id and status <> 'removed') then
@@ -211,7 +222,12 @@ declare
   v_is_own_parent boolean;
   v_is_owner_parent boolean;
 begin
-  select * into v_member from guild_members where guild_id = p_guild_id and kid_id = p_kid_id for update;
+  -- Only a request that is waiting. A child who was removed still has their
+  -- row, with both approvals from the first time round on it, so approving
+  -- that row put them straight back in: the removed child's own parent could
+  -- undo the other family's decision on their own.
+  select * into v_member from guild_members
+   where guild_id = p_guild_id and kid_id = p_kid_id and status = 'invited' for update;
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_request'); end if;
   select * into v_guild from guilds where id = p_guild_id;
 
@@ -264,6 +280,38 @@ begin
   end if;
 
   update guild_members set status = 'removed' where guild_id = p_guild_id and kid_id = p_kid_id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+/**
+ * Block a child from a guild: they are taken out at once, and asking to join
+ * again is refused. A parent on either side may do it — the guild owner's,
+ * about a child in their child's guild; the child's own, to keep their child
+ * out of that one. The founder cannot be blocked from their own guild.
+ */
+create or replace function block_guild_member(p_guild_id uuid, p_kid_id uuid)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_member guild_members; v_guild guilds;
+begin
+  select * into v_guild from guilds where id = p_guild_id;
+  select * into v_member from guild_members where guild_id = p_guild_id and kid_id = p_kid_id for update;
+  if v_guild.id is null or v_member.guild_id is null then
+    return jsonb_build_object('ok', false, 'reason', 'not_a_member');
+  end if;
+  -- Parents, not supporters and not children, exactly as for approving.
+  if not exists (select 1 from parents where user_id = auth.uid() and role = 'parent'
+                    and family_id in (v_guild.owner_family_id, v_member.family_id)) then
+    raise exception 'only a parent on one side can block';
+  end if;
+  if v_guild.leader_kid_id = p_kid_id then
+    return jsonb_build_object('ok', false, 'reason', 'is_leader');
+  end if;
+
+  update guild_members
+     set status = 'removed', blocked_at = coalesce(blocked_at, now()),
+         approved_by_own_parent = false, approved_by_owner = false
+   where guild_id = p_guild_id and kid_id = p_kid_id;
   return jsonb_build_object('ok', true);
 end $$;
 
@@ -420,7 +468,15 @@ begin
   return coalesce((
     select jsonb_agg(jsonb_build_object(
       'id', gm.id, 'guild_name', g.name, 'author', k.name, 'body', gm.body,
-      'at', gm.created_at, 'reported_at', gm.reported_at))
+      'at', gm.created_at, 'reported_at', gm.reported_at,
+      -- What a parent needs to act on it: whose guild, and which child.
+      'guild_id', gm.guild_id, 'kid_id', gm.kid_id,
+      'we_own_the_guild', g.owner_family_id = v_family,
+      'is_our_kid', k.family_id = v_family,
+      'author_status', (select m.status from guild_members m
+                         where m.guild_id = gm.guild_id and m.kid_id = gm.kid_id),
+      'author_blocked', exists (select 1 from guild_members m where m.guild_id = gm.guild_id
+                                   and m.kid_id = gm.kid_id and m.blocked_at is not null)))
     from guild_messages gm
     join guilds g on g.id = gm.guild_id
     join kids k on k.id = gm.kid_id
@@ -454,6 +510,7 @@ grant execute on function create_guild(uuid, text, text) to authenticated;
 grant execute on function request_guild_join(uuid, text) to anon, authenticated;
 grant execute on function approve_guild_member(uuid, uuid) to authenticated;
 grant execute on function leave_guild(uuid, uuid) to anon, authenticated;
+grant execute on function block_guild_member(uuid, uuid) to authenticated;
 grant execute on function guild_roster(uuid, uuid) to anon, authenticated;
 grant execute on function post_guild_message(uuid, uuid, uuid, text) to anon, authenticated;
 grant execute on function report_guild_message(uuid, uuid) to anon, authenticated;
@@ -461,5 +518,7 @@ grant execute on function guild_messages_for(uuid, uuid, int) to anon, authentic
 grant execute on function pending_guild_requests() to authenticated;
 grant execute on function reported_guild_messages() to authenticated;
 grant execute on function my_guild(uuid) to anon, authenticated;
-grant execute on function is_guild_member(uuid, uuid) to anon, authenticated;
+-- Asked inside the guild functions, after they have checked the caller. Not
+-- a browser's: given any guild and child it said whether they were in it.
+revoke execute on function is_guild_member(uuid, uuid) from public, anon, authenticated;
 grant execute on function may_act_for_kid(uuid) to anon, authenticated;

@@ -27,6 +27,14 @@ create table if not exists push_subscriptions (
 );
 
 create index if not exists push_subscriptions_family_idx on push_subscriptions (family_id, role);
+-- A push service's address and the phone's two keys are a few hundred
+-- characters between them. Anything far longer is not a subscription.
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'push_subscriptions_sizes') then
+    alter table push_subscriptions add constraint push_subscriptions_sizes
+      check (length(endpoint) <= 2048 and length(keys::text) <= 1024) not valid;
+  end if;
+end $$;
 
 alter table push_subscriptions enable row level security;
 -- No select, insert, update or delete policy on purpose. Everything goes
@@ -96,13 +104,21 @@ language sql security definer set search_path = public as $$
          end;
 $$;
 
-/** A push service reporting an endpoint is gone. Dead ones are dropped. */
+/**
+ * A push service reporting an endpoint is gone. Dead ones are dropped: at
+ * once when the service says so (404, 410), and on the fifth refusal
+ * otherwise. Five was already where push_targets stopped sending to one, but
+ * the row stayed for ever, holding a capability nothing would use again.
+ * Nothing is lost by deleting it: turning notifications back on saves the
+ * phone afresh, which was already the only way back after five.
+ */
 create or replace function record_push_failure(p_endpoint text, p_gone boolean default false)
 returns void
 language sql security definer set search_path = public as $$
-  delete from push_subscriptions where endpoint = p_endpoint and p_gone;
   update push_subscriptions set failures = failures + 1
    where endpoint = p_endpoint and not p_gone;
+  delete from push_subscriptions
+   where endpoint = p_endpoint and (p_gone or failures >= 5);
 $$;
 
 grant execute on function save_push_subscription(text, jsonb) to anon, authenticated;

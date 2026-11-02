@@ -220,7 +220,7 @@ begin
 
   insert into parents (user_id, family_id, name, is_owner, role)
   values (auth.uid(), v_row.family_id,
-          coalesce(nullif(trim(p_name), ''), 'Parent'), false, v_row.role)
+          coalesce(nullif(left(trim(p_name), 100), ''), 'Parent'), false, v_row.role)
   returning id into v_parent;
 
   update parent_invites

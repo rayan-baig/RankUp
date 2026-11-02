@@ -109,6 +109,19 @@ export default async function handler(req, res) {
   let failed = 0
 
   for (const d of digests) {
+    // Claimed first, so it goes once. Two runs that overlap (a scheduler that
+    // fires twice, a slow run meeting the next) both see the family as due;
+    // only the one that claims the week sends it. Losing a week to a crash
+    // between claiming and sending is the safer way round than two pushes.
+    let claimed = false
+    try {
+      claimed = await serviceRpc('claim_digest', { p_family_id: d.family_id, p_week_key: d.week_key })
+    } catch {
+      // Not claimed, not sent: the next run tries again.
+      continue
+    }
+    if (claimed === false) continue
+
     let targets = []
     try {
       targets = await serviceRpc('push_targets', {
@@ -124,14 +137,10 @@ export default async function handler(req, res) {
       targets.map((t) => sendPush({ endpoint: t.endpoint, keys: t.keys }, wire)),
     )
 
-    // Marked sent even when every push failed, exactly as send-reminders does.
-    // A family with no working phone registered must not be retried every hour
-    // for the rest of the week; the dead endpoints are dropped below.
-    try {
-      await serviceRpc('mark_digest_sent', { p_family_id: d.family_id, p_week_key: d.week_key })
-    } catch {
-      // The next run picks it up again, which is the safe direction.
-    }
+    // Claimed (above) even when every push then fails, exactly as
+    // send-reminders marks its own. A family with no working phone registered
+    // must not be retried every hour for the rest of the week; the dead
+    // endpoints are dropped below.
 
     await Promise.allSettled(
       results.map((result, i) => {

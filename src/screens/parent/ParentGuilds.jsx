@@ -77,6 +77,16 @@ export default function ParentGuilds() {
     load()
   }
 
+  // Acting on a report: take the child who wrote it out of your child's
+  // guild, or block them so asking again is refused too.
+  const moderate = async (m, action) => {
+    setBusy(true); setError('')
+    const result = action === 'block' ? await guilds.block(m.guild_id, m.kid_id) : await guilds.leave(m.guild_id, m.kid_id)
+    setBusy(false)
+    if (!result.ok) setError(guildError(result.reason))
+    load()
+  }
+
   const decline = async (req) => {
     setBusy(true)
     await guilds.leave(req.guild_id, req.kid_id)
@@ -162,11 +172,31 @@ export default function ParentGuilds() {
                 {m.author} in {m.guild_name} · reported {relativeTime(Date.parse(m.reported_at))}
               </div>
               <p className="text-sm">“{m.body}”</p>
+              {m.we_own_the_guild && !m.is_our_kid && (
+                m.author_blocked ? (
+                  <p className="text-xs text-muted mt-2">{m.author} is blocked from {m.guild_name}.</p>
+                ) : (
+                  <div className="flex gap-2 mt-3">
+                    {m.author_status === 'active' && (
+                      <Button variant="soft" className="flex-1 py-2 min-h-0 text-sm" disabled={busy}
+                              onClick={() => moderate(m, 'remove')}>
+                        Remove {m.author}
+                      </Button>
+                    )}
+                    <Button variant="soft" className="flex-1 py-2 min-h-0 text-sm" disabled={busy}
+                            onClick={() => moderate(m, 'block')}>
+                      Block {m.author}
+                    </Button>
+                  </div>
+                )
+              )}
             </Card>
           ))
         )}
         <p className="text-xs text-muted mt-1">
-          Reported messages are hidden from the children immediately and shown only here.
+          Reported messages are hidden from the children immediately and shown only here. In your
+          child's guild you can remove the child who wrote one, or block them so they cannot ask
+          to join again.
         </p>
       </div>
 

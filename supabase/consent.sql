@@ -94,8 +94,10 @@ alter table consent_notices enable row level security;
 alter table parental_consents enable row level security;
 
 drop policy if exists consent_notices_read on consent_notices;
-drop policy if exists consent_notices_read on consent_notices;
-create policy consent_notices_read on consent_notices for select using (true);
+-- Signed-in accounts only. The wording is public (the app ships it), but the
+-- anon key reads no table at all, and supabase/test/31-every-table.sql holds
+-- it to that.
+create policy consent_notices_read on consent_notices for select to authenticated using (true);
 
 drop policy if exists parental_consents_read on parental_consents;
 drop policy if exists parental_consents_read on parental_consents;
@@ -422,7 +424,9 @@ begin
   return v_count;
 end $$;
 
-grant execute on function has_valid_consent(uuid) to anon, authenticated;
+-- The database's own question, asked by the trigger on `kids`. Not a
+-- browser's: given any family's id it said whether that family had signed.
+revoke execute on function has_valid_consent(uuid) from public, anon, authenticated;
 grant execute on function record_parental_consent(text, text, text, text) to authenticated;
 grant execute on function revoke_parental_consent(text) to authenticated;
 grant execute on function export_family_data() to authenticated;

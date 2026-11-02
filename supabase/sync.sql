@@ -29,6 +29,13 @@ create sequence if not exists sync_rev;
 -- Where everybody's XP stood when the family goal was set; the bar counts from
 -- here. See set_family_goal below.
 alter table family_goals add column if not exists start_xp int not null default 0;
+-- Held to a sensible size like the rest of the goal (see the end of schema.sql).
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'family_goals_start_range') then
+    alter table family_goals add constraint family_goals_start_range
+      check (start_xp between 0 and 100000000) not valid;
+  end if;
+end $$;
 
 create or replace function bump_rev() returns trigger
 language plpgsql as $$
@@ -122,12 +129,17 @@ alter table quests add column if not exists edited_by uuid;
 
 /** Writes the history line. Its own function so the trigger can run as the caller. */
 -- Callable from a browser (it has to be, for the trigger), so it writes only
--- into the caller's own family, as a parent of it.
+-- into the caller's own family, as a parent of it, and only about a child of
+-- that family: a direct call could otherwise name any family's child.
 create or replace function log_quest_edit(p_family uuid, p_kid uuid, p_meta jsonb) returns void
 language sql security definer set search_path = public as $$
   insert into events (family_id, kid_id, type, meta)
   select p_family, p_kid, 'quest_edited', p_meta
-   where exists (select 1 from parents where user_id = auth.uid() and family_id = p_family);
+   where exists (select 1 from parents where user_id = auth.uid() and family_id = p_family)
+     and (p_kid is null or exists (select 1 from kids where id = p_kid and family_id = p_family))
+     -- What the trigger sends is a chore's changed fields, which the limits on
+     -- quests keep to a few thousand characters; a direct call is held to that.
+     and octet_length(p_meta::text) <= 20000;
 $$;
 revoke all on function log_quest_edit(uuid, uuid, jsonb) from public;
 grant execute on function log_quest_edit(uuid, uuid, jsonb) to anon, authenticated;
@@ -491,12 +503,14 @@ begin
     coalesce(p_payload->>'note', ''),
     -- A score is a percentage. Held to 0..100 rather than refused, so a
     -- typo like 999 from an older phone does not bounce the whole chore.
-    least(100, greatest(0, nullif(p_payload->>'test_score', '')::int)),
-    nullif(p_payload->>'elapsed_ms', '')::int,
+    -- Read as a numeric first, so a number too big for an int is held to
+    -- the range too instead of failing the whole chore.
+    least(100, greatest(0, nullif(p_payload->>'test_score', '')::numeric))::int,
+    -- How long it took: a day at most, which is longer than any timer.
+    least(86400000, greatest(0, nullif(p_payload->>'elapsed_ms', '')::numeric))::int,
     coalesce((p_payload->>'on_time')::boolean, true),
-    p_payload->>'ai_verdict',
-    nullif(p_payload->>'ai_score', '')::int,
-    p_payload->'ai_report',
+    -- RankUp has no photo check; what an older phone says about one is not kept.
+    null, null, null,
     'pending'
   ) on conflict (id) do nothing;
 
@@ -931,7 +945,8 @@ begin
          drop_selector = coalesce(p_drop_selector, drop_selector),
          -- An empty string means "take it off", which coalesce alone cannot say.
          skin_id       = case when p_skin_id = '' then null else coalesce(p_skin_id, skin_id) end,
-         avatar_hue    = coalesce(p_avatar_hue, avatar_hue)
+         -- A hue is an angle on the colour wheel.
+         avatar_hue    = coalesce(((p_avatar_hue % 360) + 360) % 360, avatar_hue)
    where id = p_kid_id;
 
   return jsonb_build_object('ok', true);
@@ -1109,11 +1124,13 @@ begin
       'family_id', (select family_id from parents where user_id = auth.uid()));
   end if;
 
-  insert into families (name) values (coalesce(nullif(trim(p_family_name), ''), 'My family'))
+  -- Held to the columns' limits (see the end of schema.sql) rather than
+  -- refused: a long name should not stop a family being made.
+  insert into families (name) values (coalesce(nullif(left(trim(p_family_name), 100), ''), 'My family'))
   returning * into v_family;
 
   insert into parents (user_id, family_id, name)
-  values (auth.uid(), v_family.id, coalesce(nullif(trim(p_parent_name), ''), 'Parent'));
+  values (auth.uid(), v_family.id, coalesce(nullif(left(trim(p_parent_name), 100), ''), 'Parent'));
 
   /*
    * A fortnight of the real thing, with no card asked for.

@@ -25,6 +25,8 @@ export const GUILD_ERRORS = {
   empty: 'Type something first.',
   no_kid: 'That kid profile no longer exists.',
   no_request: 'That request is no longer waiting.',
+  blocked: "A parent has blocked this child from that guild.",
+  is_leader: "The child who started a guild can't be blocked from it.",
 }
 
 export function guildError(reason) {
@@ -49,7 +51,13 @@ const call = async (fn, args) => {
  * for. Launching without them is a smaller product and a much smaller
  * obligation; set VITE_GUILDS_ENABLED=true when you are ready to carry it.
  */
-const GUILDS_ENABLED = String(import.meta.env?.VITE_GUILDS_ENABLED || '') === 'true'
+export function guildsSwitchedOn(value) {
+  // Exactly 'true'. Not 'TRUE', not '1', not ' true': a setting that is
+  // nearly right leaves the riskiest feature off, not on.
+  return typeof value === 'string' && value === 'true'
+}
+
+const GUILDS_ENABLED = guildsSwitchedOn(import.meta.env?.VITE_GUILDS_ENABLED)
 
 export function guildsEnabled() {
   return GUILDS_ENABLED
@@ -70,6 +78,9 @@ export const guilds = {
     call('approve_guild_member', { p_guild_id: guildId, p_kid_id: kidId }),
 
   leave: (guildId, kidId) => call('leave_guild', { p_guild_id: guildId, p_kid_id: kidId }),
+
+  /** Parent only. Out of the guild, and asking to come back is refused. */
+  block: (guildId, kidId) => call('block_guild_member', { p_guild_id: guildId, p_kid_id: kidId }),
 
   mine: (kidId) => call('my_guild', { p_kid_id: kidId }),
 

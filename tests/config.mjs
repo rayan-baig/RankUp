@@ -60,5 +60,24 @@ const SECRET_WORDS = /SERVICE_ROLE|SECRET|PRIVATE|ANTHROPIC_API_KEY/
 const leaked = publicNames.filter((v) => SECRET_WORDS.test(v))
 ok('nothing secret-shaped carries a VITE_ name', leaked.length === 0, leaked.join(', '))
 
+console.log('\n=== Guilds stay off unless the setting is exactly "true" ===')
+// Guilds are the one feature that puts a child in touch with children in
+// other families. Nearly-right settings must leave them off, not on.
+const { guildsSwitchedOn, guildsEnabled } = await import('../src/lib/guilds.js')
+ok('VITE_GUILDS_ENABLED=true switches them on', guildsSwitchedOn('true') === true)
+const nearly = [undefined, null, '', 'TRUE', 'True', ' true', 'true ', '1', 'yes', 'on', 'false', true, 1]
+const wronglyOn = nearly.filter((v) => guildsSwitchedOn(v))
+ok('anything else leaves them off (TRUE, 1, yes, " true", a boolean...)', wronglyOn.length === 0,
+  `switched on by: ${wronglyOn.map((v) => JSON.stringify(v)).join(', ')}`)
+ok('and with the setting absent, as at launch, they are off', guildsEnabled() === false)
+const guildSource = readFileSync('src/lib/guilds.js', 'utf8')
+ok('the app reads the switch through that one test',
+  /const GUILDS_ENABLED = guildsSwitchedOn\(import\.meta\.env\?\.VITE_GUILDS_ENABLED\)/.test(guildSource))
+const appSource = readFileSync('src/App.jsx', 'utf8')
+ok('and every guild screen in the app is behind it',
+  (appSource.match(/<(KidGuild|ParentGuilds) \/>/g) || []).length === 2
+  && /guildsEnabled\(\) && guildsAllowedByPlan\(state\) \? <KidGuild \/>/.test(appSource)
+  && /guildsEnabled\(\) \? <ParentGuilds \/>/.test(appSource))
+
 console.log(fails === 0 ? '\nALL CHECKS PASSED' : `\n${fails} FAILED`)
 process.exit(fails === 0 ? 0 : 1)

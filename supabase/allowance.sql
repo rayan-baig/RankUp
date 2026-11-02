@@ -36,6 +36,12 @@ create table if not exists allowance_entries (
   created_by    uuid references parents(id) on delete set null,
   created_at    timestamptz not null default now()
 );
+-- A note is a line, not a document; the functions copy it from the caller.
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'allowance_entries_note_size') then
+    alter table allowance_entries add constraint allowance_entries_note_size check (length(note) <= 500) not valid;
+  end if;
+end $$;
 
 create index if not exists allowance_entries_kid_idx
   on allowance_entries (kid_id, created_at desc);

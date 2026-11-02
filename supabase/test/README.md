@@ -22,6 +22,38 @@ quest linger on the other device forever.
 
 `04-accounts.sql` — a new account can create its family, and only its own.
 
+The files from `31-` on are generated from the database rather than written
+out table by table, so a table or function added later is covered the day
+it exists:
+
+`31-every-table.sql` — for every table, one family's parent, child, a
+signed-in stranger and the anon key cannot read, insert, update or delete any
+other family's rows, nor attach a row of their own to another family's child.
+
+`32-definer-functions.sql` — every security definer function a browser may
+call that takes an id asks who is calling, and none lets one family change or
+see another's rows, tried three ways each; the server's own functions are not
+callable from a browser.
+
+`33-inputs.sql` — every browser-callable function and every directly written
+column, given 100,000-character text and the largest and smallest numbers:
+nothing over-long or extreme is stored, no call writes rows without limit,
+and none keeps the database busy.
+
+`34-scheduled-jobs.sql` — retention deletes exactly what docs/LAUNCH.md lists
+and not one other row; reminders across both clock changes; the weekly
+digest in each family's own Sunday evening, once; dead push subscriptions
+deleted; the family's hourly push cap.
+
+`35-leagues-and-guilds.sql` — Alliance and District Champion ties and
+reruns, what a school can see, and guild consent, report, remove and block.
+
+`36-hot-queries.sql` — the sync pull and the per-family and per-child
+queries, EXPLAINed on a generated large family, use their indexes.
+
+`backup-drill.sh` — takes a copy as docs/BACKUPS.md says, restores it, runs
+the SQL files over it, and compares every table and every access rule.
+
 ## Running them
 
 You need a Postgres server. On Debian/Ubuntu:

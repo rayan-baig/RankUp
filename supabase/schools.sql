@@ -210,8 +210,12 @@ create or replace function school_code(p_len int)
 returns text language sql volatile as $$
   select string_agg(substr('ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
                            (floor(random() * 32) + 1)::int, 1), '')
-    from generate_series(1, p_len);
+    from generate_series(1, least(greatest(p_len, 1), 16));
 $$;
+-- Only the school functions here make codes. Callable by anyone, a single
+-- request for a code two billion letters long kept the database busy for as
+-- long as it took to build one.
+revoke execute on function school_code(int) from public, anon, authenticated;
 
 /** Below this many students a school's average is one family's average. */
 create or replace function school_min_students()
@@ -839,7 +843,10 @@ begin
     select distinct on (r.district_key) r.district_key, r.id, r.score
       from ranked r join contested c using (district_key)
      where r.score > 0
-     order by r.district_key, r.score desc, r.students desc, r.created_at
+     -- Ties: the school with more children taking part, then the one that
+     -- signed up first, then by id, so the same month always crowns the same
+     -- school however often it is closed.
+     order by r.district_key, r.score desc, r.students desc, r.created_at, r.id
   ), inserted as (
     insert into school_awards (district_key, month_key, school_id, score)
     select district_key, v_key, id, score from winners

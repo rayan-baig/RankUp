@@ -146,20 +146,28 @@ end $$;
 create or replace function due_digests(p_weekday int default 7, p_hour int default 18)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
+begin
+  return due_digests_at(now(), p_weekday, p_hour);
+end $$;
+
+/** The same, as of a given moment: the tests' way to stand in any time zone's Sunday. */
+create or replace function due_digests_at(p_now timestamptz, p_weekday int default 7, p_hour int default 18)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
 declare v_rows jsonb;
 begin
   select coalesce(jsonb_agg(d.digest || jsonb_build_object('week_key', d.week_key)), '[]'::jsonb)
     into v_rows
     from (
       select f.id,
-             to_char(date_trunc('week', (now() at time zone f.timezone)::date)::date, 'IYYY-"W"IW') as week_key,
+             to_char(date_trunc('week', (p_now at time zone f.timezone)::date)::date, 'IYYY-"W"IW') as week_key,
              family_week_digest(
                f.id,
-               date_trunc('week', (now() at time zone f.timezone)::date)::date
+               date_trunc('week', (p_now at time zone f.timezone)::date)::date
              ) as digest
         from families f
-       where extract(isodow from (now() at time zone f.timezone)) >= p_weekday
-         and extract(hour from (now() at time zone f.timezone)) >= p_hour
+       where extract(isodow from (p_now at time zone f.timezone)) >= p_weekday
+         and extract(hour from (p_now at time zone f.timezone)) >= p_hour
     ) d
    where not exists (
            select 1 from digest_sends s
@@ -169,6 +177,21 @@ begin
 
   return jsonb_build_object('ok', true, 'digests', v_rows);
 end $$;
+
+/**
+ * Claims a family's week before anything is sent: true for the one run that
+ * gets it, false for every other. Marking it AFTER sending, as the job used
+ * to, let two runs that overlapped (a scheduler firing twice, a slow run
+ * meeting the next) both find the family due and both send.
+ */
+create or replace function claim_digest(p_family_id uuid, p_week_key text)
+returns boolean language sql security definer set search_path = public as $$
+  with claimed as (
+    insert into digest_sends (family_id, week_key) values (p_family_id, p_week_key)
+    on conflict (family_id, week_key) do nothing
+    returning 1
+  ) select exists (select 1 from claimed);
+$$;
 
 /** Records that a week went out, which is what stops it going out twice. */
 create or replace function mark_digest_sent(p_family_id uuid, p_week_key text)
@@ -180,5 +203,7 @@ $$;
 -- Service role only. due_digests would otherwise hand any signed-in account a
 -- list of every family in the database along with how their week went.
 revoke execute on function due_digests(int, int) from public;
+revoke execute on function due_digests_at(timestamptz, int, int) from public;
+revoke execute on function claim_digest(uuid, text) from public;
 revoke execute on function mark_digest_sent(uuid, text) from public;
 revoke execute on function family_week_digest(uuid, date) from public;
