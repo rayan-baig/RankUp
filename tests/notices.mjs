@@ -46,6 +46,21 @@ if (routeNotice) {
     routeNotice({ role: 'parent', kind: 'nope' }, { deviceRole: 'kid', showHere: true, pushReady: true }).remote === false)
 }
 
+console.log('\n=== The phone that did it is not buzzed by its own tap ===')
+if (routeNotice) {
+  const approved = { role: 'kid', kidId: 'k1', kind: 'approved', args: ['Make the bed', 45] }
+  ok('a parent approving on their phone is not told "Approved!" on it',
+    routeNotice(approved, { deviceRole: 'parent', showHere: true, pushReady: true }).local === null)
+  const submitted = { role: 'parent', kind: 'submission', args: ['Ava', 'Make the bed'] }
+  ok('nor is a child\'s own phone told their parent has something to review',
+    routeNotice(submitted, { deviceRole: 'kid', showHere: true, pushReady: true }).local === null)
+  const shared = routeNotice(submitted, { deviceRole: 'parent', showHere: true, pushReady: false })
+  ok('on a phone the family shares, a chore done in the child\'s view is shown for the parent',
+    shared.local?.title === 'Ava finished a quest', JSON.stringify(shared))
+  ok('and not when the parent has notifications off',
+    routeNotice(submitted, { deviceRole: 'parent', showHere: false, pushReady: false }).local === null)
+}
+
 console.log('\n=== With no signal, the notice waits with the chore ===')
 clearOutbox()
 let online = false

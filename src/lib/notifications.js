@@ -206,7 +206,7 @@ export async function notifyRemote({ familyId, role, kidId, kind, args }) {
  * What to do with one notice the reducer raised, on this device.
  *
  * `local` is shown here, and only if this person turned notifications on and
- * the notice is for this side (the device that caused it is not buzzed).
+ * the person it is for uses this phone (the one who did it is not buzzed).
  * `remote` says whether to ask for a push to the family's other phones, and
  * this device's own setting has nothing to do with it: a child's phone has no
  * notification settings at all, and gating on it meant a child tapping
@@ -215,10 +215,15 @@ export async function notifyRemote({ familyId, role, kidId, kind, args }) {
 export function routeNotice(notice, { deviceRole, showHere, pushReady }) {
   const payload = NOTICES[notice.kind]?.(...(notice.args || []))
   if (!payload) return { local: null, remote: false }
+  // A notice is raised on the phone where the thing was done. Shown there only
+  // if the person it is for uses that phone too: a parent's phone a child also
+  // does chores on. It was the other way round, so a parent's own phone
+  // buzzed "Approved!" at every tap of Accept, and a phone the family shares
+  // never showed the parent a chore done on it.
   const forThisDevice =
     (notice.role === 'parent' && deviceRole !== 'kid') ||
     (notice.role === 'kid' && deviceRole === 'kid')
-  return { local: showHere && !forThisDevice ? payload : null, remote: Boolean(pushReady) }
+  return { local: showHere && forThisDevice ? payload : null, remote: Boolean(pushReady) }
 }
 
 /**
