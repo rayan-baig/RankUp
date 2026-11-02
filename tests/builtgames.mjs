@@ -72,6 +72,9 @@ const stop = () => {
 }
 const cleanUp = () => { stop(); if (scratch) rmSync(scratch, { recursive: true, force: true }) }
 process.on('exit', cleanUp)
+// Ctrl-C, or a CI time limit: 'exit' does not run for a signal, and the
+// detached preview server would keep the port.
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { cleanUp(); process.exit(130) })
 
 console.log(`· serving it on ${BASE}`)
 await serve()

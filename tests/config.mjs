@@ -27,14 +27,36 @@ function walk(dir, out = []) {
   return out
 }
 
-const sources = ['src', 'api', 'functions'].flatMap((d) => walk(d))
+// vite.config.js runs at build time and reads the same settings (the
+// Supabase address goes into the Content-Security-Policy), through loadEnv.
+const sources = [...['src', 'api', 'functions'].flatMap((d) => walk(d)), 'vite.config.js']
 const used = new Set()
+/** Reads by a name worked out at run time, which no list here can check. */
+const dynamic = []
 for (const file of sources) {
   const text = readFileSync(file, 'utf8')
   for (const m of text.matchAll(/process\.env\.([A-Z][A-Z_0-9]*)/g)) used.add(m[1])
-  for (const m of text.matchAll(/import\.meta\.env\?\.([A-Z][A-Z_0-9]*)/g)) used.add(m[1])
+  // With or without ?. — `import.meta.env.VITE_X` was missed before.
+  for (const m of text.matchAll(/import\.meta\.env(?:\?\.|\.)([A-Z][A-Z_0-9]*)/g)) used.add(m[1])
   for (const m of text.matchAll(/read\('(VITE_[A-Z_0-9]*)'\)/g)) used.add(m[1])
+  if (file === 'vite.config.js') for (const m of text.matchAll(/\benv\.([A-Z][A-Z_0-9]*)/g)) used.add(m[1])
+  // A setting's name kept in a string and looked up later (the school prices
+  // in api/_shared/schoolBilling.js are read this way).
+  if (!file.startsWith('src')) {
+    for (const m of text.matchAll(/'((?:STRIPE|VAPID|SUPABASE|CRON|OPERATOR|STATS|RETENTION|REMINDER|DIGEST|PUBLIC_SITE)_[A-Z_0-9]*)'/g)) used.add(m[1])
+  }
+  text.split('\n').forEach((line, i) => {
+    if (/process\.env\[|import\.meta\.env\[/.test(line)) dynamic.push(`${file}:${i + 1}`)
+  })
 }
+
+console.log('\n=== No setting is read by a name made up at run time ===')
+// src/lib/env.js walks every VITE_ setting the build has, looking for a
+// secret pasted into a public name: that loop reads names it cannot know.
+const DYNAMIC_ALLOWED = ['src/lib/env.js']
+const strayDynamic = dynamic.filter((at) => !DYNAMIC_ALLOWED.includes(at.split(':')[0]))
+ok('every setting is read by its own name, so the list below is complete', strayDynamic.length === 0,
+  `read by a computed name at ${strayDynamic.join(', ')}: name it, or this test cannot check it is documented`)
 
 // Vite's own, and the two the test harness sets. Not ours to document.
 const BUILT_IN = new Set(['DEV', 'PROD', 'MODE', 'SSR', 'BASE_URL', 'NODE_ENV'])
@@ -56,7 +78,7 @@ ok('no settings listed that do nothing', stale.length === 0, `unused: ${stale.jo
 
 console.log('\n=== No secret is named so it would be shipped to every phone ===')
 const publicNames = [...documented].filter((v) => v.startsWith('VITE_'))
-const SECRET_WORDS = /SERVICE_ROLE|SECRET|PRIVATE|ANTHROPIC_API_KEY/
+const SECRET_WORDS = /SERVICE_ROLE|SECRET|PRIVATE|API_KEY/
 const leaked = publicNames.filter((v) => SECRET_WORDS.test(v))
 ok('nothing secret-shaped carries a VITE_ name', leaked.length === 0, leaked.join(', '))
 

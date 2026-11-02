@@ -5,6 +5,17 @@
 # as text, and cron endpoints that 405 on the verb their scheduler uses — fail
 # nothing visibly. They just do the wrong thing quietly. That is exactly what a
 # suite is for, and running it by hand is how it stops happening.
+#
+# Six jobs at once rather than one after another: the browser suite alone took
+# about twenty minutes in a single job, so it runs as three shards, each about
+# seven. Every suite still runs; the job and step names say which one failed,
+# and each suite's last line names the files (tests/run-suite.mjs).
+#
+#   checks        lint, build, the static checks, the SQL suite, every refusal
+#                 reason, the production build
+#   smoke 1-3     the app in a real browser, a third each
+#   sync, awards  two phones against a real backend; the rules in Node
+#   api           the server functions under workerd, as Cloudflare runs them
 name: CI
 
 on:
@@ -18,16 +29,21 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    # The browser suites alone take over half an hour: 27 of them, each a
-    # real browser driving the real app. Twenty minutes cut them off.
-    timeout-minutes: 75
+# The SQL suite needs a real Postgres. Row level security, the security
+# definer functions and the money-handling rules cannot be checked against
+# anything less, which is the whole reason they are tested this way. The app's
+# tests run against the same database, through the stand-in Supabase API.
+env:
+  PGHOST: localhost
+  PGPORT: '55432'
+  PGUSER: postgres
+  PGPASSWORD: postgres
 
-    # The SQL suite needs a real Postgres. Row level security, the security
-    # definer functions and the money-handling rules cannot be checked against
-    # anything less, which is the whole reason they are tested this way.
+jobs:
+  checks:
+    name: Lint, build, database, production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
@@ -38,35 +54,27 @@ jobs:
         options: >-
           --health-cmd pg_isready --health-interval 5s
           --health-timeout 5s --health-retries 10
-
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: ./.github/actions/prepare
         with:
-          node-version: '22'
-          cache: npm
-
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run build
-
-      - name: Database rules
-        env:
-          PGHOST: localhost
-          PGPORT: '55432'
-          PGUSER: postgres
-          PGPASSWORD: postgres
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
-          ./supabase/test/run.sh
-          # The app and the database both work out what a chore is worth. This
-          # runs the real calcReward and the real award_for_submission over
-          # three thousand combinations and fails if they ever disagree.
-          npm run test:awards
-
-      - name: Install the browser
-        run: npx playwright install --with-deps chromium
-
+          database: 'true'
+          browser: 'true'
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+      # Reads files only: every setting the code reads is in .env.example; the
+      # Cloudflare route table matches api/; the scheduled jobs, the health
+      # check and vercel.json agree; the SQL file order is the same everywhere.
+      - name: Static checks
+        run: npm run test:static
+      - name: Database rules (the SQL suite, printed in full)
+        run: cat /tmp/rankup-sql.log
+      # Every { ok: false, reason } in supabase/*.sql has to come out of a
+      # function while the SQL suite runs, not merely be mentioned in a test.
+      - name: Every refusal reason is given by a test
+        run: npm run test:refusals
       # Every other browser suite drives the dev server, which has no
       # Content-Security-Policy. This one builds the app, checks no server
       # secret reached it and the policy allows only what is listed, then
@@ -75,50 +83,115 @@ jobs:
       # passed.
       - name: The production build — no secrets, the policy, the framed games
         run: npm run test:built
-
-      - name: Start the stack
-        env:
-          PGHOST: localhost
-          PGPORT: '55432'
-          PGUSER: postgres
-          PGPASSWORD: postgres
-        run: |
-          printf 'VITE_SUPABASE_URL=http://localhost:54321\nVITE_SUPABASE_ANON_KEY=local-anon-key\nVITE_GUILDS_ENABLED=true\n' > .env.local
-          node supabase/test/mock-server.mjs &
-          npm run dev -- --port 5173 &
-          npx wait-on http://localhost:5173 http://localhost:54321/rest/v1/ --timeout 60000 || sleep 15
-
-      - name: The app, end to end
-        env:
-          PGHOST: localhost
-          PGPORT: '55432'
-          PGUSER: postgres
-          PGPASSWORD: postgres
-        run: |
-          npm run test:smoke
-          npm run test:sync
-
-      # The serverless functions hold every secret in the product, and until
-      # this step nothing exercised them at all. They run under workerd here
-      # rather than Node, because workerd is what actually serves them in
-      # production and the two are not the same runtime.
-      - name: The server endpoints, under the runtime that serves them
-        env:
-          PGHOST: localhost
-          PGPORT: '55432'
-          PGUSER: postgres
-          PGPASSWORD: postgres
-        run: |
-          # The same settings up.sh --cf uses, from one place: CI had its own
-          # copy of this list, and it fell behind the suite.
-          bash supabase/test/serve-functions.sh &
-          npx wait-on http://localhost:8788/ --timeout 90000 || sleep 20
-          STATS_KEY_FOR_TEST=test-stats-key npm run test:api
-
       - name: Screenshots from the failure, if there was one
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots
+          name: screenshots-checks
           path: tests/screenshots/
           if-no-files-found: ignore
+
+  smoke:
+    name: The app, end to end (${{ matrix.shard }}/3)
+    runs-on: ubuntu-latest
+    # A shard takes about seven minutes; a hung browser should not hold a
+    # runner for an hour.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['55432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/prepare
+        with:
+          database: 'true'
+          browser: 'true'
+      - uses: ./.github/actions/stack
+      - name: Smoke tests, shard ${{ matrix.shard }} of 3
+        run: node tests/run-suite.mjs smoke --shard ${{ matrix.shard }}/3
+      - name: Screenshots from the failure, if there was one
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-smoke-${{ matrix.shard }}
+          path: tests/screenshots/
+          if-no-files-found: ignore
+
+  sync-awards:
+    name: Sync between phones, and the rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['55432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/prepare
+        with:
+          database: 'true'
+          browser: 'true'
+      # The app and the database both work out what a chore is worth. This
+      # runs the real calcReward and the real award_for_submission over three
+      # thousand combinations and fails if they ever disagree; and the rest
+      # of the rules (XP, streaks, money, two phones buying at once).
+      - name: The rules (awards)
+        run: npm run test:awards
+      - uses: ./.github/actions/stack
+      - name: Two phones against a real backend (sync)
+        run: npm run test:sync
+      - name: Screenshots from the failure, if there was one
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-sync
+          path: tests/screenshots/
+          if-no-files-found: ignore
+
+  # The serverless functions hold every secret in the product. They run under
+  # workerd here rather than Node, because workerd is what actually serves them
+  # in production and the two are not the same runtime.
+  api:
+    name: The server endpoints, under the runtime that serves them
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['55432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/prepare
+        with:
+          database: 'true'
+      - uses: ./.github/actions/stack
+        with:
+          serve: functions
+      - name: Every function in api/ (api)
+        run: npm run test:api
+      - name: The functions' log, if something failed
+        if: failure()
+        run: tail -100 /tmp/rankup-app.log /tmp/rankup-mock.log

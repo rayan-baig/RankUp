@@ -142,3 +142,41 @@ begin
   perform ok('no table is left locked with no policy at all', coalesce(bare, '') = '',
              'bare: ' || coalesce(bare, ''));
 end $$;
+
+-- ---------- every function, trigger, policy and grant came through the same ----------
+--
+-- run.sh recorded the schema after the first application and again after the
+-- second (upgrade-snapshot.sql). They must be identical. Nothing here lists
+-- functions by name: one added to any SQL file is in both records, so it is
+-- checked the day it is written. What this catches that the rest does not: a
+-- `drop trigger` whose `create trigger` was renamed, so the trigger is gone
+-- after an upgrade; a grant that the second run gives back to PUBLIC after the
+-- first took it away; a function whose settings (search_path, security
+-- definer) differ between two definitions in two files, so the later file
+-- wins only on the second run.
+do $$
+declare
+  v_diff  text;
+  v_count int;
+begin
+  select count(*) into v_count from upgrade_check.objects where pass = 'first';
+  perform ok('the schema was recorded after each application', v_count > 0
+    and v_count = (select count(*) from upgrade_check.objects where pass = 'second'),
+    v_count::text || ' first, ' || (select count(*) from upgrade_check.objects where pass = 'second') || ' second');
+
+  select string_agg(coalesce(a.kind, b.kind) || ' ' || coalesce(a.name, b.name)
+                    || case when a.name is null then ' (only after the second run)'
+                            when b.name is null then ' (gone after the second run)'
+                            else ' (changed: ' || a.detail || '  ->  ' || b.detail || ')' end, E'\n')
+    into v_diff
+    from (select * from upgrade_check.objects where pass = 'first') a
+    full join (select * from upgrade_check.objects where pass = 'second') b
+      on a.kind = b.kind and a.name = b.name
+   where a.name is null or b.name is null or a.detail is distinct from b.detail;
+  perform ok(format('all %s functions, triggers, policies and tables are the same after the second run',
+                    (select count(*) from upgrade_check.objects where pass = 'second')),
+             v_diff is null, coalesce(v_diff, ''));
+
+  select count(*) into v_count from upgrade_check.objects where pass = 'second' and kind = 'function';
+  perform ok(format('%s functions among them, each with its grants and settings', v_count), v_count > 100);
+end $$;

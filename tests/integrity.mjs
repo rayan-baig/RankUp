@@ -97,15 +97,15 @@ await page.waitForTimeout(900)
   ? pass('falls back to the first kid instead of rendering nothing')
   : fail('falls back to the first kid', `screen read: ${(await page.evaluate(() => document.body.innerText)).slice(0, 120)}`)
 
-console.log('\n=== A reviewed photo is destroyed, not retained ===')
-// This is now the stronger guarantee: the photo goes at the moment of the
-// decision, so there is never a library of them to lose in the first place.
+console.log('\n=== No photo is kept on the phone ===')
+// RankUp takes no photos. The store an older version kept them in stays
+// empty through a whole submit-and-accept.
 const afterDecision = await page.evaluate(
   () => Object.keys(JSON.parse(localStorage.getItem('rankup.photos.v1') || '{}')).length,
 )
 afterDecision === 0
-  ? pass('approving destroys the photo on the device')
-  : fail('approving destroys the photo', `${afterDecision} still stored`)
+  ? pass('nothing is in the old photo store after a chore is accepted')
+  : fail('nothing is in the old photo store after a chore is accepted', `${afterDecision} stored`)
 
 console.log('\n=== Removing a kid, with a chore still waiting ===')
 // Submit something and leave it undecided. RankUp keeps no photos, so there

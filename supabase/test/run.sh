@@ -17,6 +17,10 @@ for f in "$HERE/../schema.sql" "$HERE/../sync.sql" "$HERE/../coparents.sql" "$HE
   fi
 done
 echo "schema applied cleanly"
+# What every function, trigger, policy and table looks like now, to compare
+# with after the second application (18-upgrade.sql).
+psql -q -v ON_ERROR_STOP=1 -v pass=first -f "$HERE/upgrade-snapshot.sql" "$DB" >"$OUT" 2>&1 \
+  || { echo "could not record the schema after the first application:"; cat "$OUT"; exit 1; }
 
 # Apply every file a SECOND time, over the database that now has data in it.
 #
@@ -31,8 +35,11 @@ for f in "$HERE/../schema.sql" "$HERE/../sync.sql" "$HERE/../coparents.sql" "$HE
   fi
 done
 echo "schema re-applies cleanly over itself"
+psql -q -v ON_ERROR_STOP=1 -v pass=second -f "$HERE/upgrade-snapshot.sql" "$DB" >"$OUT" 2>&1 \
+  || { echo "could not record the schema after the second application:"; cat "$OUT"; exit 1; }
 
 status=0
+failed=""
 # Every numbered file, not a hand-maintained range. The previous pattern only
 # matched 01-19, so 20-referrals.sql was written, committed, and silently never
 # run — the worst way for a test to fail.
@@ -46,11 +53,13 @@ for f in "$HERE"/[0-9][0-9]-*.sql; do
   sed 's/^NOTICE:  //' "$OUT" | grep -E '(PASS|FAIL|ERROR|DETAIL)' || true
   if [ $code -ne 0 ]; then
     status=1
+    failed="$failed $(basename "$f")"
     echo "--- failure detail ---"; tail -20 "$OUT"
   fi
 done
 
 rm -f "$OUT"
 echo ""
-if [ $status -eq 0 ]; then echo "ALL SQL CHECKS PASSED"; else echo "SQL CHECKS FAILED"; fi
+# One line that says which files, so nobody has to scroll for it.
+if [ $status -eq 0 ]; then echo "ALL SQL CHECKS PASSED"; else echo "SQL CHECKS FAILED:$failed"; fi
 exit $status

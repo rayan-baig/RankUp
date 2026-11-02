@@ -36,9 +36,12 @@ async function serve(port, env) {
     // eslint-disable-next-line no-await-in-loop
     await new Promise((r) => setTimeout(r, 500))
   }
+  // Stopped here: the caller never gets the child to stop, and it would sit
+  // on the port for the next run.
+  stop(child)
   throw new Error(`vite did not start on ${port}`)
 }
-const stop = (child) => { try { process.kill(-child.pid, 'SIGKILL') } catch { /* gone */ } }
+function stop(child) { try { process.kill(-child.pid, 'SIGKILL') } catch { /* gone */ } }
 
 async function setUp(base, { account }) {
   const ctx = await browser.newContext({ viewport: { width: 360, height: 740 } })

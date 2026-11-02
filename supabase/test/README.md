@@ -54,6 +54,23 @@ queries, EXPLAINed on a generated large family, use their indexes.
 `37-games.sql` — the moment a child chose their theme (where the dragon fight
 starts) is stamped by the database alone and sent to every phone.
 
+`38-refusals.sql` — every refusal no other file reached: a child who is not
+there, an account in no family, a name left blank, a guild or an alliance with
+no seat left, a family with six adults, a school with three rivals already.
+
+`refusals.mjs` (`npm run test:refusals`) — reads every
+`jsonb_build_object('ok', false, 'reason', ...)` out of the SQL files, applies
+them to a scratch database with each one marked so it raises a notice naming
+the function and the reason (the answer itself unchanged), runs the whole
+suite, and fails for any refusal that never came out. A new refusal needs a
+test the day it is written.
+
+`upgrade-snapshot.sql` — run by `run.sh` after each of its two applications
+of the SQL files. It records every function (with its result, security,
+settings and grants), trigger, policy and table; `18-upgrade.sql` then requires
+the two records to be identical. Nothing is listed by hand, so a function added
+tomorrow is covered.
+
 `backup-drill.sh` — takes a copy as docs/BACKUPS.md says, restores it, runs
 the SQL files over it, and compares every table and every access rule.
 
@@ -75,6 +92,8 @@ Then:
 ```
 
 It drops and recreates a scratch database each run, so it never accumulates state.
+`DB=name` picks the database's name. The last line says whether everything
+passed and, if not, which files failed.
 
 `00-shim.sql` recreates just enough of Supabase — the `auth` schema, `auth.uid()`,
 and the `anon`/`authenticated` roles — for a bare Postgres to run the same SQL.
@@ -91,6 +110,10 @@ end to end.
 export PGHOST=/tmp PGPORT=55432 PGUSER=postgres
 node supabase/test/mock-server.mjs        # listens on :54321
 ```
+
+Like Supabase's own gateway, it answers only requests whose `apikey` header is
+one of the project's keys (`local-anon-key`, or the service role key the
+server functions use); anything else is a 401.
 
 Point the app at it with a `.env.local`:
 
