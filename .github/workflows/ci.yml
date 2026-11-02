@@ -68,10 +68,12 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       # Every other browser suite drives the dev server, which has no
-      # Content-Security-Policy. This one builds the app and plays the
-      # arcade's framed games under the real policy, online and offline —
-      # all four once shipped refused by it while everything here passed.
-      - name: The arcade's framed games, in the production build
+      # Content-Security-Policy. This one builds the app, checks no server
+      # secret reached it and the policy allows only what is listed, then
+      # plays the arcade's framed games under that policy, online and
+      # offline — all four once shipped refused by it while everything here
+      # passed.
+      - name: The production build — no secrets, the policy, the framed games
         run: npm run test:built
 
       - name: Start the stack

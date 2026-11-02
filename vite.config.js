@@ -33,13 +33,16 @@ function contentSecurityPolicy(env) {
     `script-src 'self' ${gameScriptSources(root).join(' ')}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
-    "img-src 'self' data: blob:",
+    // data: for the small pictures the build inlines. Not blob:, which was
+    // for previewing a photo before it was sent; RankUp takes none.
+    "img-src 'self' data:",
     `connect-src 'self'${supabase ? ` ${supabase}` : ''}`,
     "worker-src 'self'",
     "manifest-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
-    "form-action 'self'",
+    // The app has no form that submits anywhere: every one is handled in the page.
+    "form-action 'none'",
   ].join('; ')
   return {
     name: 'rankup-csp',

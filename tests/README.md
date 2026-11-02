@@ -40,6 +40,15 @@ try is still running, a purchase racing a tax, a reward deleted while a child
 buys it offline, and "Mark given" tapped on two parents' phones together.
 The one-call-at-a-time versions are `supabase/test/29-money-floor.sql`.
 
+**`bundle.mjs`** builds the app with every server-only setting in
+`.env.example` given a fake value (the service role key as a real-looking
+token) and reads every file a phone would download: none of those values, no
+service-role token, no server-only setting read by the code; and the
+Content-Security-Policy is exactly the list in the test (the game scripts by
+hash, the one Three.js file, the fonts, the database), so widening it fails
+until the test is changed too. It also checks the host headers forbid the
+camera, which RankUp does not use. Runs first in `npm run test:built`.
+
 **`builtgames.mjs`** is the one suite that runs against a production build
 rather than the dev server. The arcade's four standalone HTML games run in
 sandboxed srcdoc frames, which live under the built page's
