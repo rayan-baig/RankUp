@@ -11,7 +11,9 @@
  * quietly queued a stranger's children into the first real account somebody
  * created would be invisible in development and mortifying in production.
  */
+import { readFileSync } from 'node:fs'
 import { launch, reporter, finish, BASE, SHOT_DIR } from './helpers.mjs'
+import { TIERS, TRIAL_DAYS } from '../src/state/initialState.js'
 
 const { browser, page, errors } = await launch()
 const { fails, pass, fail } = reporter()
@@ -41,6 +43,37 @@ const door = await page.evaluate(() => document.body.innerText)
   ? pass('and says so, because "free" has stopped meaning anything')
   : fail('no-account promise', door.slice(0, 200))
 
+/*
+ * The front door explains RankUp on one screen: what it is, what it costs and
+ * the free trial. The numbers are checked against the code and the docs, so
+ * the door can never quote a price the app does not charge.
+ */
+;/chores become quests/i.test(door) && /I did it/.test(door) && /level up/i.test(door)
+  ? pass('it says what RankUp is in one sentence')
+  : fail('what it is', door.slice(0, 300))
+const payments = readFileSync('docs/PAYMENTS.md', 'utf8')
+for (const tier of [TIERS.standard, TIERS.elite]) {
+  const price = `$${tier.price.toFixed(2)}`
+  door.includes(price) && payments.includes(`${price} / month`)
+    ? pass(`it shows ${tier.name} at ${price} a month, as docs/PAYMENTS.md does`)
+    : fail(`${tier.name} price on the door`, `${price}: door ${door.includes(price)}, docs ${payments.includes(`${price} / month`)}`)
+}
+const starterFree = /Free\s*Starter · 1 child/.test(door)
+starterFree
+  ? pass('and that Starter is free, for one child')
+  : fail('starter free on the door', door.slice(0, 400))
+const grant = readFileSync('supabase/sync.sql', 'utf8').match(/grant_trial\(v_family\.id, 'elite', (\d+)\)/)?.[1]
+door.includes(`Free for ${TRIAL_DAYS} days`) && /No card/.test(door) && Number(grant) === TRIAL_DAYS
+  ? pass(`and the free trial: ${TRIAL_DAYS} days, no card, the same days the server grants`)
+  : fail('trial on the door', `door ${door.includes(`Free for ${TRIAL_DAYS} days`)}, server grants ${grant}`)
+const fits = await page.evaluate(() => {
+  const last = [...document.querySelectorAll('button')].pop()?.getBoundingClientRect()
+  return { scroll: document.scrollingElement.scrollHeight, height: innerHeight, lastBottom: last?.bottom }
+})
+fits.scroll <= fits.height && fits.lastBottom <= fits.height
+  ? pass('all of it, and every way in, on one phone screen with no scrolling')
+  : fail('front door fits one screen', JSON.stringify(fits))
+
 // The self-playing loop has to actually advance — a still frame of a phone is
 // not worth the code.
 const firstBeat = await page.evaluate(() => document.body.innerText.match(/You assign it|They do it|They show you, in a message|You accept/)?.[0])
@@ -68,6 +101,37 @@ demo.kids?.every((k) => k.xp > 0)
 demo.submissions?.some((s) => s.status === 'pending')
   ? pass('and one chore waiting, so the review screen is not empty')
   : fail('demo has something to review', JSON.stringify(demo.submissions?.map((s) => s.status)))
+
+console.log('\n=== The best parts first ===')
+const tour = page.getByTestId('demo-tour')
+const tourBox = await tour.boundingBox()
+const tourText = await tour.innerText().catch(() => '')
+tourBox && tourBox.y + tourBox.height <= 844
+  ? pass('the look-around opens on "Start here", whole, on the first screen')
+  : fail('demo tour above the fold', JSON.stringify(tourBox))
+;/1\. Accept Ava's/.test(tourText) && /2\. See Ava's world/.test(tourText) && /3\. Play the arcade/.test(tourText)
+  ? pass('accepting a chore, then her world, then the arcade, in that order')
+  : fail('demo tour order', tourText)
+await tour.getByRole('button', { name: /Accept Ava's/ }).click()
+await page.waitForTimeout(700)
+;(await page.evaluate(() => location.hash)) === '#/parent/approvals'
+  ? pass('"Accept" opens the chore waiting for review')
+  : fail('tour step 1', await page.evaluate(() => location.hash))
+await page.evaluate(() => { window.location.hash = '/parent' })
+await page.waitForTimeout(700)
+await page.getByTestId('demo-tour').getByRole('button', { name: /See Ava's world/ }).click()
+await page.waitForTimeout(900)
+;(await page.evaluate(() => location.hash)) === '#/kid' && (await state()).session.kidId === demo.kids.find((k) => k.name === 'Ava').id
+  ? pass('"See Ava\'s world" opens her home, as her')
+  : fail('tour step 2', await page.evaluate(() => location.hash))
+await page.screenshot({ path: `${SHOT_DIR}/lookaround-kid.png` })
+const feed = await page.evaluate(() => {
+  window.location.hash = '/parent'
+  return new Promise((r) => setTimeout(() => r(document.body.innerText), 900))
+})
+!/Plan changed to/.test(feed)
+  ? pass('the dashboard\'s activity is the family\'s, not how the demo was set up')
+  : fail('demo activity', feed.slice(0, 200))
 
 console.log('\n=== Every screen, with nothing missing ===')
 const ROUTES = [

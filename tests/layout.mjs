@@ -179,8 +179,6 @@ async function newFamily(page) {
   await page.locator('input[type=password]').fill('correct-horse-battery')
   await page.getByRole('button', { name: 'Create account' }).click()
   await page.waitForTimeout(1600)
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.waitForTimeout(300)
   await page.locator('input').nth(0).fill('Sam')
   await page.locator('input').nth(2).fill('1234')
   await page.getByRole('button', { name: 'Continue' }).click()
@@ -192,8 +190,6 @@ async function newFamily(page) {
     await page.waitForTimeout(1500)
   }
   await page.locator('input[placeholder="e.g. Ava"]').fill('Ava')
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.waitForTimeout(200)
   await page.getByRole('button', { name: 'Start playing' }).click()
   await page.waitForTimeout(1500)
 }
@@ -201,11 +197,8 @@ async function newFamily(page) {
 async function asParent(page, pin) {
   await page.evaluate(() => { window.location.hash = '/switch' })
   await page.waitForTimeout(300)
-  await page.getByRole('button', { name: /Enter PIN|Open Parent Mode/ }).click()
-  if (pin) {
-    await page.locator('input[type=password]').fill(pin)
-    await page.getByRole('button', { name: 'Unlock' }).click()
-  }
+  if (pin) await page.getByLabel('Parent PIN').fill(pin)
+  else await page.getByRole('button', { name: 'Open Parent Mode' }).click()
   await page.waitForTimeout(600)
 }
 async function asKid(page, name) {
@@ -254,6 +247,17 @@ for (const [width, height] of [[390, 844], [360, 740]]) {
     await page.waitForTimeout(1200)
     await walk(page, PARENT_ROUTES, `busy ${width} parent`)
     if (width === 390) {
+      // The demo's own setting-up is no longer in its feed, so change the
+      // plan here (payments are off in the demo) and back, the way a parent
+      // would, and read the line that leaves.
+      for (const plan of ['Standard', 'Elite Pass']) {
+        await page.evaluate(() => { window.location.hash = '/parent/plan' })
+        await page.waitForTimeout(600)
+        await page.getByRole('button', { name: new RegExp(`Switch to ${plan}`) }).first().click()
+        await page.waitForTimeout(300)
+        await page.getByRole('button', { name: 'Switch', exact: true }).click()
+        await page.waitForTimeout(400)
+      }
       await page.evaluate(() => { window.location.hash = '/parent' })
       await page.waitForTimeout(600)
       const feed = await page.evaluate(() => document.body.innerText)

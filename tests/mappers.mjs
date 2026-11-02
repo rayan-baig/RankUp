@@ -46,5 +46,16 @@ console.log('\n=== A cleared lockout really clears ===')
 const cleared = kids.fromRow({ ...serverRow, lockout_kind: null }, local)
 ok('no lockout on the server means no lockout here', cleared.lockout === null)
 
+console.log('\n=== Whether a child has a phone is the server\'s to say ===')
+const linkedAt = 1700000000000
+ok('a row with a phone signed in marks the child linked, on every parent\'s phone',
+  Boolean(kids.fromRow({ ...serverRow, lockout_kind: null, user_id: 'u-kid' }, { id: 'k1' }).pairedDeviceAt))
+ok('and keeps the date this phone first saw it',
+  kids.fromRow({ ...serverRow, user_id: 'u-kid' }, { id: 'k1', pairedDeviceAt: linkedAt }).pairedDeviceAt === linkedAt)
+ok('a row whose phone was unlinked clears it',
+  kids.fromRow({ ...serverRow, user_id: null }, { id: 'k1', pairedDeviceAt: linkedAt }).pairedDeviceAt === null)
+ok('a row that does not say leaves it alone',
+  kids.fromRow({ ...serverRow }, { id: 'k1', pairedDeviceAt: linkedAt }).pairedDeviceAt === linkedAt)
+
 console.log(fails === 0 ? '\nALL CHECKS PASSED' : `\n${fails} FAILED`)
 process.exit(fails === 0 ? 0 : 1)

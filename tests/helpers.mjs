@@ -132,8 +132,6 @@ export async function setUpFamily(page) {
   await page.locator('input[type=password]').fill('correct-horse-battery')
   await page.getByRole('button', { name: 'Create account' }).click()
   await page.waitForTimeout(1600)
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.waitForTimeout(400)
   await page.locator('input').nth(0).fill('Sam')
   await page.locator('input').nth(2).fill('1234')
   await page.getByRole('button', { name: 'Continue' }).click()
@@ -147,8 +145,6 @@ export async function setUpFamily(page) {
     await page.waitForTimeout(1500)
   }
   await page.locator('input[placeholder="e.g. Ava"]').fill('Ava')
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.waitForTimeout(200)
   await page.getByRole('button', { name: 'Start playing' }).click()
   await page.waitForTimeout(1000)
   await page.evaluate(() => { window.location.hash = '/parent/assign' })
@@ -162,9 +158,9 @@ export async function setUpFamily(page) {
 export async function asParent(page) {
   await page.evaluate(() => { window.location.hash = '/switch' })
   await page.waitForTimeout(300)
-  await page.getByRole('button', { name: 'Enter PIN' }).click()
-  await page.locator('input[type=password]').fill('1234')
-  await page.getByRole('button', { name: 'Unlock' }).click()
+  // The PIN box is on the screen, and the right PIN opens Parent Mode as its
+  // last digit goes in.
+  await page.getByLabel('Parent PIN').fill('1234')
   await page.waitForTimeout(600)
 }
 

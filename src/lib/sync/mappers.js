@@ -75,7 +75,16 @@ export const kids = {
     // Local-only, never sent: keep whatever this device already had.
     bestTimes: existing.bestTimes || {},
     storySeen: existing.storySeen || {},
-    pairedDeviceAt: existing.pairedDeviceAt ?? null,
+    /*
+     * Whether this child has a phone of their own is the server's to say:
+     * kids.user_id is that phone's sign-in, set when a parent claims its code
+     * and cleared when it is unlinked. Read from it, a co-parent's phone and
+     * the first-week checklist agree with the phone that did the pairing.
+     * A row without the column (an older snapshot) leaves what was here.
+     */
+    pairedDeviceAt: row.user_id
+      ? (existing.pairedDeviceAt || Date.now())
+      : row.user_id === null ? null : (existing.pairedDeviceAt ?? null),
     createdAt: ms(row.created_at) || existing.createdAt || Date.now(),
     rev: row.rev,
   }),

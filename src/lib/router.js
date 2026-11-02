@@ -36,3 +36,17 @@ export function navigate(to) {
   window.location.hash = to
   window.scrollTo(0, 0)
 }
+
+/**
+ * Go somewhere, then run `fn` as the new screen arrives.
+ *
+ * For leaving Parent Mode: locking it while a parent screen is still showing
+ * makes the route guard send the phone to the PIN screen instead of where it
+ * was going. Run in the same hashchange as the route update, so both land in
+ * one render.
+ */
+export function navigateThen(to, fn) {
+  if (window.location.hash.replace(/^#/, '') === to) { fn(); return }
+  window.addEventListener('hashchange', fn, { once: true })
+  navigate(to)
+}

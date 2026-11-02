@@ -44,6 +44,18 @@ then check what actually ended up in storage or in the database.
 
 **`flows.mjs`** walks the everyday paths: send back → redo → accept.
 
+**`firstten.mjs`** is a new family's first ten minutes on a fresh 390x844
+window: front door to the first accepted chore on one phone, counting every
+tap and typed box (at most 24), then "How RankUp works" shown once and
+remembered, the first-week checklist ticking from real state and going once a
+second browser pairs as the child's phone, and the child's home putting the
+next quest above the fold.
+
+**`packs.mjs`** holds the starter chore packs to their rules: Boss only for
+teenagers, nothing Hard every day for under-12s, a day's chores near the
+~150 XP the level curve expects, no race-the-clock on reading, nothing indoors
+filed as Outdoor, and "done" never asking for a photo.
+
 **`pairing.mjs`** runs two devices side by side — a parent tab and a kid tab on
 `?device=kid`, which has its own separate storage — and checks the whole linking
 flow: a wrong code is refused, five wrong guesses kill the code, a claimed code

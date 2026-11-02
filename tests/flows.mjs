@@ -63,6 +63,8 @@ console.log('\n=== A quest that does not ask for a photo ===')
 await asParent(page)
 await page.evaluate(() => { window.location.hash = '/parent/assign' })
 await page.waitForTimeout(600)
+// A family with no chores yet opens on the packs.
+await page.getByRole('tab', { name: 'Write one' }).click()
 await page.locator('input[placeholder="e.g. Make your bed"]').fill('Read for 10 minutes')
 await page.getByRole('switch', { name: /Ask to see a photo/ }).click()
 await page.waitForTimeout(200)

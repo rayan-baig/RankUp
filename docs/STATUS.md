@@ -14,7 +14,7 @@ one phone, with no account (see "On one phone only" below).
 
 | Thing | Status | Notes |
 |---|---|---|
-| Parent assigns a chore | ✅ | Custom chores and four ready-made packs |
+| Parent assigns a chore | ✅ | Custom chores and three ready-made packs (ages 6–11, 12+, and adaptive), held to sensible sizes by `tests/packs.mjs` |
 | Repeating chores | ✅ | Daily, school days, or weekly on the family's chosen day; they come back once a day on the family's own clock, across clock changes |
 | Adaptive chores | ✅ | Their own difficulty and their own meaning of "done", per child |
 | Child opens a chore and sees what it pays | ✅ | Every bonus itemised before they start, the test-score bonus included |
@@ -67,7 +67,9 @@ one phone, with no account (see "On one phone only" below).
 | Referrals | ✅ needs a backend | 30 days of Standard for both families, given when the invited family's first chore is accepted, not at sign-up |
 | Charity Week | 🟡 | The week's total is worked out from real payments. Handing it to a charity is a bank transfer you make |
 | Elite 1.5× XP | ✅ | In the reward calculation, on the server |
-| Look-around family (the demo) | ✅ | Opens without an account and cannot reach a real one |
+| Look-around family (the demo) | ✅ | Opens without an account and cannot reach a real one. Opens on "Start here": accept a chore, see the child's world, the arcade |
+| The front door | ✅ | What RankUp is, the three prices and the 14-day trial on one phone screen, read from the same numbers as the plan screen |
+| A new family's first ten minutes | ✅ | Two setup screens; "How RankUp works" once; a first-week checklist (a child, a phone, three chores, one accepted) that ticks itself and goes when done; one tap hands a shared phone to the child. Sign-up to first accepted chore is 24 taps, held by `tests/firstten.mjs` |
 
 ## Together with other families
 

@@ -18,6 +18,7 @@ import { reducer, potFor } from '../state/reducer.js'
 import { createInitialState, makeKid } from '../state/initialState.js'
 import { QUEST_PACKS } from '../data/questTemplates.js'
 import { DIFFICULTY } from './xp.js'
+import { dayKey } from './dates.js'
 
 const day = 86400000
 
@@ -25,7 +26,7 @@ const day = 86400000
  * Bump this whenever what the demo contains changes, so saved copies of
  * the old one are rebuilt instead of lingering for ever.
  */
-export const DEMO_VERSION = 3
+export const DEMO_VERSION = 4
 
 /** Wind a timestamp back, so the demo does not look like it started today. */
 const ago = (days) => Date.now() - days * day
@@ -114,10 +115,11 @@ export function buildDemoFamily() {
   s = finish(s, 'Wash, dry and put away one load', noah.id, 1)
 
   /*
-   * One chore waiting, and deliberately the timer one.
+   * One chore waiting, and deliberately the reading one.
    *
    * The review queue is the best screen in the app and an empty one shows
-   * nothing. The timer evidence is real and needs no picture.
+   * nothing. Reading needs no picture: the child's own note says what she
+   * read, which is what a parent would ask anyway.
    */
   const reading = s.quests.find((q) => q.title === 'Read for 20 minutes' && q.kidId === ava.id)
   if (reading) {
@@ -127,7 +129,6 @@ export function buildDemoFamily() {
         questId: reading.id,
         kidId: ava.id,
         note: 'Finished the last two chapters.',
-        elapsedMs: 1200000,
         onTime: true,
       },
     })
@@ -148,6 +149,27 @@ export function buildDemoFamily() {
     { name: 'Day out, you choose', cost: 250, icon: '🎢', description: 'Anywhere within reason.' },
   ]
   s = run(s, ...rewards.map((reward) => ({ type: 'ADD_REWARD', reward })))
+
+  /*
+   * The log, dated like a fortnight rather than a minute.
+   *
+   * Every entry was written "just now" while this was being built, so the
+   * dashboard's recent activity opened on "Plan changed to Elite Pass" and
+   * "7 quest(s) assigned", all just now: the setting-up, not the family.
+   * Setting up happened a fortnight ago, the plan change is how the demo
+   * gets Elite and nothing a visitor needs to read, and the level-ups came
+   * with the chores of the last few days.
+   */
+  const SETUP = new Set(['family_created', 'kid_added', 'quests_assigned'])
+  const events = s.events
+    .filter((e) => e.type !== 'tier_changed')
+    .map((e, i) => {
+      if (SETUP.has(e.type)) return { ...e, at: ago(14) + i * 60000 }
+      if (e.type === 'level_up') return { ...e, at: ago(1) + i * 60000 }
+      return e
+    })
+    .map((e) => ({ ...e, day: dayKey(new Date(e.at)) }))
+  s = { ...s, events }
 
   return {
     ...s,

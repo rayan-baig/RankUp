@@ -36,7 +36,6 @@ async function makeFamily(page, device, familyName, kidName) {
   await page.locator('input[type=password]').fill('correct-horse-battery')
   await page.getByRole('button', { name: 'Create account' }).click()
   await page.waitForTimeout(1500)
-  await page.getByRole('button', { name: 'Continue' }).click()
   await page.locator('input').nth(0).fill('Parent')
   await page.locator('input').nth(1).fill(familyName)
   await page.locator('input').nth(2).fill('1234')
@@ -51,8 +50,6 @@ async function makeFamily(page, device, familyName, kidName) {
     await page.waitForTimeout(1500)
   }
   await page.locator('input[placeholder="e.g. Ava"]').fill(kidName)
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.waitForTimeout(200)
   await page.getByRole('button', { name: 'Start playing' }).click()
   await page.waitForTimeout(2500)
 

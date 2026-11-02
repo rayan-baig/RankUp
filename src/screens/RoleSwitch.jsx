@@ -4,7 +4,7 @@ import { resolveKidTheme } from '../data/kidThemes.js'
 import { storyProgress } from '../lib/dragonFight.js'
 import { levelFromXp } from '../lib/xp.js'
 import Avatar from '../components/Avatar.jsx'
-import { Card, Button, TextInput, Modal } from '../components/ui.jsx'
+import { Card, Button, TextInput } from '../components/ui.jsx'
 import { navigate } from '../lib/router.js'
 import Logo from '../components/Logo.jsx'
 
@@ -17,9 +17,9 @@ import Logo from '../components/Logo.jsx'
  */
 export default function RoleSwitch() {
   const { state, dispatch } = useApp()
-  const [pinOpen, setPinOpen] = useState(false)
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
+  const needsPin = !(state.demo || !state.family.pin)
 
   const openParent = () => {
     /*
@@ -32,25 +32,37 @@ export default function RoleSwitch() {
      * four-digit code nobody told you is not a feature demonstration, it is
      * a dead end.
      */
-    if (state.demo || !state.family.pin) {
+    if (!needsPin) {
       dispatch({ type: 'UNLOCK_PARENT' })
       navigate('/parent')
-      return
     }
-    setPinOpen(true)
+  }
+
+  const unlock = () => {
+    dispatch({ type: 'UNLOCK_PARENT' })
+    setPin('')
+    setError('')
+    navigate('/parent')
   }
 
   const submitPin = () => {
     // An empty stored PIN must never be matched by an empty box.
-    if (state.family.pin && pin === state.family.pin) {
-      dispatch({ type: 'UNLOCK_PARENT' })
-      setPinOpen(false)
-      setPin('')
-      setError('')
-      navigate('/parent')
-    } else {
-      setError('That PIN is not right.')
-    }
+    if (state.family.pin && pin === state.family.pin) unlock()
+    else setError('That PIN is not right.')
+  }
+
+  /*
+   * The PIN box is on the screen rather than behind an "Enter PIN" button,
+   * and the right PIN opens Parent Mode as its last digit is typed. A wrong
+   * one waits for Unlock, so a mistyped digit is not met with an error
+   * halfway through. Opening on a match tells nobody more than tapping
+   * Unlock would have.
+   */
+  const typePin = (value) => {
+    const next = value.replace(/\D/g, '').slice(0, 8)
+    setPin(next)
+    setError('')
+    if (state.family.pin && next === state.family.pin) unlock()
   }
 
   return (
@@ -90,36 +102,30 @@ export default function RoleSwitch() {
         <div className="text-2xl mb-1" aria-hidden="true">🔐</div>
         <h2 className="font-display font-bold mb-1">Parent Mode</h2>
         <p className="text-xs text-muted mb-3">Assign quests, accept finished chores, manage the plan.</p>
-        <Button className="w-full" onClick={openParent}>
-          {state.demo || !state.family.pin ? 'Open Parent Mode' : 'Enter PIN'}
-        </Button>
+        {needsPin ? (
+          <div className="flex gap-2">
+            <TextInput
+              value={pin}
+              onChange={(e) => typePin(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && submitPin()}
+              inputMode="numeric"
+              type="password"
+              placeholder="Parent PIN"
+              aria-label="Parent PIN"
+              className="field flex-1 min-w-0 text-center"
+            />
+            <Button className="shrink-0" onClick={submitPin} disabled={!pin}>Unlock</Button>
+          </div>
+        ) : (
+          <Button className="w-full" onClick={openParent}>Open Parent Mode</Button>
+        )}
+        {error && <p className="text-xs mt-2" style={{ color: 'var(--bad)' }} role="alert">{error}</p>}
+        {needsPin && (
+          <p className="text-[11px] text-muted mt-2">
+            Forgotten it? There is no reset yet — the PIN is stored with the rest of the local data.
+          </p>
+        )}
       </Card>
-
-      <Modal
-        open={pinOpen}
-        onClose={() => { setPinOpen(false); setError('') }}
-        title="Parent PIN"
-        footer={
-          <>
-            <Button variant="ghost" className="flex-1" onClick={() => setPinOpen(false)}>Cancel</Button>
-            <Button className="flex-1" onClick={submitPin}>Unlock</Button>
-          </>
-        }
-      >
-        <TextInput
-          value={pin}
-          onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
-          onKeyDown={(e) => e.key === 'Enter' && submitPin()}
-          inputMode="numeric"
-          type="password"
-          placeholder="••••"
-          autoFocus
-        />
-        {error && <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>{error}</p>}
-        <p className="text-xs text-muted mt-3">
-          Forgotten it? There is no reset yet — the PIN is stored with the rest of the local data.
-        </p>
-      </Modal>
     </div>
   )
 }

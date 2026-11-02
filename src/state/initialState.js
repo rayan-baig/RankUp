@@ -4,13 +4,21 @@ import { DEFAULT_KID_THEME, KID_THEMES } from '../data/kidThemes.js'
 import { DEFAULT_PARENT_THEME, PARENT_THEMES } from '../data/parentThemes.js'
 
 /**
+ * Days of Elite a new family gets free, with no card. The server grants the
+ * same in create_family (supabase/sync.sql); tests/lookaround.mjs fails if the
+ * two disagree, because the front door quotes this number.
+ */
+export const TRIAL_DAYS = 14
+
+/**
  * The three plans, cheapest first.
  *
  * `limits` is the machine-readable half — what the app actually enforces — and
  * `features` is the human half shown on the plan screen. They must agree: a
  * feature line that nothing enforces is a promise the app does not keep.
  *
- * All three are billed monthly. There is no annual option and no trial charge.
+ * Standard and Elite are billed monthly or yearly (ten months' money). The
+ * trial is free and asks for no card.
  */
 export const TIERS = {
   /*
@@ -232,11 +240,11 @@ export function createInitialState() {
        * Set here as well as by create_family so it is true with no backend at
        * all — somebody trying RankUp on one phone sees the whole product, not
        * the floor of it. Nobody buys a chore app on a feature list; they buy it
-       * the first time their child photographs a made bed and it lands on their
-       * phone, and that has to happen before a card is ever mentioned.
+       * the first time their child taps "I did it!" on a made bed and it lands
+       * on their phone, and that has to happen before a card is ever mentioned.
        */
       trialTier: 'elite',
-      trialEndsAt: Date.now() + 14 * 86400000,
+      trialEndsAt: Date.now() + TRIAL_DAYS * 86400000,
       subscription: { tier: 'starter', status: 'trial', startedAt: Date.now(), renewsAt: null },
       /* Flash Tickets the family has left. Only a parent can buy more. */
       flashTickets: 0,

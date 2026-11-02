@@ -7,8 +7,35 @@
  */
 import { chromium } from 'playwright'
 import { reporter, finish, BASE, SHOT_DIR, setPlanInDatabase } from './helpers.mjs'
+import { readFileSync } from 'node:fs'
+import { CLAIM_ERRORS, claimErrorMessage } from '../src/lib/pairing.js'
 
 const { fails, pass, fail } = reporter()
+
+/*
+ * Every refusal the server can give when a parent types a code has words of
+ * its own, so none falls through to "check the digits" when the digits were
+ * fine. Read from the SQL, so a new reason fails here until it is worded.
+ */
+console.log('\n=== Every refusal has its own words ===')
+{
+  const sql = readFileSync('supabase/schema.sql', 'utf8')
+  const body = sql.slice(sql.indexOf('create or replace function claim_pairing_code('))
+  const reasons = [...new Set([...body.slice(0, body.indexOf('$$;')).matchAll(/'reason', '([a-z_]+)'/g)].map((m) => m[1]))]
+  const unworded = reasons.filter((r) => !CLAIM_ERRORS[r])
+  unworded.length === 0 && reasons.length >= 6
+    ? pass(`each of the ${reasons.length} reasons claim_pairing_code gives is worded (${reasons.join(', ')})`)
+    : fail('every claim refusal worded', unworded.join(', ') || `only ${reasons.length} found`)
+  new Set(reasons.map(claimErrorMessage)).size === reasons.length
+    ? pass('and no two of them say the same thing')
+    : fail('claim messages distinct', 'two reasons share words')
+  ;/10 minutes/.test(CLAIM_ERRORS.expired) && /New code/.test(CLAIM_ERRORS.expired)
+    ? pass('an expired code says how long codes last and what to tap')
+    : fail('expired wording', CLAIM_ERRORS.expired)
+  !/Rivera|family name/i.test(CLAIM_ERRORS.claimed)
+    ? pass('a phone linked elsewhere never names the other family')
+    : fail('claimed wording', CLAIM_ERRORS.claimed)
+}
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined })
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })
 const errors = []
@@ -44,8 +71,6 @@ await parent.locator('input[type=email]').fill(`pair${Date.now()}@example.com`)
 await parent.locator('input[type=password]').fill('correct-horse-battery')
 await parent.getByRole('button', { name: 'Create account' }).click()
 await parent.waitForTimeout(1600)
-await parent.getByRole('button', { name: 'Continue' }).click()
-await parent.waitForTimeout(400)
 await parent.locator('input').nth(0).fill('Sam')
 await parent.locator('input').nth(1).fill('The Rivera family')
 await parent.locator('input').nth(2).fill('1234')
@@ -60,8 +85,6 @@ if (await parent.getByText('What RankUp collects about your child').count()) {
   await parent.waitForTimeout(1200)
 }
 await parent.locator('input[placeholder="e.g. Ava"]').fill('Jonah')
-await parent.getByRole('button', { name: 'Continue' }).click()
-await parent.waitForTimeout(200)
 await parent.getByRole('button', { name: 'Start playing' }).click()
 await parent.waitForTimeout(1200)
 
@@ -99,11 +122,44 @@ await parent.evaluate(() => { window.location.hash = '/parent/pair' })
 await parent.waitForTimeout(700)
 const wrong = String((Number(code) + 7) % 1000000).padStart(6, '0')
 await typeCode(wrong)
-const alerted = await parent.locator('[role=alert]').count()
-alerted > 0 ? pass('a wrong code shows an error') : fail('a wrong code shows an error', 'no alert')
+const wrongSays = await parent.locator('[role=alert]').textContent().catch(() => '')
+;/don't match a phone waiting/.test(wrongSays || '') && /Check them/.test(wrongSays || '')
+  ? pass('a wrong code says it matches no phone, and to check the digits')
+  : fail('a wrong code shows an error', wrongSays || 'no alert')
 ;(await kidStore()).device.role === 'kid' && !(await kidStore()).onboarded
   ? pass('a wrong code does not link anything')
   : fail('a wrong code does not link anything', 'device changed state')
+
+console.log('\n=== An expired code says so, on both phones ===')
+await kid.getByRole('button', { name: 'New code' }).click()
+await kid.waitForTimeout(1500)
+const stale = (await kidStore())?.pendingPairing?.code
+{
+  const { default: pg } = await import('pg')
+  const db = new pg.Client({
+    host: process.env.PGHOST || '/tmp',
+    port: Number(process.env.PGPORT || 55432),
+    user: process.env.PGUSER || 'postgres',
+    database: process.env.PGDATABASE || 'rankup_test',
+  })
+  await db.connect()
+  await db.query("update pairing_codes set expires_at = now() - interval '1 minute' where code = $1", [stale])
+  await db.end()
+}
+await typeCode(stale)
+const expiredSays = await parent.locator('[role=alert]').textContent().catch(() => '')
+;/run out/.test(expiredSays || '') && /New code/.test(expiredSays || '')
+  ? pass('the parent is told the code ran out and to tap "New code"')
+  : fail('expired code message', expiredSays || 'no alert')
+await kid.waitForTimeout(3500)
+const kidSays = await kid.evaluate(() => document.body.innerText)
+;/This code ran out/.test(kidSays) && /New code/.test(kidSays)
+  ? pass('and the child\'s phone says the same, with the button to tap')
+  : fail('kid sees expiry', kidSays.slice(0, 300))
+const steps = await parent.getByTestId('pair-steps').innerText().catch(() => '')
+;/I'm a kid/.test(steps) && /Get my code/.test(steps) && /joins that profile/.test(steps)
+  ? pass('the linking screen gives the steps in the child\'s phone\'s own words')
+  : fail('pairing steps', steps)
 
 console.log('\n=== A fresh code links the two devices ===')
 await kid.getByRole('button', { name: 'New code' }).click()
@@ -140,8 +196,8 @@ await parent.getByRole('button', { name: 'Link another' }).click()
 await parent.waitForTimeout(400)
 await typeCode(code2)
 const reused = await parent.locator('[role=alert]').textContent().catch(() => '')
-;/already been linked/i.test(reused || '')
-  ? pass('a claimed code is refused the second time')
+;/already linked to your family/i.test(reused || '')
+  ? pass('a code typed again is refused, saying the phone is already in this family')
   : fail('a claimed code is refused the second time', `error was: ${reused}`)
 
 console.log('\n=== A kid device has no parent side ===')

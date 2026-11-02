@@ -57,8 +57,6 @@ async function setUp(base, { account }) {
     await page.getByRole('button', { name: 'Create account' }).click()
     await page.waitForTimeout(1600)
   }
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.waitForTimeout(300)
   await page.locator('input').nth(0).fill('Sam')
   await page.locator('input').nth(1).fill('Plain Family')
   await page.locator('input').nth(2).fill('1234')
@@ -71,8 +69,6 @@ async function setUp(base, { account }) {
     await page.waitForTimeout(1500)
   }
   await page.locator('input[placeholder="e.g. Ava"]').fill('Ava')
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.waitForTimeout(200)
   await page.getByRole('button', { name: 'Start playing' }).click()
   await page.waitForTimeout(4000)
   const where = await page.evaluate(() => window.location.hash)

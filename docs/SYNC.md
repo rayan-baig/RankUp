@@ -53,7 +53,24 @@ rule if you change the screen.
 ### A second phone for the same child
 
 A profile that already has a phone keeps it. Pairing another phone under the
-same name makes a **new** profile, and the parent's confirmation says so. To
+same name makes a **new** profile, and the parent's confirmation says so.
+Whether a child has a phone is read from the server (`kids.user_id`), so every
+parent's phone agrees, the co-parent's included.
+
+### What a parent is told when a code does not work
+
+One sentence per refusal `claim_pairing_code` gives, each saying what to do
+next (`CLAIM_ERRORS` in `src/lib/pairing.js`; `tests/pairing.mjs` fails if a
+reason has no words of its own):
+
+| Reason | Told |
+|---|---|
+| `not_found` | The numbers match no phone waiting; check them against the child's screen |
+| `expired` | Codes last 10 minutes; tap "New code" on the child's phone (which says the same) |
+| `blocked` | Typed wrong 5 times; tap "New code" |
+| `already_linked` | That phone is already in **your** family; nothing more to do |
+| `claimed` | That phone is linked to another family, which is never named; it has to unlink it first |
+| `revoked`, `too_many` | The code was cancelled; too many wrong codes from this phone, wait ten minutes | To
 move a child to a new phone (including the same phone after "Add to Home
 Screen", which starts with empty storage): unlink the old phone first, then
 link the new one.
@@ -198,8 +215,9 @@ API, so this works against a real database ([supabase/test/README.md](../supabas
 
 ## What is checked, and what is not
 
-- `tests/pairing.mjs`: the whole linking flow as two devices — a wrong code, the
-  fifth wrong guess, a used code, the child's phone having no Parent Mode.
+- `tests/pairing.mjs`: the whole linking flow as two devices — a wrong code, an
+  expired one (said on both phones), the fifth wrong guess, a used code, the
+  child's phone having no Parent Mode.
 - `tests/sync.mjs`, `tests/coparents.mjs`, `tests/devicewipe.mjs`: two and three
   browsers against Postgres.
 - `tests/offline.mjs`, `tests/guarantees.mjs`, `tests/outbox.mjs`,

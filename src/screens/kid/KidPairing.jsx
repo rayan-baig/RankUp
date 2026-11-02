@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { syncAdapter, canSyncAcrossDevices } from '../../lib/sync/index.js'
-import { generateCode, formatCode, newPairingRecord, pairingStatus, msRemaining, PAIRING_STATUS } from '../../lib/pairing.js'
+import { generateCode, formatCode, newPairingRecord, pairingStatus, msRemaining, PAIRING_STATUS, CODE_TTL_MS } from '../../lib/pairing.js'
 import { uid } from '../../lib/id.js'
 import { formatDuration } from '../../lib/dates.js'
 import { Card, Button, Banner, SectionTitle } from '../../components/ui.jsx'
@@ -141,8 +141,8 @@ export default function KidPairing({ name, themeId, onCancel }) {
               <>
                 <p className="text-sm mb-3" style={{ color: 'var(--warn)' }}>
                   {state_ === PAIRING_STATUS.BLOCKED
-                    ? 'Too many wrong tries. Get a new code.'
-                    : 'This code has expired.'}
+                    ? 'Your grown-up typed this code wrong too many times. Tap “New code” and show them the new one.'
+                    : `This code ran out (codes last ${CODE_TTL_MS / 60000} minutes). Tap “New code” and show your grown-up the new one.`}
                 </p>
                 <Button className="w-full" onClick={issue} disabled={asking}>{asking ? 'Getting a code…' : 'New code'}</Button>
               </>

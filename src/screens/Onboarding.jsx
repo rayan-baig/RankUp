@@ -5,7 +5,6 @@ import { KID_THEMES } from '../data/kidThemes.js'
 import { ADAPTIVE_SUPPORTS } from '../data/questTemplates.js'
 import { Button, Card, Field, TextInput, TextArea, Banner, ProgressBar } from '../components/ui.jsx'
 import ThemePicker from '../components/ThemePicker.jsx'
-import { SLOGAN, Wordmark } from '../components/Logo.jsx'
 import KidDeviceSetup from './kid/KidDeviceSetup.jsx'
 import SignIn from './SignIn.jsx'
 import ParentalConsent from './ParentalConsent.jsx'
@@ -15,7 +14,15 @@ import { buildDemoFamily } from '../lib/demoFamily.js'
 import { transport } from '../lib/sync/transport.js'
 import { navigate } from '../lib/router.js'
 
-const STEPS = ['Welcome', 'Your family', 'Add a kid', 'Pick a theme']
+/*
+ * Two screens, with the consent notice between them.
+ *
+ * There used to be four. The first repeated the front door the parent had
+ * just read, and "add a kid" and "pick a world" were two screens for one
+ * child, each with its own Continue. tests/firstten.mjs counts the taps from
+ * the front door to the first accepted chore so they do not creep back.
+ */
+const STEPS = ['Your family', 'Add your kid']
 
 export default function Onboarding() {
   const { state, dispatch } = useApp()
@@ -63,10 +70,8 @@ export default function Onboarding() {
   const [themeId, setThemeId] = useState(KID_THEMES[0].id)
 
   const canContinue =
-    (step === 0) ||
-    (step === 1 && family.parentName.trim() && family.pin.length >= 4) ||
-    (step === 2 && kid.name.trim()) ||
-    step === 3
+    (step === 0 && family.parentName.trim() && family.pin.length >= 4) ||
+    (step === 1 && kid.name.trim())
 
   const finish = async () => {
     const familyName = family.name.trim() || `${family.parentName.trim()}'s family`
@@ -76,7 +81,7 @@ export default function Onboarding() {
       accessibility: { hasNeeds: kid.hasNeeds, notes: kid.notes.trim(), supports: kid.supports },
     })
 
-    // Created back at step 1, so both devices agree on the id.
+    // Created back at the family step, so both devices agree on the id.
     const familyId = serverFamilyId
 
     dispatch({
@@ -101,8 +106,8 @@ export default function Onboarding() {
     return <JoinFamily onBack={() => setJoining(false)} />
   }
 
-  if (mode === 'parent' && !consented && step >= 2) {
-    return <ParentalConsent onDone={() => setConsented(true)} onBack={() => setStep(1)} />
+  if (mode === 'parent' && !consented && step >= 1) {
+    return <ParentalConsent onDone={() => setConsented(true)} onBack={() => setStep(0)} />
   }
 
   if (mode === null) {
@@ -129,34 +134,17 @@ export default function Onboarding() {
       </div>
 
       {step === 0 && (
-        <div className="flex-1 flex flex-col justify-center text-center gap-4 anim-slide-up">
-          <Wordmark size={58} />
-          <p className="font-display font-bold -mt-2" style={{ color: 'var(--accent)' }}>{SLOGAN}</p>
-          <p className="text-muted">
-            Chores become quests. Kids earn XP and a currency that matches the world they picked.
-            You approve every completed quest before anything is awarded.
-          </p>
-          <Card className="text-left">
-            <h2 className="font-display font-bold mb-2 text-sm">How the loop works</h2>
-            <ol className="text-sm text-muted space-y-1.5 list-decimal list-inside">
-              <li>You assign a quest to a kid.</li>
-              <li>They do it and tap “I did it!”. If you want proof, they send you a photo from their camera app.</li>
-              <li>You approve or send it back. Approving awards XP and currency.</li>
-            </ol>
-          </Card>
-          {!transport.isConfigured() && (
-            <Banner tone="info" icon="📱" title="This device only">
-              No account is connected, so everything stays in this browser and nothing is
-              charged. Connect the sync service to use RankUp on two phones.
-            </Banner>
-          )}
-        </div>
-      )}
-
-      {step === 1 && (
         <div className="anim-slide-up">
           <h1 className="font-display text-2xl font-extrabold mb-1">Your family</h1>
           <p className="text-muted text-sm mb-4">You are the parent account. Kids get their own profiles inside it.</p>
+          {!transport.isConfigured() && (
+            <div className="mb-4">
+              <Banner tone="info" icon="📱" title="This device only">
+                No account is connected, so everything stays in this browser and nothing is
+                charged. Connect the sync service to use RankUp on two phones.
+              </Banner>
+            </div>
+          )}
           <Field label="Your name">
             <TextInput value={family.parentName} onChange={(e) => setFamily({ ...family, parentName: e.target.value })} placeholder="e.g. Sam" autoFocus />
           </Field>
@@ -193,7 +181,7 @@ export default function Onboarding() {
         </div>
       )}
 
-      {step === 2 && (
+      {step === 1 && (
         <div className="anim-slide-up">
           <h1 className="font-display text-2xl font-extrabold mb-1">Add your first kid</h1>
           <p className="text-muted text-sm mb-4">You can add more later — there is no limit.</p>
@@ -247,9 +235,10 @@ export default function Onboarding() {
         </div>
       )}
 
-      {step === 3 && (
-        <div className="anim-slide-up">
-          <h1 className="font-display text-2xl font-extrabold mb-1">{kid.name || 'Your kid'} picks a world</h1>
+      {/* Same screen as the name: one child, one Continue. */}
+      {step === 1 && (
+        <div className="anim-slide-up mt-2">
+          <h2 className="font-display text-xl font-extrabold mb-1">{kid.name.trim() || 'Your kid'} picks a world</h2>
           <p className="text-muted text-sm mb-4">
             The theme changes the background, the avatar and what the currency is called. Once chosen it is
             locked — changing it later needs your PIN.
@@ -280,12 +269,12 @@ export default function Onboarding() {
           className="flex-1"
           disabled={!canContinue || creating}
           onClick={async () => {
-            if (step === 3) return finish()
-            if (step === 1) await ensureFamily()
+            if (step === 1) return finish()
+            await ensureFamily()
             setStep((s) => s + 1)
           }}
         >
-          {creating ? 'Setting up…' : step === 3 ? 'Start playing' : 'Continue'}
+          {creating ? 'Setting up…' : step === 1 ? 'Start playing' : 'Continue'}
         </Button>
       </div>
     </div>

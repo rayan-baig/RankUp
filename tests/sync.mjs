@@ -42,7 +42,6 @@ await parent.locator('input[type=password]').fill('correct-horse-battery')
 await parent.getByRole('button', { name:'Create account' }).click()
 await parent.waitForTimeout(1200)
 
-await parent.getByRole('button', { name:'Continue' }).click()
 await parent.locator('input').nth(0).fill('Sam')
 await parent.locator('input').nth(1).fill('The Riveras')
 await parent.locator('input').nth(2).fill('1234')
@@ -57,8 +56,6 @@ if (await parent.getByText('What RankUp collects about your child').count()) {
   await parent.waitForTimeout(1500)
 }
 await parent.locator('input[placeholder="e.g. Ava"]').fill('Jonah')
-await parent.getByRole('button', { name:'Continue' }).click()
-await parent.waitForTimeout(200)
 await parent.getByRole('button', { name:'Start playing' }).click()
 await parent.waitForTimeout(2500)
 
@@ -119,6 +116,8 @@ await parent.evaluate(() => { window.location.hash = '/parent/assign' })
 await parent.waitForTimeout(800)
 await parent.locator('select').first().selectOption({ label: 'Ava' })
 await parent.waitForTimeout(300)
+// A family with no chores yet opens on the packs.
+await parent.getByRole('tab', { name: 'Write one' }).click()
 await parent.locator('input[placeholder="e.g. Make your bed"]').fill('Tidy the bookshelf')
 await parent.getByRole('button', { name:/Assign to Ava/ }).click()
 await parent.waitForTimeout(3000)

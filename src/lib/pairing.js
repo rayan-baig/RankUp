@@ -82,15 +82,20 @@ export function msRemaining(record, now = Date.now()) {
   return Math.max(0, record.expiresAt - now)
 }
 
-/** Wording the parent sees when a code does not work. Never says which digit was wrong. */
+/**
+ * Wording the parent sees when a code does not work, one per reason
+ * claim_pairing_code gives. Each says what happened and the one thing to do
+ * next. Never says which digit was wrong, and never names another family.
+ */
+const MINUTES = CODE_TTL_MS / 60000
 export const CLAIM_ERRORS = {
-  not_found: "That code doesn't match any device waiting to be linked. Check the digits and try again.",
-  expired: 'That code has expired. Ask them to tap "New code" on their device.',
-  blocked: 'That code has been tried too many times and is no longer valid. Ask them for a new one.',
+  not_found: "Those numbers don't match a phone waiting to be linked. Check them against the code on your child's screen and type them again.",
+  expired: `That code has run out: codes last ${MINUTES} minutes. On your child's phone, tap “New code” and type the new one here.`,
+  blocked: `That code was typed wrong ${MAX_ATTEMPTS} times, so it has stopped working. On your child's phone, tap “New code” and type the new one here.`,
   too_many: 'Too many wrong codes from this phone. Wait about ten minutes, then try again.',
-  claimed: 'That device has already been linked to a family.',
-  revoked: 'That code was cancelled. Ask them for a new one.',
-  already_linked: 'That device is already linked to your family.',
+  claimed: 'That phone is already linked to another family. It can only join yours once that family unlinks it.',
+  revoked: "That code was cancelled on your child's phone. Type the code on their screen now.",
+  already_linked: 'That phone is already linked to your family, so there is nothing more to do. Its quests are on it now.',
   unavailable: 'Could not reach the sync service. Check your connection and try again.',
 }
 

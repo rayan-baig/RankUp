@@ -1,6 +1,10 @@
 import Logo, { SLOGAN } from '../components/Logo.jsx'
 import LoopPreview from '../components/LoopPreview.jsx'
 import { Words } from '../components/Motion.jsx'
+import { TIERS, TRIAL_DAYS } from '../state/initialState.js'
+
+/* "$9.99", never "$9.990" or "$10". */
+const dollars = (n) => `$${n.toFixed(2)}`
 
 /**
  * The front door.
@@ -19,10 +23,16 @@ import { Words } from '../components/Motion.jsx'
  * The three doors are deliberately not equal. Looking around is the one most
  * people should take and it is styled like it; the other two are for people
  * who already know what they are doing.
+ *
+ * It answers, on one phone screen with no scrolling, the three things a
+ * parent asks before anything else: what is it, what does it cost, and is
+ * there a catch to trying it. The prices and the trial come from TIERS and
+ * TRIAL_DAYS, the same numbers the plan screen and the server use, so the
+ * door cannot quote a price the app does not charge (tests/lookaround.mjs).
  */
 export default function Welcome({ onLookAround, onParent, onKid, wiped = null }) {
   return (
-    <div className="shell px-5 py-7 min-h-screen flex flex-col">
+    <div className="shell px-5 py-5 min-h-screen flex flex-col">
       {wiped && (
         <p role="status" data-testid="device-wiped" className="text-sm text-center mb-4 rounded-xl px-3 py-2"
           style={{ background: 'var(--card)', border: '1px solid var(--line)' }}>
@@ -31,24 +41,51 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null })
             : 'This phone was unlinked from its family, so everything RankUp kept on it has been erased.'}
         </p>
       )}
-      <div className="text-center mb-5 anim-slide-up">
-        <div className="flex justify-center mb-3">
-          <Logo size={68} glow />
+      <div className="text-center mb-3 anim-slide-up">
+        <div className="flex items-center justify-center gap-2.5">
+          <Logo size={44} glow />
+          <h1 className="font-display text-4xl font-extrabold leading-none tracking-tight">
+            Rank<span style={{ color: '#FFC93D' }}>Up</span>
+          </h1>
         </div>
-        <h1 className="font-display text-4xl font-extrabold leading-none tracking-tight">
-          Rank<span style={{ color: '#FFC93D' }}>Up</span>
-        </h1>
         {/* Three words arriving one after another. It is the first motion
             anybody sees and it says the app is alive before a button is
             tapped. */}
         <Words as="p" className="font-display font-bold mt-1.5 text-[var(--accent)]">
           {SLOGAN}
         </Words>
+        <p className="text-sm text-muted mt-1 mx-auto" style={{ maxWidth: 330 }} data-testid="what-it-is">
+          Your kids&rsquo; chores become quests. They tap &ldquo;I did it!&rdquo;, you accept,
+          and they earn XP and level up in a world they pick.
+        </p>
       </div>
 
-      <LoopPreview />
+      <LoopPreview compact />
 
-      <div className="mt-7">
+      {/*
+        * The price, before anyone is asked for anything. A parent who has to
+        * sign up to find out what it costs assumes the worst.
+        */}
+      <div className="card-flat mt-4 px-3 py-2.5" data-testid="price">
+        <p className="text-xs text-center font-semibold mb-2">
+          Free for {TRIAL_DAYS} days with everything in {TIERS.elite.name}. No card.
+        </p>
+        <div className="grid grid-cols-3 gap-1.5 text-center">
+          {[TIERS.starter, TIERS.standard, TIERS.elite].map((t) => (
+            <div key={t.id} className="min-w-0">
+              <div className="font-display font-extrabold text-sm leading-tight">
+                {t.price ? dollars(t.price) : 'Free'}
+                {t.price ? <span className="text-[10px] font-semibold text-muted">/mo</span> : null}
+              </div>
+              <div className="text-[11px] text-muted leading-tight">
+                {t.name}{t.id === 'starter' ? ' · 1 child' : ''}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4">
         {/*
           * The one that should be taken, and it says exactly what it costs,
           * because "try it free" has been used by enough people asking for a
@@ -58,11 +95,11 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null })
           type="button"
           onClick={onLookAround}
           className="btn btn-primary anim-shine w-full font-display font-extrabold"
-          style={{ fontSize: 16, paddingTop: 14, paddingBottom: 14 }}
+          style={{ fontSize: 16, paddingTop: 12, paddingBottom: 12 }}
         >
           Have a look around →
         </button>
-        <p className="text-xs text-muted text-center mt-2 mb-5">
+        <p className="text-xs text-muted text-center mt-1.5 mb-3">
           A real family, already set up. No account, no email, nothing to cancel.
         </p>
 
@@ -71,7 +108,7 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null })
         <button
           type="button"
           onClick={onParent}
-          className="card w-full text-left p-3.5 mb-2.5 flex items-center gap-3.5 transition-transform active:scale-[0.98]"
+          className="card w-full text-left px-3.5 py-2.5 mb-2 flex items-center gap-3.5 transition-transform active:scale-[0.98]"
         >
           <span className="text-2xl" aria-hidden="true">🧑‍🍳</span>
           <span className="min-w-0 flex-1">
@@ -86,22 +123,18 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null })
         <button
           type="button"
           onClick={onKid}
-          className="card w-full text-left p-3.5 flex items-center gap-3.5 transition-transform active:scale-[0.98]"
+          className="card w-full text-left px-3.5 py-2.5 flex items-center gap-3.5 transition-transform active:scale-[0.98]"
         >
           <span className="text-2xl" aria-hidden="true">🎮</span>
           <span className="min-w-0 flex-1">
             <span className="block font-display font-bold text-sm">I'm a kid</span>
             <span className="block text-xs text-muted">
-              Get a code to connect to your grown-up's account.
+              No account: get a code to join your grown-up's.
             </span>
           </span>
           <span aria-hidden="true" className="text-muted">›</span>
         </button>
       </div>
-
-      <p className="text-xs text-muted text-center mt-6">
-        A kid's phone never creates its own account — it joins a parent's.
-      </p>
     </div>
   )
 }

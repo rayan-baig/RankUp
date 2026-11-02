@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
-import { levelFromXp, formatXp, xpToNext, liveStreak } from '../../lib/xp.js'
+import { levelFromXp, formatXp, xpToNext, liveStreak, DIFFICULTY } from '../../lib/xp.js'
 import { nextEvolution, storyChapters } from '../../data/kidThemes.js'
 import { storyProgress, dragonFight, DRAGON_HP, HERO_HP } from '../../lib/dragonFight.js'
 import { isMarketOpen } from '../../data/marketSkins.js'
@@ -15,6 +15,7 @@ import InstallPrompt from '../../components/InstallPrompt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
 import { useKidSchool } from './useKidSchool.js'
 import { familyGoalProgress } from '../../state/reducer.js'
+import { CATEGORY_MAP } from '../../data/questTemplates.js'
 
 export default function KidHome() {
   const { state, dispatch } = useApp()
@@ -43,20 +44,25 @@ export default function KidHome() {
   const active = quests.filter((q) => q.status === 'assigned' || q.status === 'redo')
   const waiting = quests.filter((q) => q.status === 'submitted')
   /*
-   * The way forward, said for where the child actually is. "Nothing left to
-   * do, spend a token in the arcade" was shown to a child in a family that had
-   * just been set up: no chore ever assigned and no token to spend.
+   * The way forward, said for where the child actually is, and the first
+   * thing under their name. It used to be a "Current quest" row with a
+   * "1 / 7" nobody could read, then three number cards, then "Ready for the
+   * next challenge?" — so a child opening a fresh phone saw their level
+   * three times before being told what to do. Now: the quest, what it pays,
+   * and one button. "Nothing left to do, spend a token in the arcade" was
+   * once shown to a child in a family that had just been set up: no chore
+   * ever assigned and no token to spend, so each case says its own thing.
    */
   const hasTokens = Boolean(state.demo) || (kid.playTokens || 0) > 0
-  const next = active.length
-    ? { icon: '⚔️', to: '/kid/quests', title: 'Ready for the next challenge?', line: "Keep going, you're doing great." }
-    : hasTokens
-      ? { icon: '🎮', to: '/kid/arcade', title: 'Nothing left to do', line: 'Spend a token in the arcade.' }
-      : waiting.length
-        ? { icon: '⏳', to: '/kid/quests', title: 'All sent', line: 'Your parent is checking what you did.' }
-        : quests.length
-          ? { icon: '✅', to: '/kid/quests', title: 'All done for now', line: 'New quests show up here when your parent adds them.' }
-          : { icon: '📜', to: '/kid/quests', title: 'No quests yet', line: 'Ask your parent to give you your first quest.' }
+  // A chore sent back comes first: it is the one a parent is waiting on.
+  const nextQuest = active.find((q) => q.status === 'redo') || active[0] || null
+  const next = hasTokens
+    ? { icon: '🎮', to: '/kid/arcade', title: 'Nothing left to do', line: 'Spend a token in the arcade.' }
+    : waiting.length
+      ? { icon: '⏳', to: '/kid/quests', title: 'All sent', line: 'Your parent is checking what you did.' }
+      : quests.length
+        ? { icon: '✅', to: '/kid/quests', title: 'All done for now', line: 'New quests show up here when your parent adds them.' }
+        : { icon: '📜', to: '/kid/quests', title: 'No quests yet', line: 'Ask your parent to give you your first quest.' }
   // A day later than today (the server's, after a zone change) counts as claimed.
   const bonusAvailable = !kid.lastLoginBonus || kid.lastLoginBonus < dayKey()
 
@@ -141,6 +147,43 @@ export default function KidHome() {
         )}
       </Card>
 
+      <SectionTitle>Do this next</SectionTitle>
+      {nextQuest ? (
+        <Card className="mb-3" data-testid="next-up" style={{ borderColor: nextQuest.status === 'redo' ? 'var(--warn)' : 'var(--accent)' }}>
+          <div className="flex items-center gap-3">
+            <span className="text-3xl shrink-0" aria-hidden="true">{CATEGORY_MAP[nextQuest.category]?.icon || '🎯'}</span>
+            <div className="min-w-0 flex-1">
+              <div className="font-display font-bold truncate">{nextQuest.title}</div>
+              <div className="text-xs text-muted">
+                {nextQuest.status === 'redo'
+                  ? 'Sent back. Have another go.'
+                  : `+${nextQuest.xp ?? DIFFICULTY[nextQuest.difficulty]?.xp ?? 0} XP · ${theme.currency.icon} +${Math.max(1, Math.round((nextQuest.xp ?? DIFFICULTY[nextQuest.difficulty]?.xp ?? 0) / 5))}`}
+              </div>
+            </div>
+          </div>
+          <Button className="w-full mt-3" onClick={() => navigate(`/kid/quest/${nextQuest.id}`)}>
+            Start this quest
+          </Button>
+          <p className="text-[11px] text-muted mt-2 text-center">
+            {active.length === 1 ? 'Your last one for now.' : `${active.length - 1} more after this one.`}
+          </p>
+        </Card>
+      ) : (
+        <Card
+          className="mb-3 flex items-center gap-3"
+          data-testid="next-up"
+          onClick={() => navigate(next.to)}
+          style={{ cursor: 'pointer', borderColor: 'color-mix(in srgb, var(--accent) 45%, var(--line))' }}
+        >
+          <span className="text-2xl shrink-0" aria-hidden="true">{next.icon}</span>
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-sm">{next.title}</div>
+            <div className="text-xs text-muted">{next.line}</div>
+          </div>
+          <span className="text-muted shrink-0" aria-hidden="true">›</span>
+        </Card>
+      )}
+
       {/* The story: a new chapter to watch, or the fight that is on. */}
       {newChapter && (
         <button
@@ -220,42 +263,6 @@ export default function KidHome() {
         </button>
       )}
 
-      {/* The one you are on, with how far through it you are. */}
-      {active.length > 0 && (
-        <>
-          <SectionTitle>Current quest</SectionTitle>
-          <Card
-            className="mb-3"
-            onClick={() => navigate(`/kid/quest/${active[0].id}`)}
-            style={{ cursor: 'pointer' }}
-          >
-            <div className="flex items-center gap-3">
-              <span className="text-2xl shrink-0" aria-hidden="true">{active[0].icon || '🎯'}</span>
-              <div className="min-w-0 flex-1">
-                <div className="font-semibold text-sm truncate">{active[0].title}</div>
-                <div className="text-xs text-muted">
-                  {active.length === 1 ? 'The only one left today.' : `${active.length} to do today.`}
-                </div>
-              </div>
-              <span
-                className="font-display font-extrabold text-sm shrink-0"
-                style={{ color: 'var(--accent)' }}
-              >
-                {waiting.length + 1} / {active.length + waiting.length}
-              </span>
-            </div>
-            <div className="mt-2">
-              <ProgressBar
-                value={waiting.length}
-                max={active.length + waiting.length}
-                height={8}
-                label="Quests done today"
-              />
-            </div>
-          </Card>
-        </>
-      )}
-
       {/* Three small cards, as in the design. */}
       <div className="flex gap-2 mb-3 anim-stagger">
         {/*
@@ -287,20 +294,6 @@ export default function KidHome() {
           label={nextReward ? nextReward.name : 'No rewards set'}
         />
       </div>
-
-      {/* The way forward, which the design puts right under the numbers. */}
-      <Card
-        className="mb-3 flex items-center gap-3"
-        onClick={() => navigate(next.to)}
-        style={{ cursor: 'pointer', borderColor: 'color-mix(in srgb, var(--accent) 45%, var(--line))' }}
-      >
-        <span className="text-2xl shrink-0" aria-hidden="true">{next.icon}</span>
-        <div className="min-w-0 flex-1">
-          <div className="font-semibold text-sm">{next.title}</div>
-          <div className="text-xs text-muted">{next.line}</div>
-        </div>
-        <span className="text-muted shrink-0" aria-hidden="true">›</span>
-      </Card>
 
       {bonusAvailable && (
         <Card className="mb-3 flex items-center gap-3" style={{ borderColor: 'var(--accent)' }}>

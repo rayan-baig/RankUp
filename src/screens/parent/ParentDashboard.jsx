@@ -11,12 +11,15 @@ import { TIERS } from '../../state/initialState.js'
 import Avatar from '../../components/Avatar.jsx'
 import { Screen, Card, Button, SectionTitle, Stat, ProgressBar, EmptyState, Banner, Chip } from '../../components/ui.jsx'
 import SyncBadge from '../../components/SyncBadge.jsx'
-import { navigate } from '../../lib/router.js'
+import { navigate, navigateThen } from '../../lib/router.js'
 import TrialBanner from '../../components/TrialBanner.jsx'
 import { activityFeed } from '../../lib/activity.js'
 import CharityWeek from '../../components/CharityWeek.jsx'
 import InstallPrompt from '../../components/InstallPrompt.jsx'
 import { billingNotice } from '../../lib/billing.js'
+import HowItWorks from '../../components/HowItWorks.jsx'
+import FirstWeek from '../../components/FirstWeek.jsx'
+import DemoTour from '../../components/DemoTour.jsx'
 
 export default function ParentDashboard() {
   const { state, dispatch } = useApp()
@@ -50,6 +53,15 @@ export default function ParentDashboard() {
     ? billingNotice({ status: state.family.subscriptionStatus, paid_tier: state.family.lastPaidTier })
     : null
 
+  // On a phone the family shares: out of Parent Mode, locked behind them.
+  const handOver = () => {
+    if (state.kids.length === 1) {
+      navigateThen('/kid', () => dispatch({ type: 'SET_ROLE', role: 'kid', kidId: state.kids[0].id }))
+    } else {
+      navigateThen('/switch', () => dispatch({ type: 'LOCK_PARENT' }))
+    }
+  }
+
   return (
     <Screen>
       <TrialBanner />
@@ -60,11 +72,32 @@ export default function ParentDashboard() {
         </Banner>
       )}
       <CharityWeek />
-      <header className="mb-3">
-        <p className="text-xs uppercase tracking-widest text-muted">Parent dashboard</p>
-        <h1 className="font-display text-2xl font-extrabold truncate">{state.family.name || 'Your family'}</h1>
-        <SyncBadge className="mt-0.5" />
+      <header className="mb-3 flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs uppercase tracking-widest text-muted">Parent dashboard</p>
+          <h1 className="font-display text-2xl font-extrabold truncate">{state.family.name || 'Your family'}</h1>
+          <SyncBadge className="mt-0.5" />
+        </div>
+        {/*
+          * On a phone the family shares, the child's side is one tap away.
+          * There was no way out of Parent Mode at all: a parent who wanted to
+          * hand the phone over had nothing to tap.
+          */}
+        {state.kids.length > 0 && (
+          <Button
+            variant="soft"
+            className="shrink-0 px-3 py-2 min-h-0 text-xs mt-1"
+            style={{ maxWidth: 150 }}
+            onClick={handOver}
+          >
+            <span className="truncate">👋 {state.kids.length === 1 ? `Hand to ${state.kids[0].name}` : 'Hand to a kid'}</span>
+          </Button>
+        )}
       </header>
+
+      <DemoTour />
+      <HowItWorks />
+      <FirstWeek />
 
       <div className="flex gap-2 mb-3">
         <Stat icon="📥" value={pending.length} label="To review" tone={pending.length ? 'var(--warn)' : undefined} />

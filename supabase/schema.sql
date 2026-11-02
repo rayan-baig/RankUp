@@ -1299,6 +1299,12 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'not_found');
   end if;
   if v_row.claimed_at is not null then
+    -- Typed in again by the family that already linked it (the confirmation
+    -- missed, a second parent doing the same thing): say that, rather than
+    -- telling a parent their own child's phone belongs to someone else.
+    if v_row.claimed_by_family_id = p_family_id then
+      return jsonb_build_object('ok', false, 'reason', 'already_linked');
+    end if;
     return jsonb_build_object('ok', false, 'reason', 'claimed');
   end if;
   if v_row.revoked_at is not null then

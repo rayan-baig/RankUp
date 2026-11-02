@@ -9,6 +9,9 @@ import { useEffect, useState } from 'react'
  * assigned, the child taps "I did it!", sends a photo from their own camera
  * app if the parent wants one, the parent accepts, XP lands. It is the one thing on the front door doing any selling.
  *
+ * There is no camera shutter in it: RankUp takes no photos, and the
+ * preview should not suggest that it does.
+ *
  * Deliberately not a video and not an image. A video costs a download, needs
  * re-recording every time a screen changes, and is the first thing to look
  * stale; this is drawn from the same tokens as the real app, so it cannot
@@ -27,7 +30,7 @@ const BEATS = [
   { label: 'You accept. They level up.', ms: 2400 },
 ]
 
-export default function LoopPreview() {
+export default function LoopPreview({ compact = false }) {
   const [beat, setBeat] = useState(0)
   const [still, setStill] = useState(false)
 
@@ -57,7 +60,8 @@ export default function LoopPreview() {
         className="relative overflow-hidden mx-auto"
         style={{
           width: 206,
-          height: 252,
+          // The front door also has to show the price without scrolling.
+          height: compact ? 196 : 252,
           borderRadius: 26,
           border: '2px solid var(--line)',
           background: 'linear-gradient(170deg, var(--surface), var(--bg))',
@@ -91,12 +95,12 @@ export default function LoopPreview() {
                 className="ml-auto font-display font-extrabold"
                 style={{ fontSize: 11, color: 'var(--accent)' }}
               >
-                +30
+                +15
               </span>
             </div>
           </div>
 
-          {/* The proof. A viewfinder, a shutter, then a verdict. */}
+          {/* The tap, the message, then the verdict. */}
           <div
             className="relative flex-1 rounded-xl overflow-hidden"
             style={{
@@ -104,19 +108,7 @@ export default function LoopPreview() {
               background: 'color-mix(in srgb, var(--ink) 4%, transparent)',
             }}
           >
-            {beat === 1 && (
-              <>
-                <Viewfinder still={still} />
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    background: 'white',
-                    animation: anim('rankup-shutter 900ms ease-out 700ms both'),
-                    opacity: still ? 0 : undefined,
-                  }}
-                />
-              </>
-            )}
+            {beat === 1 && <DoneTap still={still} />}
 
             {beat === 2 && <Checking still={still} />}
 
@@ -129,7 +121,7 @@ export default function LoopPreview() {
 
       {/* The words under it, and the progress through the four beats. */}
       <p
-        className="text-center font-display font-bold mt-3.5"
+        className={`text-center font-display font-bold ${compact ? 'mt-2' : 'mt-3.5'}`}
         style={{ fontSize: 14, minHeight: 20 }}
         aria-live="polite"
       >
@@ -189,7 +181,8 @@ function Assigned({ still }) {
   )
 }
 
-function Viewfinder({ still }) {
+/* The child's one tap. Nothing is photographed in RankUp. */
+function DoneTap({ still }) {
   return (
     <div className="absolute inset-0 grid place-items-center">
       <span
@@ -239,7 +232,7 @@ function Approved({ still }) {
           className="font-display font-extrabold"
           style={{ fontSize: 26, color: 'var(--accent)', animation: still ? undefined : 'rankup-pop 460ms both' }}
         >
-          +30 XP
+          +15 XP
         </div>
         <div
           className="w-full rounded-full overflow-hidden mt-2 mb-1.5"

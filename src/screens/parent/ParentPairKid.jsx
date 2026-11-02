@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { syncAdapter, canSyncAcrossDevices } from '../../lib/sync/index.js'
-import { claimErrorMessage, isCompleteCode, MAX_ATTEMPTS } from '../../lib/pairing.js'
+import { claimErrorMessage, isCompleteCode, MAX_ATTEMPTS, CODE_TTL_MS } from '../../lib/pairing.js'
 import { Screen, Card, Button, Banner, SectionTitle, Chip } from '../../components/ui.jsx'
 import CodeInput from '../../components/CodeInput.jsx'
 import { navigate } from '../../lib/router.js'
@@ -99,10 +99,22 @@ export default function ParentPairKid() {
       </button>
 
       <h1 className="font-display text-2xl font-extrabold mb-1">Link a kid's device</h1>
-      <p className="text-sm text-muted mb-4">
-        On their phone, they choose <strong>"I'm a kid"</strong> and get a six-digit code. Type it in
-        below.
-      </p>
+      {/*
+        * Three steps, each one thing to tap or type, in the words on the
+        * child's screen. It used to be one sentence, and a parent finding
+        * their child's name already on this phone had no way to know the
+        * new phone would join that profile rather than start a second one.
+        */}
+      <ol className="text-sm text-muted mb-4 space-y-1.5 list-decimal list-inside" data-testid="pair-steps">
+        <li>On your child's phone, open RankUp and tap <strong>“I'm a kid”</strong>.</li>
+        <li>
+          They type their first name, pick a world and tap <strong>“Get my code”</strong>.
+          {state.kids.some((k) => !k.pairedDeviceAt) && (
+            <> Use the name you gave them here, and the phone joins that profile, quests and XP included.</>
+          )}
+        </li>
+        <li>Type the six numbers on their screen below.</li>
+      </ol>
 
       <Card className="mb-3">
         <CodeInput
@@ -125,8 +137,8 @@ export default function ParentPairKid() {
       </Card>
 
       <Banner tone="info" icon="⏱️" title="Codes are short-lived on purpose">
-        A code lasts 10 minutes, stops working after {MAX_ATTEMPTS} wrong guesses, and can only be
-        used once. If it stops working, ask them to tap "New code".
+        A code lasts {CODE_TTL_MS / 60000} minutes, stops working after {MAX_ATTEMPTS} wrong guesses, and can
+        only be used once. If it stops working, tap “New code” on their phone.
       </Banner>
 
       {!canSyncAcrossDevices && (

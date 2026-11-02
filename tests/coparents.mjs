@@ -76,8 +76,6 @@ await first.locator('input[type=email]').fill(`first${stamp}@example.com`)
 await first.locator('input[type=password]').fill('correct-horse-battery')
 await first.getByRole('button', { name: 'Create account' }).click()
 await first.waitForTimeout(1600)
-await first.getByRole('button', { name: 'Continue' }).click()
-await first.waitForTimeout(400)
 await first.locator('input').nth(0).fill('Sam')
 await first.locator('input').nth(1).fill('The Two-House Family')
 await first.locator('input').nth(2).fill('1234')
@@ -91,8 +89,6 @@ if (await first.getByText('What RankUp collects about your child').count()) {
   await first.waitForTimeout(1500)
 }
 await first.locator('input[placeholder="e.g. Ava"]').fill('Ava')
-await first.getByRole('button', { name: 'Continue' }).click()
-await first.waitForTimeout(300)
 await first.getByRole('button', { name: 'Start playing' }).click()
 await first.waitForTimeout(2500)
 
@@ -126,8 +122,6 @@ await second.locator('input[type=email]').fill(`second${stamp}@example.com`)
 await second.locator('input[type=password]').fill('correct-horse-battery')
 await second.getByRole('button', { name: 'Create account' }).click()
 await second.waitForTimeout(1600)
-await second.getByRole('button', { name: 'Continue' }).click()
-await second.waitForTimeout(500)
 
 // The link only appears on the family-details step, which is where a second
 // parent would otherwise start typing a family name that already exists.
