@@ -1,5 +1,7 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 /**
  * The Content-Security-Policy, written into the built page.
@@ -36,8 +38,61 @@ function contentSecurityPolicy(env) {
   }
 }
 
+
+/**
+ * Tells the service worker which files this build is made of.
+ *
+ * public/sw.js keeps the app on the phone so it opens offline. It needs two
+ * lists, and only the build knows them, because every file name carries a
+ * fingerprint of its contents:
+ *
+ *   shell — what the page loads before the first screen (its script, the
+ *           shared pieces that script needs, and the stylesheet), read from
+ *           the built page itself so it is exactly what a phone fetches.
+ *   files — everything in assets/: the screens, the games and the pictures,
+ *           so ones nobody has opened yet can be fetched in the background and
+ *           open offline too, and pieces of older versions can be told apart
+ *           and thrown away.
+ *
+ * Written into the copied sw.js rather than a separate file, so the worker
+ * itself changes whenever the build does — which is how a browser learns
+ * there is a new version to fetch.
+ */
+function offlineFileList() {
+  return {
+    name: 'rankup-offline-files',
+    apply: 'build',
+    writeBundle(options, bundle) {
+      const worker = join(options.dir, 'sw.js')
+      if (!existsSync(worker)) return
+      const names = Object.keys(bundle).filter((name) => name.startsWith('assets/'))
+      const page = String(bundle['index.html']?.source || '')
+      const shell = [...page.matchAll(/(?:src|href)="(?:\.?\/)?(assets\/[^"]+)"/g)].map((m) => m[1])
+      const build = { shell: [...new Set(shell)], files: names }
+      const source = readFileSync(worker, 'utf8')
+      const filled = source.replace(/^const BUILD = null\b.*$/m, `const BUILD = ${JSON.stringify(build)}`)
+      if (filled === source) throw new Error('rankup-offline-files: could not find "const BUILD = null" in sw.js')
+      writeFileSync(worker, filled)
+    },
+  }
+}
+
+/**
+ * React itself in a file of its own. It is needed on the first screen like
+ * the app's own code, but it changes far less often: kept apart, a phone that
+ * already has it keeps it across app updates instead of downloading it again
+ * inside a new app file every time.
+ */
+function vendorChunk(id) {
+  if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react'
+  return undefined
+}
+
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), contentSecurityPolicy(loadEnv(mode, process.cwd(), ''))],
+  plugins: [react(), contentSecurityPolicy(loadEnv(mode, process.cwd(), '')), offlineFileList()],
   server: { host: true, port: 5173 },
-  build: { outDir: 'dist' },
+  build: {
+    outDir: 'dist',
+    rollupOptions: { output: { manualChunks: vendorChunk } },
+  },
 }))

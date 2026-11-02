@@ -1,39 +1,45 @@
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import {
   MINIGAMES, CATEGORIES, findGame, featuredGame,
   MAX_TOKENS, DAILY_COIN_CAP, payout,
 } from '../../data/minigames.js'
 import { dayKey } from '../../lib/dates.js'
-import Stacker from '../../components/games/Stacker.jsx'
-import MemoryMatch from '../../components/games/MemoryMatch.jsx'
-import ColourChain from '../../components/games/ColourChain.jsx'
-import LightsOut from '../../components/games/LightsOut.jsx'
-import Catcher from '../../components/games/Catcher.jsx'
-import Snake from '../../components/games/Snake.jsx'
-import Merge from '../../components/games/Merge.jsx'
-import Bricks from '../../components/games/Bricks.jsx'
-import Sweeper from '../../components/games/Sweeper.jsx'
-import SkyHop from '../../components/games/SkyHop.jsx'
-import FourInARow from '../../components/games/FourInARow.jsx'
-import SlidePuzzle from '../../components/games/SlidePuzzle.jsx'
-import SportsMania from '../../components/games/SportsMania.jsx'
-import TurboBall from '../../components/games/TurboBall.jsx'
-import BlockDrop from '../../components/games/BlockDrop.jsx'
-import SweetSwap from '../../components/games/SweetSwap.jsx'
-import Impostor from '../../components/games/Impostor.jsx'
-import Trackstar from '../../components/games/Trackstar.jsx'
-import TennisTour from '../../components/games/TennisTour.jsx'
-import Wildfire from '../../components/games/Wildfire.jsx'
-import RoyalDraw from '../../components/games/RoyalDraw.jsx'
-import HoldEm from '../../components/games/HoldEm.jsx'
-import Blackjack from '../../components/games/Blackjack.jsx'
-import GoFish from '../../components/games/GoFish.jsx'
-import { Screen, Card, Button, SectionTitle, Banner, Stat, EmptyState, Segmented } from '../../components/ui.jsx'
+import { Screen, Card, Button, SectionTitle, Banner, Stat, EmptyState, Segmented, Loading } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
 import HeroArt from '../../components/HeroArt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
 import { art } from '../../data/art.js'
+import { lazyLoad } from '../../lib/lazy.js'
+
+/*
+ * Each game downloads when a child first starts it, not with the arcade: the
+ * shelf is twenty-four cards, and most visits play one of them.
+ */
+const Stacker = lazyLoad(() => import('../../components/games/Stacker.jsx'))
+const MemoryMatch = lazyLoad(() => import('../../components/games/MemoryMatch.jsx'))
+const ColourChain = lazyLoad(() => import('../../components/games/ColourChain.jsx'))
+const LightsOut = lazyLoad(() => import('../../components/games/LightsOut.jsx'))
+const Catcher = lazyLoad(() => import('../../components/games/Catcher.jsx'))
+const Snake = lazyLoad(() => import('../../components/games/Snake.jsx'))
+const Merge = lazyLoad(() => import('../../components/games/Merge.jsx'))
+const Bricks = lazyLoad(() => import('../../components/games/Bricks.jsx'))
+const Sweeper = lazyLoad(() => import('../../components/games/Sweeper.jsx'))
+const SkyHop = lazyLoad(() => import('../../components/games/SkyHop.jsx'))
+const FourInARow = lazyLoad(() => import('../../components/games/FourInARow.jsx'))
+const SlidePuzzle = lazyLoad(() => import('../../components/games/SlidePuzzle.jsx'))
+const SportsMania = lazyLoad(() => import('../../components/games/SportsMania.jsx'))
+const TurboBall = lazyLoad(() => import('../../components/games/TurboBall.jsx'))
+const BlockDrop = lazyLoad(() => import('../../components/games/BlockDrop.jsx'))
+const SweetSwap = lazyLoad(() => import('../../components/games/SweetSwap.jsx'))
+const Impostor = lazyLoad(() => import('../../components/games/Impostor.jsx'))
+const Trackstar = lazyLoad(() => import('../../components/games/Trackstar.jsx'))
+const TennisTour = lazyLoad(() => import('../../components/games/TennisTour.jsx'))
+const Wildfire = lazyLoad(() => import('../../components/games/Wildfire.jsx'))
+const RoyalDraw = lazyLoad(() => import('../../components/games/RoyalDraw.jsx'))
+const HoldEm = lazyLoad(() => import('../../components/games/HoldEm.jsx'))
+const Blackjack = lazyLoad(() => import('../../components/games/Blackjack.jsx'))
+const GoFish = lazyLoad(() => import('../../components/games/GoFish.jsx'))
 
 /** One colour per shelf, so the grid is scannable without artwork. */
 const TILE_TINT = {
@@ -119,7 +125,9 @@ export default function KidArcade() {
           </Button>
         </div>
         <p className="text-xs text-muted mb-3">{meta.howTo}</p>
-        <Game theme={theme} onDone={finish} />
+        <Suspense fallback={<Loading inline />}>
+          <Game theme={theme} onDone={finish} />
+        </Suspense>
       </Screen>
     )
   }

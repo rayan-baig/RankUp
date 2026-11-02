@@ -13,7 +13,7 @@ import SyncBadge from '../../components/SyncBadge.jsx'
 import { navigate } from '../../lib/router.js'
 import InstallPrompt from '../../components/InstallPrompt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
-import { useKidSchool } from './KidSchool.jsx'
+import { useKidSchool } from './useKidSchool.js'
 import { familyGoalProgress } from '../../state/reducer.js'
 
 export default function KidHome() {

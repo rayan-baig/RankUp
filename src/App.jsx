@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { Suspense, useEffect, useMemo } from 'react'
 import { useApp, pendingSubmissions } from './state/AppContext.jsx'
 import { activeLockout, guildsAllowedByPlan, overdriveActive } from './state/reducer.js'
 import { useRoute, navigate } from './lib/router.js'
@@ -15,40 +15,50 @@ import NavBar from './components/NavBar.jsx'
 import LevelUpOverlay from './components/LevelUpOverlay.jsx'
 import BadgeToast from './components/BadgeToast.jsx'
 
-import Onboarding from './screens/Onboarding.jsx'
 import RoleSwitch from './screens/RoleSwitch.jsx'
 import LockoutScreen from './screens/kid/LockoutScreen.jsx'
-import KidHome from './screens/kid/KidHome.jsx'
-import KidQuests from './screens/kid/KidQuests.jsx'
-import QuestDetail from './screens/kid/QuestDetail.jsx'
-import KidGuild from './screens/kid/KidGuild.jsx'
-import KidShop from './screens/kid/KidShop.jsx'
-import KidMarket from './screens/kid/KidMarket.jsx'
-import KidArcade from './screens/kid/KidArcade.jsx'
-import KidProfile from './screens/kid/KidProfile.jsx'
-import KidStory from './screens/kid/KidStory.jsx'
-import KidDragon from './screens/kid/KidDragon.jsx'
-import KidSchool from './screens/kid/KidSchool.jsx'
-import KidPairing from './screens/kid/KidPairing.jsx'
-import ParentDashboard from './screens/parent/ParentDashboard.jsx'
-import ParentApprovals from './screens/parent/ParentApprovals.jsx'
-import ParentAssign from './screens/parent/ParentAssign.jsx'
-import ParentKids from './screens/parent/ParentKids.jsx'
-import ParentBlueprint from './screens/parent/ParentBlueprint.jsx'
-import ParentOverride from './screens/parent/ParentOverride.jsx'
-import ParentAlliance from './screens/parent/ParentAlliance.jsx'
-import ParentSchool from './screens/parent/ParentSchool.jsx'
-import SchoolPortal from './screens/SchoolPortal.jsx'
-import OperatorSchools from './screens/OperatorSchools.jsx'
 import { guildsEnabled } from './lib/guilds.js'
-import LegalDoc from './screens/LegalDoc.jsx'
-import ParentGuilds from './screens/parent/ParentGuilds.jsx'
-import ParentPairKid from './screens/parent/ParentPairKid.jsx'
-import ParentPlan from './screens/parent/ParentPlan.jsx'
-import ParentSettings from './screens/parent/ParentSettings.jsx'
 import ScreenBoundary from './components/ScreenBoundary.jsx'
 import DemoBanner from './components/DemoBanner.jsx'
 import { buildDemoFamily } from './lib/demoFamily.js'
+import { lazyLoad } from './lib/lazy.js'
+import { Loading } from './components/ui.jsx'
+
+/*
+ * Every screen downloads when it is first opened, so a phone opening the app
+ * fetches the shared core and the one screen it lands on — the front door, the
+ * parent dashboard or the kid home — and nothing else. The front door is only
+ * ever seen once, so after setup it is never downloaded again at all. See
+ * lib/lazy.js.
+ */
+const Onboarding = lazyLoad(() => import('./screens/Onboarding.jsx'))
+const KidPairing = lazyLoad(() => import('./screens/kid/KidPairing.jsx'))
+const KidHome = lazyLoad(() => import('./screens/kid/KidHome.jsx'))
+const ParentDashboard = lazyLoad(() => import('./screens/parent/ParentDashboard.jsx'))
+const KidQuests = lazyLoad(() => import('./screens/kid/KidQuests.jsx'))
+const QuestDetail = lazyLoad(() => import('./screens/kid/QuestDetail.jsx'))
+const KidGuild = lazyLoad(() => import('./screens/kid/KidGuild.jsx'))
+const KidShop = lazyLoad(() => import('./screens/kid/KidShop.jsx'))
+const KidMarket = lazyLoad(() => import('./screens/kid/KidMarket.jsx'))
+const KidArcade = lazyLoad(() => import('./screens/kid/KidArcade.jsx'))
+const KidProfile = lazyLoad(() => import('./screens/kid/KidProfile.jsx'))
+const KidStory = lazyLoad(() => import('./screens/kid/KidStory.jsx'))
+const KidDragon = lazyLoad(() => import('./screens/kid/KidDragon.jsx'))
+const KidSchool = lazyLoad(() => import('./screens/kid/KidSchool.jsx'))
+const ParentApprovals = lazyLoad(() => import('./screens/parent/ParentApprovals.jsx'))
+const ParentAssign = lazyLoad(() => import('./screens/parent/ParentAssign.jsx'))
+const ParentKids = lazyLoad(() => import('./screens/parent/ParentKids.jsx'))
+const ParentBlueprint = lazyLoad(() => import('./screens/parent/ParentBlueprint.jsx'))
+const ParentOverride = lazyLoad(() => import('./screens/parent/ParentOverride.jsx'))
+const ParentAlliance = lazyLoad(() => import('./screens/parent/ParentAlliance.jsx'))
+const ParentSchool = lazyLoad(() => import('./screens/parent/ParentSchool.jsx'))
+const SchoolPortal = lazyLoad(() => import('./screens/SchoolPortal.jsx'))
+const OperatorSchools = lazyLoad(() => import('./screens/OperatorSchools.jsx'))
+const LegalDoc = lazyLoad(() => import('./screens/LegalDoc.jsx'))
+const ParentGuilds = lazyLoad(() => import('./screens/parent/ParentGuilds.jsx'))
+const ParentPairKid = lazyLoad(() => import('./screens/parent/ParentPairKid.jsx'))
+const ParentPlan = lazyLoad(() => import('./screens/parent/ParentPlan.jsx'))
+const ParentSettings = lazyLoad(() => import('./screens/parent/ParentSettings.jsx'))
 
 const KID_NAV = [
   { to: '/kid', icon: '🏠', label: 'Home', exact: true },
@@ -180,7 +190,11 @@ export default function App() {
     return (
       <>
         <ParentBackground theme={parentTheme} />
-        <LegalDoc which={route.endsWith('terms') ? 'terms' : 'privacy'} />
+        <ScreenBoundary key={route} route={route}>
+          <Suspense fallback={<Loading />}>
+            <LegalDoc which={route.endsWith('terms') ? 'terms' : 'privacy'} />
+          </Suspense>
+        </ScreenBoundary>
       </>
     )
   }
@@ -194,7 +208,9 @@ export default function App() {
       <>
         <ParentBackground theme={parentTheme} />
         <ScreenBoundary key={route} route={route}>
-          <OperatorSchools />
+          <Suspense fallback={<Loading />}>
+            <OperatorSchools />
+          </Suspense>
         </ScreenBoundary>
       </>
     )
@@ -206,7 +222,9 @@ export default function App() {
         <ParentBackground theme={parentTheme} />
         <DemoBanner />
         <ScreenBoundary key={route} route={route}>
-          <SchoolPortal />
+          <Suspense fallback={<Loading />}>
+            <SchoolPortal />
+          </Suspense>
         </ScreenBoundary>
       </>
     )
@@ -240,15 +258,21 @@ export default function App() {
       return (
         <>
           <ThemeBackground theme={chosen} />
-          <KidPairing
-            name={state.pendingPairing.kidName}
-            themeId={state.pendingPairing.themeId}
-            onCancel={() => dispatch({ type: 'CANCEL_PAIRING' })}
-          />
+          <Suspense fallback={<Loading />}>
+            <KidPairing
+              name={state.pendingPairing.kidName}
+              themeId={state.pendingPairing.themeId}
+              onCancel={() => dispatch({ type: 'CANCEL_PAIRING' })}
+            />
+          </Suspense>
         </>
       )
     }
-    return <Onboarding />
+    return (
+      <Suspense fallback={<Loading />}>
+        <Onboarding />
+      </Suspense>
+    )
   }
 
   /* A locked-out kid sees nothing but the lockout screen. */
@@ -288,7 +312,9 @@ export default function App() {
         screen leaves the rest of the app usable instead of taking it all down.
       */}
       <ScreenBoundary key={route} route={route}>
-        {renderRoute(route, path, activeKid, state)}
+        <Suspense fallback={<Loading />}>
+          {renderRoute(route, path, activeKid, state)}
+        </Suspense>
       </ScreenBoundary>
 
       {isKidArea && (

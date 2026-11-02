@@ -15,6 +15,22 @@ export function Screen({ children, className = '' }) {
   return <div className={`shell px-4 pb-28 pt-3 anim-screen ${className}`}>{children}</div>
 }
 
+/*
+ * What shows while a screen's code is still downloading (see lib/lazy.js).
+ * Nothing at all for the first moment: once the piece has been fetched before
+ * it arrives sooner than anyone could read the word, and a flash of "Loading…"
+ * on every tab would look like a fault.
+ */
+export function Loading({ inline = false }) {
+  const [shown, setShown] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setShown(true), 300)
+    return () => clearTimeout(t)
+  }, [])
+  const note = shown ? <Card><p className="text-sm text-muted">Loading…</p></Card> : null
+  return inline ? note : <Screen>{note}</Screen>
+}
+
 export function Card({ children, className = '', flat = false, ...rest }) {
   return (
     <div className={`${flat ? 'card-flat' : 'card'} p-4 ${className}`} {...rest}>
