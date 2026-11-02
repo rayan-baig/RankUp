@@ -20,6 +20,7 @@ VP=$(sed -n 1p "$VAPID_FILE"); VS=$(sed -n 2p "$VAPID_FILE")
 
 exec npx wrangler pages dev dist --port 8788 --compatibility-flags nodejs_compat \
   --binding SUPABASE_URL=http://localhost:54321 \
+  --binding VITE_SUPABASE_ANON_KEY=local-anon-key \
   --binding SUPABASE_SERVICE_ROLE_KEY=service-role-key \
   --binding CRON_SECRET=test-cron-secret \
   --binding OPERATOR_SECRET=test-operator-secret \

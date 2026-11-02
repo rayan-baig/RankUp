@@ -8,6 +8,7 @@
 
 import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
 import { schoolCycle, schoolPriceId, schoolTrialEnd } from './_shared/schoolBilling.js'
+import { userHeaders } from './_shared/job.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -38,7 +39,7 @@ async function callerSchool(token) {
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/school_checkout_info`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: token, Authorization: `Bearer ${token}` },
+      headers: userHeaders(token),
       body: '{}',
     })
     if (!res.ok) return null

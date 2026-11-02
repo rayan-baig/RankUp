@@ -53,6 +53,17 @@ function isServiceRole(req) {
   return Boolean(auth) && auth === SERVICE_KEY
 }
 
+/**
+ * The project's own keys, the only things Supabase's gateway accepts in the
+ * `apikey` header: the public (anon) key the app is built with, and the
+ * service role key. Anything else is turned away before the database is
+ * asked, as it is on a real project. This stand-in used to ignore the header,
+ * and four server functions sent a person's sign-in token there: every test
+ * passed, and every push and checkout would have been refused in production.
+ */
+const ANON_KEY = process.env.MOCK_ANON_KEY || 'local-anon-key'
+const apiKeyAccepted = (req) => [ANON_KEY, SERVICE_KEY].includes(String(req.headers.apikey || ''))
+
 /** The bearer token here is just a user id — enough to exercise auth.uid(). */
 function userIdFrom(req) {
   const auth = req.headers.authorization || ''
@@ -101,6 +112,9 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end() }
 
   const url = new URL(req.url, 'http://localhost')
+  if (!apiKeyAccepted(req)) {
+    return send(res, 401, { message: req.headers.apikey ? 'Invalid API key' : 'No API key found in request' })
+  }
   const userId = userIdFrom(req)
   const service = isServiceRole(req)
   if (process.env.MOCK_LOG) console.log(req.method, url.pathname, 'as', userId || '(anon)')

@@ -8,6 +8,7 @@
  */
 
 import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
+import { userHeaders } from './_shared/job.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -35,7 +36,7 @@ async function schoolPortal(req, res, token) {
   try {
     const infoRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/school_checkout_info`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: token, Authorization: `Bearer ${token}` },
+      headers: userHeaders(token),
       body: '{}',
     })
     const info = await infoRes.json()
@@ -91,7 +92,7 @@ export default async function handler(req, res) {
     // family — the customer id comes from the database, never from the request.
     const statusRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/billing_status`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: token, Authorization: `Bearer ${token}` },
+      headers: userHeaders(token),
       body: '{}',
     })
     const status = await statusRes.json()

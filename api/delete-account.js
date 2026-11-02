@@ -20,15 +20,12 @@
  */
 
 import { makeStripe } from './_shared/stripe.js'
-import { makeServiceRpc } from './_shared/job.js'
+import { makeServiceRpc, userHeaders } from './_shared/job.js'
 import { cancelPendingBilling } from './_shared/cancelBilling.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
-// The project's public key, when the host has it; the parent's token is what
-// decides who is asking either way.
-const ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || ''
 
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end()
@@ -47,7 +44,7 @@ export default async function handler(req, res) {
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/delete_family_account`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: ANON_KEY || token, Authorization: `Bearer ${token}` },
+      headers: userHeaders(token),
       body: JSON.stringify({ p_confirm: String(body?.confirm ?? '') }),
     })
     // The database refusing (not a parent of any family) arrives as an error.

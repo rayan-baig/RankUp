@@ -16,6 +16,7 @@
 
 import webpush from 'web-push'
 import { sendPush, failureFor } from './_shared/push.js'
+import { userHeaders } from './_shared/job.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -97,11 +98,11 @@ function configured() {
 async function rpc(fn, args, token) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: token,
-      Authorization: `Bearer ${token}`,
-    },
+    // The service key speaks for itself; a person's token goes with the
+    // project's public key (see userHeaders).
+    headers: token === SERVICE_KEY
+      ? { 'Content-Type': 'application/json', apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` }
+      : userHeaders(token),
     body: JSON.stringify(args),
   })
   if (!res.ok) throw new Error(`${fn} failed: ${res.status}`)

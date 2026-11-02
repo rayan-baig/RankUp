@@ -77,7 +77,7 @@ const recorded = await page.evaluate(async () => {
   const token = JSON.parse(raw).access_token
   const res = await fetch('http://localhost:54321/rest/v1/rpc/export_family_data', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: token, Authorization: `Bearer ${token}` },
+    headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: `Bearer ${token}` },
     body: '{}',
   })
   const data = await res.json()

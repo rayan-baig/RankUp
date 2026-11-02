@@ -17,6 +17,27 @@ export function secretMatches(given, expected) {
   return diff === 0
 }
 
+/**
+ * Headers for calling the database as the signed-in person, with their own
+ * token, so row level security decides what they may do.
+ *
+ * `apikey` is the project's public (anon) key, not the person's token. The
+ * gateway in front of a real Supabase project accepts only the project's own
+ * keys there and turns anything else away before the database is asked; the
+ * person is named by the Authorization header. Sending the person's token as
+ * `apikey` worked against the local stand-in, which did not check it, and
+ * would have failed every push, checkout and billing-portal call on a real
+ * project. The local stand-in now checks it as Supabase does
+ * (supabase/test/mock-server.mjs).
+ *
+ * VITE_SUPABASE_ANON_KEY is the same value the app is built with; the host
+ * gives the functions the project's settings as well as the build.
+ */
+export function userHeaders(token) {
+  const anon = process.env.VITE_SUPABASE_ANON_KEY || ''
+  return { 'Content-Type': 'application/json', apikey: anon || token, Authorization: `Bearer ${token}` }
+}
+
 export function makeServiceRpc(supabaseUrl, serviceKey) {
   return async function serviceRpc(fn, args) {
     const res = await fetch(`${supabaseUrl}/rest/v1/rpc/${fn}`, {

@@ -1,9 +1,9 @@
 /**
  * The server endpoints, through the runtime that actually serves them.
  *
- * Everything else in this repo tests the app or the database. These four
- * functions sit between the two, holding the secrets — the Anthropic key, the
- * VAPID private key, the Stripe key, the service role key — and nothing was
+ * Everything else in this repo tests the app or the database. These
+ * functions sit between the two, holding the secrets — the VAPID private key,
+ * the Stripe key, the service role key — and nothing was
  * exercising them end to end. They are also where a mistake costs real money:
  * an endpoint that spends a family's allowance on a request that never ran, or
  * one that lets a stranger buzz somebody's phone.
@@ -11,6 +11,7 @@
  * Needs the Cloudflare stack up:  supabase/test/up.sh --cf
  */
 import http from 'node:http'
+import { readdirSync } from 'node:fs'
 import pg from 'pg'
 import Stripe from 'stripe'
 import { billingNotice, billingError } from '../src/lib/billing.js'
@@ -20,6 +21,29 @@ const BASE = process.env.API_BASE || 'http://localhost:8788'
 // database: a fixed id is "already handled" the second time.
 const RUN = Date.now().toString(36)
 const CRON = 'test-cron-secret'
+// The stats key serve-functions.sh gives the local server. Against anything
+// else, set STATS_KEY_FOR_TEST to that server's key.
+const STATS_KEY_FOR_TEST = process.env.STATS_KEY_FOR_TEST
+  || (/^http:\/\/localhost[:/]/.test(BASE) ? 'test-stats-key' : '')
+
+/*
+ * Which functions in api/ this suite actually reached. Every request it makes
+ * goes through fetch, so fetch keeps count: a function counts once it has
+ * answered at least one request with anything but a 404 (a 404 is the route
+ * table saying it does not exist). The end of the file fails for any that
+ * never did, so a function added to api/ is a failure here until it is tested.
+ */
+const reached = new Map()
+const realFetch = globalThis.fetch
+globalThis.fetch = async (input, init) => {
+  const res = await realFetch(input, init)
+  const url = String(input?.url || input)
+  if (url.startsWith(`${BASE}/api/`) && res.status !== 404) {
+    const name = new URL(url).pathname.replace(/^\/api\//, '').split('/')[0]
+    reached.set(name, (reached.get(name) || 0) + 1)
+  }
+  return res
+}
 
 const fails = []
 const pass = n => console.log('  PASS', n)
@@ -108,8 +132,8 @@ for (const [who, key] of [['the scheduler\'s key', CRON], ['the operator\'s key'
   const text = await res.text()
   ok(`nor to ${who}`, (res.status === 401 || res.status === 404) && !/\d{2,}|families|users/.test(text), `status ${res.status} ${text}`)
 }
-if (process.env.STATS_KEY_FOR_TEST) {
-  const counted = await fetch(`${BASE}/api/stats`, { headers: { Authorization: `Bearer ${process.env.STATS_KEY_FOR_TEST}` } })
+if (STATS_KEY_FOR_TEST) {
+  const counted = await fetch(`${BASE}/api/stats`, { headers: { Authorization: `Bearer ${STATS_KEY_FOR_TEST}` } })
   const raw = await counted.text()
   let body = {}
   try { body = JSON.parse(raw) } catch { body = {} }
@@ -120,7 +144,7 @@ if (process.env.STATS_KEY_FOR_TEST) {
   ok('and nothing more rides along in the headers',
     !Object.keys(Object.fromEntries(counted.headers)).some((h) => /^x-|server-timing|set-cookie/i.test(h)),
     JSON.stringify(Object.fromEntries(counted.headers)))
-  const posted = await fetch(`${BASE}/api/stats`, { method: 'POST', headers: { Authorization: `Bearer ${process.env.STATS_KEY_FOR_TEST}` } })
+  const posted = await fetch(`${BASE}/api/stats`, { method: 'POST', headers: { Authorization: `Bearer ${STATS_KEY_FOR_TEST}` } })
   ok('GET only', posted.status === 405, `status ${posted.status}`)
 }
 
@@ -286,7 +310,7 @@ const billingRow = async (id) => (await db.query(
   'select tier, subscription_status, flash_tickets, last_paid_tier from families where id = $1', [id])).rows[0]
 // What the plan screen is given: billing_status, asked as the parent, through the API.
 const billingAs = async (token) => (await fetch('http://localhost:54321/rest/v1/rpc/billing_status', {
-  method: 'POST', headers: { 'Content-Type': 'application/json', apikey: token, Authorization: `Bearer ${token}` }, body: '{}',
+  method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: `Bearer ${token}` }, body: '{}',
 })).json()
 let clock = Math.floor(Date.now() / 1000) + 60
 const tick = () => { clock += 10; return clock }
@@ -633,7 +657,7 @@ console.log('\n=== A failed renewal drops the plan, and the parent is told why =
   console.log('\n=== An older app that asks the database directly ===')
   const direct = await familyFixture('5')
   const viaDb = await (await fetch('http://localhost:54321/rest/v1/rpc/delete_family_account', {
-    method: 'POST', headers: { 'Content-Type': 'application/json', apikey: direct.parent, Authorization: `Bearer ${direct.parent}` },
+    method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: `Bearer ${direct.parent}` },
     body: JSON.stringify({ p_confirm: 'DELETE' }),
   })).json()
   ok('deletes the account, and its subscription is queued', viaDb?.ok === true && !(await familyExists(direct.family))
@@ -699,6 +723,13 @@ stripeStandIn.close()
 console.log('\n=== A route that does not exist is a 404, not a stack trace ===')
 const missing = await fetch(`${BASE}/api/not-a-real-endpoint`, { method: 'POST' })
 ok('an unknown endpoint is a plain 404', missing.status === 404, `status ${missing.status}`)
+
+console.log('\n=== Every function in api/ was reached by this suite ===')
+const functions = readdirSync(new URL('../api/', import.meta.url)).filter((f) => f.endsWith('.js')).map((f) => f.replace(/\.js$/, ''))
+for (const name of functions.sort()) {
+  ok(`${name} answered (${reached.get(name) || 0} requests)`, (reached.get(name) || 0) > 0,
+    'no request to it got anything but a 404: test it here, or check functions/api/[[route]].js routes it')
+}
 
 await db.end()
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nALL CHECKS PASSED')
