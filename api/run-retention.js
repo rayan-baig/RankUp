@@ -2,8 +2,9 @@
  * Serverless function: throw away what nothing reads any more.
  *
  * Run it once a day; see docs/LAUNCH.md. It clears photographs from
- * submissions a parent never decided, and trims the activity log and the
- * spent pairing rows.
+ * submissions a parent never decided, trims the activity log and the spent
+ * pairing rows, and retries any deleted family's Stripe cancellation that has
+ * not gone through yet.
  *
  * WHY THIS IS NOT OPTIONAL. Four tables here grow forever and are only ever
  * read over a short recent window, so without this job the database's largest
@@ -23,10 +24,13 @@
  */
 
 import { recordRun } from './_shared/job.js'
+import { makeStripe } from './_shared/stripe.js'
+import { cancelPendingBilling } from './_shared/cancelBilling.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const CRON_SECRET = process.env.CRON_SECRET || ''
+const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
 
 /**
  * Days to keep. Generous by default: the job exists to bound growth, not to be
@@ -90,8 +94,19 @@ export default async function handler(req, res) {
       p_event_days: EVENT_DAYS,
       p_pairing_days: PAIRING_DAYS,
     })
+    /*
+     * Deleted families whose Stripe subscription is not yet confirmed
+     * cancelled: Stripe was down or refused when the account was deleted
+     * (api/delete-account.js), or the app that deleted it called the database
+     * directly. Tried again every day until Stripe confirms; a failure here
+     * stays queued, does not fail the clean-up above, and health_snapshot
+     * reports it once it is a day old.
+     */
+    const billing = STRIPE_SECRET
+      ? await cancelPendingBilling({ stripe: makeStripe(STRIPE_SECRET), serviceRpc, limit: 200 })
+      : { skipped: 'stripe_not_configured' }
     await recordRun(serviceRpc, 'run-retention', true)
-    return res.status(200).json(result || { ok: true })
+    return res.status(200).json({ ...(result || { ok: true }), billing_cancellations: billing })
   } catch (err) {
     await recordRun(serviceRpc, 'run-retention', false, err.message)
     return res.status(502).json({ error: 'retention_failed', detail: err.message })

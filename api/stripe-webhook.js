@@ -22,6 +22,7 @@
 
 import { makeStripe, verifyWebhook } from './_shared/stripe.js'
 import { schoolIdOf, schoolPriceId, schoolCycle } from './_shared/schoolBilling.js'
+import { cancelPendingBilling } from './_shared/cancelBilling.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -178,6 +179,41 @@ async function familyIdFor(object, stripe) {
   }
 }
 
+const LIVE_STATUSES = ['active', 'trialing', 'past_due', 'unpaid', 'incomplete', 'paused']
+const customerOf = (object) => (typeof object?.customer === 'string' ? object.customer : object?.customer?.id) || null
+
+/**
+ * News about a family that deleted its account.
+ *
+ * Every billing write keys on the family, so for a family that is gone each
+ * one failed, and Stripe retried the event for days: including the
+ * "subscription deleted" that cancelling a deleted family's plan itself
+ * causes. Those events are now answered and dropped. And a subscription that
+ * is still live for a deleted family (a checkout page left open and paid
+ * after the deletion, or a cancellation that has not gone through yet) is
+ * cancelled here and now; if Stripe will not, it stays queued for
+ * api/run-retention.js.
+ *
+ * Returns the response to send, or null for a family that exists.
+ */
+async function goneFamily(stripe, familyId, object, { subscriptionId = null, live = false } = {}) {
+  const customerId = customerOf(object)
+  const fate = await serviceRpc('billing_family_gone', {
+    p_family_id: familyId || null,
+    p_customer_id: customerId,
+    p_subscription_id: subscriptionId,
+    p_live: live,
+  })
+  if (fate === 'present') return null
+  if (fate !== 'deleted') return { received: true, ignored: 'no_family' }
+  // Anything still waiting for this family, the subscription just queued
+  // included. Stripe is evidently answering, so it is a good moment to try.
+  const outcome = await cancelPendingBilling({
+    stripe, serviceRpc, familyId: familyId || null, customerId: familyId ? null : customerId,
+  })
+  return { received: true, ignored: 'family_deleted', billing_cancellations: outcome }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' })
   if (!STRIPE_SECRET || !WEBHOOK_SECRET || !SERVICE_KEY) {
@@ -239,6 +275,13 @@ export default async function handler(req, res) {
     if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
       const familyId = object.metadata?.family_id || object.client_reference_id
       const customerId = typeof object.customer === 'string' ? object.customer : object.customer?.id
+      if (familyId) {
+        // Paid on a page opened before the account was deleted: the new
+        // subscription is cancelled before it ever renews.
+        const subscriptionId = typeof object.subscription === 'string' ? object.subscription : object.subscription?.id || null
+        const gone = await goneFamily(stripe, familyId, object, { subscriptionId, live: Boolean(subscriptionId) })
+        if (gone) return res.status(200).json(gone)
+      }
       if (familyId && customerId) {
         await serviceRpc('attach_stripe_customer', { p_family_id: familyId, p_customer_id: customerId })
       }
@@ -276,11 +319,14 @@ export default async function handler(req, res) {
 
     if (event.type.startsWith('customer.subscription.')) {
       const familyId = await familyIdFor(object, stripe)
-      if (!familyId) {
-        console.warn('[stripe-webhook] no family for', event.type)
-        return res.status(200).json({ received: true, ignored: 'no_family' })
-      }
       const status = event.type === 'customer.subscription.deleted' ? 'canceled' : object.status
+      const gone = await goneFamily(stripe, familyId, object, {
+        subscriptionId: object.id || null, live: LIVE_STATUSES.includes(status),
+      })
+      if (gone) {
+        if (gone.ignored === 'no_family') console.warn('[stripe-webhook] no family for', event.type)
+        return res.status(200).json(gone)
+      }
       await serviceRpc('apply_subscription_change', {
         p_family_id: familyId,
         p_status: status,
@@ -312,9 +358,12 @@ export default async function handler(req, res) {
     if (event.type === 'invoice.paid' || event.type === 'invoice.payment_succeeded') {
       const familyId = await familyIdFor(object, stripe)
       const paid = Number(object.amount_paid ?? object.amount_due ?? 0)
+      // Money taken from a family that has since deleted its account is
+      // still money taken: counted, against no family.
+      const gone = familyId ? await goneFamily(stripe, familyId, object) : null
       if (familyId && paid > 0) {
         await serviceRpc('record_payment', {
-          p_family_id: familyId,
+          p_family_id: gone ? null : familyId,
           // Keyed on the invoice for the same reason as a school's: one
           // payment arrives as two events.
           p_stripe_event: `invoice:${object.id}`,
@@ -337,7 +386,10 @@ export default async function handler(req, res) {
      */
     if (event.type === 'charge.refunded') {
       const familyId = await familyIdFor(object, stripe)
-      if (!familyId) return res.status(200).json({ received: true, ignored: 'no_family' })
+      // A refund to a deleted family is the operator's to give, in Stripe;
+      // there is no plan or ticket left here to take back.
+      const gone = await goneFamily(stripe, familyId, object)
+      if (gone) return res.status(200).json(gone)
       const amount = Number(object.amount || 0)
       const full = object.refunded === true || (amount > 0 && Number(object.amount_refunded || 0) >= amount)
       const result = await serviceRpc('apply_charge_refund', {

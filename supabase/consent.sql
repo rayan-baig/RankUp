@@ -297,11 +297,61 @@ begin
   );
 end $$;
 
-/** Delete the whole account. Everything cascades; nothing is kept. */
+/*
+ * Subscriptions still to be cancelled at Stripe for families that deleted
+ * their account.
+ *
+ * Deleting the family used to leave its Stripe subscription running: the
+ * family's row, with the only link to it, was gone, and the card went on being
+ * charged every month for an account that no longer existed. Stripe can only
+ * be told with the secret key, which the database does not have, and Stripe
+ * may not be answering at that moment. So the deletion writes the
+ * subscription here in the same transaction as it removes the family, and a
+ * server function holding the key cancels it: api/delete-account.js straight
+ * away, and the daily api/run-retention.js for anything still waiting. A row
+ * is only marked done once Stripe has confirmed, so nothing is forgotten, and
+ * health_snapshot reports any that have waited more than a day.
+ *
+ * It holds no family id. `family_key` is a one-way fingerprint of it, enough
+ * for the webhook to recognise news about a deleted family (a checkout page
+ * left open and paid after the deletion, say) and nothing else. Every
+ * deletion leaves one, with or without billing, for a week: that covers a
+ * checkout page's 24 hours and Stripe's three days of webhook retries.
+ * Cancelled rows go after 30 days. Not readable from a browser.
+ */
+create table if not exists billing_cancellations (
+  id                     bigserial primary key,
+  family_key             text not null,
+  stripe_customer_id     text,
+  stripe_subscription_id text,
+  queued_at              timestamptz not null default now(),
+  attempts               int not null default 0,
+  last_try_at            timestamptz,
+  last_error             text,
+  done_at                timestamptz
+);
+create unique index if not exists billing_cancellations_once
+  on billing_cancellations (family_key, (coalesce(stripe_subscription_id, '')));
+alter table billing_cancellations enable row level security;
+revoke all on billing_cancellations from public, anon, authenticated;
+
+create or replace function billing_family_key(p_family_id uuid)
+returns text language sql immutable set search_path = public as $$
+  select encode(sha256(convert_to(p_family_id::text, 'UTF8')), 'hex');
+$$;
+
+/**
+ * Delete the whole account. Everything cascades. What stays is the row in
+ * billing_cancellations above (Stripe ids under a fingerprint, no family id),
+ * so the subscription is cancelled rather than left charging.
+ */
 create or replace function delete_family_account(p_confirm text)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_family uuid;
+declare
+  v_family uuid;
+  v_billing boolean;
+  v_out jsonb;
 begin
   -- A parent, not a supporter. Without the role check a grandparent with
   -- read-only access could delete the entire family, children and all.
@@ -311,10 +361,28 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'confirmation_required');
   end if;
 
+  -- Before the family row (and with it the Stripe ids) goes. Same
+  -- transaction: if the deletion fails, nothing is queued; if it succeeds, the
+  -- cancellation cannot be lost. See billing_cancellations above.
+  insert into billing_cancellations (family_key, stripe_customer_id, stripe_subscription_id, done_at)
+  select billing_family_key(f.id), f.stripe_customer_id, f.stripe_subscription_id,
+         -- Nothing to cancel: kept only as the marker, already done.
+         case when f.stripe_customer_id is null and f.stripe_subscription_id is null then now() end
+    from families f where f.id = v_family
+  on conflict do nothing;
+  select stripe_customer_id is not null or stripe_subscription_id is not null into v_billing
+    from families where id = v_family;
+
   perform erase_child_traces(v_family);
   delete from adult_invite_attempts where user_id = auth.uid();
   delete from pairing_claim_attempts where user_id = auth.uid();
   delete from families where id = v_family;
+
+  -- The server function that called this cancels the subscription with
+  -- Stripe now, and needs to know which. The family id is the caller's own.
+  v_out := case when v_billing
+                then jsonb_build_object('ok', true, 'billing', 'cancel_queued', 'family_id', v_family)
+                else jsonb_build_object('ok', true, 'billing', 'none') end;
 
   -- The parent's own sign-in, which holds their email address: the privacy
   -- policy says deleting the account removes it, and it outlived the family.
@@ -323,9 +391,9 @@ begin
     delete from auth.users where id = auth.uid()
        and not exists (select 1 from school_staff where user_id = auth.uid());
   exception when insufficient_privilege then
-    return jsonb_build_object('ok', true, 'sign_in_kept', true);
+    return v_out || jsonb_build_object('sign_in_kept', true);
   end;
-  return jsonb_build_object('ok', true);
+  return v_out;
 end $$;
 
 /**

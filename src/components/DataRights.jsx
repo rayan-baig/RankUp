@@ -1,10 +1,43 @@
 import { useState } from 'react'
 import { useApp } from '../state/AppContext.jsx'
-import { transport } from '../lib/sync/transport.js'
+import { transport, freshAccessToken } from '../lib/sync/transport.js'
 import { clearState } from '../lib/storage.js'
 import { Card, Button, Banner, SectionTitle, Modal, TextInput, Field } from './ui.jsx'
 import { navigate } from '../lib/router.js'
 import { humanError } from '../lib/errors.js'
+
+const DELETE_URL = import.meta.env?.VITE_DELETE_ACCOUNT_URL || '/api/delete-account'
+
+/**
+ * Delete the account through the server, which also cancels the family's
+ * Stripe subscription there and then, with the secret key a browser must never
+ * hold. Calling the database directly deleted the family and left the card
+ * being charged every month.
+ *
+ * Where there is no server function to ask (a host serving only the app, or
+ * the development server) the database is asked directly, as before: the
+ * account still goes at once, and the cancellation it queues is made by the
+ * daily retention job.
+ */
+async function deleteOnServer() {
+  const token = await freshAccessToken()
+  if (token) {
+    try {
+      const res = await fetch(DELETE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ confirm: 'DELETE' }),
+      })
+      const data = await res.json().catch(() => null)
+      // The endpoint's own answer, deleted or refused. Anything else (a page
+      // instead of JSON, "not configured") means it is not there to ask.
+      if (data && typeof data.ok === 'boolean') return data
+    } catch {
+      // Not reachable: ask the database instead.
+    }
+  }
+  return transport.rpc('delete_family_account', { p_confirm: 'DELETE' })
+}
 
 /**
  * The rights a parent actually has, as buttons rather than as paragraphs.
@@ -65,7 +98,7 @@ export default function DataRights() {
     if (typed !== 'DELETE') return
     setBusy(true)
     if (transport.isConfigured()) {
-      try { await transport.rpc('delete_family_account', { p_confirm: 'DELETE' }) }
+      try { await deleteOnServer() }
       catch { /* the local wipe below still happens */ }
       transport.signOut()
     }
@@ -134,7 +167,8 @@ export default function DataRights() {
         <p className="text-sm">
           Withdrawing consent deletes your children's profiles, quests and progress. Your
           own account stays, but you will not be able to add a child again without consenting
-          afresh.
+          afresh. A paid plan carries on until you cancel it on your plan page (Manage billing), or
+          delete the account.
         </p>
       </Modal>
 
@@ -153,7 +187,8 @@ export default function DataRights() {
       >
         <p className="text-sm mb-3">
           This removes your account, every child profile, every quest and all
-          progress. It cannot be undone.
+          progress. It cannot be undone. If you pay for a plan, the subscription
+          is cancelled at the same moment, so nothing more is charged.
         </p>
         <Field label="Type DELETE to confirm">
           <TextInput value={typed} onChange={(e) => setTyped(e.target.value.toUpperCase())} placeholder="DELETE" />

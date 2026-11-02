@@ -111,7 +111,7 @@ or point any external scheduler at them. Do not assume Pages will run them.
 |---|---|---|
 | `/api/send-reminders` | every 15 min | Daily reminders never arrive |
 | `/api/send-digests` | hourly | The Sunday digest never goes out |
-| `/api/run-retention` | daily | Old activity records pile up |
+| `/api/run-retention` | daily | Old activity records pile up, and a deleted family's Stripe cancellation that failed is never retried |
 | `/api/settle-alliances` | monthly | Nobody is ever paid their discount |
 | `/api/settle-schools` | monthly | No District Champion, no School Stars, no free month |
 
@@ -149,7 +149,10 @@ schedule was never set up at all.
 
 **Retention keeps the database small.** The activity log keeps every row and
 spent pairing codes never leave unless this job runs. (RankUp keeps no photos;
-the job also clears any left by an older version.)
+the job also clears any left by an older version.) It also cancels, at Stripe,
+any deleted family's subscription that could not be cancelled at the moment of
+deletion, so it needs `STRIPE_SECRET_KEY` as well; see docs/PAYMENTS.md.
+`/api/health` turns red if one has waited more than a day.
 
 ## 3. Generate the keys
 

@@ -219,21 +219,41 @@ ok('as is a school that does not exist',
  */
 const stripeCalls = []
 let stripeMode = 'ok'
+// The subscriptions this stand-in Stripe holds, by id: listed by customer,
+// retrieved, and cancelled (DELETE), as Stripe does.
+const stripeSubs = new Map()
 const stripeStandIn = http.createServer((req, res) => {
   let raw = ''
   req.on('data', (c) => { raw += c })
   req.on('end', () => {
     if (stripeMode === 'drop') { req.socket.destroy(); return }
     const url = new URL(req.url, 'http://stripe.test')
-    stripeCalls.push({ method: req.method, path: url.pathname, params: new URLSearchParams(raw) })
+    stripeCalls.push({ method: req.method, path: url.pathname, params: new URLSearchParams(raw),
+                       query: url.searchParams, idempotencyKey: req.headers['idempotency-key'] || null })
     const send = (code, body) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)) }
     if (stripeMode === 'error500') return send(500, { error: { type: 'api_error', message: 'Stripe is having a bad day' } })
     if (url.pathname === '/v1/checkout/sessions') {
       return send(200, { id: `cs_test_${stripeCalls.length}`, object: 'checkout.session', url: `https://checkout.stripe.test/${stripeCalls.length}` })
     }
     if (url.pathname === '/v1/billing_portal/sessions') return send(200, { id: 'bps_test', object: 'billing_portal.session', url: 'https://billing.stripe.test/portal' })
-    if (url.pathname === '/v1/subscriptions' && req.method === 'GET') return send(200, { object: 'list', data: [], has_more: false })
-    if (url.pathname.startsWith('/v1/subscriptions/')) return send(200, { id: url.pathname.split('/').pop(), object: 'subscription' })
+    if (url.pathname === '/v1/subscriptions' && req.method === 'GET') {
+      const customer = url.searchParams.get('customer')
+      const data = [...stripeSubs.values()].filter((sub) => !customer || sub.customer === customer)
+      return send(200, { object: 'list', url: '/v1/subscriptions', data, has_more: false })
+    }
+    if (url.pathname.startsWith('/v1/subscriptions/')) {
+      const id = url.pathname.split('/').pop()
+      const held = stripeSubs.get(id)
+      if (req.method === 'DELETE') {
+        if (!held) return send(404, { error: { type: 'invalid_request_error', code: 'resource_missing', message: `No such subscription: '${id}'` } })
+        if (held.status === 'canceled') {
+          return send(400, { error: { type: 'invalid_request_error', message: 'A canceled subscription can only update its cancellation_details and metadata.' } })
+        }
+        held.status = 'canceled'
+        return send(200, held)
+      }
+      return send(200, held || { id, object: 'subscription' })
+    }
     return send(404, { error: { type: 'invalid_request_error', message: 'no such route in the stand-in' } })
   })
 })
@@ -477,6 +497,183 @@ console.log('\n=== A failed renewal drops the plan, and the parent is told why =
   await db.query('update families set flash_tickets = 4 where id = $1', [RENEW])
   await signed({ ...packRefund, id: `${packRefund.id}_late` })
   ok('a replay of the refund takes nothing more', (await billingRow(RENEW)).flash_tickets === 4)
+}
+
+/*
+ * Deleting the account stops the billing.
+ *
+ * It did not: the database removed the family, and with it the only link to
+ * its Stripe subscription, which went on charging the card every month. Now
+ * api/delete-account.js deletes and then cancels at Stripe with the secret
+ * key; a cancellation Stripe will not take stays queued for run-retention.
+ */
+{
+  const familyFixture = async (tag, { billing = true } = {}) => {
+    const parent = `a0000000-0000-4000-8000-00000000de${tag}a`
+    const family = `a0000000-0000-4000-8000-00000000de${tag}f`
+    const customer = `cus_api_del_${tag}_${RUN}`
+    const subscription = `sub_api_del_${tag}_${RUN}`
+    await db.query(`insert into auth.users (id, email) values ($1, $2) on conflict do nothing`, [parent, `api-del-${tag}@example.com`])
+    await db.query(`insert into families (id, name, tier) values ($1, $2, 'starter') on conflict (id) do nothing`, [family, `Deleting ${tag}`])
+    await db.query(`insert into parents (user_id, family_id, name) values ($1, $2, 'Deleting Parent') on conflict do nothing`, [parent, family])
+    if (billing) {
+      await db.query(`update families set tier = 'elite', subscription_status = 'active', stripe_customer_id = $2,
+                      stripe_subscription_id = $3 where id = $1`, [family, customer, subscription])
+      stripeSubs.set(subscription, { id: subscription, object: 'subscription', status: 'active', customer,
+                                     metadata: { family_id: family, tier: 'elite' } })
+    }
+    return { parent, family, customer, subscription }
+  }
+  const familyExists = async (id) => (await db.query('select count(*)::int as n from families where id = $1', [id])).rows[0].n === 1
+  const queued = async (subscription) => (await db.query(
+    'select attempts, done_at, last_error from billing_cancellations where stripe_subscription_id = $1', [subscription])).rows[0]
+  const cancels = (from, id) => stripeCalls.slice(from).filter((c) => c.method === 'DELETE' && c.path === `/v1/subscriptions/${id}`)
+  const deleteAs = (token, confirm = 'DELETE') => asUser('/api/delete-account', { confirm }, token)
+
+  console.log('\n=== Deleting a paying family\'s account cancels its subscription at Stripe, at once ===')
+  stripeMode = 'ok'
+  const paying = await familyFixture('1')
+  // A second plan on the same customer that the family row did not know of
+  // yet (a checkout just completed), one already over, and a school's.
+  const extra = `sub_api_del_extra_${RUN}`
+  stripeSubs.set(extra, { id: extra, object: 'subscription', status: 'trialing', customer: paying.customer, metadata: {} })
+  stripeSubs.set(`sub_api_del_over_${RUN}`, { id: `sub_api_del_over_${RUN}`, object: 'subscription', status: 'canceled', customer: paying.customer, metadata: {} })
+  stripeSubs.set(`sub_api_del_school_${RUN}`, { id: `sub_api_del_school_${RUN}`, object: 'subscription', status: 'active', customer: paying.customer, metadata: { school_id: SCHOOL } })
+
+  ok('deleting with no token is refused', (await post('/api/delete-account', { confirm: 'DELETE' })).status === 401)
+  let from = stripeCalls.length
+  const unconfirmed = await deleteAs(paying.parent, 'yes')
+  ok('without the typed confirmation nothing is deleted or cancelled', unconfirmed.status === 400
+    && await familyExists(paying.family) && cancels(from, paying.subscription).length === 0, `status ${unconfirmed.status}`)
+
+  from = stripeCalls.length
+  const done = await deleteAs(paying.parent)
+  const doneBody = await done.json().catch(() => ({}))
+  ok('the parent deletes the account', done.status === 200 && doneBody.ok === true, `status ${done.status} ${JSON.stringify(doneBody)}`)
+  ok('and the family is gone', !(await familyExists(paying.family)))
+  ok('its subscription is cancelled at Stripe in the same request', doneBody.billing === 'cancelled'
+    && cancels(from, paying.subscription).length === 1 && stripeSubs.get(paying.subscription).status === 'canceled', JSON.stringify(doneBody))
+  const cancelCall = cancels(from, paying.subscription)[0]
+  // A DELETE carries its parameters in the query string.
+  const cancelParam = (name) => cancelCall?.query.get(name) ?? cancelCall?.params.get(name)
+  ok('at once: no final invoice and no proration, so nothing more is charged',
+    cancelParam('invoice_now') === 'false' && cancelParam('prorate') === 'false',
+    cancelCall ? `${cancelCall.query} | ${cancelCall.params}` : 'no call')
+  ok('sent with an idempotency key, so a retry cannot act twice', Boolean(cancelCall?.idempotencyKey))
+  ok('as is a second live plan on the same customer', cancels(from, extra).length === 1)
+  ok('but not one already over, nor a school\'s plan',
+    cancels(from, `sub_api_del_over_${RUN}`).length === 0 && cancels(from, `sub_api_del_school_${RUN}`).length === 0
+    && stripeSubs.get(`sub_api_del_school_${RUN}`).status === 'active')
+  ok('the Stripe customer is kept (it holds the payment records)',
+    !stripeCalls.slice(from).some((c) => c.method === 'DELETE' && c.path.startsWith('/v1/customers')))
+  ok('the browser is not handed the family id or any Stripe id',
+    !JSON.stringify(doneBody).includes(paying.family) && !JSON.stringify(doneBody).includes('cus_') && !JSON.stringify(doneBody).includes('sub_'))
+  ok('and the queue records it as done', Boolean((await queued(paying.subscription))?.done_at))
+
+  const after = await signed({ id: `evt_api_del_gone_${RUN}`, type: 'customer.subscription.deleted', created: tick(),
+    data: { object: { ...stripeSubs.get(paying.subscription) } } })
+  const afterBody = await after.json().catch(() => ({}))
+  ok('Stripe\'s "subscription deleted" for the deleted family is answered, not failed for days',
+    after.status === 200 && afterBody.ignored === 'family_deleted', `status ${after.status} ${JSON.stringify(afterBody)}`)
+  from = stripeCalls.length
+  const again = await fetch(`${BASE}/api/run-retention`, { method: 'POST', headers: { Authorization: `Bearer ${CRON}` } })
+  ok('the daily job cancels nothing twice', again.status === 200 && cancels(from, paying.subscription).length === 0)
+  ok('the account cannot be deleted twice', (await deleteAs(paying.parent)).status === 403)
+
+  console.log('\n=== Stripe down when the account is deleted: deleted anyway, cancelled later ===')
+  const unlucky = await familyFixture('2')
+  stripeMode = 'error500'
+  const down = await deleteAs(unlucky.parent)
+  const downBody = await down.json().catch(() => ({}))
+  ok('the account is still deleted', down.status === 200 && downBody.ok === true && !(await familyExists(unlucky.family)),
+    `status ${down.status} ${JSON.stringify(downBody)}`)
+  ok('and says the cancellation is queued, not done', downBody.billing === 'queued', JSON.stringify(downBody))
+  let row = await queued(unlucky.subscription)
+  ok('it waits in the queue with what went wrong', row && !row.done_at && row.attempts === 1 && Boolean(row.last_error), JSON.stringify(row))
+  ok('and the subscription is still live at Stripe (nothing pretended otherwise)', stripeSubs.get(unlucky.subscription).status === 'active')
+
+  stripeMode = 'drop'
+  const stillDown = await fetch(`${BASE}/api/run-retention`, { method: 'POST', headers: { Authorization: `Bearer ${CRON}` } })
+  const stillDownBody = await stillDown.json().catch(() => ({}))
+  row = await queued(unlucky.subscription)
+  ok('Stripe still not answering: the daily job still succeeds at its clean-up', stillDown.status === 200
+    && stillDownBody.billing_cancellations?.failed >= 1, `status ${stillDown.status} ${JSON.stringify(stillDownBody.billing_cancellations)}`)
+  ok('and the cancellation keeps waiting, tried twice now', !row.done_at && row.attempts === 2, JSON.stringify(row))
+
+  stripeMode = 'ok'
+  from = stripeCalls.length
+  const back = await fetch(`${BASE}/api/run-retention`, { method: 'POST', headers: { Authorization: `Bearer ${CRON}` } })
+  const backBody = await back.json().catch(() => ({}))
+  row = await queued(unlucky.subscription)
+  ok('Stripe back: the next run cancels it', back.status === 200 && cancels(from, unlucky.subscription).length === 1
+    && stripeSubs.get(unlucky.subscription).status === 'canceled', JSON.stringify(backBody.billing_cancellations))
+  ok('and marks it done', Boolean(row.done_at) && row.last_error === null, JSON.stringify(row))
+  from = stripeCalls.length
+  await fetch(`${BASE}/api/run-retention`, { method: 'POST', headers: { Authorization: `Bearer ${CRON}` } })
+  ok('after which no run asks Stripe again', cancels(from, unlucky.subscription).length === 0)
+
+  console.log('\n=== An older app that asks the database directly ===')
+  const direct = await familyFixture('5')
+  const viaDb = await (await fetch('http://localhost:54321/rest/v1/rpc/delete_family_account', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', apikey: direct.parent, Authorization: `Bearer ${direct.parent}` },
+    body: JSON.stringify({ p_confirm: 'DELETE' }),
+  })).json()
+  ok('deletes the account, and its subscription is queued', viaDb?.ok === true && !(await familyExists(direct.family))
+    && Boolean(await queued(direct.subscription)) && stripeSubs.get(direct.subscription).status === 'active', JSON.stringify(viaDb))
+  from = stripeCalls.length
+  await fetch(`${BASE}/api/run-retention`, { method: 'POST', headers: { Authorization: `Bearer ${CRON}` } })
+  ok('which the daily job then cancels', cancels(from, direct.subscription).length === 1
+    && stripeSubs.get(direct.subscription).status === 'canceled' && Boolean((await queued(direct.subscription))?.done_at))
+
+  console.log('\n=== Already cancelled at Stripe, but the answer was lost ===')
+  const lost = await familyFixture('3')
+  stripeSubs.get(lost.subscription).status = 'canceled'
+  from = stripeCalls.length
+  const lostDone = await (await deleteAs(lost.parent)).json().catch(() => ({}))
+  ok('a subscription Stripe has already cancelled counts as done', lostDone.billing === 'cancelled'
+    && Boolean((await queued(lost.subscription))?.done_at), JSON.stringify(lostDone))
+
+  console.log('\n=== A checkout paid after the account was deleted ===')
+  const late = await familyFixture('4', { billing: false })
+  const lateBody = await (await deleteAs(late.parent)).json().catch(() => ({}))
+  ok('a family that never paid deletes with nothing to cancel', lateBody.ok === true && lateBody.billing === 'none', JSON.stringify(lateBody))
+  stripeSubs.set(late.subscription, { id: late.subscription, object: 'subscription', status: 'active', customer: late.customer,
+                                      metadata: { family_id: late.family, tier: 'elite' } })
+  from = stripeCalls.length
+  const paidLate = await signed({ id: `evt_api_del_late_${RUN}`, type: 'checkout.session.completed', created: tick(),
+    data: { object: { id: `cs_api_del_late_${RUN}`, object: 'checkout.session', mode: 'subscription', payment_status: 'paid',
+      customer: late.customer, subscription: late.subscription, client_reference_id: late.family,
+      metadata: { family_id: late.family, tier: 'elite' } } } })
+  const paidLateBody = await paidLate.json().catch(() => ({}))
+  ok('the webhook answers it', paidLate.status === 200 && paidLateBody.ignored === 'family_deleted', `status ${paidLate.status} ${JSON.stringify(paidLateBody)}`)
+  ok('and cancels the subscription it started before it can renew', cancels(from, late.subscription).length === 1
+    && stripeSubs.get(late.subscription).status === 'canceled')
+  const updatedLate = await signed({ id: `evt_api_del_late_upd_${RUN}`, type: 'customer.subscription.updated', created: tick(),
+    data: { object: { id: late.subscription, object: 'subscription', status: 'active', customer: late.customer,
+      metadata: { family_id: late.family, tier: 'elite' } } } })
+  ok('its other events are answered too, not failed for days', updatedLate.status === 200, `status ${updatedLate.status}`)
+  const invoiceLate = await signed({ id: `evt_api_del_late_inv_${RUN}`, type: 'invoice.paid', created: tick(),
+    data: { object: { id: `in_api_del_late_${RUN}`, object: 'invoice', customer: late.customer, amount_paid: 1599, currency: 'usd',
+      parent: { subscription_details: { metadata: { family_id: late.family } } } } } })
+  const counted = (await db.query('select family_id, amount_pence from billing_events where stripe_event = $1', [`invoice:in_api_del_late_${RUN}`])).rows[0]
+  ok('money already taken is still counted, against no family', invoiceLate.status === 200
+    && counted?.family_id === null && counted?.amount_pence === 1599, `status ${invoiceLate.status} ${JSON.stringify(counted)}`)
+  const refundLate = await signed({ id: `evt_api_del_late_ref_${RUN}`, type: 'charge.refunded', created: tick(),
+    data: { object: { id: `ch_api_del_late_${RUN}`, object: 'charge', customer: late.customer, amount: 1599, amount_refunded: 1599,
+      refunded: true, currency: 'usd', metadata: { family_id: late.family } } } })
+  ok('and a refund the operator gives it is answered', refundLate.status === 200, `status ${refundLate.status}`)
+
+  console.log('\n=== A family this database never had is never cancelled ===')
+  const stranger = `sub_api_stranger_${RUN}`
+  stripeSubs.set(stranger, { id: stranger, object: 'subscription', status: 'active', customer: `cus_api_stranger_${RUN}`,
+                             metadata: { family_id: 'a0000000-0000-4000-8000-0000000fffff' } })
+  from = stripeCalls.length
+  const strange = await signed({ id: `evt_api_stranger_${RUN}`, type: 'customer.subscription.updated', created: tick(),
+    data: { object: { ...stripeSubs.get(stranger) } } })
+  const strangeBody = await strange.json().catch(() => ({}))
+  ok('news about it is answered and dropped', strange.status === 200 && strangeBody.ignored === 'no_family', JSON.stringify(strangeBody))
+  ok('and its subscription is left alone: only a family known to have deleted itself is cancelled',
+    cancels(from, stranger).length === 0 && stripeSubs.get(stranger).status === 'active')
 }
 
 stripeStandIn.close()

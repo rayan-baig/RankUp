@@ -24,6 +24,7 @@
 const ROUTES = {
   'billing-portal': () => import('../../api/billing-portal.js'),
   'create-checkout': () => import('../../api/create-checkout.js'),
+  'delete-account': () => import('../../api/delete-account.js'),
   health: () => import('../../api/health.js'),
   'run-retention': () => import('../../api/run-retention.js'),
   'send-push': () => import('../../api/send-push.js'),

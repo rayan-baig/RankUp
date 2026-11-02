@@ -14,7 +14,7 @@
  */
 
 export const CONSENT_VERSION = '2026-11'
-export const LAST_UPDATED = 'October 2026'
+export const LAST_UPDATED = 'November 2026'
 /*
  * 2026-11 is the notice below, word for word as supabase/consent.sql stores
  * it (tests/consent.mjs checks). 2026-01, the first version, still described
@@ -126,6 +126,7 @@ export const PRIVACY_POLICY = {
       heading: 'How long we keep it',
       body: [
         'Everything: until you delete your account, which removes it immediately and permanently.',
+        'If you pay for a plan, deleting your account also cancels the subscription at once, so nothing more is charged. Stripe keeps its record of the payments you made (invoices and receipts), because payment records have to be kept for tax and are needed if a refund is due. We keep only Stripe\'s reference to your billing, and only until the cancellation is confirmed and 30 days have passed.',
       ],
     },
     {
@@ -184,6 +185,7 @@ export const TERMS = {
       body: [
         'Standard is $9.99 a month and Elite Pass is $15.99 a month, billed monthly until you cancel.',
         'You can cancel at any time from Settings. Your subscription runs to the end of the period you have paid for, and is not renewed.',
+        'Deleting your account cancels your subscription straight away rather than at the end of the period, so you are not charged again.',
         'If a payment fails we will retry, and your account moves to Standard features if it keeps failing. Nothing your child has earned is ever removed.',
       ],
     },

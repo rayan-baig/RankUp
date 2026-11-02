@@ -82,6 +82,17 @@ begin
     delete from rpc_receipts where created_at < now() - interval '30 days';
   end if;
 
+  -- What a deleted family leaves for its Stripe cancellation (consent.sql):
+  -- the marker after a week, a confirmed cancellation after 30 days. One still
+  -- waiting for Stripe is never deleted here; api/run-retention.js retries it.
+  if to_regclass('public.billing_cancellations') is not null then
+    delete from billing_cancellations
+     where done_at is not null
+       and (done_at < now() - interval '30 days'
+            or (stripe_customer_id is null and stripe_subscription_id is null
+                and queued_at < now() - interval '7 days'));
+  end if;
+
   if to_regclass('public.crash_reports') is not null then
     execute format(
       'with gone as (delete from crash_reports where created_at < now() - make_interval(days => %s) returning 1) select count(*) from gone',

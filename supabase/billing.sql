@@ -595,3 +595,100 @@ revoke execute on function stripe_customer_for_family(uuid) from public;
 revoke execute on function attach_stripe_customer(uuid, text) from public;
 revoke execute on function refund_photo_check(uuid) from public, anon;
 grant execute on function refund_photo_check(uuid) to authenticated;
+
+/*
+ * Cancelling a deleted family's subscription. The queue is
+ * billing_cancellations (consent.sql, next to the deletion that fills it); the
+ * Stripe calls are api/_shared/cancelBilling.js. Service role only: a
+ * browser has no business reading Stripe ids or marking a cancellation done.
+ */
+
+/**
+ * What is still to be cancelled: everything waiting, or one deleted family's
+ * (by its id, which the deletion handed the server function) or one Stripe
+ * customer's. Rows with nothing to cancel are only markers and never listed.
+ */
+create or replace function pending_billing_cancellations(
+  p_family_id uuid default null,
+  p_customer_id text default null,
+  p_limit int default 50
+) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', c.id,
+           'customer_id', c.stripe_customer_id,
+           'subscription_id', c.stripe_subscription_id,
+           'attempts', c.attempts) order by c.queued_at, c.id), '[]'::jsonb)
+    from (select * from billing_cancellations
+           where done_at is null
+             and (stripe_customer_id is not null or stripe_subscription_id is not null)
+             and (p_family_id is null or family_key = billing_family_key(p_family_id))
+             and (p_customer_id is null or stripe_customer_id = p_customer_id)
+           order by queued_at, id
+           limit greatest(1, least(coalesce(p_limit, 50), 500))) c;
+$$;
+
+/**
+ * Record how a try went. Done only on Stripe's confirmation; a failure keeps
+ * the row waiting, with what went wrong, for the next run.
+ */
+create or replace function finish_billing_cancellation(p_id bigint, p_ok boolean, p_error text default null)
+returns void
+language sql security definer set search_path = public as $$
+  update billing_cancellations
+     set attempts = attempts + 1,
+         last_try_at = now(),
+         last_error = case when p_ok then null else left(coalesce(p_error, 'failed'), 300) end,
+         done_at = case when p_ok then now() else null end
+   where id = p_id and done_at is null;
+$$;
+
+/**
+ * Is this Stripe news about a family that has deleted its account?
+ *
+ *   'present'  the family exists; handle the event as usual.
+ *   'deleted'  it deleted its account. A live subscription named here is
+ *              added to the queue (a checkout paid after the deletion, or one
+ *              the deletion did not know of), for the webhook to cancel.
+ *   'unknown'  no such family, and no sign it ever deleted itself here.
+ *
+ * Asked by the webhook before any write, because every billing write keys on
+ * the family and a family that is gone made each one fail, so Stripe retried
+ * the event for days, including the "subscription cancelled" this deletion
+ * itself causes.
+ */
+create or replace function billing_family_gone(
+  p_family_id uuid,
+  p_customer_id text default null,
+  p_subscription_id text default null,
+  p_live boolean default false
+) returns text
+language plpgsql security definer set search_path = public as $$
+declare v_key text;
+begin
+  if p_family_id is not null and exists (select 1 from families where id = p_family_id) then
+    return 'present';
+  end if;
+  if p_customer_id is not null and exists (select 1 from families where stripe_customer_id = p_customer_id) then
+    return 'present';
+  end if;
+
+  select family_key into v_key from billing_cancellations
+   where (p_family_id is not null and family_key = billing_family_key(p_family_id))
+      or (p_customer_id is not null and stripe_customer_id = p_customer_id)
+   order by queued_at desc limit 1;
+  if v_key is null then return 'unknown'; end if;
+
+  if p_live and (p_subscription_id is not null or p_customer_id is not null) then
+    insert into billing_cancellations (family_key, stripe_customer_id, stripe_subscription_id)
+    values (v_key, p_customer_id, p_subscription_id)
+    on conflict (family_key, (coalesce(stripe_subscription_id, ''))) do update
+      set done_at = null,
+          stripe_customer_id = coalesce(billing_cancellations.stripe_customer_id, excluded.stripe_customer_id);
+  end if;
+  return 'deleted';
+end $$;
+
+revoke execute on function pending_billing_cancellations(uuid, text, int) from public, anon, authenticated;
+revoke execute on function finish_billing_cancellation(bigint, boolean, text) from public, anon, authenticated;
+revoke execute on function billing_family_gone(uuid, text, text, boolean) from public, anon, authenticated;

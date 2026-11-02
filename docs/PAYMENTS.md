@@ -139,6 +139,81 @@ Enable the portal once in Stripe: Settings → Billing → Customer portal.
 
 ---
 
+## When a family deletes its account
+
+Deleting the account (Settings → Delete my account) **cancels the family's
+Stripe subscription at once**, so the card is never charged again. Before
+this, the database removed the family and with it the only link to the
+subscription, which went on renewing every month for an account that no
+longer existed.
+
+How it works, and why it cannot lose one:
+
+- The app asks `/api/delete-account` (`api/delete-account.js`) with the
+  parent's own token. That calls `delete_family_account` as the parent (same
+  rules as ever: a parent, the typed DELETE), which removes the family and, **in
+  the same transaction**, writes its customer and subscription ids into
+  `billing_cancellations`. If the deletion fails nothing is queued; if it
+  succeeds the cancellation cannot be lost.
+- The endpoint then cancels with the secret key, on the server. Every live
+  subscription on the family's customer is cancelled (not only the one the
+  family row knew of: a checkout that had just completed is caught too), at
+  once, with `invoice_now=false` and `prorate=false`, so there is no final
+  invoice. A school's plan on the same customer is left alone.
+- **The account is deleted whatever Stripe does.** If Stripe is down or
+  refuses, the endpoint still answers `ok`, and the row stays queued with the
+  error. The daily `/api/run-retention` tries everything still queued, and so
+  does the webhook whenever Stripe sends news about that family, until Stripe
+  confirms. A row is marked done only on Stripe's confirmation, and a
+  subscription Stripe has already cancelled counts as done.
+- **It is never forgotten.** Retention never deletes a row still waiting, and
+  `/api/health` reports `billing_cancellations_overdue` (and is not ok) for any
+  that has waited more than a day: Stripe refusing, or `STRIPE_SECRET_KEY` not
+  set on the retention job.
+- **Idempotent.** Each cancel carries an idempotency key; running the queue
+  again, or two runs at once, cancels nothing twice.
+- **A checkout paid after the deletion** (a payment page left open) is caught
+  by the webhook: it recognises the deleted family and cancels the new
+  subscription before it renews. An app opened before this change, which asks
+  the database directly, still queues the cancellation; the daily job makes it.
+
+Webhook events about a deleted family (including the "subscription deleted"
+the cancellation itself causes) are answered `200` and dropped, rather than
+failing and being retried by Stripe for three days. A payment already taken is
+still recorded for the totals, against no family. Events for a family id this
+database never had are dropped too, and their subscriptions are **never**
+cancelled: only a family known to have deleted itself here is.
+
+**The Stripe customer is kept.** It holds the invoices and payments the family
+made, which you must keep for tax, and it is what a refund or a chargeback on
+those payments is handled against. Stripe keeps those records whatever happens
+to the customer. RankUp's database keeps only the queue row (the customer and
+subscription ids, under a one-way fingerprint of the family id rather than the
+id itself), until 30 days after Stripe confirmed the cancellation. Every
+deletion also leaves that fingerprint, with no Stripe ids, for a week, so a
+late checkout can be recognised. If a parent asks for the Stripe record to be
+erased too, delete the customer in the Stripe dashboard once you no longer
+need its payments for tax or disputes.
+
+No refund is given automatically for the rest of the period. If you want to
+give one, refund the last payment in Stripe; the webhook handles it.
+
+**Withdrawing consent is not deleting the account.** It removes the children
+and keeps the parent's account, so the subscription carries on until the
+parent cancels it in the billing portal or deletes the account; the
+withdrawal screen says so. **Schools** have no deletion of their own: the last
+member of staff cannot leave a school, and a school cancels from its School
+League page through the portal. Deleting a parent's account never touches a
+school's plan.
+
+`tests/api.mjs` drives all of this through the real runtime against a
+stand-in Stripe: deleting with Stripe up, down and not answering, an older app
+deleting through the database, a subscription already cancelled, a checkout
+paid after the deletion, and a family the database never had.
+`supabase/test/30-deleted-billing.sql` checks the queue itself.
+
+---
+
 ## What this costs you
 
 Stripe takes about 2.9% + 30¢ per transaction. On $9.99 that is roughly 59¢, so

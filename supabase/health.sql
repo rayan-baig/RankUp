@@ -60,6 +60,7 @@ declare
   v_jobs    jsonb;
   v_backlog int;
   v_crashes int;
+  v_unbilled int := 0;
 begin
   select jsonb_object_agg(j.job, jsonb_build_object(
            'state', case
@@ -91,6 +92,14 @@ begin
 
   select count(*) into v_crashes from crash_reports
    where created_at > now() - interval '24 hours';
+  -- Deleted families whose Stripe subscription has still not been confirmed
+  -- cancelled a day later: Stripe refusing, or the key not set. Each one may
+  -- be charged again, so it is never silently ok.
+  if to_regclass('public.billing_cancellations') is not null then
+    select count(*) into v_unbilled from billing_cancellations
+     where done_at is null and queued_at < now() - interval '1 day'
+       and (stripe_customer_id is not null or stripe_subscription_id is not null);
+  end if;
 
   return jsonb_build_object(
     -- never_run counts as not-ok. Only checking for 'stale' meant a deployment
@@ -101,11 +110,12 @@ begin
     'ok', not exists (
       select 1 from jsonb_each(v_jobs) e
        where e.value->>'state' in ('stale', 'never_run')
-    ) and v_backlog = 0,
+    ) and v_backlog = 0 and v_unbilled = 0,
     'checked_at', now(),
     'jobs', v_jobs,
     'stale_photo_backlog', v_backlog,
-    'crashes_24h', v_crashes
+    'crashes_24h', v_crashes,
+    'billing_cancellations_overdue', v_unbilled
   );
 end $$;
 
