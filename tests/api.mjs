@@ -22,7 +22,10 @@ const BASE = process.env.API_BASE || 'http://localhost:8788'
 const MOCK = process.env.MOCK_URL || 'http://localhost:54321'
 // Stripe ids are made unique per run, so the suite can run again on the same
 // database: a fixed id is "already handled" the second time.
-const RUN = Date.now().toString(36)
+// Letters only: the error-report scrubber turns any 4 digits in a row into
+// "[number]", and a label with digits in it then went missing from the
+// report now and then.
+const RUN = Date.now().toString(36).replace(/\d/g, (d) => 'qrstuvwxyz'[d])
 const CRON = 'test-cron-secret'
 // The stats key serve-functions.sh gives the local server. Against anything
 // else, set STATS_KEY_FOR_TEST to that server's key.
