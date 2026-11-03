@@ -1,4 +1,4 @@
-import { uid } from '../lib/id.js'
+import { uid, now as clock } from '../lib/id.js'
 import { dayKey } from '../lib/dates.js'
 import { DEFAULT_KID_THEME, KID_THEMES } from '../data/kidThemes.js'
 import { DEFAULT_PARENT_THEME, PARENT_THEMES } from '../data/parentThemes.js'
@@ -178,7 +178,7 @@ export function makeKid({ name, themeId = DEFAULT_KID_THEME, accessibility = nul
     id: uid('kid'),
     name,
     themeId,
-    themeChosenAt: Date.now(),
+    themeChosenAt: clock(),
     avatarHue: Math.floor(Math.random() * 360),
     xp: 0,
     coins: 0,
@@ -196,14 +196,14 @@ export function makeKid({ name, themeId = DEFAULT_KID_THEME, accessibility = nul
     bestScores: {},
     lastLoginBonus: null,
     bestTimes: {},
-    createdAt: Date.now(),
+    createdAt: clock(),
   }
 }
 
 export function createInitialState() {
   return {
     version: 1,
-    createdAt: Date.now(),
+    createdAt: clock(),
     onboarded: false,
     /**
      * What this installation is.
@@ -242,8 +242,8 @@ export function createInitialState() {
        * on their phone, and that has to happen before a card is ever mentioned.
        */
       trialTier: 'elite',
-      trialEndsAt: Date.now() + TRIAL_DAYS * 86400000,
-      subscription: { tier: 'starter', status: 'trial', startedAt: Date.now(), renewsAt: null },
+      trialEndsAt: clock() + TRIAL_DAYS * 86400000,
+      subscription: { tier: 'starter', status: 'trial', startedAt: clock(), renewsAt: null },
       /* Flash Tickets the family has left. Only a parent can buy more. */
       flashTickets: 0,
     },

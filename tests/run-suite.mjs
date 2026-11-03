@@ -74,6 +74,7 @@ const SUITES = {
     { file: 'integrity.mjs', weight: 30 },
     { file: 'flows.mjs', weight: 34 },
     { file: 'rewards.mjs', weight: 28 },
+    { file: 'oncetap.mjs', weight: 25 },
     { file: 'pairing.mjs', weight: 58 },
     { file: 'firstten.mjs', weight: 45 },
     { file: 'notifications.mjs', weight: 19 },

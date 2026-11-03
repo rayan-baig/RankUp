@@ -1,4 +1,4 @@
-import { uid } from '../lib/id.js'
+import { uid, forAction, now as clock } from '../lib/id.js'
 import { dayKey, daysBetween, deviceZone } from '../lib/dates.js'
 import { submissionReward, levelFromXp, liveStreak } from '../lib/xp.js'
 import { createInitialState, TIERS, makeKid } from './initialState.js'
@@ -51,7 +51,7 @@ function queueNotice(state, notice) {
 }
 
 function logEvent(state, event) {
-  const entry = { id: uid('ev'), at: Date.now(), day: dayKey(), ...event }
+  const entry = { id: uid('ev'), at: clock(), day: dayKey(), ...event }
   return { ...state, events: [...state.events, entry].slice(-2000) }
 }
 
@@ -102,14 +102,14 @@ export function effectiveTier(family) {
   const paid = TIERS[family?.tier] ? family.tier : 'starter'
   const trial = family?.trialTier
   const until = family?.trialEndsAt
-  if (!trial || !until || until <= Date.now()) return paid
+  if (!trial || !until || until <= clock()) return paid
   return (TIER_RANK[trial] ?? 0) > (TIER_RANK[paid] ?? 0) ? trial : paid
 }
 
 /** Days left on a running trial, or null when there is not one. */
 export function trialDaysLeft(family) {
   if (!family?.trialTier || !family?.trialEndsAt) return null
-  const ms = family.trialEndsAt - Date.now()
+  const ms = family.trialEndsAt - clock()
   if (ms <= 0) return null
   return Math.max(1, Math.ceil(ms / 86400000))
 }
@@ -162,13 +162,13 @@ export function guildCapacity(state) {
 /** A lockout that has run out of time is treated as lifted. */
 export function activeLockout(kid) {
   if (!kid?.lockout) return null
-  if (kid.lockout.type === 'dimension' && kid.lockout.until && Date.now() >= kid.lockout.until) return null
+  if (kid.lockout.type === 'dimension' && kid.lockout.until && clock() >= kid.lockout.until) return null
   return kid.lockout
 }
 
 /** True once a Dimension Lockout's timer has run out, even if nothing cleared it yet. */
 export function overrideHasExpired(override) {
-  return Boolean(override.kind === 'dimension' && override.until && Date.now() >= override.until)
+  return Boolean(override.kind === 'dimension' && override.until && clock() >= override.until)
 }
 
 /* ------------------------------------------------------------------ */
@@ -184,21 +184,21 @@ const WEEK_MS = 7 * 86400000
  * to disagree about). Purchases still queued on this phone are in
  * state.redemptions already, so they count.
  */
-export function rewardRedemptionsThisWeek(state, kidId, rewardId, now = Date.now()) {
+export function rewardRedemptionsThisWeek(state, kidId, rewardId, now = clock()) {
   return (state.redemptions || [])
     .filter((r) => r.kidId === kidId && r.rewardId === rewardId && (r.at || 0) > now - WEEK_MS)
     .sort((a, b) => (a.at || 0) - (b.at || 0))
 }
 
 /** How many more times this child may take it in the next seven days; null when it has no limit. */
-export function rewardLeftThisWeek(state, kidId, reward, now = Date.now()) {
+export function rewardLeftThisWeek(state, kidId, reward, now = clock()) {
   const limit = weeklyLimitOf(reward?.weeklyLimit)
   if (!limit) return null
   return Math.max(0, limit - rewardRedemptionsThisWeek(state, kidId, reward.id, now).length)
 }
 
 /** When the next one frees up, for a child who has used them all: a time, or null. */
-export function rewardFreesUpAt(state, kidId, reward, now = Date.now()) {
+export function rewardFreesUpAt(state, kidId, reward, now = clock()) {
   if (rewardLeftThisWeek(state, kidId, reward, now) !== 0) return null
   const used = rewardRedemptionsThisWeek(state, kidId, reward.id, now)
   const limit = weeklyLimitOf(reward.weeklyLimit)
@@ -251,7 +251,16 @@ export function familyGoalProgress(state) {
   return Math.max(0, total - (state.familyGoal.startXp || 0))
 }
 
+/**
+ * The reducer. Each action is worked out with its own ids and its own time
+ * (see forAction in lib/id.js), so React running it twice for one tap, as it
+ * may, gives the same answer twice rather than a second purchase.
+ */
 export function reducer(state, action) {
+  return forAction(action, () => reduce(state, action))
+}
+
+function reduce(state, action) {
   switch (action.type) {
     /* ---------- lifecycle ---------- */
 
@@ -383,7 +392,7 @@ export function reducer(state, action) {
         }
       }
 
-      return { ...next, lastSyncedAt: Date.now() }
+      return { ...next, lastSyncedAt: clock() }
     }
 
     case 'RESET':
@@ -437,7 +446,7 @@ export function reducer(state, action) {
           role: 'kid',
           linkedKidId: linked.id,
           familyName: action.familyName || 'your family',
-          pairedAt: Date.now(),
+          pairedAt: clock(),
         },
         pendingPairing: null,
         // Deliberately does not touch family.id: a sync may already have landed
@@ -467,12 +476,12 @@ export function reducer(state, action) {
       if (existing) {
         const next = mapKid(state, existing.id, (k) => ({
           ...k,
-          pairedDeviceAt: Date.now(),
+          pairedDeviceAt: clock(),
           pairedCodeId: paired.id,
         }))
         return logEvent(next, { type: 'device_linked', kidId: existing.id, meta: { merged: true } })
       }
-      const kid = { ...makeKid({ name: paired.name, themeId: paired.themeId }), id: paired.id, pairedDeviceAt: Date.now() }
+      const kid = { ...makeKid({ name: paired.name, themeId: paired.themeId }), id: paired.id, pairedDeviceAt: clock() }
       const next = { ...state, kids: [...state.kids, kid] }
       return logEvent(next, { type: 'device_linked', kidId: kid.id, meta: { merged: false } })
     }
@@ -628,7 +637,7 @@ export function reducer(state, action) {
       const back = before.id === action.themeId
       return logEvent(
         mapKid(state, action.kidId, (k) => {
-          if (!back) return { ...k, themeId: action.themeId, themeChosenAt: Date.now(), themeBefore: before }
+          if (!back) return { ...k, themeId: action.themeId, themeChosenAt: clock(), themeBefore: before }
           const { themeBefore: _back, ...rest } = k
           void _back
           return { ...rest, themeId: action.themeId, themeChosenAt: before.chosenAt }
@@ -645,7 +654,7 @@ export function reducer(state, action) {
     case 'SEE_STORY':
       return mapKid(state, action.kidId, (k) => ({
         ...k,
-        storySeen: { ...(k.storySeen || {}), [action.chapter]: action.at ?? Date.now() },
+        storySeen: { ...(k.storySeen || {}), [action.chapter]: action.at ?? clock() },
       }))
 
     case 'SET_KID_COSMETIC':
@@ -805,8 +814,8 @@ export function reducer(state, action) {
             ...state.family.subscription,
             tier: action.tier,
             status: 'active',
-            startedAt: Date.now(),
-            renewsAt: Date.now() + 30 * 86400000,
+            startedAt: clock(),
+            renewsAt: clock() + 30 * 86400000,
           },
         },
       }
@@ -819,7 +828,7 @@ export function reducer(state, action) {
       const quests = action.quests.map((q) => ({
         id: uid('q'),
         status: 'assigned',
-        createdAt: Date.now(),
+        createdAt: clock(),
         difficulty: 'medium',
         requiresPhoto: true,
         adaptive: false,
@@ -902,7 +911,7 @@ export function reducer(state, action) {
       const submission = {
         id: uid('sub'),
         status: 'pending',
-        submittedAt: Date.now(),
+        submittedAt: clock(),
         ...fields,
       }
       const next = {
@@ -964,14 +973,14 @@ export function reducer(state, action) {
             ? {
                 ...s,
                 status: 'approved',
-                decidedAt: Date.now(),
+                decidedAt: clock(),
                 parentNote: action.note || '',
                 sticker: STICKER_MAP[action.sticker] ? action.sticker : null,
                 awarded: { xp, coins, lines },
               }
             : s,
         ),
-        quests: state.quests.map((q) => (q.id === quest.id ? { ...q, status: 'approved', completedAt: Date.now() } : q)),
+        quests: state.quests.map((q) => (q.id === quest.id ? { ...q, status: 'approved', completedAt: clock() } : q)),
       }
 
       next = mapKid(next, kid.id, (k) => ({
@@ -1015,7 +1024,7 @@ export function reducer(state, action) {
               kind: 'earned',
               submissionId: submission.id,
               note: quest.title,
-              at: Date.now(),
+              at: clock(),
             },
           ],
         }
@@ -1072,7 +1081,7 @@ export function reducer(state, action) {
             ? {
                 ...s,
                 status: 'rejected',
-                decidedAt: Date.now(),
+                decidedAt: clock(),
                 parentNote: action.note || '',
               }
             : s,
@@ -1184,7 +1193,7 @@ export function reducer(state, action) {
           redemptions: next.redemptions.map((r) => (r.id === args.p_redemption_id ? { ...r, status: 'requested', givenAt: null } : r)),
         }
       }
-      return { ...next, syncNotice: { message, at: Date.now() } }
+      return { ...next, syncNotice: { message, at: clock() } }
     }
 
     case 'CLEAR_SYNC_NOTICE':
@@ -1242,7 +1251,7 @@ export function reducer(state, action) {
         ...state,
         allowance: [
           ...state.allowance,
-          { id: uid('al'), kidId, pence: signed, kind, note: note || '', at: Date.now() },
+          { id: uid('al'), kidId, pence: signed, kind, note: note || '', at: clock() },
         ],
       }
       return queueRpc(next, kind === 'paid' ? 'record_payout' : 'record_gift', {
@@ -1276,7 +1285,7 @@ export function reducer(state, action) {
       return {
         ...state,
         rewards: [...state.rewards, {
-          id: uid('rw'), createdAt: Date.now(), ...action.reward, weeklyLimit: weeklyLimitOf(action.reward?.weeklyLimit),
+          id: uid('rw'), createdAt: clock(), ...action.reward, weeklyLimit: weeklyLimitOf(action.reward?.weeklyLimit),
         }],
       }
 
@@ -1307,7 +1316,7 @@ export function reducer(state, action) {
         ...next,
         redemptions: [
           ...next.redemptions,
-          { id: redemptionId, rewardId: reward.id, kidId: kid.id, name: reward.name, cost: reward.cost, at: Date.now(), status: 'requested' },
+          { id: redemptionId, rewardId: reward.id, kidId: kid.id, name: reward.name, cost: reward.cost, at: clock(), status: 'requested' },
         ],
       }
       next = queueRpc(next, 'redeem_reward', {
@@ -1326,13 +1335,13 @@ export function reducer(state, action) {
       if (!state.redemptions.some((r) => r.id === action.redemptionId && r.status !== 'given')) return state
       return queueRpc({
         ...state,
-        redemptions: state.redemptions.map((r) => (r.id === action.redemptionId ? { ...r, status: 'given', givenAt: Date.now() } : r)),
+        redemptions: state.redemptions.map((r) => (r.id === action.redemptionId ? { ...r, status: 'given', givenAt: clock() } : r)),
       }, 'mark_redemption_given', { p_redemption_id: action.redemptionId })
 
     /* ---------- notes ---------- */
 
     case 'ADD_NOTE':
-      return { ...state, notes: [...state.notes, { id: uid('note'), at: Date.now(), read: false, ...action.note }] }
+      return { ...state, notes: [...state.notes, { id: uid('note'), at: clock(), read: false, ...action.note }] }
 
     case 'MARK_NOTES_READ':
       return {
@@ -1353,7 +1362,7 @@ export function reducer(state, action) {
         kind,
         reason: reason || '',
         consequence: consequence || '',
-        createdAt: Date.now(),
+        createdAt: clock(),
         liftedAt: null,
       }
       let next = state
@@ -1365,11 +1374,11 @@ export function reducer(state, action) {
         override.amount = taken
         next = mapKid(next, kidId, (k) => ({ ...k, coins: k.coins - taken }))
         next = queueRpc(next, 'apply_currency_tax', { p_kid_id: kidId, p_percent: percent })
-        override.liftedAt = Date.now() // a tax is instantaneous, not an ongoing state
+        override.liftedAt = clock() // a tax is instantaneous, not an ongoing state
       } else if (kind === 'dimension') {
         const minutes = Math.max(5, action.minutes || 60)
         override.minutes = minutes
-        override.until = Date.now() + minutes * 60000
+        override.until = clock() + minutes * 60000
         next = mapKid(next, kidId, (k) => ({ ...k, lockout: { type: 'dimension', until: override.until, reason: override.reason, consequence: override.consequence, overrideId: override.id } }))
       } else if (kind === 'red') {
         next = mapKid(next, kidId, (k) => ({ ...k, lockout: { type: 'red', until: null, reason: override.reason, consequence: override.consequence, overrideId: override.id } }))
@@ -1386,7 +1395,7 @@ export function reducer(state, action) {
      * app on load and on a timer.
      */
     case 'EXPIRE_LOCKOUTS': {
-      const now = Date.now()
+      const now = clock()
       const expired = state.overrides.filter(
         (o) => !o.liftedAt && o.kind === 'dimension' && o.until && now >= o.until,
       )
@@ -1410,7 +1419,7 @@ export function reducer(state, action) {
       let next = {
         ...state,
         overrides: state.overrides.map((o) =>
-          o.id === action.overrideId ? { ...o, liftedAt: Date.now(), endedBy: 'parent' } : o,
+          o.id === action.overrideId ? { ...o, liftedAt: clock(), endedBy: 'parent' } : o,
         ),
       }
       next = mapKid(next, override.kidId, (k) =>
@@ -1434,7 +1443,7 @@ export function reducer(state, action) {
           ...state.guild,
           invitedMates: [
             ...state.guild.invitedMates,
-            { id: uid('mate'), name: action.name, invitedAt: Date.now(), status: 'invited', demo: true },
+            { id: uid('mate'), name: action.name, invitedAt: clock(), status: 'invited', demo: true },
           ],
         },
       }
@@ -1448,7 +1457,7 @@ export function reducer(state, action) {
         ...state,
         guild: {
           ...state.guild,
-          chat: [...state.guild.chat, { id: uid('msg'), at: Date.now(), ...action.message }].slice(-200),
+          chat: [...state.guild.chat, { id: uid('msg'), at: clock(), ...action.message }].slice(-200),
         },
       }
 
@@ -1474,7 +1483,7 @@ export function reducer(state, action) {
         : state.kids.reduce((sum, k) => sum + (k.xp || 0), 0)
       const familyGoal = {
         name, targetXp, startXp,
-        setAt: same ? state.familyGoal.setAt : Date.now(),
+        setAt: same ? state.familyGoal.setAt : clock(),
         progress: same ? state.familyGoal.progress || 0 : 0,
         shared: true,
       }

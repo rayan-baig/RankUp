@@ -21,15 +21,26 @@ export default function KidShop() {
    */
   const [justGot, setJustGot] = useState(null)
   const settle = useRef(null)
+  /*
+   * The same thing, read at the moment of the tap. `justGot` is what the last
+   * render saw, so two taps that arrive before the screen redraws (two events
+   * in one frame) both found it empty. A ref has the first tap's answer at
+   * once.
+   */
+  const buying = useRef(false)
   useEffect(() => () => clearTimeout(settle.current), [])
   if (!kid) return null
 
   const redeem = (r) => {
-    if (justGot) return
+    if (justGot || buying.current) return
+    buying.current = true
     dispatch({ type: 'REDEEM_REWARD', rewardId: r.id, kidId: kid.id })
     setJustGot(r.id)
     clearTimeout(settle.current)
-    settle.current = setTimeout(() => setJustGot(null), 1500)
+    settle.current = setTimeout(() => {
+      buying.current = false
+      setJustGot(null)
+    }, 1500)
   }
 
   const mine = state.redemptions.filter((r) => r.kidId === kid.id).sort((a, b) => b.at - a.at)

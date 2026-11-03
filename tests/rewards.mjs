@@ -53,7 +53,9 @@ const coinsBefore = (await readState(page)).kids[0].coins
 await page.getByRole('button', { name: /3$/ }).first().click()
 await page.waitForTimeout(800)
 let state = await readState(page)
-state.redemptions.some((r) => r.name === 'Pick the film' && r.status === 'requested') && state.kids[0].coins === coinsBefore - 3
+// Exactly one: a tap once left two, one the server never had (tests/oncetap.mjs).
+state.redemptions.filter((r) => r.name === 'Pick the film').length === 1
+  && state.redemptions.some((r) => r.name === 'Pick the film' && r.status === 'requested') && state.kids[0].coins === coinsBefore - 3
   ? pass('the child spends their currency on it')
   : fail('the child spends their currency on it', JSON.stringify({ coinsBefore, after: state.kids[0].coins, r: state.redemptions }))
 
