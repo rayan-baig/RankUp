@@ -39,7 +39,7 @@ const { billingNotice, dashboardBillingNotice, planDate } = await import('../src
 const { schoolBillingNotice } = await import('../src/lib/schools.js')
 
 const BASE = process.env.API_BASE || 'http://localhost:8788'
-const MOCK = 'http://localhost:54321'
+const MOCK = process.env.MOCK_URL || 'http://localhost:54321'
 const RUN = Date.now().toString(36)
 
 const fails = []

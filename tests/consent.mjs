@@ -7,6 +7,7 @@
 import { chromium } from 'playwright'
 import { reporter, finish, BASE } from './helpers.mjs'
 import { CONSENT_NOTICE, CONSENT_VERSION } from '../src/data/legalText.js'
+const MOCK = process.env.MOCK_URL || 'http://localhost:54321'
 
 const { fails, pass, fail } = reporter()
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined })
@@ -98,7 +99,7 @@ const recorded = await page.evaluate(async () => {
   const raw = localStorage.getItem('rankup.session.v1')
   if (!raw) return { skipped: 'no session' }
   const token = JSON.parse(raw).access_token
-  const res = await fetch('http://localhost:54321/rest/v1/rpc/export_family_data', {
+  const res = await fetch(`${MOCK}/rest/v1/rpc/export_family_data`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: `Bearer ${token}` },
     body: '{}',
@@ -117,9 +118,9 @@ console.log('\n=== The words signed are the words stored ===')
 // What the database keeps as the record of what this parent agreed to must be
 // what the screen showed them, line for line.
 const stored = await page.evaluate(async (version) => {
-  const res = await fetch(`http://localhost:54321/rest/v1/consent_notices?version=eq.${version}`,
+  const res = await fetch(`${MOCK}/rest/v1/consent_notices?version=eq.${version}`,
     { headers: { apikey: 'local-anon-key' } })
-  const current = await fetch('http://localhost:54321/rest/v1/rpc/current_consent_version', {
+  const current = await fetch(`${MOCK}/rest/v1/rpc/current_consent_version`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key' }, body: '{}',
   })
   return { rows: await res.json(), current: await current.json() }

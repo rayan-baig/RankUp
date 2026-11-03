@@ -120,7 +120,7 @@ const xpNow = await page.evaluate(() => {
 const lvl = levelFromXp(xpNow).level
 await arrive({ pendingLevelUp: { from: lvl, to: lvl + 3 }, pendingStreak: { count: 4 } })
 await page.getByTestId('level-up').waitFor({ state: 'visible', timeout: 4000 })
-const card = await page.getByTestId('level-up').innerText()
+const card = await page.getByTestId('level-up').innerText({ timeout: 1500 }).catch(() => '')
 await page.waitForTimeout(400)
 await page.screenshot({ path: `${SHOT_DIR}/moment-levelup.png` })
 ok('three levels in one card, with the streak riding along', /3 levels up/i.test(card) && /4 days in a row/.test(card), card)
@@ -133,14 +133,23 @@ ok(`a level-up lasts about ${LEVEL_UP_MS} ms (measured ${lived})`, lived >= 1600
 
 await arrive({ pendingLevelUp: { from: lvl, to: lvl + 1 } })
 await page.getByTestId('level-up').waitFor({ state: 'visible', timeout: 4000 })
-const tapped = Date.now()
-await page.getByRole('link', { name: /Arcade/ }).first().click({ timeout: 2000 }).catch(async () => {
-  await page.getByRole('button', { name: /Arcade/ }).first().click({ timeout: 2000 })
+// When the tap went down, and when the level-up left the page, timed in the
+// page itself, so a slow machine cannot blur "the tap closed it" with "it
+// timed out".
+await page.evaluate(() => {
+  window.__moment = {}
+  window.addEventListener('pointerdown', () => { window.__moment.tap = performance.now() }, { capture: true, once: true })
+  new MutationObserver((_, obs) => {
+    if (!document.querySelector('[data-testid="level-up"]')) { window.__moment.gone = performance.now(); obs.disconnect() }
+  }).observe(document.body, { childList: true, subtree: true })
 })
+await page.getByRole('button', { name: /Arcade/ }).first().click({ timeout: 2000 })
 await page.waitForTimeout(300)
 const hash = await page.evaluate(() => location.hash)
 ok('a tap on the screen behind it goes through (the arcade opens)', hash.startsWith('#/kid/arcade'), hash)
-ok('and the same tap closed the level-up', (await page.getByTestId('level-up').count()) === 0 && Date.now() - tapped < LEVEL_UP_MS)
+const timing = await page.evaluate(() => window.__moment)
+ok('and the same tap closed the level-up', timing.tap != null && timing.gone != null && timing.gone - timing.tap < 500,
+  JSON.stringify(timing))
 
 await page.evaluate(() => { window.location.hash = '/kid' })
 await arrive({ pendingLevelUp: { from: lvl, to: lvl + 1 } })
@@ -151,8 +160,10 @@ ok('tapping the card itself skips it', (await page.getByTestId('level-up').count
 
 await arrive({ pendingStreak: { count: 6 } })
 await page.getByTestId('streak-moment').waitFor({ state: 'visible', timeout: 4000 })
+// Read before the screenshot: on a busy machine a screenshot can take longer than the moment lasts.
+const streakText = await page.getByTestId('streak-moment').innerText({ timeout: 1500 }).catch(() => '')
 await page.screenshot({ path: `${SHOT_DIR}/moment-streak.png` })
-ok('a streak on its own says so', /6 days in a row/.test(await page.getByTestId('streak-moment').innerText()))
+ok('a streak on its own says so', /6 days in a row/.test(streakText), streakText)
 const streakGone = await page.getByTestId('streak-moment').waitFor({ state: 'detached', timeout: 3200 }).then(() => true, () => false)
 ok(`and is gone within ${STREAK_MS} ms or so`, streakGone)
 

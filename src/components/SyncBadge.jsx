@@ -110,7 +110,7 @@ export default function SyncBadge({ className = '' }) {
     <button
       type="button"
       onClick={needsSignIn && state.device?.role !== 'kid' && transport.isConfigured() ? () => setSigningIn(true) : syncNow}
-      className={`inline-flex items-center gap-1.5 text-[11px] ${className}`}
+      className={`inline-flex items-center gap-1.5 text-[11px] text-left ${className}`}
       style={{ color: 'var(--ink-muted)' }}
       title={look.hint || error || 'Tap to sync now'}
     >

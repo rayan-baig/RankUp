@@ -19,6 +19,7 @@ import { billingNotice, billingError } from '../src/lib/billing.js'
 const PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
 
 const BASE = process.env.API_BASE || 'http://localhost:8788'
+const MOCK = process.env.MOCK_URL || 'http://localhost:54321'
 // Stripe ids are made unique per run, so the suite can run again on the same
 // database: a fixed id is "already handled" the second time.
 const RUN = Date.now().toString(36)
@@ -348,13 +349,13 @@ await new Promise((resolve) => stripeStandIn.listen(12111, resolve))
 const lastCall = (path) => [...stripeCalls].reverse().find((c) => c.path === path)
 const asUser = (path, body, token) => fetch(`${BASE}${path}`, {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:8788', Authorization: `Bearer ${token}` },
+  headers: { 'Content-Type': 'application/json', Origin: BASE, Authorization: `Bearer ${token}` },
   body: JSON.stringify(body ?? {}),
 })
 const billingRow = async (id) => (await db.query(
   'select tier, subscription_status, flash_tickets, last_paid_tier from families where id = $1', [id])).rows[0]
 // What the plan screen is given: billing_status, asked as the parent, through the API.
-const billingAs = async (token) => (await fetch('http://localhost:54321/rest/v1/rpc/billing_status', {
+const billingAs = async (token) => (await fetch(`${MOCK}/rest/v1/rpc/billing_status`, {
   method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: `Bearer ${token}` }, body: '{}',
 })).json()
 let clock = Math.floor(Date.now() / 1000) + 60
@@ -369,7 +370,7 @@ console.log('\n=== The billing portal when Stripe is down ===')
     `status ${open.status} ${JSON.stringify(body)}`)
   ok('for their own customer, coming back to the plan screen',
     lastCall('/v1/billing_portal/sessions')?.params.get('customer') === 'cus_api_live'
-    && lastCall('/v1/billing_portal/sessions')?.params.get('return_url') === 'http://localhost:8788/#/parent/plan')
+    && lastCall('/v1/billing_portal/sessions')?.params.get('return_url') === `${BASE}/#/parent/plan`)
 
   stripeMode = 'error500'
   const broken = await asUser('/api/billing-portal', {}, PARENT)
@@ -440,7 +441,7 @@ console.log('\n=== A sibling on the same parent domain is trusted with nothing =
   })
   ok('a billing portal opened with a sibling\'s Origin still returns to RankUp',
     fromSibling.status === 200
-    && lastCall('/v1/billing_portal/sessions')?.params.get('return_url') === 'http://localhost:8788/#/parent/plan',
+    && lastCall('/v1/billing_portal/sessions')?.params.get('return_url') === `${BASE}/#/parent/plan`,
     `status ${fromSibling.status} ${lastCall('/v1/billing_portal/sessions')?.params.get('return_url')}`)
   ok('and its answer carries no CORS header for the sibling to read it by', shared(fromSibling).length === 0,
     shared(fromSibling).join(', '))
@@ -761,7 +762,7 @@ console.log('\n=== A failed renewal drops the plan, and the parent is told why =
 
   console.log('\n=== An older app that asks the database directly ===')
   const direct = await familyFixture('5')
-  const viaDb = await (await fetch('http://localhost:54321/rest/v1/rpc/delete_family_account', {
+  const viaDb = await (await fetch(`${MOCK}/rest/v1/rpc/delete_family_account`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: `Bearer ${direct.parent}` },
     body: JSON.stringify({ p_confirm: 'DELETE' }),
   })).json()
@@ -870,7 +871,7 @@ console.log('\n=== The free trial\'s reminder emails ===')
     text.includes(`you are on ${TIERS.starter.name}, which is free`) && text.includes('Nothing is charged by itself'))
   ok('that their children keep what they earned', text.includes('Everything your children have earned stays exactly where it is'))
   ok('how to get help', /Need help\? Open RankUp, then Settings, Help & about, Help\. Or write to help@example\.test/.test(text))
-  ok('a link to the plan on this site', text.includes('http://localhost:8788/#/parent/plan') && (mail.body.html || '').includes('http://localhost:8788/#/parent/plan'))
+  ok('a link to the plan on this site', text.includes(`${BASE}/#/parent/plan`) && (mail.body.html || '').includes(`${BASE}/#/parent/plan`))
   ok('and the MTRX Horizyn footer, in both parts', text.includes('RankUp is a product of MTRX Horizyn.') && (mail.body.html || '').includes('RankUp is a product of MTRX Horizyn.'))
   ok('no child is named in it, and no price', !/\$\d/.test(text) && !/Ava|kid name/.test(text))
 

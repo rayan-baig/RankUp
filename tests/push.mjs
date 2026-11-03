@@ -250,7 +250,7 @@ await db.query(`insert into guilds (id, name, crest, capacity, leader_kid_id, in
 await db.query(`insert into guild_members (guild_id, kid_id, family_id, role, status, approved_by_own_parent, approved_by_owner)
                 values ($1, $2, $3, 'leader', 'active', true, true) on conflict do nothing`, [G.guild, G.leader, G.ownerFamily])
 // Juno asks, as the app does, over the API with her own sign-in.
-const asked = await fetch('http://localhost:54321/rest/v1/rpc/request_guild_join', {
+const asked = await fetch(`${process.env.MOCK_URL || 'http://localhost:54321'}/rest/v1/rpc/request_guild_join`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: `Bearer ${G.askingKidUser}` },
   body: JSON.stringify({ p_kid_id: G.kid, p_invite_code: 'PSHG23' }),

@@ -110,7 +110,7 @@ changes nothing.
   family afresh so it shows what the server really has.
 - **The server down for a long time** (an hour, say). The phone asks less
   often, twice as long between rounds up to one a minute, and the sync line
-  says "RankUp's server has been down since 3:40 PM · 5 saved on this phone"
+  says "Server down since 3:40 PM · 5 saved on this phone"
   once it has been failing for a minute. The first round that gets an answer
   sends everything waiting at once, without each change sitting out the rest
   of its wait, and the line says "Back online · everything sent". So it is

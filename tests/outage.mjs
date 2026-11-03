@@ -152,7 +152,7 @@ ok('in the order they were made', queued.map((o) => o.fn || o.type).join(',')
 ok(`it backed off: ${server.downPulls} rounds in the hour (${server.downRequests} requests), about one a minute`,
   server.downPulls <= 70 && server.downPulls >= 40 && server.downRequests <= 90, `${server.downPulls} rounds, ${server.downRequests} requests`)
 const during = words()
-ok(`and says so plainly: "${during.text}"`, /server has been down since/.test(during.text) && /9 saved on this phone/.test(during.text)
+ok(`and says so plainly: "${during.text}"`, /^Server down since /.test(during.text) && /9 saved on this phone/.test(during.text)
   && /Nothing is lost/.test(during.hint), JSON.stringify(during))
 ok('not "No internet": the phone is online, the server is not', !/No internet/.test(during.text))
 ok(`only after a minute of failing (${DOWN_AFTER_MS / 1000} s), not on a blip`,

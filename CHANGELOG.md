@@ -13,7 +13,7 @@ Quick moments, a phone that does not fill up, and schools.
 - The arcade says, in a child's words, how many tokens they have, how many coins they can still win today, and when winnings come back.
 - Switching themes back and forth keeps everything, with chores still waiting to be sent; going back to the theme you started on does not restart Block Craft's dragon fight.
 - Old, finished chores and notes the server already has (over 60 days) are let go of on the phone, so a busy family's year no longer fills it. Nothing waiting to be sent is ever touched. Chore history says the phone keeps 60 days; Download my data has everything.
-- With the server down for a long time, the phone asks less often, says "RankUp's server has been down since …" and that nothing is lost, and sends everything within a minute of it coming back. An accept or a send-back sent again because its answer was lost is recognised as the same one.
+- With the server down for a long time, the phone asks less often, says "Server down since …" with how many changes are saved on the phone, and sends everything within a minute of it coming back. An accept or a send-back sent again because its answer was lost is recognised as the same one.
 - A school signs up on one form (account and school together), and the number of students typed to see the price is kept: 9 steps to the first league table instead of 11.
 - The operator page has a checklist for checking a school is real, beside what RankUp knows about it; Verify waits until every check is ticked.
 - A help page for schools, with prices and numbers from the code.

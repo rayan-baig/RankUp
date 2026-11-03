@@ -31,7 +31,7 @@ export function syncWords({ status, pending = 0, error = null, downSince = null,
     return { text: `No internet${saved}`, hint: 'Everything is saved on this phone. It sends next time RankUp is open with internet.', tone: 'warn' }
   }
   if (status === SYNC_STATUS.OFFLINE || status === SYNC_STATUS.ERROR) {
-    if (down) return { text: `RankUp’s server has been down since ${clock(downSince)}${saved}`, hint: waiting, tone: 'bad' }
+    if (down) return { text: `Server down since ${clock(downSince)}${saved}`, hint: waiting, tone: 'bad' }
     return { text: `Can’t sync yet${saved}`, hint: waiting, tone: 'bad' }
   }
   if (status === SYNC_STATUS.SYNCING) return { text: 'Syncing…', hint: null, tone: 'accent' }

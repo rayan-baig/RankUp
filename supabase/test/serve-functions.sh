@@ -18,8 +18,11 @@ VAPID_FILE="${VAPID_FILE:-/tmp/rankup-vapid.txt}"
   > "$VAPID_FILE"
 VP=$(sed -n 1p "$VAPID_FILE"); VS=$(sed -n 2p "$VAPID_FILE")
 
-exec npx wrangler pages dev dist --port 8788 --compatibility-flags nodejs_compat \
-  --binding SUPABASE_URL=http://localhost:54321 \
+# FUNCTIONS_PORT and MOCK_URL let a second copy run beside another on one machine.
+PORT="${FUNCTIONS_PORT:-8788}"
+MOCK="${MOCK_URL:-http://localhost:54321}"
+exec npx wrangler pages dev dist --port "$PORT" --compatibility-flags nodejs_compat \
+  --binding SUPABASE_URL="$MOCK" \
   --binding VITE_SUPABASE_ANON_KEY=local-anon-key \
   --binding SUPABASE_SERVICE_ROLE_KEY=service-role-key \
   --binding CRON_SECRET=test-cron-secret \
@@ -45,7 +48,7 @@ exec npx wrangler pages dev dist --port 8788 --compatibility-flags nodejs_compat
   --binding EMAIL_FROM="RankUp <no-reply@rankup.example.test>" \
   --binding EMAIL_REPLY_TO=help@example.test \
   --binding EMAIL_API_BASE=http://localhost:12112 \
-  --binding PUBLIC_SITE_URL=http://localhost:8788 \
+  --binding PUBLIC_SITE_URL="http://localhost:$PORT" \
   --binding VAPID_PUBLIC_KEY="$VP" \
   --binding VAPID_PRIVATE_KEY="$VS" \
   --binding VAPID_SUBJECT=mailto:test@example.com
