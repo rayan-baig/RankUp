@@ -894,6 +894,62 @@ console.log('\n=== The free trial\'s reminder emails ===')
     pass('(the last-day reminder is checked by 40-trial-emails.sql; it is too close to midnight UTC to try here)')
   }
 }
+console.log('\n=== A school\'s month, by email, after settlement ===')
+{
+  const SCHOOL = 'a0000000-0000-4000-8000-00000000c5c1'
+  const HEAD = 'a0000000-0000-4000-8000-00000000c5a1'
+  const TEACHER = 'a0000000-0000-4000-8000-00000000c5a2'
+  const head = `api-school-head-${RUN}@example.com`
+  const teacher = `api-school-teacher-${RUN}@example.com`
+  const now = new Date()
+  const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
+  const monthKey = last.toISOString().slice(0, 7)
+  const monthName = last.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+  await db.query('delete from schools where id = $1', [SCHOOL])
+  await db.query(`insert into auth.users (id, email) values ($1, $3), ($2, $4) on conflict (id) do update set email = excluded.email`,
+    [HEAD, TEACHER, head, teacher])
+  await db.query(`insert into schools (id, name, district, district_key, student_count, size_band, status, verified,
+                    billing_status, billing_period_end)
+                  values ($1, 'API Hill School', 'API Valley', 'api valley ${RUN}', 120, 'medium', 'active', true,
+                    'active', now() + interval '12 days')`, [SCHOOL])
+  await db.query(`insert into school_staff (user_id, school_id, name, role) values ($1, $3, 'Head', 'admin'), ($2, $3, 'Teacher', 'teacher')
+                  on conflict (user_id) do update set school_id = excluded.school_id, role = excluded.role`, [HEAD, TEACHER, SCHOOL])
+  // Last month, as settlement leaves it, and a payment in it.
+  await db.query(`insert into school_month_scores (school_id, month_key, score, students, ranked) values ($1, $2, 12.5, 30, true)`, [SCHOOL, monthKey])
+  await db.query(`insert into billing_events (school_id, stripe_event, type, payload, amount_pence, currency, received_at)
+                  values ($1, $2, 'school:invoice_paid', '{}', 4900, 'USD', $3)`, [SCHOOL, `in_api_school_${RUN}`, new Date(last.getTime() + 9 * 86400000)])
+  const run = () => fetch(`${BASE}/api/settle-schools`, { method: 'POST', headers: { Authorization: `Bearer ${CRON}` } })
+  const ours = () => emails.filter((e) => e.body.to?.includes(head))
+
+  emailMode = 'error500'
+  const down = await run()
+  const downBody = await down.json().catch(() => ({}))
+  ok('with the email service down, the month still closes and the job says the email failed',
+    down.status === 200 && downBody.emails?.failed >= 1, JSON.stringify(downBody.emails))
+  ok('and the school\'s month is not marked sent, so the next run tries again',
+    (await db.query('select count(*)::int n from school_month_emails where school_id = $1', [SCHOOL])).rows[0].n === 0)
+
+  emailMode = 'ok'
+  const first = await run()
+  ok('after settlement, the school\'s admin gets the month', first.status === 200 && ours().length === 1, `${first.status}, ${ours().length}`)
+  const mail = ours()[0] || { body: {} }
+  const text = mail.body.text || ''
+  ok('to the admin only, never a teacher', mail.body.to?.length === 1 && !emails.some((e) => e.body.to?.includes(teacher)))
+  ok(`the subject names the school and the month: "${mail.body.subject}"`, mail.body.subject === `API Hill School: your School League month, ${monthName}`)
+  ok('the league result', text.includes(`API Hill School scored 12.5 points per student in ${monthName}, with 30 taking part: the only ranked school in API Valley this month, so no Champion there.`), text.split('\n\n')[1])
+  ok('what it paid', text.includes(`In ${monthName} you paid $49.00.`))
+  ok('and when it renews', /Your plan renews on \d{1,2} [A-Z][a-z]+ \d{4}\./.test(text))
+  ok('a plain-text part and an HTML part', text.length > 100 && /^<!doctype html>/i.test(mail.body.html || ''))
+  ok('the MTRX Horizyn footer, in both', text.includes('RankUp is a product of MTRX Horizyn.') && (mail.body.html || '').includes('RankUp is a product of MTRX Horizyn.'))
+  ok('a way to the school page and to help', text.includes(`${BASE}/#/school`) && text.includes(`${BASE}/#/school/help`))
+  ok('with an idempotency key naming the school and the month',
+    mail.key === `school-month-${SCHOOL}-${monthKey}-${head}`, mail.key)
+
+  await run()
+  await Promise.all([run(), run()])
+  ok('once per school per month, however often the job runs', ours().length === 1, `${ours().length} emails`)
+  await db.query('delete from schools where id = $1', [SCHOOL])
+}
 emailStandIn.close()
 
 console.log('\n=== A route that does not exist is a 404, not a stack trace ===')

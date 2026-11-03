@@ -73,6 +73,10 @@ begin
 end $$;
 insert into push_subscriptions (endpoint, keys, family_id, kid_id, user_id, role) values
   ('https://push.example/t31-a', '{}', '31a00000-0000-4000-8000-00000000000f', null, '31a00000-0000-4000-8000-0000000000a1', 'parent');
+-- A school, and its month's email, which no family may see.
+insert into schools (id, name, district, district_key, student_count, size_band) values
+  ('31a00000-0000-4000-8000-0000000005c1', 'T31 School', 'T31 District', 't31 district', 10, 'small');
+insert into school_month_emails (school_id, month_key) values ('31a00000-0000-4000-8000-0000000005c1', '2026-01');
 -- A tombstone in `deletions`, the way a real delete leaves one.
 insert into quests (id, family_id, kid_id, title) values
   ('31a00000-0000-4000-8000-0000000000d1', '31a00000-0000-4000-8000-00000000000f', '31a00000-0000-4000-8000-00000000000c', 'T31 deleted');

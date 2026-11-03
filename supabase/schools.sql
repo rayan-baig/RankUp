@@ -1433,3 +1433,168 @@ begin
 end $$;
 
 grant execute on function remove_school_staff(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- The month, by email, to each school's admin (api/settle-schools.js).
+--
+-- Settlement closed a school's month and told nobody: the result sat on the
+-- school's page for whoever opened it, and what the school had paid, and when
+-- it renews, were only in Stripe's receipts. Each month, after settlement,
+-- the admin gets one short email: the month's league result, what the school
+-- paid that month, and when the plan next renews (or ends).
+--
+-- Once per school per month: the primary key is the promise. The job claims
+-- a school's month before sending and marks it sent after; a send that fails
+-- gives the claim back for the next run, and a claim left by a run that died
+-- is taken again after an hour (the email provider's idempotency key stops
+-- that being a second email). Only the scheduled job, holding the service
+-- key, may claim: these name the admins' addresses.
+-- ---------------------------------------------------------------------------
+
+create table if not exists school_month_emails (
+  school_id  uuid not null references schools(id) on delete cascade,
+  month_key  text not null,
+  claimed_at timestamptz not null default now(),
+  sent_at    timestamptz,
+  primary key (school_id, month_key)
+);
+alter table school_month_emails enable row level security;
+revoke all on school_month_emails from public, anon, authenticated;
+
+/**
+ * What the email says about one school's month: its result, what it paid,
+ * and what happens next with its plan. Facts only; the words are the job's
+ * (api/_shared/email.js). No child is in it: the School Stars are not.
+ */
+create or replace function school_month_summary(p_school uuid, p_month_key text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  v_s      schools;
+  v_score  school_month_scores;
+  v_from   timestamptz := to_date(p_month_key || '-01', 'YYYY-MM-DD')::timestamptz;
+  v_rank   int;
+  v_of     int;
+  v_champ  boolean;
+  v_given  boolean;
+  v_paid   jsonb;
+  v_rivals jsonb;
+begin
+  select * into v_s from schools where id = p_school;
+  if not found then return null; end if;
+  select * into v_score from school_month_scores where school_id = p_school and month_key = p_month_key;
+
+  -- Its place among the district's ranked schools that month.
+  select r.rn, r.n into v_rank, v_of from (
+    select ms.school_id, count(*) over () as n,
+           row_number() over (order by ms.score desc, ms.students desc, s.created_at, s.id) as rn
+      from school_month_scores ms join schools s on s.id = ms.school_id
+     where ms.month_key = p_month_key and ms.ranked and s.district_key = v_s.district_key
+  ) r where r.school_id = p_school;
+
+  select true, a.applied_at is not null into v_champ, v_given
+    from school_awards a where a.month_key = p_month_key and a.school_id = p_school;
+
+  -- Payments recorded in the month, by currency (a school pays in one).
+  select coalesce(jsonb_agg(jsonb_build_object('currency', currency, 'minor', total) order by currency), '[]'::jsonb)
+    into v_paid
+    from (
+      select upper(coalesce(currency, 'USD')) as currency, sum(amount_pence)::bigint as total
+        from billing_events
+       where school_id = p_school and type = 'school:invoice_paid' and amount_pence is not null
+         and received_at >= v_from and received_at < v_from + interval '1 month'
+       group by 1
+    ) p;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'rival', case when r.challenger_id = p_school then rs.name else cs.name end,
+           'result', case when rr.winner_id is null then 'draw' when rr.winner_id = p_school then 'won' else 'lost' end)
+           order by r.created_at, r.id), '[]'::jsonb)
+    into v_rivals
+    from school_rivalry_results rr
+    join school_rivalries r on r.id = rr.rivalry_id
+    join schools cs on cs.id = r.challenger_id
+    join schools rs on rs.id = r.rival_id
+   where rr.month_key = p_month_key and p_school in (r.challenger_id, r.rival_id);
+
+  return jsonb_build_object(
+    'school_id', v_s.id,
+    'name', v_s.name,
+    'district', v_s.district,
+    'month_key', p_month_key,
+    'score', v_score.score,
+    'students', coalesce(v_score.students, 0),
+    'ranked', coalesce(v_score.ranked, false),
+    'verified', v_s.verified,
+    'min_students', school_min_students(),
+    'rank', v_rank,
+    'ranked_schools', v_of,
+    'champion', coalesce(v_champ, false),
+    'free_month_given', coalesce(v_given, false),
+    'rivalries', v_rivals,
+    'paid', v_paid,
+    'status', v_s.status,
+    -- What happens next: renews, ends, or the trial ends.
+    'renews_at', case when v_s.status = 'active' and v_s.billing_ends_at is null then v_s.billing_period_end end,
+    'ends_at', case when v_s.status = 'active' then v_s.billing_ends_at end,
+    'trial_ends_at', case when v_s.status = 'trial' then v_s.trial_ends_at end
+  );
+end $$;
+
+/**
+ * Claim up to `p_limit` schools' emails for a closed month, with what each
+ * says and who to send it to: every school whose month was settled, that is
+ * not suspended, has an admin with an address, and has not had this month's
+ * email. A claim more than an hour old that never became a send is taken
+ * again.
+ */
+create or replace function claim_school_month_emails(p_month date, p_limit int default 50)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_key text := to_char(date_trunc('month', p_month), 'YYYY-MM');
+  r     record;
+  v_out jsonb := '[]'::jsonb;
+  v_to  jsonb;
+begin
+  for r in
+    select ms.school_id
+      from school_month_scores ms join schools s on s.id = ms.school_id
+     where ms.month_key = v_key and s.status <> 'suspended'
+       and not exists (select 1 from school_month_emails e
+                        where e.school_id = ms.school_id and e.month_key = v_key
+                          and (e.sent_at is not null or e.claimed_at > now() - interval '1 hour'))
+     order by ms.school_id
+  loop
+    select coalesce(jsonb_agg(u.email order by st.joined_at), '[]'::jsonb) into v_to
+      from school_staff st join auth.users u on u.id = st.user_id
+     where st.school_id = r.school_id and st.role = 'admin' and u.email like '%@%';
+    -- Nobody to write to: not claimed, so an admin added later still gets it.
+    continue when jsonb_array_length(v_to) = 0;
+
+    insert into school_month_emails (school_id, month_key) values (r.school_id, v_key)
+    on conflict (school_id, month_key) do update set claimed_at = now()
+     where school_month_emails.sent_at is null and school_month_emails.claimed_at <= now() - interval '1 hour';
+    continue when not found;
+
+    v_out := v_out || (school_month_summary(r.school_id, v_key) || jsonb_build_object('recipients', v_to));
+    exit when jsonb_array_length(v_out) >= greatest(p_limit, 1);
+  end loop;
+  return jsonb_build_object('ok', true, 'month', v_key, 'emails', v_out);
+end $$;
+
+/** Sent, so never again; or not sent, so the claim is given back for the next run. */
+create or replace function finish_school_month_email(p_school uuid, p_month_key text, p_sent boolean)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if p_sent then
+    update school_month_emails set sent_at = coalesce(sent_at, now())
+     where school_id = p_school and month_key = p_month_key;
+  else
+    delete from school_month_emails
+     where school_id = p_school and month_key = p_month_key and sent_at is null;
+  end if;
+end $$;
+
+-- The scheduled job's alone: they list schools and their admins' addresses.
+revoke execute on function school_month_summary(uuid, text) from public, anon, authenticated;
+revoke execute on function claim_school_month_emails(date, int) from public, anon, authenticated;
+revoke execute on function finish_school_month_email(uuid, text, boolean) from public, anon, authenticated;

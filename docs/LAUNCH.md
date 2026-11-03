@@ -236,7 +236,7 @@ Six jobs:
 | `/api/send-trial-emails` | hourly | No email three days before a free trial ends, or on the day. Needs `EMAIL_API_KEY` and `EMAIL_FROM` ([EMAILS.md](EMAILS.md)) |
 | `/api/run-retention` | daily | Old activity piles up, and a deleted family's Stripe cancellation that failed is never retried |
 | `/api/settle-alliances` | monthly (the 2nd) | Nobody is ever given their 20% discount |
-| `/api/settle-schools` | monthly (the 2nd) | No District Champion, no School Stars, no free month |
+| `/api/settle-schools` | monthly (the 2nd) | No District Champion, no School Stars, no free month, and no monthly email to each school's admin |
 
 The hourly digest is not wasteful: the database decides whose Sunday evening it
 is, so an hourly run is what makes a digest arrive at six in the evening in every

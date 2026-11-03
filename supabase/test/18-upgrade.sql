@@ -138,7 +138,7 @@ begin
                              'crash_reports','billing_events','push_subscriptions',
                              'parental_consents','deletions','referrals',
                              'parent_invites','adult_invite_attempts','rpc_receipts',
-                             'billing_cancellations');
+                             'billing_cancellations', 'school_month_emails');
   perform ok('no table is left locked with no policy at all', coalesce(bare, '') = '',
              'bare: ' || coalesce(bare, ''));
 end $$;

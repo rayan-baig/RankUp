@@ -1,7 +1,7 @@
 # Emails
 
-Which emails a family gets from RankUp, who sends each one, and what you have
-to set up for it. Three senders, and only one of them is this repository's
+Which emails a family (or a school) gets from RankUp, who sends each one, and
+what you have to set up for it. Three senders, and only one of them is this repository's
 code.
 
 | Email | Sent by | When | Set up |
@@ -10,6 +10,7 @@ code.
 | **Reset your password** | Supabase Auth | When you send one from the dashboard (the app has no "forgot password" screen yet) | Supabase dashboard: the template below |
 | **3 days left of your trial** | RankUp, `/api/send-trial-emails` | Three days before a family's free trial ends, in its own time zone | `EMAIL_API_KEY`, `EMAIL_FROM`, the hourly job (below) |
 | **Last day of your free trial** | RankUp, `/api/send-trial-emails` | On the day it ends, in its own time zone (late the evening before, for a trial that ends in the first two hours of a day, which an hourly job could miss) | The same |
+| **Your School League month** (to a school's admin) | RankUp, `/api/settle-schools` | Once a month, when the month is closed (the 2nd) | `EMAIL_API_KEY`, `EMAIL_FROM`, the monthly job |
 | **Receipt** | Stripe | Each payment | Stripe dashboard (below) |
 | **A payment failed** | Stripe | A renewal's card is declined | Stripe dashboard (below) |
 | **Your plan has ended** | Stripe, if your account offers it; otherwise nobody | A subscription is cancelled, or Stripe stops retrying | Stripe dashboard (below) |
@@ -90,6 +91,60 @@ DMARC on the parent domain).
   `tests/api.mjs` (the job under workerd against a stand-in provider: the
   words, both parts, the footer, the help line, once only, the provider
   down).
+
+---
+
+## RankUp's own: a school's month
+
+`api/settle-schools.js`, after it has closed last month; words in
+`api/_shared/email.js` (`schoolMonthEmail`), the facts in
+`supabase/schools.sql` (`school_month_summary`, `claim_school_month_emails`).
+
+- **Who.** Each admin of each school whose month was settled, one email to
+  each address. Never a teacher, never a parent, and never a school that is
+  suspended.
+- **What.** The month's league result (its score per student and its place
+  among the district's ranked schools, District Champion and the free month,
+  each rivalry won, lost or drawn, or why it was not ranked), what the school
+  paid that month (from the invoices Stripe reported), and what happens next:
+  the date the plan renews, the date it ends if it was cancelled, the date the
+  free trial ends, or that it has ended. No child is in it: the School Stars
+  stay on the school's page.
+
+  > **Subject:** Hill School: your School League month, October 2026
+  >
+  > Hello,
+  >
+  > Hill School scored 12.3 points per student in October 2026, with 41
+  > taking part: 2nd of 5 schools in North Valley.
+  >
+  > Against Lake School: you won.
+  >
+  > In October 2026 you paid $49.00.
+  >
+  > Your plan renews on 14 November 2026.
+  >
+  > Open the school page: https://rankup.&lt;your domain&gt;/#/school
+  >
+  > Need help? The school help page is https://rankup.&lt;your domain&gt;/#/school/help.
+  > Or write to help@…; a person reads it.
+  >
+  > RankUp is a product of MTRX Horizyn.
+  > You get this because you run Hill School's School League account. One
+  > email a month.
+
+- **Once per school per month.** The job claims each school's month in the
+  database before sending (only the job can: the functions are revoked from
+  `public`, `anon` and `authenticated`), marks it sent after, and gives the
+  claim back if the send failed, so the next run tries again. A run that died
+  between sending and marking is covered by the provider's idempotency key.
+- **Without the email settings** the month is still closed and the free
+  months still given; the emails wait until they are set and the job runs.
+- **Tested** by `supabase/test/47-school-month-email.sql` (what it says,
+  who gets it, once only, a failed send retried, a dead run's claim taken
+  again, nobody else can call it), `tests/noticewords.mjs` (every variant's
+  words) and `tests/api.mjs` (the job under workerd against a stand-in
+  provider).
 
 ---
 

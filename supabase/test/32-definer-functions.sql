@@ -339,7 +339,10 @@ begin
     'claim_due_reminders(integer,integer,integer)', 'claim_due_reminders_at(timestamptz,integer,integer,integer)',
     'finish_reminders(jsonb)', 'claim_due_digests(integer,integer,integer,uuid,integer)',
     'claim_due_digests_at(timestamptz,integer,integer,integer,uuid,integer)', 'finish_digests(jsonb)',
-    'record_push_failures(jsonb)']
+    'record_push_failures(jsonb)',
+    -- A school's month, by email.
+    'school_month_summary(uuid,text)', 'claim_school_month_emails(date,integer)',
+    'finish_school_month_email(uuid,text,boolean)']
   loop
     if to_regprocedure(f) is null then
       v_open := v_open || (f || ' (no longer exists — update this list)');

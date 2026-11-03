@@ -120,6 +120,9 @@ console.log('\n=== Every link goes to a screen the app has ===')
 const app = read('src/App.jsx')
 const render = app.slice(app.indexOf('function renderRoute'))
 const exact = new Set([...render.matchAll(/route === '([^']+)'/g)].map((m) => m[1]))
+// The screens App draws itself, outside the family's app, before renderRoute:
+// the school's own pages (a school admin is not a parent).
+for (const m of app.matchAll(/\n  if \(route === '([^']+)'\) {\n    return \(/g)) exact.add(m[1])
 const prefixes = [...render.matchAll(/route\.startsWith\('([^']+)'\)/g)].map((m) => m[1])
 const isRoute = (url) => {
   const path = String(url).replace(/^\/?#/, '').split('?')[0]
@@ -171,6 +174,42 @@ ok('a phone can ask the server for every kind but the local test', PUSH_KINDS.ev
 ok('the server clips a value to the length these words were measured with', /\.slice\(0, VALUE_MAX\)/.test(read('api/send-push.js')))
 
 /* ------------------------------------------------------------------ */
+console.log('\n=== A school\'s month, by email ===')
+{
+  const { schoolMonthEmail } = await import('../api/_shared/email.js')
+  const base = {
+    name: 'Hill <School>', district: 'North Valley', month_key: '2026-09', score: 14.24, students: 41, ranked: true,
+    verified: true, min_students: 5, rank: 1, ranked_schools: 4, champion: false, free_month_given: false,
+    rivalries: [], paid: [{ currency: 'USD', minor: 4900 }], status: 'active', renews_at: '2026-11-14T10:00:00Z',
+  }
+  const cases = {
+    placed: { ...base, rank: 2 },
+    champion: { ...base, champion: true, free_month_given: true, rivalries: [{ rival: 'Lake', result: 'won' }, { rival: 'Pond', result: 'draw' }] },
+    unchecked: { ...base, ranked: false, verified: false, rank: null, students: 3, paid: [], status: 'trial', renews_at: null, trial_ends_at: '2026-10-20T00:00:00Z' },
+    small: { ...base, ranked: false, rank: null, students: 1 },
+    cancelling: { ...base, renews_at: null, ends_at: '2026-11-20T00:00:00Z' },
+    lapsed: { ...base, status: 'lapsed', renews_at: null, paid: [] },
+  }
+  const out = Object.fromEntries(Object.entries(cases).map(([k, m]) => [k, schoolMonthEmail(m, { site: 'https://rankup.example.test', replyTo: 'help@example.test' })]))
+  const all = Object.values(out)
+  ok('every one has a plain-text part, help, and the MTRX Horizyn footer',
+    all.every((e) => e.text.includes('Need help?') && e.text.includes('RankUp is a product of MTRX Horizyn.') && e.html.includes('RankUp is a product of MTRX Horizyn.')))
+  ok('no blanks: nothing undefined, null or NaN in any', all.every((e) => !/undefined|null|NaN/.test(e.text)), all.map((e) => e.text).find((t) => /undefined|null|NaN/.test(t)))
+  ok('the school\'s name is escaped in the HTML part', all.every((e) => !e.html.includes('<School>') && e.html.includes('&lt;School&gt;')))
+  ok('the subject fits an inbox line', all.every((e) => e.subject.length <= 78), all.map((e) => e.subject).join(' | '))
+  ok('a place in the district', out.placed.text.includes('2nd of 4 schools in North Valley'))
+  ok('a Champion is told, and about its free month', /was District Champion in North Valley for September 2026/.test(out.champion.text)
+    && out.champion.text.includes('free month for winning has been given'))
+  ok('each rivalry, won, lost or drawn', out.champion.text.includes('Against Lake: you won.') && out.champion.text.includes('Against Pond: a draw.'))
+  ok('a school not yet checked is told why it was not ranked', out.unchecked.text.includes('we have not finished checking the school yet'))
+  ok('and one with too few students, how many it needs', out.small.text.includes('a school needs at least 5 students taking part, and 1 was'))
+  ok('what it paid, or that nothing was charged on a trial', out.placed.text.includes('In September 2026 you paid $49.00.')
+    && out.unchecked.text.includes('Nothing was charged in September 2026: you are on your free trial.'))
+  ok('when it renews, ends, or the trial ends', out.placed.text.includes('Your plan renews on 14 November 2026.')
+    && out.cancelling.text.includes('Your plan ends on 20 November 2026')
+    && out.unchecked.text.includes('Your free trial ends on 20 October 2026.') && out.lapsed.text.includes('Your plan has ended'))
+}
+
 console.log('\n=== The trial\'s last-day email ===')
 
 {

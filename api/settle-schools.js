@@ -10,16 +10,27 @@
  * are read back from the database as "still owed" (unapplied_school_awards)
  * rather than from this run's result, so a month whose reward failed to apply
  * is simply tried again next time, and one already given is never given again.
+ *
+ * Then each school's admin gets the month by email: the league result, what
+ * the school paid, and when its plan renews (schoolMonthEmail,
+ * api/_shared/email.js). Once per school per month: the database claims each
+ * one before it is sent and marks it after (claim_school_month_emails,
+ * supabase/schools.sql), a failed send gives the claim back for the next run,
+ * and the email provider's idempotency key covers a run that died between
+ * sending and marking. Needs EMAIL_API_KEY and EMAIL_FROM; without them the
+ * month is still closed and the emails wait.
  */
 
 import { recordRun, secretMatches, makeServiceRpc } from './_shared/job.js'
 import { makeStripe } from './_shared/stripe.js'
 import { championReward } from './_shared/schoolBilling.js'
+import { emailSettings, emailConfigured, sendEmail, schoolMonthEmail } from './_shared/email.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
 const CRON_SECRET = process.env.CRON_SECRET || ''
+const SITE = (process.env.PUBLIC_SITE_URL || '').replace(/\/+$/, '')
 
 /** The first day of last month, in UTC. */
 function lastMonth(now = new Date()) {
@@ -100,12 +111,63 @@ export default async function handler(req, res) {
     }
   }
 
+  const emails = await sendMonthEmails(serviceRpc, month)
+
   // A Stripe error is a failed run: a free month decided and not given is what
-  // somebody has to go and look at. A school whose plan has ended is not.
+  // somebody has to go and look at. A school whose plan has ended is not. An
+  // email that did not go is too; it goes on the next run.
   const errored = waiting.filter((w) => w.reason !== 'plan_not_active')
-  await recordRun(serviceRpc, 'settle-schools', errored.length === 0,
-    errored.length ? `${errored.length} free month(s) not given` : null)
+  const problems = [
+    errored.length ? `${errored.length} free month(s) not given` : null,
+    emails.failed ? `${emails.failed} school email(s) not sent` : null,
+  ].filter(Boolean)
+  await recordRun(serviceRpc, 'settle-schools', problems.length === 0, problems.join('; ') || null)
   return res.status(200).json({
-    ok: true, month: settled?.month, champions: settled?.champions || [], given: rewarded, waiting,
+    ok: true, month: settled?.month, champions: settled?.champions || [], given: rewarded, waiting, emails,
   })
+}
+
+/**
+ * Each school's month to its admin, in batches the database claims. Stops
+ * starting batches after 20 seconds; what is left goes on the next run.
+ */
+async function sendMonthEmails(serviceRpc, month) {
+  const settings = emailSettings()
+  if (!emailConfigured(settings)) return { sent: 0, failed: 0, schools: 0, skipped: 'not_configured' }
+  const started = Date.now()
+  const out = { sent: 0, failed: 0, schools: 0 }
+  while (Date.now() - started < 20000) {
+    let batch
+    try {
+      batch = await serviceRpc('claim_school_month_emails', { p_month: month, p_limit: 25 })
+    } catch (err) {
+      console.error('[settle-schools] could not claim the month emails:', err.message)
+      out.failed += 1
+      break
+    }
+    const list = batch?.emails || []
+    if (!list.length) break
+    for (const m of list) {
+      const email = schoolMonthEmail(m, { site: SITE, replyTo: settings.replyTo })
+      // One email per admin, each to their own address.
+      // eslint-disable-next-line no-await-in-loop
+      const results = await Promise.all((m.recipients || []).map((to) => sendEmail({
+        to,
+        ...email,
+        idempotencyKey: `school-month-${m.school_id}-${m.month_key}-${String(to).toLowerCase()}`,
+      }, settings)))
+      const done = results.length > 0 && results.every((r) => r.ok)
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await serviceRpc('finish_school_month_email', { p_school: m.school_id, p_month_key: m.month_key, p_sent: done })
+      } catch { /* the claim runs out in an hour and the idempotency key covers the retry */ }
+      out.schools += 1
+      out.sent += results.filter((r) => r.ok).length
+      out.failed += results.filter((r) => !r.ok).length
+    }
+    // A school whose email failed was given back, and would be claimed again
+    // at once: the provider is having trouble, so the next run tries.
+    if (out.failed) break
+  }
+  return out
 }

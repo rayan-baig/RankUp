@@ -3,9 +3,9 @@
  *
  * Most of RankUp's email is not sent from here: sign-up confirmations and
  * password resets are Supabase's, and receipts and payment problems are
- * Stripe's. Both are set up in those dashboards (docs/EMAILS.md). The one
- * kind sent from this code is the free trial's two reminders
- * (api/send-trial-emails.js).
+ * Stripe's. Both are set up in those dashboards (docs/EMAILS.md). Two kinds
+ * are sent from this code: the free trial's two reminders
+ * (api/send-trial-emails.js) and a school's month (api/settle-schools.js).
  *
  * Sent through the email provider's HTTP API, because a Cloudflare Worker
  * cannot speak SMTP. Written for Resend's API (POST /emails): one call, a
@@ -135,5 +135,102 @@ export function trialEmail({ kind, trialTier, paidTier, endsLocal, daysLeft = 3,
     ...foot,
   ].join('\n\n')
 
+  return { subject, text, html: toHtml(paragraphs, link, help, foot) }
+}
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+/** "2026-10" as "October 2026". */
+export function monthName(monthKey) {
+  const [y, m] = String(monthKey || '').split('-').map(Number)
+  return MONTHS[m - 1] ? `${MONTHS[m - 1]} ${y}` : String(monthKey || '')
+}
+
+/** A day, written out, in UTC: "14 November 2026". */
+function dayName(iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+}
+
+/** Minor units as money: 4900 USD is "$49.00". */
+export function money(minor, currency = 'USD') {
+  const amount = (Number(minor) || 0) / 100
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: String(currency || 'USD').toUpperCase() }).format(amount)
+  } catch {
+    return `${amount.toFixed(2)} ${String(currency || '').toUpperCase()}`
+  }
+}
+
+const ordinal = (n) => {
+  const v = n % 100
+  if (v >= 11 && v <= 13) return `${n}th`
+  return `${n}${({ 1: 'st', 2: 'nd', 3: 'rd' })[n % 10] || 'th'}`
+}
+
+/**
+ * The month, to a school's admin, after settlement (api/settle-schools.js):
+ * the league result, what the school paid that month, and what happens next
+ * with its plan. `m` is what school_month_summary (supabase/schools.sql)
+ * returns. Short and plain, in the School League's own words; no child is
+ * named (the School Stars are on the school's page, behind the admin's
+ * check). A plain-text part, help, and the MTRX Horizyn footer.
+ */
+export function schoolMonthEmail(m, { site, replyTo } = {}) {
+  const month = monthName(m.month_key)
+  const school = String(m.name || 'Your school')
+  const subject = `${school}: your School League month, ${month}`
+  const score = Number(m.score)
+
+  const league = []
+  if (m.champion) {
+    league.push(`${school} was District Champion in ${m.district} for ${month}, with ${score.toFixed(1)} points per student.`)
+    league.push(m.free_month_given
+      ? 'Your free month for winning has been given: it comes off your next bill (or adds a month to your trial).'
+      : 'Your free month for winning comes off your next bill (or adds a month to your trial).')
+  } else if (m.ranked && m.rank) {
+    const place = m.ranked_schools > 1
+      ? `${ordinal(m.rank)} of ${m.ranked_schools} schools in ${m.district}`
+      : `the only ranked school in ${m.district} this month, so no Champion there`
+    league.push(`${school} scored ${score.toFixed(1)} points per student in ${month}, with ${m.students} taking part: ${place}.`)
+  } else {
+    const why = !m.verified
+      ? 'we have not finished checking the school yet'
+      : `a school needs at least ${m.min_students} students taking part, and ${m.students} ${m.students === 1 ? 'was' : 'were'}`
+    league.push(`${school} was not ranked in ${month}: ${why}. Its score was ${Number.isFinite(score) ? score.toFixed(1) : '0.0'} points per student.`)
+  }
+  for (const r of m.rivalries || []) {
+    league.push(r.result === 'draw' ? `Against ${r.rival}: a draw.` : `Against ${r.rival}: you ${r.result}.`)
+  }
+
+  const paid = (m.paid || []).filter((p) => Number(p.minor) > 0)
+  const paidLine = paid.length
+    ? `In ${month} you paid ${paid.map((p) => money(p.minor, p.currency)).join(' and ')}.`
+    : m.status === 'trial'
+      ? `Nothing was charged in ${month}: you are on your free trial.`
+      : `Nothing was charged in ${month}.`
+
+  let next
+  if (m.renews_at) next = `Your plan renews on ${dayName(m.renews_at)}.`
+  else if (m.ends_at) next = `Your plan ends on ${dayName(m.ends_at)}, as you asked. Nothing more will be charged.`
+  else if (m.trial_ends_at) next = `Your free trial ends on ${dayName(m.trial_ends_at)}. Nothing is charged by itself: choose a plan on the school page to keep playing.`
+  else next = 'Your plan has ended, so your school sits the league out until it starts again, from the school page.'
+
+  const paragraphs = ['Hello,', ...league, paidLine, next]
+  const base = site ? site.replace(/\/+$/, '') : ''
+  const link = base ? { url: `${base}/#/school`, label: 'Open the school page' } : null
+  const help = `Need help? ${base ? `The school help page is ${base}/#/school/help.` : 'The school page has a Help link.'}${replyTo ? ` Or write to ${replyTo}; a person reads it.` : ''}`
+  const foot = [
+    PRODUCT_OF,
+    `You get this because you run ${school}'s School League account. One email a month.`,
+  ]
+  const text = [
+    ...paragraphs,
+    ...(link ? [`${link.label}: ${link.url}`] : []),
+    help,
+    '--',
+    ...foot,
+  ].join('\n\n')
   return { subject, text, html: toHtml(paragraphs, link, help, foot) }
 }
