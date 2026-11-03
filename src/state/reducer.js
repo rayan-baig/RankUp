@@ -8,6 +8,7 @@ import { ENTITIES, familyGoals, weeklyLimitOf } from '../lib/sync/mappers.js'
 import { pendingRows } from '../lib/sync/shadow.js'
 import { questsDueToReturn, dayOf } from '../lib/recurrence.js'
 import { STICKER_MAP } from '../data/stickers.js'
+import { foldLevelUp, foldStreak } from '../lib/moments.js'
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -370,11 +371,14 @@ export function reducer(state, action) {
       const was = mine && state.kids.find((k) => k.id === mine)
       const now = mine && next.kids.find((k) => k.id === mine)
       if (was && now && was.rev != null) {
+        // One moment however many levels the sync brought: see lib/moments.js.
         const from = levelFromXp(was.xp).level
         const to = levelFromXp(now.xp).level
-        if (to > from) {
-          const held = state.pendingLevelUp?.kidId === mine ? state.pendingLevelUp : null
-          next = { ...next, pendingLevelUp: { kidId: mine, from: held ? Math.min(held.from, from) : from, to } }
+        if (to > from) next = { ...next, pendingLevelUp: foldLevelUp(state.pendingLevelUp, mine, from, to) }
+        const streakBefore = was.streak?.count || 0
+        const streakAfter = now.streak?.count || 0
+        if (streakAfter > streakBefore) {
+          next = { ...next, pendingStreak: foldStreak(state.pendingStreak, mine, streakBefore, streakAfter) }
         }
       }
 
@@ -1024,7 +1028,12 @@ export function reducer(state, action) {
 
       if (afterLevel > beforeLevel) {
         next = logEvent(next, { type: 'level_up', kidId: kid.id, meta: { from: beforeLevel, to: afterLevel } })
-        next = { ...next, pendingLevelUp: { kidId: kid.id, from: beforeLevel, to: afterLevel } }
+        // Accepting several in a row folds into one moment, never a queue.
+        next = { ...next, pendingLevelUp: foldLevelUp(state.pendingLevelUp, kid.id, beforeLevel, afterLevel) }
+      }
+      const streakAfter = next.kids.find((k) => k.id === kid.id)?.streak?.count || 0
+      if (streakAfter > (kid.streak?.count || 0)) {
+        next = { ...next, pendingStreak: foldStreak(state.pendingStreak, kid.id, kid.streak?.count || 0, streakAfter) }
       }
       return next
     }
@@ -1075,8 +1084,12 @@ export function reducer(state, action) {
       }, 'set_history_note', { p_submission_id: action.submissionId, p_note: note }, `set_history_note:${action.submissionId}`)
     }
 
+    // A level-up carries the streak inside it, so closing it closes both.
     case 'CLEAR_LEVEL_UP':
-      return { ...state, pendingLevelUp: null }
+      return { ...state, pendingLevelUp: null, pendingStreak: null }
+
+    case 'CLEAR_STREAK':
+      return { ...state, pendingStreak: null }
 
     /** The provider has moved these into the outbox; `keep` are the ones it could not. */
     case 'DRAIN_SYNC_QUEUE': {

@@ -553,6 +553,8 @@
  * ------------------------------------------------------------------------- */
 @keyframes rankup-sweep   { from { width: 0 } to { width: 100% } }
 @keyframes rankup-fill    { from { width: 18% } to { width: 72% } }
+/* A moment's time running out (LevelUpOverlay): full to empty. */
+@keyframes rankup-moment-bar { from { width: 100% } to { width: 0 } }
 
 /*
  * Atmosphere.

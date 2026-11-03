@@ -207,6 +207,7 @@ export function buildDemoFamily() {
      * when you arrive.
      */
     pendingLevelUp: null,
+    pendingStreak: null,
     createdAt: ago(14),
   }
 }

@@ -12,7 +12,7 @@ import ThemeBackground from './components/ThemeBackground.jsx'
 import Atmosphere from './components/Atmosphere.jsx'
 import ParentBackground from './components/ParentBackground.jsx'
 import NavBar from './components/NavBar.jsx'
-import LevelUpOverlay from './components/LevelUpOverlay.jsx'
+import LevelUpOverlay, { StreakMoment } from './components/LevelUpOverlay.jsx'
 import BadgeToast from './components/BadgeToast.jsx'
 
 import RoleSwitch from './screens/RoleSwitch.jsx'
@@ -346,7 +346,17 @@ export default function App() {
             (state.kids.find((k) => k.id === state.pendingLevelUp.kidId) || activeKid).themeId,
             state.pendingLevelUp.to,
           )}
+          streak={state.pendingStreak?.kidId === state.pendingLevelUp.kidId ? state.pendingStreak : null}
           onClose={() => dispatch({ type: 'CLEAR_LEVEL_UP' })}
+        />
+      )}
+      {/* A streak on its own, in the child's half only: a parent does not need
+          a moment for it. One waiting with a level-up is shown inside that. */}
+      {!state.pendingLevelUp && state.pendingStreak && isKidArea && (
+        <StreakMoment
+          key={`${state.pendingStreak.kidId}-${state.pendingStreak.count}`}
+          streak={state.pendingStreak}
+          onClose={() => dispatch({ type: 'CLEAR_STREAK' })}
         />
       )}
     </>

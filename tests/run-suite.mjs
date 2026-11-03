@@ -62,6 +62,7 @@ const SUITES = {
     { file: 'offline.mjs', env: { TZ: 'America/New_York' }, weight: 1 },
     { file: 'syncfixes.mjs', weight: 1 },
     { file: 'notices.mjs', weight: 1 },
+    { file: 'moments.mjs', weight: 20 },
     { file: 'screens.mjs', weight: 40 },
     { file: 'lookaround.mjs', weight: 27 },
     { file: 'motion.mjs', weight: 14 },
