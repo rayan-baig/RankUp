@@ -607,11 +607,34 @@ export function reducer(state, action) {
         },
       }
 
-    case 'SET_KID_THEME':
+    /*
+     * A theme is a look: XP, coins, levels, streaks, tokens, skins and the
+     * stories already watched all stay exactly as they were.
+     *
+     * The one thing tied to the moment a theme was chosen is Block Craft's
+     * dragon fight, which starts no earlier than that moment (the server
+     * stamps it, see stamp_theme_chosen). Flicking to another theme and
+     * straight back, before the change has even left the phone, must not
+     * restart a fight: so the theme as the server last confirmed it is kept
+     * aside (`themeBefore`), and going back to it puts its moment back. The
+     * folded set_kid_look or row change then tells the server nothing moved,
+     * and it keeps its own moment too.
+     */
+    case 'SET_KID_THEME': {
+      const kid = state.kids.find((k) => k.id === action.kidId)
+      if (!kid || kid.themeId === action.themeId) return state
+      const before = kid.themeBefore || { id: kid.themeId, chosenAt: kid.themeChosenAt ?? null }
+      const back = before.id === action.themeId
       return logEvent(
-        mapKid(state, action.kidId, (k) => ({ ...k, themeId: action.themeId, themeChosenAt: Date.now() })),
+        mapKid(state, action.kidId, (k) => {
+          if (!back) return { ...k, themeId: action.themeId, themeChosenAt: Date.now(), themeBefore: before }
+          const { themeBefore: _back, ...rest } = k
+          void _back
+          return { ...rest, themeId: action.themeId, themeChosenAt: before.chosenAt }
+        }),
         { type: 'theme_changed', kidId: action.kidId, meta: { themeId: action.themeId } },
       )
+    }
 
     /*
      * A chapter of the theme's story has been watched on this device. Local

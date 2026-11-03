@@ -286,7 +286,7 @@ export default function KidProfile() {
           </>
         }
       >
-        <p className="text-sm text-muted mb-3">Changing a theme resets the look of the whole app for this kid.</p>
+        <p className="text-sm text-muted mb-3">A new theme changes how the whole app looks for this kid. Their level, XP, coins and streak stay exactly as they are.</p>
         <TextInput
           value={pin}
           onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 8))}

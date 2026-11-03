@@ -17,9 +17,20 @@ const iso = (millis) => (millis ? new Date(millis).toISOString() : null)
 /* Kids                                                                */
 /* ------------------------------------------------------------------ */
 
+/**
+ * A kid as this phone keeps it, less `themeBefore`: once the server's row has
+ * arrived, the theme it names is the confirmed one (see SET_KID_THEME).
+ */
+const settledKid = (existing) => {
+  if (!existing || !('themeBefore' in existing)) return existing
+  const { themeBefore: _settled, ...kept } = existing
+  void _settled
+  return kept
+}
+
 export const kids = {
   fromRow: (row, existing = {}) => ({
-    ...existing,
+    ...settledKid(existing),
     id: row.id,
     name: row.name,
     themeId: row.theme_id,
