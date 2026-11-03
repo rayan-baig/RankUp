@@ -71,7 +71,7 @@ begin
   end if;
   -- An unknown zone would make every due check throw, so it is refused here,
   -- once, rather than breaking the job for everybody later.
-  if not exists (select 1 from pg_timezone_names where name = v_tz) then
+  if not is_time_zone(v_tz) then
     v_tz := 'UTC';
   end if;
   -- A kid id is accepted from the caller, so it has to belong to them. Nothing

@@ -89,7 +89,9 @@ begin
   select coalesce(nullif(timezone, ''), 'UTC') into v_tz from families where id = p_family_id;
   -- A zone the database does not know is counted in UTC rather than failing
   -- the whole run for every family after this one.
-  if v_tz is null or not exists (select 1 from pg_timezone_names where name = v_tz) then
+  -- is_time_zone (schema.sql), not pg_timezone_names: that read the whole
+  -- zone database for every family, 9 ms each, every hourly run.
+  if v_tz is null or not is_time_zone(v_tz) then
     v_tz := 'UTC';
   end if;
   v_from := (p_week_start::timestamp) at time zone v_tz;
@@ -278,7 +280,7 @@ declare v_rows jsonb;
 begin
   with running as (
     select f.id, f.tier, f.trial_tier, f.trial_ends_at,
-           case when exists (select 1 from pg_timezone_names where name = f.timezone)
+           case when is_time_zone(f.timezone)
                 then f.timezone else 'UTC' end as tz
       from families f
      where f.trial_tier is not null

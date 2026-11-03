@@ -403,7 +403,16 @@ create table if not exists events (
 );
 
 create index if not exists events_family_day_idx on events(family_id, day);
-create index if not exists events_kid_type_idx on events(kid_id, type);
+/*
+ * One child's events of one kind, by day: a guild's roster sums each member's
+ * accepted chores over the last seven days, for every member, every time a
+ * child opens it. (kid_id, type) alone read every such event the child had in
+ * the 90 days retention keeps, about 115 for a child doing a chore or two a
+ * day, to use 8; with the day in the index it reads the 8. It serves
+ * everything (kid_id, type) did, so that one goes. docs/LOAD-TEST.md.
+ */
+create index if not exists events_kid_type_day_idx on events(kid_id, type, day);
+drop index if exists events_kid_type_idx;
 
 -- ---------------------------------------------------------------------------
 -- Row Level Security
@@ -412,6 +421,14 @@ create index if not exists events_kid_type_idx on events(kid_id, type);
 -- browser, so a determined person can send any query they like. These policies
 -- are what make that safe.
 -- ---------------------------------------------------------------------------
+--
+-- Every helper in a policy below is written `(select current_family_id())`
+-- rather than `current_family_id()`. The meaning is identical; the cost is
+-- not. Bare, Postgres may call the function once for every row it looks at:
+-- a phone's first pull of a busy family read 750 chores and asked "is this a
+-- parent?" 750 times. In a subselect it is asked once per query. (Supabase
+-- gives the same advice for auth.uid() in policies.) Measured in
+-- docs/LOAD-TEST.md; supabase/test/45-load.sql holds every policy here to it.
 
 -- Which family does the logged-in user belong to?
 /**
@@ -431,14 +448,24 @@ create index if not exists events_kid_type_idx on events(kid_id, type);
  * exactly one function — supporter_view() in coparents.sql — which returns
  * the handful of things they are meant to see and nothing else.
  */
+/*
+ * Written in PL/pgSQL, not SQL, for speed alone; what it returns is unchanged.
+ * A security definer SQL function is never inlined, and Postgres plans its
+ * body afresh at every place a statement calls it. A sync pull calls it in
+ * ten places, so every pull planned this one line ten times. PL/pgSQL keeps
+ * the plan for the life of the connection. Measured
+ * under load (docs/LOAD-TEST.md); is_parent() and current_kid_id() below
+ * changed for the same reason.
+ */
 create or replace function current_family_id()
-returns uuid language sql stable security definer set search_path = public as $$
-  select coalesce(
+returns uuid language plpgsql stable security definer set search_path = public as $$
+begin
+  return coalesce(
     (select family_id from parents
       where user_id = auth.uid() and role = 'parent'),
     (select family_id from kids    where user_id = auth.uid())
   );
-$$;
+end $$;
 
 /**
  * What this family is actually entitled to, right now.
@@ -511,15 +538,36 @@ end $$;
 revoke execute on function grant_trial(uuid, text, int) from public, anon, authenticated;
 
 create or replace function is_parent()
-returns boolean language sql stable security definer set search_path = public as $$
-  select exists (select 1 from parents
+returns boolean language plpgsql stable security definer set search_path = public as $$
+begin
+  return exists (select 1 from parents
                   where user_id = auth.uid() and role = 'parent');
-$$;
+end $$;
 
 create or replace function current_kid_id()
-returns uuid language sql stable security definer set search_path = public as $$
-  select id from kids where user_id = auth.uid();
-$$;
+returns uuid language plpgsql stable security definer set search_path = public as $$
+begin
+  return (select id from kids where user_id = auth.uid());
+end $$;
+
+/*
+ * Is this a time zone Postgres can convert to?
+ *
+ * Asking pg_timezone_names reads the whole time zone database from disk, about
+ * 9 ms every time. family_week_digest asked it once per family, so the Sunday
+ * digest job spent 9.5 seconds on 1,000 families before it sent anything
+ * (docs/LOAD-TEST.md). Trying the conversion costs microseconds and accepts
+ * exactly what every caller then does with the zone.
+ */
+create or replace function is_time_zone(p_tz text)
+returns boolean language plpgsql stable set search_path = public as $$
+begin
+  if nullif(trim(p_tz), '') is null then return false; end if;
+  perform now() at time zone p_tz;
+  return true;
+exception when others then
+  return false;
+end $$;
 
 /*
  * Is this child one of the caller's family's? (No child at all also passes.)
@@ -559,15 +607,17 @@ alter table events          enable row level security;
 -- the subscription columns, which only the Stripe webhook (service role) writes.
 drop policy if exists family_read on families;
 create policy family_read on families
-  for select using (id = current_family_id());
+  for select using (id = (select current_family_id()));
 drop policy if exists family_update on families;
 create policy family_update on families
-  for update using (id = current_family_id() and is_parent());
+  for update using (id = (select current_family_id()) and (select is_parent()));
 
 drop policy if exists parents_read on parents;
 create policy parents_read on parents
   -- Parents only. A child's device has no use for the adults' rows, which
   -- hold their email addresses.
+  -- Left calling the helpers bare (see above): in a subselect here they made
+  -- parents_write's own subselects on this table recurse.
   for select using (family_id = current_family_id() and is_parent());
 /*
  * An adult may edit their own row, and nobody else's.
@@ -594,31 +644,31 @@ drop policy if exists kids_read on kids;
 create policy kids_read on kids
   -- A parent sees every child; a child sees only themselves. A brother's row
   -- holds his accessibility notes, which are for his parents and nobody else.
-  for select using (family_id = current_family_id() and (is_parent() or id = current_kid_id()));
+  for select using (family_id = (select current_family_id()) and ((select is_parent()) or id = (select current_kid_id())));
 drop policy if exists kids_parent_write on kids;
 create policy kids_parent_write on kids
-  for all using (family_id = current_family_id() and is_parent())
-  with check (family_id = current_family_id() and is_parent());
+  for all using (family_id = (select current_family_id()) and (select is_parent()))
+  with check (family_id = (select current_family_id()) and (select is_parent()));
 
 -- Quests: a kid can read their own; only a parent can create or edit one.
 -- This is the rule that keeps the game honest — a kid cannot raise a quest's XP.
 drop policy if exists quests_read on quests;
 create policy quests_read on quests
   for select using (
-    family_id = current_family_id()
-    and (is_parent() or kid_id = current_kid_id())
+    family_id = (select current_family_id())
+    and ((select is_parent()) or kid_id = (select current_kid_id()))
   );
 drop policy if exists quests_parent_write on quests;
 create policy quests_parent_write on quests
-  for all using (family_id = current_family_id() and is_parent())
-  with check (family_id = current_family_id() and is_parent() and kid_in_caller_family(kid_id));
+  for all using (family_id = (select current_family_id()) and (select is_parent()))
+  with check (family_id = (select current_family_id()) and (select is_parent()) and kid_in_caller_family(kid_id));
 
 -- Submissions: a kid creates their own; only a parent decides one.
 drop policy if exists submissions_read on submissions;
 create policy submissions_read on submissions
   for select using (
-    family_id = current_family_id()
-    and (is_parent() or kid_id = current_kid_id())
+    family_id = (select current_family_id())
+    and ((select is_parent()) or kid_id = (select current_kid_id()))
   );
 -- No insert policy: a submission is made by submit_quest. A direct insert
 -- named any quest, including a sibling's or another family's, and was paid
@@ -626,33 +676,33 @@ create policy submissions_read on submissions
 drop policy if exists submissions_kid_insert on submissions;
 drop policy if exists submissions_parent_update on submissions;
 create policy submissions_parent_update on submissions
-  for update using (family_id = current_family_id() and is_parent())
-  with check (family_id = current_family_id() and is_parent() and kid_in_caller_family(kid_id));
+  for update using (family_id = (select current_family_id()) and (select is_parent()))
+  with check (family_id = (select current_family_id()) and (select is_parent()) and kid_in_caller_family(kid_id));
 
 drop policy if exists rewards_read on rewards;
 create policy rewards_read on rewards
-  for select using (family_id = current_family_id());
+  for select using (family_id = (select current_family_id()));
 drop policy if exists rewards_parent_write on rewards;
 create policy rewards_parent_write on rewards
-  for all using (family_id = current_family_id() and is_parent())
-  with check (family_id = current_family_id() and is_parent());
+  for all using (family_id = (select current_family_id()) and (select is_parent()))
+  with check (family_id = (select current_family_id()) and (select is_parent()));
 
 drop policy if exists redemptions_read on redemptions;
 create policy redemptions_read on redemptions
-  for select using (family_id = current_family_id());
+  for select using (family_id = (select current_family_id()));
 -- No insert policy: a redemption is made by redeem_reward, which charges for
 -- it. A direct insert let a child take any reward at a cost of nothing.
 drop policy if exists redemptions_kid_insert on redemptions;
 drop policy if exists redemptions_parent_update on redemptions;
 create policy redemptions_parent_update on redemptions
-  for update using (family_id = current_family_id() and is_parent())
-  with check (family_id = current_family_id() and is_parent() and kid_in_caller_family(kid_id));
+  for update using (family_id = (select current_family_id()) and (select is_parent()))
+  with check (family_id = (select current_family_id()) and (select is_parent()) and kid_in_caller_family(kid_id));
 
 drop policy if exists notes_read on notes;
 create policy notes_read on notes
   for select using (
-    family_id = current_family_id()
-    and (is_parent() or kid_id = current_kid_id())
+    family_id = (select current_family_id())
+    and ((select is_parent()) or kid_id = (select current_kid_id()))
   );
 -- A parent writes as a parent; a child writes only as themselves. The check
 -- used to be the family alone, so a child could post "you are grounded - Mum"
@@ -660,36 +710,36 @@ create policy notes_read on notes
 drop policy if exists notes_insert on notes;
 create policy notes_insert on notes
   for insert with check (
-    family_id = current_family_id()
+    family_id = (select current_family_id())
     and kid_in_caller_family(kid_id)
-    and ((is_parent() and author = 'parent')
-         or (author = 'kid' and kid_id = current_kid_id())));
+    and (((select is_parent()) and author = 'parent')
+         or (author = 'kid' and kid_id = (select current_kid_id()))));
 drop policy if exists notes_update on notes;
 create policy notes_update on notes
-  for update using (family_id = current_family_id() and (is_parent() or kid_id = current_kid_id()))
-  with check (family_id = current_family_id() and (is_parent() or kid_id = current_kid_id())
+  for update using (family_id = (select current_family_id()) and ((select is_parent()) or kid_id = (select current_kid_id())))
+  with check (family_id = (select current_family_id()) and ((select is_parent()) or kid_id = (select current_kid_id()))
               and kid_in_caller_family(kid_id));
 
 drop policy if exists goals_read on family_goals;
 create policy goals_read on family_goals
-  for select using (family_id = current_family_id());
+  for select using (family_id = (select current_family_id()));
 drop policy if exists goals_parent_write on family_goals;
 create policy goals_parent_write on family_goals
-  for all using (family_id = current_family_id() and is_parent())
-  with check (family_id = current_family_id() and is_parent());
+  for all using (family_id = (select current_family_id()) and (select is_parent()))
+  with check (family_id = (select current_family_id()) and (select is_parent()));
 
 -- Overrides: a kid can see one applied to them (they are told the reason), but
 -- obviously cannot create or lift one.
 drop policy if exists overrides_read on overrides;
 create policy overrides_read on overrides
   for select using (
-    family_id = current_family_id()
-    and (is_parent() or kid_id = current_kid_id())
+    family_id = (select current_family_id())
+    and ((select is_parent()) or kid_id = (select current_kid_id()))
   );
 drop policy if exists overrides_parent_write on overrides;
 create policy overrides_parent_write on overrides
-  for all using (family_id = current_family_id() and is_parent())
-  with check (family_id = current_family_id() and is_parent() and kid_in_caller_family(kid_id));
+  for all using (family_id = (select current_family_id()) and (select is_parent()))
+  with check (family_id = (select current_family_id()) and (select is_parent()) and kid_in_caller_family(kid_id));
 
 -- Guilds: visible only to members of that guild.
 drop policy if exists guilds_read on guilds;
