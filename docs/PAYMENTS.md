@@ -140,6 +140,10 @@ it is replayed, is checked by `tests/api.mjs` through the real runtime.
 
 **A refund in full does not cancel the subscription in Stripe.** Cancel it
 there too, or the next renewal charges the card and puts the plan back. Until
+it is cancelled (or the parent cancels it from "Manage billing"), checkout
+refuses to start a second plan beside it (`refunded_plan_renews`): the plan
+screen says "choose a plan below", and both subscriptions would otherwise have
+charged the card every period. Until
 then Stripe goes on calling the subscription `active`, and cancelling it in the
 portal at the end of the period says `active` once more: the webhook used to
 take that as the plan coming back, so a refunded family had its plan again,

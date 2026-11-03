@@ -291,6 +291,12 @@ console.log('\n=== 4. A refund ===')
   ok('refunded: the plan screen says the payment was refunded', f.plan?.title === 'Your payment was refunded', JSON.stringify(f.plan))
   ok('refunded: and so does the dashboard', f.dashboard?.title === 'Your payment was refunded', JSON.stringify(f.dashboard))
   const again = await webhook(event('refund_again', 'charge.refunded', charge()))
+  // Stripe still has the subscription, set to renew: a second one beside it
+  // would charge the card twice every period.
+  const second = await asUser('/api/create-checkout', { tier: 'elite', cycle: 'month' }, PARENT)
+  const why = await second.json().catch(() => ({}))
+  ok('refunded but still renewing in Stripe: no second plan can be started beside it',
+    second.status === 409 && why.error === 'refunded_plan_renews', `status ${second.status} ${JSON.stringify(why)}`)
   ok('the same refund again (a new event for the same charge) acts once',
     full.status === 200 && again.status === 200 && (await db.query(
       "select count(*)::int as n from billing_events where stripe_event = $1", [`refund:ch_walk_${RUN}`])).rows[0].n === 1)

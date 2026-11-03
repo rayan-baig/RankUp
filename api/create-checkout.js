@@ -161,6 +161,14 @@ export default async function handler(req, res) {
   if (!oneOff && billing.has_subscription && ['active', 'trialing', 'past_due'].includes(billing.status)) {
     return res.status(409).json({ error: 'already_subscribed' })
   }
+  // Refunded in full, but the subscription is still live at Stripe and set to
+  // renew (a refund does not cancel it, docs/PAYMENTS.md). The plan screen
+  // says "choose a plan below", and a checkout here started a second
+  // subscription beside it: both then charged the card every period. Once it
+  // is cancelled (ends_at is set) or has ended, a new plan is fine.
+  if (!oneOff && billing.has_subscription && billing.status === 'refunded' && !billing.ends_at) {
+    return res.status(409).json({ error: 'refunded_plan_renews' })
+  }
 
   // Whatever lands in success_url/cancel_url is where Stripe sends the person
   // after paying, on a page carrying RankUp's name. An unvalidated origin from
