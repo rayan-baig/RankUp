@@ -150,6 +150,9 @@ function Landing({ onStart }) {
       <Button className="w-full" disabled={!transport.isConfigured()} onClick={() => onStart(students)}>
         Sign your school up
       </Button>
+      <button type="button" className="w-full text-sm underline text-muted mt-3" onClick={() => navigate('/school/help')}>
+        Questions from schools, answered
+      </button>
     </>
   )
 }
@@ -462,6 +465,10 @@ function Dashboard({ school, league, demo, onChange }) {
           )
         )}
       </Card>
+
+      <button type="button" className="w-full text-sm underline text-muted mb-3" onClick={() => navigate('/school/help')}>
+        Help: questions from schools
+      </button>
 
       <Card flat className="mb-3">
         <SectionTitle>Staff</SectionTitle>

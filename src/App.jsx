@@ -55,6 +55,7 @@ const ParentAlliance = lazyLoad(() => import('./screens/parent/ParentAlliance.js
 const ParentSchool = lazyLoad(() => import('./screens/parent/ParentSchool.jsx'))
 const SchoolPortal = lazyLoad(() => import('./screens/SchoolPortal.jsx'))
 const OperatorSchools = lazyLoad(() => import('./screens/OperatorSchools.jsx'))
+const SchoolHelp = lazyLoad(() => import('./screens/SchoolHelp.jsx'))
 const LegalDoc = lazyLoad(() => import('./screens/LegalDoc.jsx'))
 const ParentGuilds = lazyLoad(() => import('./screens/parent/ParentGuilds.jsx'))
 const ParentPairKid = lazyLoad(() => import('./screens/parent/ParentPairKid.jsx'))
@@ -160,7 +161,7 @@ export default function App() {
 
   // Route guards.
   useEffect(() => {
-    if (route.startsWith('/legal/') || route === '/school' || route === '/operator') return
+    if (route.startsWith('/legal/') || route === '/school' || route === '/school/help' || route === '/operator') return
     if (!state.onboarded && route !== '/welcome') {
       navigate('/welcome')
       return
@@ -217,6 +218,19 @@ export default function App() {
         <ScreenBoundary key={route} route={route}>
           <Suspense fallback={<Loading />}>
             <OperatorSchools />
+          </Suspense>
+        </ScreenBoundary>
+      </>
+    )
+  }
+
+  if (route === '/school/help') {
+    return (
+      <>
+        <ParentBackground theme={parentTheme} />
+        <ScreenBoundary key={route} route={route}>
+          <Suspense fallback={<Loading />}>
+            <SchoolHelp />
           </Suspense>
         </ScreenBoundary>
       </>

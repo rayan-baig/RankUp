@@ -51,6 +51,7 @@ const SUITES = {
     { file: 'dataexport.mjs' },
     { file: 'noticewords.mjs' },
     { file: 'arcadewords.mjs' },
+    { file: 'schoolhelp.mjs' },
   ],
   // The app in a real browser, against the dev server on :5173 and the mock
   // API on :54321 (supabase/test/up.sh starts both).

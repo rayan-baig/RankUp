@@ -28,6 +28,17 @@ export const SCHOOL_CHAMPION_TRIAL_DAYS = 30
 /** A year is this many months' money: two free for paying up front. */
 export const SCHOOL_YEAR_MONTHS = 10
 export const SCHOOL_MIN_STUDENTS = 5
+/*
+ * Three rules that live in supabase/schools.sql, copied here so the school
+ * help page can say them. tests/schoolhelp.mjs reads the SQL and fails if a
+ * copy and its rule ever differ.
+ */
+/** Accepted chores a student can score a day (school_kid_points: least(count(*), 8)). */
+export const SCHOOL_DAILY_CHORES = 8
+/** Rivalries a school can have at once, waiting or active (challenge_school). */
+export const SCHOOL_MAX_RIVALS = 3
+/** A school's Stars each month (settle_school_month: rn <= 10). */
+export const SCHOOL_STARS = 10
 
 /** What a school this size pays, worked out the same way the database does. */
 export function schoolPrice(students) {

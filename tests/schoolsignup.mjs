@@ -13,6 +13,7 @@
  * Against the mock API and a real Postgres (supabase/test/up.sh).
  */
 import { launch, reporter, finish, BASE, SHOT_DIR } from './helpers.mjs'
+import { SCHOOL_PRICES, dollars } from '../src/lib/schools.js'
 
 const { browser, page, errors } = await launch()
 const { fails, pass, fail } = reporter()
@@ -61,6 +62,16 @@ await page.screenshot({ path: `${SHOT_DIR}/school-first-table.png` })
 console.log(`\n  ${steps} steps over ${screens.size} screens (it was 11 over 4)`)
 ok(`${steps} steps, no more than 9`, steps <= 9, String(steps))
 ok(`${screens.size} screens, no more than 3 counting the school's own page`, screens.size <= 3, [...screens].join(', '))
+
+console.log('\n=== The help page for schools ===')
+await page.evaluate(() => { window.location.hash = '/school/help' })
+await page.waitForTimeout(1200)
+const helpQuestions = await page.locator('button[aria-expanded]').count()
+ok(`the help page opens, with ${helpQuestions} questions`, helpQuestions >= 9, String(helpQuestions))
+await page.getByRole('button', { name: 'How much does it cost?' }).click()
+await page.waitForTimeout(300)
+ok('and the prices in it', (await page.getByTestId('school-help-price').innerText()).includes(`${dollars(SCHOOL_PRICES[1].monthlyCents)} a month`))
+await page.screenshot({ path: `${SHOT_DIR}/school-help.png`, fullPage: true })
 
 console.log('\n=== Signed in already: no account fields at all ===')
 await page.evaluate(() => { window.location.hash = '/school' })
