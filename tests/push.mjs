@@ -164,6 +164,68 @@ ok('held for an offline phone no longer than it would still be on time (the grac
   reminderTtl > 0 && reminderTtl <= 120 * 60, `TTL ${reminder?.headers?.ttl}`)
 await db.query('delete from reminder_schedules where family_id = $1', [FAMILY])
 
+console.log('\n=== Many reminders at once, and a run that dies part-way ===')
+// 150 families, one phone each, every reminder due now. A run that died is
+// played by claiming a batch straight from the database and never finishing
+// it: the job must leave that batch alone while its claim holds, send it once
+// the claim runs out, and send every reminder exactly once in all.
+{
+  const N = 150
+  const fam = (i) => `a0000000-0000-4000-8000-${String(900000000000 + i)}`
+  const user = (i) => `a0000000-0000-4000-8001-${String(900000000000 + i)}`
+  const ids = Array.from({ length: N }, (_, i) => i)
+  await db.query(`delete from families where name like 'Push batch %'`)
+  await db.query(`delete from auth.users where email like 'push-batch-%@example.test'`)
+  await db.query(`insert into families (id, name, timezone) select unnest($1::uuid[]), 'Push batch ' || generate_series(1, $2::int), 'UTC'`,
+    [ids.map(fam), N])
+  await db.query(`insert into auth.users (id, email) select u, 'push-batch-' || n || '@example.test'
+                  from unnest($1::uuid[]) with ordinality t(u, n)`, [ids.map(user)])
+  await db.query(`insert into parents (user_id, family_id, name) select u, f, 'P' from unnest($1::uuid[], $2::uuid[]) t(u, f)`,
+    [ids.map(user), ids.map(fam)])
+  await db.query(`insert into push_subscriptions (endpoint, keys, family_id, user_id, role)
+                  select 'http://127.0.0.1:${PORT}/push/batch/' || n, $3::jsonb, f, u, 'parent'
+                    from unnest($1::uuid[], $2::uuid[]) with ordinality t(f, u, n)`, [ids.map(fam), ids.map(user), JSON.stringify(keys)])
+  // Everybody else's reminders are not this test's: switched off while it runs.
+  const others = (await db.query(`update reminder_schedules set enabled = false
+    where enabled and family_id not in (select id from families where name like 'Push batch %') returning id`)).rows.map((r) => r.id)
+  await db.query(`insert into reminder_schedules (family_id, role, label, at_local, timezone)
+                  select f, 'parent', 'Morning quests', ((now() - interval '1 minute') at time zone 'UTC')::time, 'UTC'
+                    from unnest($1::uuid[]) f`, [ids.map(fam)])
+  const dead = await db.query(`select claim_due_reminders(120, 40, 300) as v`)
+  const deadIds = (dead.rows[0].v.reminders || []).map((r) => r.family_id)
+
+  const run = async () => {
+    const before = received.length
+    const res = await fetch(`${BASE}/api/send-reminders`, { method: 'POST', headers: { Authorization: 'Bearer test-cron-secret' } })
+    const body = await res.json().catch(() => ({}))
+    return { status: res.status, body, got: received.slice(before).filter((r) => r.path.includes('/push/batch/')) }
+  }
+  received.length = 0
+  const first = await run()
+  ok('the job sends everything due that nobody has claimed', first.status === 200 && first.got.length === N - deadIds.length,
+    `${first.status} ${JSON.stringify(first.body)}, ${first.got.length} pushes, ${deadIds.length} claimed by the dead run`)
+  ok('in batches, each with its own topic', first.body.batches >= 2 && first.got.every((r) => /^[0-9a-f]{32}$/.test(r.headers.topic || '')),
+    `${first.body.batches} batches, topic ${first.got[0]?.headers?.topic}`)
+  ok('and leaves the dead run\'s batch alone while its claim holds', deadIds.length === 40 && first.got.length === N - 40)
+  await db.query(`update reminder_schedules set claimed_at = claimed_at - interval '6 minutes'
+                  where claimed_at is not null and family_id = any($1::uuid[])`, [deadIds])
+  const second = await run()
+  ok('once that claim runs out, the next run sends that batch', second.status === 200 && second.got.length === 40,
+    `${second.got.length} pushes`)
+  const third = await run()
+  ok('and a third run finds nothing', third.status === 200 && third.got.length === 0 && third.body.due === 0, JSON.stringify(third.body))
+  const counts = new Map()
+  for (const r of [...first.got, ...second.got]) counts.set(r.path, (counts.get(r.path) || 0) + 1)
+  ok('every phone got its reminder exactly once', counts.size === N && [...counts.values()].every((n) => n === 1),
+    `${counts.size} phones, ${[...counts.values()].filter((n) => n > 1).length} twice`)
+  const unmarked = (await db.query(`select count(*)::int n from reminder_schedules
+    where family_id = any($1::uuid[]) and (last_sent_on is null or claimed_at is not null)`, [ids.map(fam)])).rows[0].n
+  ok('every one is marked sent, and none is left claimed', unmarked === 0, `${unmarked} not`)
+  await db.query(`update reminder_schedules set enabled = true where id = any($1::uuid[])`, [others])
+  await db.query(`delete from families where name like 'Push batch %'`)
+  await db.query(`delete from auth.users where email like 'push-batch-%@example.test'`)
+}
+
 console.log('\n=== A family cannot flood a phone ===')
 await db.query(`insert into push_sends (family_id) select $1 from generate_series(1, 60)`, [FAMILY])
 const flood = await fetch(`${BASE}/api/send-push`, {

@@ -121,6 +121,24 @@ language sql security definer set search_path = public as $$
    where endpoint = p_endpoint and (p_gone or failures >= 5);
 $$;
 
+/**
+ * The same for a batch, in one call: [{ "endpoint": ..., "gone": true }, ...].
+ * The scheduled jobs send hundreds of pushes a run, and one call per failure
+ * spent the few hundred requests a Cloudflare Function may make on
+ * bookkeeping. Returns how many were recorded.
+ */
+create or replace function record_push_failures(p_failures jsonb)
+returns int language plpgsql security definer set search_path = public as $$
+declare f jsonb; v_n int := 0;
+begin
+  for f in select * from jsonb_array_elements(coalesce(p_failures, '[]'::jsonb)) loop
+    if nullif(f->>'endpoint', '') is null then continue; end if;
+    perform record_push_failure(f->>'endpoint', coalesce((f->>'gone')::boolean, false));
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end $$;
+
 grant execute on function save_push_subscription(text, jsonb) to anon, authenticated;
 grant execute on function delete_push_subscription(text) to anon, authenticated;
 
@@ -132,6 +150,7 @@ grant execute on function delete_push_subscription(text) to anon, authenticated;
 -- key, may call them.
 revoke execute on function push_targets(uuid, text, uuid) from public, anon, authenticated;
 revoke execute on function record_push_failure(text, boolean) from public, anon, authenticated;
+revoke execute on function record_push_failures(jsonb) from public, anon, authenticated;
 
 /*
  * How many notices a family's devices may send through send-push in an hour.

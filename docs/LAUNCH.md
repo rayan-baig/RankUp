@@ -264,16 +264,36 @@ const JOBS = {
   '20 3 * * *': ['run-retention'],
   '40 4 2 * *': ['settle-alliances', 'settle-schools'],
 }
+// A job that stopped with more still due (it may make only so many requests
+// in one run) answers { more: true }; calling it again starts a fresh run.
+async function run(env, job) {
+  for (let i = 0; i < 20; i += 1) {
+    const res = await fetch(`${env.SITE}/api/${job}`, {
+      method: 'POST', headers: { Authorization: `Bearer ${env.CRON_SECRET}` },
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok || !body.more) return
+  }
+}
 export default {
   async scheduled(event, env, ctx) {
-    for (const job of JOBS[event.cron] || []) {
-      ctx.waitUntil(fetch(`${env.SITE}/api/${job}`, {
-        method: 'POST', headers: { Authorization: `Bearer ${env.CRON_SECRET}` },
-      }))
-    }
+    for (const job of JOBS[event.cron] || []) ctx.waitUntil(run(env, job))
   },
 }
 ```
+
+**The reminder and digest jobs pace themselves.** One run of a Pages Function
+may make about a thousand requests on Workers Paid (each push is one) and has
+a limit on processor time, so a run sends what fits, in batches it claims
+first, and answers `"more": true` when it stopped with more still due. The
+next run, or the scheduler calling again as above, carries on; nothing is
+sent twice for it and nothing is dropped. 10,000 reminders due at the same
+minute take eleven runs of about three to eight seconds each. A scheduler
+that cannot call again (a plain cron service) sends about a thousand every 15
+minutes, which is fine for a few thousand families; past that, call again on
+`"more": true`, or schedule `/api/send-reminders` every 5 minutes, or set
+`JOB_SUBREQUEST_LIMIT` if the plan allows more. See
+[NOTIFICATIONS.md](NOTIFICATIONS.md).
 
 ### Knowing they are still running
 

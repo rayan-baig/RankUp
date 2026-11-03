@@ -137,6 +137,7 @@ const SUITES = {
   // The server functions under workerd on :8788 (supabase/test/up.sh --cf).
   api: [
     { file: 'api.mjs' },
+    { file: 'pushbatch.mjs' },
     { file: 'push.mjs' },
     { file: 'billingwalk.mjs' },
   ],

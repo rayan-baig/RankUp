@@ -97,9 +97,9 @@ cancelling and asking again is told at most once a day.
 |---|---|---|
 | Notices per family per hour | **60.** Counted per request, and a request goes to all of that role's phones at once, so four parent phones receiving one notice count as one. The 61st in an hour is refused (`too_many_notices`) and not retried. | `claim_push_send`, `supabase/notifications.sql` |
 | ... a guild request | Counted against the asking family, and refused over its 60. Counted against the guild's family too, which is skipped (the asking family's parents are still told) once that family is over its own 60, so no family's phones get more than 60 an hour | `api/send-push.js` |
-| A reminder | **Once a day** each, on the family's own date, however often the job runs | `due_reminders`, `supabase/reminders.sql` |
+| A reminder | **Once a day** each, on the family's own date, however often the job runs | `claim_due_reminders`, `supabase/reminders.sql` |
 | Reminders in a list | 24, each name up to 40 characters | `save_reminder_schedule` |
-| The digest | **Once a week** per family, in that family's own time zone | `claim_digest`, `supabase/digests.sql` |
+| The digest | **Once a week** per family, in that family's own time zone | `claim_due_digests`, `supabase/digests.sql` |
 | How long the push service holds a notice for a phone that is off | **28 days** for chores, decisions and the digest | `NOTICE_TTL_SECONDS`, `api/_shared/push.js` |
 | ... for a reminder | Only as long as it would still be on time: the grace window, **2 hours** by default (`REMINDER_GRACE_MINUTES`) | `api/send-reminders.js` |
 | A reminder the job was late for | Sent up to the grace window late, then skipped for that day | `due_reminders` |
@@ -110,6 +110,63 @@ cancelling and asking again is told at most once a day.
 Notices share a **tag** per kind (`submission`, `decision`, `guild`,
 `reminder`, `digest`), so a newer one replaces the older one on the phone instead of
 stacking up.
+
+### Ten thousand at once
+
+The reminder and digest jobs run as Cloudflare Pages Functions, and one run
+has limits: about a thousand requests to other servers on Workers Paid (each
+push is one, each database call is one), and a budget of processor time. The
+jobs used to ask for everything due, then make two database calls and a push
+per notice, marking each sent after its push. With 10,000 due that is 30,000
+requests from one run: it would fail a few hundred in, the notices pushed but
+not yet marked went again on the next run, and the rest crept out a few
+hundred every 15 minutes until the grace window closed on them.
+
+Now (`api/_shared/pushBatch.js`):
+
+- **One call claims a batch** (`claim_due_reminders`, `claim_due_digests`):
+  up to 100 phones' worth, most overdue first, each notice with its phones.
+  A claimed notice is nobody else's for five minutes, so two runs at once
+  never send the same one.
+- **Its pushes go six at a time** (Workers keep six connections open), each
+  read to the end so the next can use the connection, each given up after
+  10 seconds. The VAPID signature is made once per push service per hour
+  rather than once per push: 0.2 ms of processor time a push instead of 0.7.
+- **One call records the phones that failed, one marks the batch sent**
+  (`record_push_failures`, `finish_reminders`, `finish_digests`).
+- **A run starts no batch it might not finish**: none after 20 seconds
+  (`PUSH_RUN_SECONDS`), and none that could take it past its requests
+  (`JOB_SUBREQUEST_LIMIT`, 1,000). It answers `"more": true` and the next run
+  carries on with what is still due and unclaimed.
+- **A run stopped part-way anyway** (the platform ends it) leaves the batch in
+  hand claimed. Five minutes later the next run sends it again. That is the
+  only way a notice can go twice, and the repeat carries the same `Topic`, so
+  the push service replaces a copy the phone has not fetched yet, and the
+  same tag, so the phone replaces one it already shows. Nothing claimed is
+  ever left unsent.
+
+Measured with `tools/pushload.mjs` (10,000 families, a reminder each, due at
+the same minute, one phone each; the production build under workerd; a
+stand-in push service):
+
+| | Runs | Each run | Requests a run | All 10,000 |
+|---|---:|---:|---:|---:|
+| Before, push service answering at once | 1 | 88.7 s | 30,000 | 88.7 s |
+| Before, push service taking 40 ms | 1 | about 8.5 min (2,000 took 102 s) | 30,000 | — |
+| After, push service answering at once | 11 | 2.7 s | at most 988 | 29.7 s |
+| After, push service taking 40 ms | 11 | 8.4 s | at most 988 | 92.8 s |
+
+Every phone received its reminder exactly once, and every reminder was marked
+sent. Before, the run worked only because nothing locally limits a run's
+requests; on Cloudflare it would have stopped at the thousandth.
+
+**What this asks of the scheduler.** Eleven runs at one every 15 minutes is
+two and a half hours, past the two-hour grace window, so at that size the
+scheduler has to call again when a run answers `"more": true` (the Worker in
+[LAUNCH.md](LAUNCH.md) section 2b does), or run the job every 5 minutes, or
+the plan has to allow more requests (`JOB_SUBREQUEST_LIMIT`). Up to about
+7,000 reminders due at the same moment, eight runs inside the grace window, a
+plain 15-minute schedule is enough.
 
 ### When a phone is offline
 
@@ -201,8 +258,16 @@ revoking from only one side leaves them callable with the anon key
   one family sending at once get sixty notices an hour between them, no more.
   A child's guild request reaches a parent in each family, not a supporter,
   in the database's words, once, and within both families' ceilings.
+- **The batches** (`tests/pushbatch.mjs`, in Node, every request counted): no
+  run makes more requests than it may, a run out of time starts no batch,
+  2,500 notices over several runs are each sent once, a family with more
+  phones than a batch still gets its notice, failed phones are recorded in
+  one call, and the signature is reused per push service. Under workerd
+  (`tests/push.mjs`): 150 reminders at once, with a batch claimed by a run
+  that died, each reach their phone exactly once.
 - **In Postgres** (`06-notifications.sql`, `11-reminders.sql`,
-  `17-digests.sql`, `34-scheduled-jobs.sql`, `39-guild-request-notice.sql`):
+  `17-digests.sql`, `34-scheduled-jobs.sql`, `39-guild-request-notice.sql`,
+  `46-push-batches.sql`):
   a phone can register and remove only itself, nobody can list subscriptions,
   the hourly cap counts per family, reminders fire once a day on the family's
   own clock, the digest goes once a week in each family's own evening, and a

@@ -224,6 +224,107 @@ returns void language sql security definer set search_path = public as $$
   on conflict (family_id, week_key) do nothing;
 $$;
 
+-- ---------------------------------------------------------------------------
+-- Sending the digests in batches the job claims (api/send-digests.js).
+--
+-- The same change as the reminders' (reminders.sql): the job asked for every
+-- family's digest at once and made two calls per family before its pushes,
+-- far past what one run of a Cloudflare Function may make at 10,000
+-- families. Now each call claims a batch, with the phones, continuing after
+-- the last family the previous call looked at; and the claim is a row that
+-- says so (`pending`). A finished batch is marked sent. A run stopped
+-- part-way leaves its claims to run out after five minutes and the next run
+-- sends those families again, so a digest is never lost to a timeout; it can
+-- go twice only for the one batch that was cut off, and the repeat replaces
+-- the first on the phone (the same tag) rather than adding to it.
+-- claim_digest and mark_digest_sent still write a finished row.
+-- ---------------------------------------------------------------------------
+
+alter table digest_sends add column if not exists pending boolean not null default false;
+alter table digest_sends add column if not exists claimed_at timestamptz;
+
+create or replace function claim_due_digests_at(p_now timestamptz, p_weekday int default 7, p_hour int default 18,
+                                                p_max_targets int default 100, p_after uuid default null,
+                                                p_lease_seconds int default 300)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  f       record;
+  v_d     jsonb;
+  v_t     jsonb;
+  v_out   jsonb := '[]'::jsonb;
+  v_count int := 0;
+  v_after uuid := p_after;
+  v_more  boolean := false;
+  v_lease interval := make_interval(secs => greatest(p_lease_seconds, 30));
+begin
+  for f in
+    select x.id, x.week_start, to_char(x.week_start, 'IYYY-"W"IW') as week_key
+      from (
+        select fam.id,
+               date_trunc('week', (p_now at time zone tz.zone)::date)::date as week_start,
+               tz.zone
+          from families fam
+          cross join lateral (select case when is_time_zone(fam.timezone) then fam.timezone else 'UTC' end as zone) tz
+         where (p_after is null or fam.id > p_after)
+           and extract(isodow from (p_now at time zone tz.zone)) >= p_weekday
+           and extract(hour from (p_now at time zone tz.zone)) >= p_hour
+      ) x
+     where not exists (
+             select 1 from digest_sends s
+              where s.family_id = x.id and s.week_key = to_char(x.week_start, 'IYYY-"W"IW')
+                and (not s.pending or s.claimed_at > p_now - v_lease))
+     order by x.id
+  loop
+    v_d := family_week_digest(f.id, f.week_start);
+    -- Nothing happened and nothing happened last week either: say nothing.
+    if coalesce((v_d->>'approved')::int, 0) = 0 and coalesce((v_d->>'approved_last_week')::int, 0) = 0 then
+      v_after := f.id;
+      continue;
+    end if;
+    select coalesce(jsonb_agg(jsonb_build_object('endpoint', t.endpoint, 'keys', t.keys)), '[]'::jsonb)
+      into v_t from push_targets(f.id, 'parent', null) t;
+    if v_count > 0 and v_count + jsonb_array_length(v_t) > greatest(p_max_targets, 1) then
+      v_more := true;
+      exit;
+    end if;
+    v_after := f.id;
+    insert into digest_sends (family_id, week_key, sent_at, pending, claimed_at)
+    values (f.id, f.week_key, p_now, true, p_now)
+    on conflict (family_id, week_key) do update
+       set claimed_at = p_now, sent_at = p_now
+     where digest_sends.pending and digest_sends.claimed_at <= p_now - v_lease;
+    if not found then continue; end if;
+    v_count := v_count + jsonb_array_length(v_t);
+    v_out := v_out || (v_d || jsonb_build_object('week_key', f.week_key, 'targets', v_t));
+  end loop;
+
+  return jsonb_build_object('ok', true, 'digests', v_out, 'targets', v_count, 'more', v_more, 'after', v_after);
+end $$;
+
+create or replace function claim_due_digests(p_weekday int default 7, p_hour int default 18,
+                                             p_max_targets int default 100, p_after uuid default null,
+                                             p_lease_seconds int default 300)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  return claim_due_digests_at(now(), p_weekday, p_hour, p_max_targets, p_after, p_lease_seconds);
+end $$;
+
+/** A batch went out: [{ "family_id": ..., "week_key": ... }, ...]. Returns how many. */
+create or replace function finish_digests(p_items jsonb)
+returns int language plpgsql security definer set search_path = public as $$
+declare v_n int;
+begin
+  update digest_sends s set pending = false, sent_at = now()
+    from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) i
+   where s.family_id = (i->>'family_id')::uuid and s.week_key = i->>'week_key' and s.pending;
+  get diagnostics v_n = row_count;
+  return v_n;
+end $$;
+
+revoke execute on function claim_due_digests_at(timestamptz, int, int, int, uuid, int) from public, anon, authenticated;
+revoke execute on function claim_due_digests(int, int, int, uuid, int) from public, anon, authenticated;
+revoke execute on function finish_digests(jsonb) from public, anon, authenticated;
+
 -- Service role only. due_digests would otherwise hand any signed-in account a
 -- list of every family in the database along with how their week went.
 revoke execute on function due_digests(int, int) from public, anon, authenticated;

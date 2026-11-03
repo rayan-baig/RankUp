@@ -6,11 +6,14 @@
  * what asks: one push on a Sunday evening with the week in a sentence, and a
  * tap that lands on the charts.
  *
- * Schedule it hourly. It is safe to run that often for the same three reasons
- * send-reminders is: the database only returns families whose local evening it
- * actually is, each send is recorded against (family, week) so a second run
- * finds nothing, and a family with nothing to report is left out entirely
- * rather than being told they did nothing.
+ * Schedule it hourly. It is safe to run that often, or twice at once: the
+ * database only offers families whose local evening it actually is, a family
+ * with nothing to report is left out entirely rather than being told they did
+ * nothing, and families are claimed in batches before anything is sent and
+ * marked sent as each batch goes (`claim_due_digests`, supabase/digests.sql;
+ * api/_shared/pushBatch.js), so a family is told once a week. A run stops
+ * starting batches before it runs out of time or of the requests a
+ * Cloudflare Function may make, and the next hourly run carries on.
  *
  * The wording is built here rather than taken from anywhere, because everything
  * a phone displays under this app's name has to be written by this app — see
@@ -18,8 +21,7 @@
  */
 
 import { recordRun, secretMatches, makeServiceRpc } from './_shared/job.js'
-import webpush from 'web-push'
-import { sendPush, failureFor } from './_shared/push.js'
+import { sendInBatches, batchLimits, topicFor } from './_shared/pushBatch.js'
 import { digestNotice } from '../src/data/noticeWords.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -55,74 +57,47 @@ export default async function handler(req, res) {
 
   const serviceRpc = makeServiceRpc(SUPABASE_URL, SERVICE_KEY)
 
-  let due
+  const vapid = { subject: VAPID_SUBJECT, publicKey: VAPID_PUBLIC, privateKey: VAPID_PRIVATE }
+  let result
   try {
-    due = await serviceRpc('due_digests', { p_weekday: DIGEST_WEEKDAY, p_hour: DIGEST_HOUR })
+    result = await sendInBatches({
+      serviceRpc,
+      vapid,
+      limits: batchLimits(),
+      // The cursor is the last family the previous batch looked at, so a run
+      // does not work out the quiet families' weeks again for every batch.
+      claim: async (maxPhones, after) => {
+        const got = await serviceRpc('claim_due_digests', {
+          p_weekday: DIGEST_WEEKDAY, p_hour: DIGEST_HOUR, p_max_targets: maxPhones,
+          p_after: after || null, p_lease_seconds: 300,
+        })
+        return {
+          more: Boolean(got?.more),
+          cursor: got?.after || after || null,
+          items: (got?.digests || []).map((d) => ({
+            family_id: d.family_id,
+            week_key: d.week_key,
+            targets: d.targets || [],
+            payload: JSON.stringify(digestMessage(d)),
+            topic: topicFor(`digest-${d.week_key}`),
+          })),
+        }
+      },
+      finish: (items) => serviceRpc('finish_digests', {
+        p_items: items.map((i) => ({ family_id: i.family_id, week_key: i.week_key })),
+      }),
+    })
   } catch (err) {
     await recordRun(serviceRpc, 'send-digests', false, err.message)
-    return res.status(502).json({ error: 'lookup_failed' })
+    return res.status(502).json({ error: 'send_failed' })
   }
 
-  const digests = due?.digests || []
   // Nothing due is a successful run, not a skipped one. Most runs find nothing,
   // and a health check that only counted busy runs would call this job dead
   // every day except Sunday.
-  if (!digests.length) {
-    await recordRun(serviceRpc, 'send-digests', true)
-    return res.status(200).json({ ok: true, due: 0, sent: 0 })
-  }
-
-  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
-  let sent = 0
-  let failed = 0
-
-  for (const d of digests) {
-    // Claimed first, so it goes once. Two runs that overlap (a scheduler that
-    // fires twice, a slow run meeting the next) both see the family as due;
-    // only the one that claims the week sends it. Losing a week to a crash
-    // between claiming and sending is the safer way round than two pushes.
-    let claimed = false
-    try {
-      claimed = await serviceRpc('claim_digest', { p_family_id: d.family_id, p_week_key: d.week_key })
-    } catch {
-      // Not claimed, not sent: the next run tries again.
-      continue
-    }
-    if (claimed === false) continue
-
-    let targets = []
-    try {
-      targets = await serviceRpc('push_targets', {
-        p_family_id: d.family_id, p_role: 'parent', p_kid_id: null,
-      }) || []
-    } catch {
-      failed += 1
-      continue
-    }
-
-    const wire = JSON.stringify(digestMessage(d))
-    const results = await Promise.allSettled(
-      targets.map((t) => sendPush({ endpoint: t.endpoint, keys: t.keys }, wire)),
-    )
-
-    // Claimed (above) even when every push then fails, exactly as
-    // send-reminders marks its own. A family with no working phone registered
-    // must not be retried every hour for the rest of the week; the dead
-    // endpoints are dropped below.
-
-    await Promise.allSettled(
-      results.map((result, i) => {
-        if (result.status === 'fulfilled') return null
-        const failure = failureFor(result.reason)
-        if (!failure) return null
-        return serviceRpc('record_push_failure', { p_endpoint: targets[i].endpoint, p_gone: failure.gone })
-      }),
-    )
-
-    sent += results.filter((x) => x.status === 'fulfilled').length
-    failed += results.filter((x) => x.status === 'rejected').length
-  }
-
   await recordRun(serviceRpc, 'send-digests', true)
-  return res.status(200).json({ ok: true, due: digests.length, sent, failed })
+  return res.status(200).json({
+    ok: true, due: result.notices, sent: result.sent, failed: result.failed,
+    batches: result.batches, more: Boolean(result.stoppedFor), stopped_for: result.stoppedFor,
+  })
 }

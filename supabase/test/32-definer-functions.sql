@@ -334,7 +334,12 @@ begin
     'record_school_payment(uuid,text,integer,text)', 'attach_school_customer(uuid,text)',
     'stripe_customer_for_school(uuid)', 'school_for_customer(text)',
     'due_digests_at(timestamptz,integer,integer)', 'due_reminders_at(timestamptz,integer)',
-    'mark_reminder_sent_at(uuid,timestamptz)', 'claim_digest(uuid,text)']
+    'mark_reminder_sent_at(uuid,timestamptz)', 'claim_digest(uuid,text)',
+    -- The reminder and digest jobs' batches.
+    'claim_due_reminders(integer,integer,integer)', 'claim_due_reminders_at(timestamptz,integer,integer,integer)',
+    'finish_reminders(jsonb)', 'claim_due_digests(integer,integer,integer,uuid,integer)',
+    'claim_due_digests_at(timestamptz,integer,integer,integer,uuid,integer)', 'finish_digests(jsonb)',
+    'record_push_failures(jsonb)']
   loop
     if to_regprocedure(f) is null then
       v_open := v_open || (f || ' (no longer exists — update this list)');
