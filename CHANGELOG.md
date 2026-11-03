@@ -20,6 +20,7 @@ Getting ready for launch.
 - `robots.txt` keeps search engines off `/api/`, and a sitemap lists the front door.
 - Settings names the plan a family is really on: a free family is on Starter, not "Standard".
 - Every price and trial length comes from the plan list, including the dashboard's Elite banner and the terms.
+- Two emails before a free trial ends, three days before and on the day, once each per family, from a new hourly job (`/api/send-trial-emails`). docs/EMAILS.md lists every email RankUp sends and what to set up in Supabase and Stripe.
 - A forgotten Parent Mode PIN can be reset: "Forgot your PIN?" asks for the account's password again, then a new PIN. Not on a child's phone.
 - "Download my data" also gives an easy-to-read summary (children, chores, history, rewards) beside the full JSON, and the JSON now includes what each child spent.
 - The plan screen says what each plan adds, in plain words, from the limits the app enforces, and what a year saves against twelve months.

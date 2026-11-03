@@ -30,6 +30,7 @@ const ROUTES = {
   'send-push': () => import('../../api/send-push.js'),
   'send-digests': () => import('../../api/send-digests.js'),
   'send-reminders': () => import('../../api/send-reminders.js'),
+  'send-trial-emails': () => import('../../api/send-trial-emails.js'),
   'settle-alliances': () => import('../../api/settle-alliances.js'),
   'settle-schools': () => import('../../api/settle-schools.js'),
   stats: () => import('../../api/stats.js'),

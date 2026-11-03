@@ -229,3 +229,135 @@ revoke execute on function due_digests_at(timestamptz, int, int) from public;
 revoke execute on function claim_digest(uuid, text) from public;
 revoke execute on function mark_digest_sent(uuid, text) from public;
 revoke execute on function family_week_digest(uuid, date) from public;
+
+-- ---------------------------------------------------------------------------
+-- The free trial's two reminder emails.
+--
+-- A new family gets a trial of a better plan with no card, and when it ends
+-- they are quietly on the plan they pay for. Two emails say so first: three
+-- days before, and on the day it ends, in the family's own time zone. The job
+-- that sends them is api/send-trial-emails.js, run hourly.
+--
+-- Each is sent once per family, ever: the primary key is the promise. A run
+-- claims the row before sending and marks it sent after; a send that fails
+-- gives the claim back so the next run tries again, and a claim left by a run
+-- that died is taken again after an hour (the email service's idempotency key
+-- stops that being a second email). Nothing about the email address is kept
+-- here: it is read from the account when the job asks.
+-- ---------------------------------------------------------------------------
+
+create table if not exists trial_reminder_sends (
+  family_id     uuid not null references families(id) on delete cascade,
+  kind          text not null check (kind in ('three_days', 'last_day')),
+  trial_ends_at timestamptz not null,
+  claimed_at    timestamptz not null default now(),
+  sent_at       timestamptz,
+  primary key (family_id, kind)
+);
+
+alter table trial_reminder_sends enable row level security;
+revoke all on trial_reminder_sends from public, anon, authenticated;
+
+/**
+ * Which families are due a trial reminder at `p_now`, with who to write to.
+ *
+ * Due means: a trial is running, of a better plan than the one they pay for
+ * (a family already paying for Elite loses nothing when an Elite trial ends,
+ * and is told nothing), and
+ *   three_days  it ends within three days, but not today where they live;
+ *   last_day    it ends today where they live.
+ * A family that missed the first (the job was down) gets only the second.
+ * Only parents are written to, never a supporter, and only an account with an
+ * email address.
+ */
+create or replace function due_trial_reminders_at(p_now timestamptz)
+returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v_rows jsonb;
+begin
+  with running as (
+    select f.id, f.tier, f.trial_tier, f.trial_ends_at,
+           case when exists (select 1 from pg_timezone_names where name = f.timezone)
+                then f.timezone else 'UTC' end as tz
+      from families f
+     where f.trial_tier is not null
+       and f.trial_ends_at is not null
+       and f.trial_ends_at > p_now
+       and f.trial_ends_at <= p_now + interval '3 days'
+       and (case f.trial_tier when 'elite' then 2 when 'standard' then 1 else 0 end)
+         > (case f.tier       when 'elite' then 2 when 'standard' then 1 else 0 end)
+  ), due as (
+    select r.*,
+           case when (r.trial_ends_at at time zone r.tz)::date = (p_now at time zone r.tz)::date
+                then 'last_day' else 'three_days' end as kind
+      from running r
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'family_id', d.id,
+           'kind', d.kind,
+           'trial_tier', d.trial_tier,
+           'paid_tier', d.tier,
+           'trial_ends_at', d.trial_ends_at,
+           'timezone', d.tz,
+           'ends_local', to_char(d.trial_ends_at at time zone d.tz, 'FMDay FMDD FMMonth'),
+           'days_left', (d.trial_ends_at at time zone d.tz)::date - (p_now at time zone d.tz)::date,
+           'recipients', (
+             select coalesce(jsonb_agg(jsonb_build_object('email', u.email, 'name', p.name) order by p.created_at), '[]'::jsonb)
+               from parents p join auth.users u on u.id = p.user_id
+              where p.family_id = d.id and p.role = 'parent'
+                and u.email is not null and u.email like '%@%')
+         ) order by d.trial_ends_at), '[]'::jsonb)
+    into v_rows
+    from due d
+   where not exists (
+           select 1 from trial_reminder_sends s
+            where s.family_id = d.id and s.kind = d.kind
+              and (s.sent_at is not null or s.claimed_at > p_now - interval '1 hour'));
+
+  return jsonb_build_object('ok', true, 'reminders', v_rows);
+end $$;
+
+create or replace function due_trial_reminders()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select due_trial_reminders_at(now());
+$$;
+
+/**
+ * Claim one family's reminder before it is sent: true for the one run that
+ * gets it. A reminder already sent is never claimed again; a claim more than
+ * an hour old that never became a send (the run died) can be taken again.
+ */
+create or replace function claim_trial_reminder(p_family_id uuid, p_kind text, p_trial_ends_at timestamptz)
+returns boolean language sql security definer set search_path = public as $$
+  with claimed as (
+    insert into trial_reminder_sends (family_id, kind, trial_ends_at)
+    values (p_family_id, p_kind, p_trial_ends_at)
+    on conflict (family_id, kind) do update
+       set claimed_at = now(), trial_ends_at = excluded.trial_ends_at
+     where trial_reminder_sends.sent_at is null
+       and trial_reminder_sends.claimed_at < now() - interval '1 hour'
+    returning 1
+  ) select exists (select 1 from claimed);
+$$;
+
+/**
+ * After the send: sent, so never again; or not sent, so the claim is given
+ * back and the next run tries again.
+ */
+create or replace function finish_trial_reminder(p_family_id uuid, p_kind text, p_sent boolean)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if p_sent then
+    update trial_reminder_sends set sent_at = coalesce(sent_at, now())
+     where family_id = p_family_id and kind = p_kind;
+  else
+    delete from trial_reminder_sends
+     where family_id = p_family_id and kind = p_kind and sent_at is null;
+  end if;
+end $$;
+
+-- Service role only: these list every family on a trial, with their email.
+revoke execute on function due_trial_reminders_at(timestamptz) from public;
+revoke execute on function due_trial_reminders() from public;
+revoke execute on function claim_trial_reminder(uuid, text, timestamptz) from public;
+revoke execute on function finish_trial_reminder(uuid, text, boolean) from public;

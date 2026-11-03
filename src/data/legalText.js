@@ -161,7 +161,7 @@ export const PRIVACY_POLICY = {
     {
       heading: 'Who we share it with',
       body: [
-        'Nobody, except the services that make the app work: Supabase (hosting and database), Stripe (payments, only if you subscribe), and a push notification service if you enable notifications.',
+        'Nobody, except the services that make the app work: Supabase (hosting and database), Stripe (payments, only if you subscribe), a push notification service if you enable notifications, and an email service that sends your account emails (your email address only, never anything about your children).',
         'If you add your child to a school\'s league, that school sees what is described under "The School League" above, and nothing more.',
         'We do not sell data. We do not share it for advertising. We show children no advertising.',
       ],

@@ -74,6 +74,8 @@ begin
     into v_jobs
     from (values
             ('send-reminders',   interval '2 hours'),
+            -- Hourly. Quiet for a day means a trial-ending email may be missed.
+            ('send-trial-emails', interval '6 hours'),
             ('run-retention',    interval '3 days'),
             -- Weekly by design, so the window has to clear a whole week plus
             -- room for a scheduler that ran late. Anything tighter would report

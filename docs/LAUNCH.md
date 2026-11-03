@@ -97,10 +97,14 @@ service worker answers only its own origin, and a payment always comes back to
 
 ### Email from the shared domain
 
-The only email RankUp sends is Supabase's: the sign-up confirmation (if
-**Confirm email** is on) and the password reset links you send from the
-dashboard. Supabase's built-in sender is for testing (a handful an hour, and
-only to your own team), so a live project needs its own:
+RankUp's email comes from three places, listed with their words in
+[EMAILS.md](EMAILS.md): Supabase (the sign-up confirmation, if **Confirm
+email** is on, and the password reset links you send from the dashboard),
+Stripe (receipts, and a failed payment or a cancelled plan, if you switch
+those on), and RankUp's own code (the free trial's two reminders, sent by
+`/api/send-trial-emails` through the provider's API with `EMAIL_API_KEY` and
+`EMAIL_FROM`). Supabase's built-in sender is for testing (a handful an hour,
+and only to your own team), so a live project needs its own:
 
 - [ ] An email-sending provider, with the company's domain verified **once**.
       Each product sends from its own address on its own subdomain; RankUp's
@@ -108,11 +112,17 @@ only to your own team), so a live project needs its own:
 - [ ] Supabase → Authentication → **Emails → SMTP Settings**: the provider's
       SMTP host, port, user and password; sender email
       `no-reply@rankup.<your domain>`; sender name `RankUp`.
-- [ ] Supabase → Authentication → **Emails → Templates**: end each template
-      (Confirm sign up, Reset password, and any other you turn on) with the
-      line `RankUp is a product of MTRX Horizyn.`, the same words as the
+- [ ] Supabase → Authentication → **Emails → Templates**: paste the words in
+      [EMAILS.md](EMAILS.md) (Confirm sign up, Reset password). Each ends with
+      the line `RankUp is a product of MTRX Horizyn.`, the same words as the
       privacy policy and terms. The company's name only: no person's name or
       address goes in an email.
+- [ ] The same provider's **API key** for RankUp's own email: `EMAIL_API_KEY`,
+      with `EMAIL_FROM=RankUp <no-reply@rankup.<your domain>>` and, if you
+      like, `EMAIL_REPLY_TO` the company's support address (section 4).
+- [ ] Stripe → Settings → **Customer emails** and **Billing → Subscriptions
+      and emails**: the ones to switch on, and the words, are in
+      [EMAILS.md](EMAILS.md).
 - [ ] **SPF, DKIM and DMARC, set once on the parent domain**, not per product:
       - **DKIM**: the record(s) the provider gives you, at
         `<selector>._domainkey.<your domain>`. Mail it signs for
@@ -201,6 +211,7 @@ or POST, because schedulers differ on which they send.
 |---|---|---|
 | `/api/send-reminders` | every 15 minutes | Daily reminders never arrive |
 | `/api/send-digests` | hourly | The weekly digest never goes out |
+| `/api/send-trial-emails` | hourly | No email three days before a free trial ends, or on the day. Needs `EMAIL_API_KEY` and `EMAIL_FROM` ([EMAILS.md](EMAILS.md)) |
 | `/api/run-retention` | daily | Old activity piles up, and a deleted family's Stripe cancellation that failed is never retried |
 | `/api/settle-alliances` | monthly (the 2nd) | Nobody is ever given their 20% discount |
 | `/api/settle-schools` | monthly (the 2nd) | No District Champion, no School Stars, no free month |
@@ -214,7 +225,7 @@ the header itself once `CRON_SECRET` is set in the project. Nothing else to do.
 
 **On Cloudflare Pages there is no scheduler.** Pages Functions cannot be run on a
 timer, so these will never fire by themselves. Either point any outside scheduler
-(a cron service, GitHub Actions on a schedule) at the five addresses with the
+(a cron service, GitHub Actions on a schedule) at the six addresses with the
 header, or deploy a small separate Worker with Cron Triggers that calls them. A
 starting point for that Worker (not part of this repository, and not tested
 here):
@@ -222,11 +233,12 @@ here):
 ```js
 // A separate Worker. Its wrangler.toml needs:
 //   [triggers]
-//   crons = ["*/15 * * * *", "5 * * * *", "20 3 * * *", "40 4 2 * *"]
+//   crons = ["*/15 * * * *", "5 * * * *", "35 * * * *", "20 3 * * *", "40 4 2 * *"]
 // and two settings: SITE (https://rankup.<your domain>) and CRON_SECRET (the same value).
 const JOBS = {
   '*/15 * * * *': ['send-reminders'],
   '5 * * * *': ['send-digests'],
+  '35 * * * *': ['send-trial-emails'],
   '20 3 * * *': ['run-retention'],
   '40 4 2 * *': ['settle-alliances', 'settle-schools'],
 }
@@ -343,7 +355,8 @@ every phone downloads. A secret in a `VITE_` name is a published secret.
 | `VITE_STRIPE_ENABLED` | `true` to switch billing on | No |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe's secret key and the webhook's signing secret | **Yes** |
 | `STRIPE_PRICE_*` | The price ids from section 3 | No |
-| `CRON_SECRET` | One long random string (`openssl rand -hex 32`) that protects all five scheduled jobs and the detailed health check | **Yes** |
+| `CRON_SECRET` | One long random string (`openssl rand -hex 32`) that protects all six scheduled jobs and the detailed health check | **Yes** |
+| `EMAIL_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | The email provider's API key, who RankUp's own emails are from (`RankUp <no-reply@rankup.<your domain>>`), and an optional support address for replies. Only the trial reminders use them ([EMAILS.md](EMAILS.md)) | Key: **yes** |
 | `OPERATOR_SECRET` | A different long random string: your key to `/#/operator`, where you check each school is real | **Yes** |
 | `STATS_KEY` | Optional. Lets your own console read two counts (families, active families) from `/api/stats`. Unset, that address does not exist. | **Yes** |
 | `VITE_GUILDS_ENABLED` | Leave unset for launch (section 7) | No |

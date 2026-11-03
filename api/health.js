@@ -19,9 +19,10 @@
  * The split matters: crash counts and job names are operational detail, and a
  * health endpoint that hands them to anybody is a free map of your weak points.
  *
- * "Stale" is the thing this exists to catch. All three jobs are scheduled
- * outside this codebase and all three fail by going silent — no error, no
- * alert, just reminders that stop arriving and old rows that stop being deleted.
+ * "Stale" is the thing this exists to catch. Every job is scheduled outside
+ * this codebase and every one fails by going silent — no error, no alert,
+ * just reminders and trial emails that stop arriving and old rows that stop
+ * being deleted.
  */
 
 import { makeServiceRpc, secretMatches } from './_shared/job.js'

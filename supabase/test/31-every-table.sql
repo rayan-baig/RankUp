@@ -65,6 +65,7 @@ begin
     insert into allowance_entries (family_id, kid_id, pence, kind) values (f.fam, f.kid, 100, 'gift');
     insert into reminder_schedules (family_id, role, kid_id, at_local) values (f.fam, 'kid', f.kid, '18:00');
     insert into digest_sends (family_id, week_key) values (f.fam, '2026-W01');
+    insert into trial_reminder_sends (family_id, kind, trial_ends_at) values (f.fam, 'three_days', now());
     insert into push_sends (family_id) values (f.fam);
     insert into crash_reports (family_id, where_at, message) values (f.fam, 'T31', 'T31');
     insert into rpc_receipts (id, kid_id, fn, result) values (gen_random_uuid(), f.kid, 'T31', '{}');

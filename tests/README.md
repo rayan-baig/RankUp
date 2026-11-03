@@ -9,7 +9,7 @@ Every suite is listed, file by file, in **`tests/run-suite.mjs`**, which runs it
 | sync | `npm run test:sync` | the same | Two and three phones against a real Postgres |
 | awards | `npm run test:awards` | Postgres | The rules, in Node, against the app's own code and the database |
 | built | `npm run test:built` | a browser | The production build: no secrets in it, the security policy, the arcade's framed games |
-| api | `npm run test:api` | `up.sh --cf` | Every function in `api/`, under the runtime Cloudflare uses |
+| api | `npm run test:api` | `up.sh --cf` | Every function in `api/`, under the runtime Cloudflare uses, against stand-ins for Stripe and the email provider |
 | SQL | `npm run test:db` | Postgres | About a thousand checks on the database rules (`supabase/test/`) |
 | refusals | `npm run test:refusals` | Postgres | Every `{ ok: false, reason }` in the SQL is actually given while the SQL suite runs |
 

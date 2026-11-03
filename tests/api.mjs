@@ -76,6 +76,26 @@ await db.query(
   `insert into parents (user_id, family_id, name) values ($1, $3, 'API Parent'), ($2, $4, 'API Outsider')
      on conflict do nothing`, [PARENT, OUTSIDER, FAMILY, OTHER_FAMILY])
 
+/*
+ * A stand-in for the email provider (EMAIL_API_BASE in serve-functions.sh).
+ * It records every email the functions send, and can be told to fail.
+ */
+const emails = []
+let emailMode = 'ok'
+const emailStandIn = http.createServer((req, res) => {
+  let raw = ''
+  req.on('data', (c) => { raw += c })
+  req.on('end', () => {
+    if (emailMode === 'error500') { res.writeHead(500); res.end('{"message":"down"}'); return }
+    let body = {}
+    try { body = JSON.parse(raw || '{}') } catch { /* recorded as empty */ }
+    emails.push({ path: req.url, auth: req.headers.authorization, key: req.headers['idempotency-key'], body })
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ id: `email_${emails.length}` }))
+  })
+})
+await new Promise((resolve) => emailStandIn.listen(12112, resolve))
+
 const post = (path, body, token) =>
   fetch(`${BASE}${path}`, {
     method: 'POST',
@@ -108,7 +128,7 @@ const noPhotoCheck = await post('/api/verify-photo', { imageDataUrl: 'x' }, PARE
 ok('there is no photo-check address any more', noPhotoCheck.status === 404, `status ${noPhotoCheck.status}`)
 
 console.log('\n=== The scheduled jobs are not open to the public ===')
-for (const job of ['run-retention', 'send-reminders', 'send-digests', 'settle-alliances', 'settle-schools']) {
+for (const job of ['run-retention', 'send-reminders', 'send-digests', 'send-trial-emails', 'settle-alliances', 'settle-schools']) {
   const open = await fetch(`${BASE}/api/${job}`, { method: 'POST' })
   ok(`${job} refuses a caller with no secret`, open.status === 401 || open.status === 403, `status ${open.status}`)
   const withSecret = await fetch(`${BASE}/api/${job}`, {
@@ -800,6 +820,76 @@ console.log('\n=== A failed renewal drops the plan, and the parent is told why =
 }
 
 stripeStandIn.close()
+
+console.log('\n=== The free trial\'s reminder emails ===')
+{
+  const { TIERS } = await import('../src/state/initialState.js')
+  const TRIAL_FAMILY = 'a0000000-0000-4000-8000-00000000f0e1'
+  const TRIAL_PARENT = 'a0000000-0000-4000-8000-00000000e0a1'
+  const TRIAL_GRAN = 'a0000000-0000-4000-8000-00000000e0a2'
+  const address = `api-trial-${RUN}@example.com`
+  await db.query(`insert into auth.users (id, email) values ($1, $3), ($2, $4) on conflict (id) do update set email = excluded.email`,
+    [TRIAL_PARENT, TRIAL_GRAN, address, `api-gran-${RUN}@example.com`])
+  await db.query(`insert into families (id, name, tier, trial_tier, trial_ends_at, timezone)
+                  values ($1, 'API Trial Family', 'starter', 'elite', now() + interval '60 hours', 'UTC')
+                  on conflict (id) do update set trial_tier = 'elite', trial_ends_at = now() + interval '60 hours', tier = 'starter'`, [TRIAL_FAMILY])
+  await db.query(`insert into parents (user_id, family_id, name, role) values ($1, $3, 'Trial Parent', 'parent'), ($2, $3, 'Trial Gran', 'supporter')
+                  on conflict do nothing`, [TRIAL_PARENT, TRIAL_GRAN, TRIAL_FAMILY])
+  await db.query('delete from trial_reminder_sends where family_id = $1', [TRIAL_FAMILY])
+  const run = () => fetch(`${BASE}/api/send-trial-emails`, { method: 'POST', headers: { Authorization: `Bearer ${CRON}` } })
+  const ours = () => emails.filter((e) => e.body.to?.includes(address))
+
+  // The provider is down first: nothing is lost.
+  emailMode = 'error500'
+  const down = await run()
+  const downBody = await down.json().catch(() => ({}))
+  ok('with the email service down the job still answers, and says it failed to send', down.status === 200 && downBody.failed >= 1, JSON.stringify(downBody))
+  ok('and the reminder is not marked sent, so the next run tries again',
+    (await db.query('select count(*)::int as n from trial_reminder_sends where family_id = $1', [TRIAL_FAMILY])).rows[0].n === 0)
+  const health = await (await fetch(`${BASE}/api/health`, { headers: { Authorization: `Bearer ${CRON}` } })).json()
+  ok('and /api/health shows the failure', health.jobs?.['send-trial-emails']?.last_error?.includes('not sent'), JSON.stringify(health.jobs?.['send-trial-emails']))
+
+  emailMode = 'ok'
+  const first = await run()
+  ok('three days before the end, the job sends the first reminder', first.status === 200 && ours().length === 1, `${first.status}, ${ours().length} emails`)
+  const mail = ours()[0] || { body: {} }
+  ok('to the parent, one email per address, never to a supporter',
+    mail.body.to?.length === 1 && mail.body.to[0] === address && !emails.some((e) => e.body.to?.includes(`api-gran-${RUN}@example.com`)))
+  ok('from the configured sender, with replies to the support address',
+    mail.body.from === 'RankUp <no-reply@rankup.example.test>' && mail.body.reply_to === 'help@example.test')
+  ok('with the provider key, and an idempotency key naming the family and the reminder',
+    mail.auth === 'Bearer re_test_local_only' && mail.key === `trial-three_days-${TRIAL_FAMILY}-${address}`, `${mail.key}`)
+  ok(`the subject is the trial banner's words: "${mail.body.subject}"`, /^\d days? left of Elite Pass, free$/.test(mail.body.subject || ''))
+  const text = mail.body.text || ''
+  ok('a plain-text part, and an HTML part', text.length > 100 && /^<!doctype html>/i.test(mail.body.html || ''))
+  ok('it says what they move to and that nothing is charged by itself',
+    text.includes(`you are on ${TIERS.starter.name}, which is free`) && text.includes('Nothing is charged by itself'))
+  ok('that their children keep what they earned', text.includes('Everything your children have earned stays exactly where it is'))
+  ok('how to get help', /Need help\? Open RankUp, then Settings, Help & about, Help\. Or write to help@example\.test/.test(text))
+  ok('a link to the plan on this site', text.includes('http://localhost:8788/#/parent/plan') && (mail.body.html || '').includes('http://localhost:8788/#/parent/plan'))
+  ok('and the MTRX Horizyn footer, in both parts', text.includes('RankUp is a product of MTRX Horizyn.') && (mail.body.html || '').includes('RankUp is a product of MTRX Horizyn.'))
+  ok('no child is named in it, and no price', !/\$\d/.test(text) && !/Ava|kid name/.test(text))
+
+  await run()
+  ok('run again, nothing more is sent: once per family', ours().length === 1, `${ours().length} emails`)
+  await Promise.all([run(), run()])
+  ok('nor by two runs at once', ours().length === 1)
+
+  // The day it ends: the second, and last, reminder.
+  await db.query(`update families set trial_ends_at = date_trunc('day', now()) + interval '23 hours 59 minutes' where id = $1`, [TRIAL_FAMILY])
+  const ending = await (await db.query('select trial_ends_at > now() as later from families where id = $1', [TRIAL_FAMILY])).rows[0]
+  if (ending.later) {
+    await run()
+    const last = ours()[1]?.body || {}
+    ok('on the day it ends, the last reminder goes', ours().length === 2 && last.subject === 'Last day of your free trial', last.subject)
+    ok('and says so', (last.text || '').includes('ends today') && (last.text || '').includes('This is the last email about it'))
+    await run()
+    ok('and only once', ours().length === 2)
+  } else {
+    pass('(the last-day reminder is checked by 40-trial-emails.sql; it is too close to midnight UTC to try here)')
+  }
+}
+emailStandIn.close()
 
 console.log('\n=== A route that does not exist is a 404, not a stack trace ===')
 const missing = await fetch(`${BASE}/api/not-a-real-endpoint`, { method: 'POST' })

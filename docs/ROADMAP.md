@@ -51,7 +51,7 @@ send it, and a page to set the new password, would take that off you.
 
 ### 5. A ready-made scheduler for Cloudflare
 
-Cloudflare Pages cannot run the five scheduled jobs on a timer. LAUNCH.md gives
+Cloudflare Pages cannot run the six scheduled jobs on a timer. LAUNCH.md gives
 a starting point for a small Worker with Cron Triggers; putting that Worker in
 this repository, with its own test, would make the recommended host work
 without an outside scheduler.

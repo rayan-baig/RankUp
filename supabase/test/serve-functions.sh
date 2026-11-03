@@ -41,6 +41,10 @@ exec npx wrangler pages dev dist --port 8788 --compatibility-flags nodejs_compat
   --binding STRIPE_PRICE_SCHOOL_XL=price_test_school_xl \
   --binding STRIPE_PRICE_SCHOOL_XL_YEAR=price_test_school_xl_year \
   --binding STRIPE_API_BASE=http://localhost:12111 \
+  --binding EMAIL_API_KEY=re_test_local_only \
+  --binding EMAIL_FROM="RankUp <no-reply@rankup.example.test>" \
+  --binding EMAIL_REPLY_TO=help@example.test \
+  --binding EMAIL_API_BASE=http://localhost:12112 \
   --binding PUBLIC_SITE_URL=http://localhost:8788 \
   --binding VAPID_PUBLIC_KEY="$VP" \
   --binding VAPID_PRIVATE_KEY="$VS" \
