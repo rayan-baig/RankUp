@@ -39,7 +39,7 @@ ok('no other school of that name', by(plain, 'unique').flag === 'ok')
 ok('one other school spells the district this way', /1 other school in Riverside district/.test(by(plain, 'district').fact))
 
 console.log('\n=== What gets flagged ===')
-ok('a free email address: phone the school', emailFact(staff('lane1987@gmail.com')).flag === 'warn' && /free email/.test(emailFact(staff('lane1987@gmail.com')).fact))
+ok('a free email address: phone the school', emailFact(staff('someone@gmail.com')).flag === 'warn' && /free email/.test(emailFact(staff('someone@gmail.com')).fact))
 ok('an address not yet confirmed is a second look', emailFact(staff('lane@maplegrove.sch.example', false), base.name).flag === 'look')
 ok('no email at all', emailFact([]).flag === 'warn')
 const dupe = schoolChecks(base, [base, twin])

@@ -172,9 +172,26 @@ family.
 
 No storage bucket is needed: RankUp keeps no photos.
 
+**Then check the server-only functions are shut to browsers.** The scheduled
+jobs and the Stripe webhook use database functions that only the server may
+call, and one of them lists parents' email addresses for the trial emails.
+Supabase grants every new function to the browser's two roles by name, so
+each of these is revoked from `public, anon, authenticated` (all three; 0.7.1
+fixed the ones that named only `public`). Re-running the files applies it.
+Check in the SQL editor; both answers must be `false`:
+
+```sql
+select has_function_privilege('anon', 'public.due_trial_reminders()', 'execute') as anon,
+       has_function_privilege('authenticated', 'public.due_trial_reminders()', 'execute') as signed_in;
+```
+
+`supabase/test/32-definer-functions.sql` checks every such function on every
+push.
+
 **Upgrading later: run all the files again, in the same order, before the new
-app goes live.** They are written to be safe to run over a live database, and
-that is the whole upgrade procedure. A newer app calling a function the older
+app goes live.** Every file, every time, not only the ones that changed: they
+are written to be safe to run over a live database, and that is the whole
+upgrade procedure. A newer app calling a function the older
 database does not have yet is refused (a game, a gift or a purchase would show
 as not accepted). The test suite applies every file twice and checks that every
 table, row, function, trigger, policy and permission came through the second
@@ -196,7 +213,10 @@ repository, so their limits are set in the dashboard.
       sign-in would be refused.
 - [ ] **Password resets.** The app has no "forgot password" screen. A parent
       who forgets theirs needs a reset link sent from the dashboard (Users →
-      Send password recovery). Set **Email OTP expiration** to 15 minutes. Once,
+      Send password recovery). A forgotten **Parent Mode PIN** needs nothing
+      from you: "Forgot your PIN?" on the profile screen asks for the
+      account's password, then a new PIN (5 wrong passwords and it waits
+      before asking again; never on a child's phone). Set **Email OTP expiration** to 15 minutes. Once,
       on the live project, check a link is dead after the password has been
       changed: send one, change the password, then open the link. This cannot
       be tested locally.
@@ -206,6 +226,8 @@ repository, so their limits are set in the dashboard.
 Set `CRON_SECRET` (section 4) to a long random string. Each job is one HTTP
 request with the header `Authorization: Bearer <CRON_SECRET>`. They accept GET
 or POST, because schedulers differ on which they send.
+
+Six jobs:
 
 | Job | How often | What breaks without it |
 |---|---|---|
@@ -307,7 +329,19 @@ cancellation still waiting for Stripe is never deleted.
         `STRIPE_PRICE_ELITE_YEAR`.
       - Three **one-off** Flash Ticket prices ($2.99 for 2, $5.99 for 5,
         $11.99 for 12) → `STRIPE_PRICE_FLASH_2`, `_FLASH_5`, `_FLASH_12`.
-      - The School League: eight prices, see [PAYMENTS.md](PAYMENTS.md#the-school-league).
+      - The School League: eight prices, a month and a year (ten months'
+        money) for each size: up to 300 students $29 / $290, up to 800
+        $59 / $590, up to 1,500 $99 / $990, more $149 / $1,490 → the
+        `STRIPE_PRICE_SCHOOL_*` settings. See
+        [PAYMENTS.md](PAYMENTS.md#the-school-league).
+
+      These are the prices in the code (`TIERS` in
+      `src/state/initialState.js`, `FLASH_TICKET_PACKS` in
+      `src/lib/billing.js`, `SCHOOL_PRICES` in `src/lib/schools.js`); the app,
+      the help pages and the terms all read them from there. A Stripe price
+      must match the code's, or a family is shown one price and charged
+      another. Yearly is ten months' money. A new family gets 14 days of Elite
+      free, no card; a school 30 days.
 
       Set every yearly id if you sell yearly: a missing one means a family who
       has just paid for a year is put back on the free plan by the very
@@ -356,7 +390,7 @@ every phone downloads. A secret in a `VITE_` name is a published secret.
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe's secret key and the webhook's signing secret | **Yes** |
 | `STRIPE_PRICE_*` | The price ids from section 3 | No |
 | `CRON_SECRET` | One long random string (`openssl rand -hex 32`) that protects all six scheduled jobs and the detailed health check | **Yes** |
-| `EMAIL_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | The email provider's API key, who RankUp's own emails are from (`RankUp <no-reply@rankup.<your domain>>`), and an optional support address for replies. Only the trial reminders use them ([EMAILS.md](EMAILS.md)) | Key: **yes** |
+| `EMAIL_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | The email provider's API key, who RankUp's own emails are from (`RankUp <no-reply@rankup.<your domain>>`), and an optional support address for replies. Only the trial reminders use them ([EMAILS.md](EMAILS.md)). Without the first two, `/api/send-trial-emails` sends nothing and the health check says so. Leave `EMAIL_API_BASE` unset: it is for the tests | Key: **yes** |
 | `OPERATOR_SECRET` | A different long random string: your key to `/#/operator`, where you check each school is real | **Yes** |
 | `STATS_KEY` | Optional. Lets your own console read two counts (families, active families) from `/api/stats`. Unset, that address does not exist. | **Yes** |
 | `VITE_GUILDS_ENABLED` | Leave unset for launch (section 7) | No |
@@ -388,6 +422,8 @@ the phone.
       email (an address on `<your domain>`) and its registered postal
       address. The company's, never a person's: this repository and the app
       are public. The app shows a warning banner until both are filled in.
+      Once the email is there, both help pages end with "Still stuck? Write
+      to …" with it.
       The consent notice does not name the operator, so this needs no new
       consent version.
 - [ ] Read the privacy policy and terms in that file from start to finish. They
@@ -415,6 +451,19 @@ the phone.
       subscription shows as cancelled in Stripe straight away.
 - [ ] Check `GET /api/health` with the secret: every job `ok` once each has had
       a chance to run, `billing_cancellations_overdue` 0.
+- [ ] Read both help pages on the phone: parents' (Settings → Help & about →
+      Help) and schools' (`https://rankup.<your domain>/#/school/help`, also
+      linked from the School League's page). Every price and number on them
+      is read from the code; check they are what you mean to charge.
+- [ ] Sign a test school up at `/#/school` (one form: your account and the
+      school), then open `/#/operator` with `OPERATOR_SECRET`: the school is
+      waiting, with a checklist of what to check and what RankUp knows.
+      Tick every check, verify, and see it ranked.
+- [ ] With a test family three days from the end of its free trial, check
+      the trial email arrives (and again on the last day), from
+      `no-reply@rankup.<your domain>`. In the database:
+      `update families set trial_ends_at = now() + interval '3 days' where name = '<test family>'`,
+      then wait for the hourly job.
 
 ## 7. Keeping the legal side small
 

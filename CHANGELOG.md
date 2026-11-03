@@ -5,6 +5,20 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.8.0 — 2026-11-03
+
+Quick moments, a phone that does not fill up, and schools.
+
+- A level-up lasts about two and a half seconds, a tap anywhere skips it, and the tap still reaches what is under it. Several levels at once (a big sync, or chore after chore accepted) are one moment, not a queue. A streak going up gets a two-second moment of its own; badges earned together are one toast.
+- The arcade says, in a child's words, how many tokens they have, how many coins they can still win today, and when winnings come back.
+- Switching themes back and forth keeps everything, with chores still waiting to be sent; going back to the theme you started on does not restart Block Craft's dragon fight.
+- Old, finished chores and notes the server already has (over 60 days) are let go of on the phone, so a busy family's year no longer fills it. Nothing waiting to be sent is ever touched. Chore history says the phone keeps 60 days; Download my data has everything.
+- With the server down for a long time, the phone asks less often, says "RankUp's server has been down since …" and that nothing is lost, and sends everything within a minute of it coming back. An accept or a send-back sent again because its answer was lost is recognised as the same one.
+- A school signs up on one form (account and school together), and the number of students typed to see the price is kept: 9 steps to the first league table instead of 11.
+- The operator page has a checklist for checking a school is real, beside what RankUp knows about it; Verify waits until every check is ticked.
+- A help page for schools, with prices and numbers from the code.
+- docs/LAUNCH.md brought up to date: the six jobs, the trial emails and EMAIL_ settings, re-running every SQL file, checking the server-only functions are shut, the prices, the PIN reset and the help pages.
+
 ## 0.7.1 — 2026-11-03
 
 Fixes from a review of 0.7.0.

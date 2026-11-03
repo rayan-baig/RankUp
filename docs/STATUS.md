@@ -22,7 +22,7 @@ one phone, with no account (see "On one phone only" below).
 | Parent accepts or sends back | ✅ | Sending back puts it straight back on the child's list with the note. Two parents accepting at once pay once ("already decided on another device") |
 | XP, levels, coins | ✅ | Paid only when a parent accepts, and decided by the server, not the phone |
 | Streaks and streak freezes | ✅ | Counted on the family's own day. A lapsed streak no longer shows or pays |
-| Level-up celebration | ✅ | On the child's own phone too, when the accept arrives by sync |
+| Level-up celebration | ✅ | On the child's own phone too, when the accept arrives by sync. About 2½ seconds, a tap anywhere skips it and still reaches what is under it; several levels at once are one moment. A streak going up gets its own two-second moment ([tests/moments.mjs](../tests/moments.mjs)) |
 | Timer ("race the clock") chores | ✅ | Best times kept per chore |
 | Test-score chores | ✅ | 80% or more earns a bonus; scores held to 0–100 |
 | Surprise 2× XP chores | ✅ | Flagged at random when adding a pack, or by hand |
@@ -38,12 +38,12 @@ one phone, with no account (see "On one phone only" below).
 
 | Thing | Status | Notes |
 |---|---|---|
-| 15 child themes | ✅ | Background, currency and avatar all change |
+| 15 child themes | ✅ | Background, currency and avatar all change. Switching keeps every level, coin and streak, is on screen in well under half a second, and flicking back and forth with chores waiting to send sends one change. Leaving Block Craft for a while and coming back restarts the dragon fight |
 | Avatar with five forms | ✅ | Tap it and it reacts |
 | Worlds that change with level | ✅ | Four per theme at levels 10/25/50/100, each with its own colours, sky and line of story |
 | Block Craft's nine forms, story and battles | ✅ | Overworld to The Dragon (399). A battle scene per chapter; worlds stay secret until reached |
 | Dragon boss fight | ✅ | Accepted chores hit the dragon; chores sent back, 48 idle hours and specials hit back. Worked out from synced chores and held by the server |
-| Arcade | ✅ | 24 games. Tokens come only from finished chores (at most 5 held); at most 15 coins a day from games, counted on the family's day. The look-around family has unlimited tokens |
+| Arcade | ✅ | 24 games. Tokens come only from finished chores (at most 5 held); at most 15 coins a day from games, counted on the family's day. The look-around family has unlimited tokens. The arcade tells a child, in plain words, how many tokens they have, how many coins they can still win today, and that winnings come back at midnight |
 | Sunday Market and Flash Tickets | ✅ | Cosmetic skins on Sundays only, no countdown, every skin comes back. Flash Tickets are bought by a parent; prices fixed on the server |
 | Elite cosmetics (frames, drop selectors) | ✅ | |
 | 10 parent dashboard themes | ✅ | Colours only, by design |
@@ -54,7 +54,8 @@ one phone, with no account (see "On one phone only" below).
 |---|---|---|
 | Accounts | ✅ needs a backend | Parents sign in with email and password; a child's phone signs in anonymously and never has an account |
 | Linking a child's phone | ✅ needs a backend | Six-digit code: 10 minutes, 5 wrong guesses, once only ([SYNC.md](SYNC.md)). Without a backend, two tabs of one browser |
-| Sync between phones | ✅ needs a backend | Everything travels, offline first, through an outbox ([SYNC.md](SYNC.md)). Tested against real Postgres through a stand-in for Supabase's API; not yet against a live project |
+| Sync between phones | ✅ needs a backend | Everything travels, offline first, through an outbox ([SYNC.md](SYNC.md)). Tested against real Postgres through a stand-in for Supabase's API; not yet against a live project. With the server down for an hour it backs off to a try a minute, says so plainly, and sends everything within a minute of it coming back, nothing twice |
+| Phone storage | ✅ needs a backend | Old, finished history the server already has (over 60 days) is let go of on the phone, never anything waiting to be sent. A busy family's year levels off at about 1.7 million characters instead of 6.2 million and growing. With no backend the phone keeps everything, as it holds the only copy |
 | Unlinking a phone | ✅ | The unlinked phone erases what RankUp kept on it |
 | Co-parents and supporters | ✅ needs a backend | Up to 6 adults. A second parent has the same rights; a supporter (a grandparent) sees how the children are doing and can give pocket money, nothing else |
 | Parental consent | ✅ | Required before any child exists, enforced by the database. Notice version 2026-11 (no photos, no AI check); consents to older versions stand ([LEGAL.md](LEGAL.md)) |
@@ -83,12 +84,13 @@ one phone, with no account (see "On one phone only" below).
 
 | Thing | Status | Notes |
 |---|---|---|
-| School sign-up, priced by size | ✅ | `/school`. Starts on a 30-day trial |
+| School sign-up, priced by size | ✅ | `/school`. Starts on a 30-day trial. One form for the account and the school: 9 steps from the front page to the first league table (was 11), held by `tests/schoolsignup.mjs` |
 | Join codes for parents and staff | ✅ | Only a parent can put a child in a school |
 | District league | ✅ | Average per student, at most 8 chores a day each, accepted chores only |
 | Rival schools | ✅ | At most three at a time; monthly results kept |
 | School Stars (top ten) | ✅ | The admin checks the list before families see it; first names only with a parent's yes |
-| Checking a school is real | ✅ | `/#/operator` with your `OPERATOR_SECRET`. Until verified, a school is in no league and sees no names |
+| Checking a school is real | ✅ | `/#/operator` with your `OPERATOR_SECRET`, with a checklist per school beside what RankUp knows (email domain and confirmation, size and price, same-named schools, the district's spelling). Until verified, a school is in no league and sees no names |
+| Help for schools | ✅ | `/#/school/help`: eleven questions, prices and numbers read from the code |
 | Charging schools | ✅ with Stripe | `api/school-checkout.js`, priced by the school's size; needs the eight `STRIPE_PRICE_SCHOOL_*` prices |
 | Closing each month, the Champion's free month | ✅ | `api/settle-schools.js`, monthly. **You have to schedule it.** Safe to run twice |
 
@@ -146,7 +148,7 @@ between phones ([SYNC.md](SYNC.md)).
 | A broken change is caught before it ships | `.github/workflows/ci.yml`: lint, build, the SQL suite against a real Postgres (every refusal reason given, every file safe to run twice), the production build, the browser suites in three parallel shards, two-phone sync, the server functions under Cloudflare's runtime. About ten minutes |
 | One screen crashing does not take the app down | `src/components/ScreenBoundary.jsx` |
 | You hear about crashes on other people's phones | `supabase/crashes.sql`: the screen and the error, never a name |
-| A scheduled job that stops being called | `/api/health` with the `CRON_SECRET`: each of the five jobs `ok`, `stale` or `never_run` |
+| A scheduled job that stops being called | `/api/health` with the `CRON_SECRET`: each of the six jobs `ok`, `stale` or `never_run` |
 | A deleted family's subscription still not cancelled | The same check: `billing_cancellations_overdue` |
 | One address to point a monitor at | `GET /api/health` → `{"ok":true,"version":"…"}`, or 503 |
 | What to do when one of them is red | [IF-SOMETHING-BREAKS.md](IF-SOMETHING-BREAKS.md) |
