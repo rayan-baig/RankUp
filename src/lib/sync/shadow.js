@@ -45,6 +45,23 @@ export function clearShadow() {
 }
 
 /**
+ * Forget rows this phone has let go of to save space (lib/prune.js), so their
+ * absence from the state is not read as a delete. The server keeps them.
+ */
+export function forgetRows(dropped) {
+  const shadow = readShadow()
+  let changed = false
+  for (const [table, ids] of Object.entries({ quests: dropped?.quests, notes: dropped?.notes })) {
+    for (const id of ids || []) {
+      if (`${table}:${id}` in shadow || `?${table}:${id}` in shadow) changed = true
+      delete shadow[`${table}:${id}`]
+      delete shadow[`?${table}:${id}`]
+    }
+  }
+  if (changed) writeShadow(shadow)
+}
+
+/**
  * XP, currency and streaks are NOT in this list on purpose.
  *
  * They move only through approve_submission and its siblings, which run inside

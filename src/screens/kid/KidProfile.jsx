@@ -13,6 +13,7 @@ import KidPot from '../../components/KidPot.jsx'
 import { navigate } from '../../lib/router.js'
 import BadgeShelf from '../../components/BadgeShelf.jsx'
 import { activityFeed } from '../../lib/activity.js'
+import { choreCounts } from '../../lib/prune.js'
 
 export default function KidProfile() {
   const { state, dispatch } = useApp()
@@ -29,14 +30,14 @@ export default function KidProfile() {
     // From the synced submissions, not this phone's own log: on a child's
     // phone the approvals all happen somewhere else.
     const mine = activityFeed(state).filter((e) => e.kidId === kid?.id)
-    const approved = mine.filter((e) => e.type === 'quest_approved')
-    const rejected = mine.filter((e) => e.type === 'quest_rejected')
+    // Old chores let go of on this phone still count (lib/prune.js).
+    const { approved, rejected } = choreCounts(state, kid?.id, mine)
     return {
-      approved: approved.length,
-      rejected: rejected.length,
+      approved,
+      rejected,
       levelUps: mine.filter((e) => e.type === 'level_up').length,
     }
-  }, [state.events, state.submissions, state.quests, kid?.id])
+  }, [state.events, state.submissions, state.quests, state.historyTally, kid?.id])
 
   if (!kid) return null
   const { level } = levelFromXp(kid.xp)

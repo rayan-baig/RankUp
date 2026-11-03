@@ -5,7 +5,8 @@ import { buildDemoFamily, DEMO_VERSION } from '../lib/demoFamily.js'
 import { loadState, saveState, clearState, dropOldPhotos, wipeDevice } from '../lib/storage.js'
 import { setCrashNames } from '../lib/crashReport.js'
 import { createSyncEngine, SYNC_STATUS, resetCursor } from '../lib/sync/syncEngine.js'
-import { queueChanges, recordDelivered, pendingRows } from '../lib/sync/shadow.js'
+import { queueChanges, recordDelivered, pendingRows, forgetRows } from '../lib/sync/shadow.js'
+import { pruneHistory } from '../lib/prune.js'
 import { enqueue as enqueueOp, readOutbox } from '../lib/sync/outbox.js'
 import { transport } from '../lib/sync/transport.js'
 import { NOTICES, notifyLocally, notifyRemote, pushRequest, routeNotice, pushConfigured, remindersToFire, getPrefs as notificationPrefs, disable as disableNotifications } from '../lib/notifications.js'
@@ -396,9 +397,25 @@ const syncs = (state) =>
   useEffect(() => {
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
+      /*
+       * Old, finished chores and notes the server already has are let go of
+       * here, before saving, so a year of them never fills the phone. Never
+       * anything waiting to be sent (lib/prune.js). The shadow forgets them
+       * first, and the change list below is worked out from the smaller state,
+       * so letting go of a row is never mistaken for deleting it.
+       */
+      let saving = state
+      if (syncs(state)) {
+        const pruned = pruneHistory(state, { work: [readOutbox(), state.syncQueue || []] })
+        if (pruned.dropped.count) {
+          forgetRows(pruned.dropped)
+          saving = pruned.state
+          dispatch({ type: 'PRUNE_HISTORY', dropped: pruned.dropped })
+        }
+      }
       // A full phone is told so, rather than losing everything since the last
       // good save without a word. The app keeps going on what is in memory.
-      setStorageFull(!saveState(state))
+      setStorageFull(!saveState(saving))
       if (syncs(state)) {
         // Rows the server sent were recorded as the server's when they arrived
         // (see the engine's dispatch above); everything else goes out.
@@ -406,7 +423,7 @@ const syncs = (state) =>
         // Anything queued should go now rather than wait out the idle backoff —
         // the poll slows down precisely because nothing is happening, and this
         // is something happening.
-        if (queueChanges(state, { role: state.device?.role }) > 0) {
+        if (queueChanges(saving, { role: state.device?.role }) > 0) {
           engineRef.current?.wake()
         }
       }

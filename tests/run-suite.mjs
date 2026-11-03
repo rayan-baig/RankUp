@@ -127,6 +127,7 @@ const SUITES = {
     { file: 'schools.mjs' },
     { file: 'arcadecap.mjs' },
     { file: 'crashreport.mjs' },
+    { file: 'storagegrowth.mjs' },
   ],
   // The server functions under workerd on :8788 (supabase/test/up.sh --cf).
   api: [

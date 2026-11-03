@@ -6,6 +6,7 @@ import { adults as familyAdults } from '../../lib/coparents.js'
 import { choreHistory, historyTotals, byDay, OUTCOMES, HISTORY_NOTE_MAX } from '../../lib/choreHistory.js'
 import { Screen, Card, Button, EmptyState, Modal, TextInput } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
+import { KEEP_DAYS } from '../../lib/prune.js'
 
 /**
  * Chore history: every chore each child has sent in, in one place.
@@ -80,6 +81,12 @@ export default function ParentHistory({ initialKidId = null }) {
               {totals.waiting > 0 && <> · <strong>{totals.waiting}</strong> waiting</>}
             </p>
             <p className="text-xs text-muted mt-0.5">{totals.xp.toLocaleString()} XP earned from these.</p>
+            {Object.keys(state.historyTally || {}).length > 0 && (
+              <p className="text-xs text-muted mt-0.5" data-testid="history-kept">
+                This phone keeps the last {KEEP_DAYS} days in full, to save space. Every chore is still on the
+                server: Settings → Download my data has them all.
+              </p>
+            )}
           </Card>
 
           {byDay(entries).map((day) => (

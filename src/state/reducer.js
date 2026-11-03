@@ -9,6 +9,7 @@ import { pendingRows } from '../lib/sync/shadow.js'
 import { questsDueToReturn, dayOf } from '../lib/recurrence.js'
 import { STICKER_MAP } from '../data/stickers.js'
 import { foldLevelUp, foldStreak } from '../lib/moments.js'
+import { applyPrune } from '../lib/prune.js'
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -1113,6 +1114,11 @@ export function reducer(state, action) {
 
     case 'CLEAR_STREAK':
       return { ...state, pendingStreak: null }
+
+    // Old, finished, already on the server: let go of on this phone. The
+    // provider worked out which (lib/prune.js) and forgot them in the shadow.
+    case 'PRUNE_HISTORY':
+      return applyPrune(state, action.dropped)
 
     /** The provider has moved these into the outbox; `keep` are the ones it could not. */
     case 'DRAIN_SYNC_QUEUE': {
