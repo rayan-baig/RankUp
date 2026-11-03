@@ -35,7 +35,7 @@ create index if not exists reminder_schedules_family_idx
   on reminder_schedules (family_id, role);
 
 alter table reminder_schedules enable row level security;
-revoke all on reminder_schedules from public;
+revoke all on reminder_schedules from public, anon, authenticated;
 
 /**
  * Replace this device's role's schedule wholesale.
@@ -227,7 +227,7 @@ grant execute on function my_reminder_schedule(text, uuid) to anon, authenticate
 
 -- The job's two functions are service-role only: due_reminders would otherwise
 -- let any signed-in account enumerate every family id in the database.
-revoke execute on function due_reminders(int) from public;
-revoke execute on function mark_reminder_sent(uuid) from public;
-revoke execute on function due_reminders_at(timestamptz, int) from public;
-revoke execute on function mark_reminder_sent_at(uuid, timestamptz) from public;
+revoke execute on function due_reminders(int) from public, anon, authenticated;
+revoke execute on function mark_reminder_sent(uuid) from public, anon, authenticated;
+revoke execute on function due_reminders_at(timestamptz, int) from public, anon, authenticated;
+revoke execute on function mark_reminder_sent_at(uuid, timestamptz) from public, anon, authenticated;

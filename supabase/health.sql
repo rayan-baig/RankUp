@@ -24,7 +24,7 @@ create table if not exists job_runs (
 );
 
 alter table job_runs enable row level security;
-revoke all on job_runs from public;
+revoke all on job_runs from public, anon, authenticated;
 
 /** Called by each scheduled job as it finishes, success or failure. */
 create or replace function record_job_run(p_job text, p_ok boolean, p_error text default null)
@@ -114,8 +114,8 @@ begin
   );
 end $$;
 
-revoke execute on function record_job_run(text, boolean, text) from public;
-revoke execute on function health_snapshot() from public;
+revoke execute on function record_job_run(text, boolean, text) from public, anon, authenticated;
+revoke execute on function health_snapshot() from public, anon, authenticated;
 
 /**
  * Two numbers for the owner's console (MTRX Horizyn): how many families,

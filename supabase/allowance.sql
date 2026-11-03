@@ -97,7 +97,7 @@ exception when others then
   return;
 end $$;
 
-revoke execute on function credit_allowance(uuid) from public;
+revoke execute on function credit_allowance(uuid) from public, anon, authenticated;
 
 /**
  * Record that a parent actually handed the money over.

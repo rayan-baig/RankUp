@@ -104,4 +104,4 @@ begin
   );
 end $$;
 
-revoke execute on function run_retention(int, int, int) from public;
+revoke execute on function run_retention(int, int, int) from public, anon, authenticated;

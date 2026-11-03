@@ -257,7 +257,7 @@ begin
   return jsonb_build_object('ok', true, 'flash_tickets', v_left);
 end $$;
 
-revoke execute on function credit_flash_tickets(uuid, int, text, jsonb) from public;
+revoke execute on function credit_flash_tickets(uuid, int, text, jsonb) from public, anon, authenticated;
 
 /**
  * Buy a Sunday Market skin.
@@ -529,10 +529,10 @@ grant execute on function lock_billing_columns() to postgres;
 -- Written by the webhook only. Postgres grants EXECUTE to PUBLIC on a new
 -- function automatically, so these must be revoked from PUBLIC, not just from
 -- anon and authenticated.
-revoke execute on function apply_subscription_change(uuid, text, text, text, text, timestamptz, text, jsonb, timestamptz) from public;
-revoke execute on function family_for_customer(text) from public;
-revoke execute on function stripe_customer_for_family(uuid) from public;
-revoke execute on function attach_stripe_customer(uuid, text) from public;
+revoke execute on function apply_subscription_change(uuid, text, text, text, text, timestamptz, text, jsonb, timestamptz) from public, anon, authenticated;
+revoke execute on function family_for_customer(text) from public, anon, authenticated;
+revoke execute on function stripe_customer_for_family(uuid) from public, anon, authenticated;
+revoke execute on function attach_stripe_customer(uuid, text) from public, anon, authenticated;
 
 /*
  * Cancelling a deleted family's subscription. The queue is

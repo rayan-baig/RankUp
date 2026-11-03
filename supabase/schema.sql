@@ -475,7 +475,7 @@ $$;
 -- Nothing needs the grant: every caller is another function in this schema
 -- running as the owner, and the app works its own entitlement out from the
 -- family row it already has.
-revoke execute on function effective_tier(uuid) from public;
+revoke execute on function effective_tier(uuid) from public, anon, authenticated;
 
 /**
  * Start a trial, without touching what they pay for.
@@ -508,7 +508,7 @@ end $$;
 -- Not granted to anyone signed in: a browser asking for its own free month is
 -- the whole thing this must not allow. Trials are started by create_family,
 -- by a referral and by a guild invite — all of them server-side.
-revoke execute on function grant_trial(uuid, text, int) from public;
+revoke execute on function grant_trial(uuid, text, int) from public, anon, authenticated;
 
 create or replace function is_parent()
 returns boolean language sql stable security definer set search_path = public as $$
@@ -787,7 +787,7 @@ drop policy if exists events_insert on events;
 create or replace function credit_allowance(p_submission_id uuid)
 returns void language sql immutable as $$ select $$;
 
-revoke execute on function credit_allowance(uuid) from public;
+revoke execute on function credit_allowance(uuid) from public, anon, authenticated;
 
 /*
  * A stub, replaced by the real thing in referrals.sql.
@@ -800,7 +800,7 @@ revoke execute on function credit_allowance(uuid) from public;
 create or replace function qualify_referral(p_family_id uuid)
 returns void language sql immutable as $$ select $$;
 
-revoke execute on function qualify_referral(uuid) from public;
+revoke execute on function qualify_referral(uuid) from public, anon, authenticated;
 
 /**
  * What an approved chore is actually worth.
@@ -902,7 +902,7 @@ begin
   return jsonb_build_object('xp', v_xp, 'coins', v_coins);
 end $$;
 
-revoke execute on function award_for_submission(uuid, text) from public;
+revoke execute on function award_for_submission(uuid, text) from public, anon, authenticated;
 
 /*
  * Where a family lives. Also added by digests.sql; here as well because
@@ -946,7 +946,7 @@ begin
   end;
 end $$;
 
-revoke execute on function family_today(uuid, text) from public;
+revoke execute on function family_today(uuid, text) from public, anon, authenticated;
 
 -- The signature gained p_sticker, and `create or replace` only replaces an
 -- EXACT match — so on a database that already has the four-argument version,

@@ -33,7 +33,7 @@ create index if not exists crash_reports_created_idx on crash_reports (created_a
 
 alter table crash_reports enable row level security;
 -- Written through the function below, read only by you, in the dashboard.
-revoke all on crash_reports from public;
+revoke all on crash_reports from public, anon, authenticated;
 
 /**
  * The database's own pass over what a phone sent, in case the phone's did not

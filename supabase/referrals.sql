@@ -46,7 +46,7 @@ alter table referrals enable row level security;
 create or replace function referral_reward_days()
 returns int language sql immutable as $$ select 30 $$;
 
-revoke execute on function referral_reward_days() from public;
+revoke execute on function referral_reward_days() from public, anon, authenticated;
 
 /**
  * A family's invite code.
@@ -78,7 +78,7 @@ end $$;
 
 -- Not granted: it takes an arbitrary family id, and a code is the one thing
 -- about another household a stranger should not be able to ask for.
-revoke execute on function referral_code_for(uuid) from public;
+revoke execute on function referral_code_for(uuid) from public, anon, authenticated;
 
 -- The caller's own code, which is the only one a browser may have.
 create or replace function my_referral_code()
@@ -181,7 +181,7 @@ exception when others then
 end $$;
 
 -- Not granted: a browser calling this is a browser paying itself.
-revoke execute on function qualify_referral(uuid) from public;
+revoke execute on function qualify_referral(uuid) from public, anon, authenticated;
 
 /**
  * What the caller has to show for their invites.

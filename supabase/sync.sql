@@ -141,7 +141,7 @@ language sql security definer set search_path = public as $$
      -- quests keep to a few thousand characters; a direct call is held to that.
      and octet_length(p_meta::text) <= 20000;
 $$;
-revoke all on function log_quest_edit(uuid, uuid, jsonb) from public;
+revoke all on function log_quest_edit(uuid, uuid, jsonb) from public, anon, authenticated;
 grant execute on function log_quest_edit(uuid, uuid, jsonb) to anon, authenticated;
 
 -- Not security definer, on purpose: it has to see who is writing. A database
@@ -256,7 +256,7 @@ returns jsonb language sql stable security definer set search_path = public as $
                       where d.family_id = g.family_id and d.table_name = 'kids'
                         and d.rev > coalesce(p_since, 0)));
 $$;
-revoke all on function family_goal_since(bigint) from public;
+revoke all on function family_goal_since(bigint) from public, anon, authenticated;
 grant execute on function family_goal_since(bigint) to authenticated;
 
 /**
@@ -318,7 +318,7 @@ begin
   end if;
   return jsonb_build_object('ok', true);
 end $$;
-revoke all on function set_family_goal(text, int, int) from public;
+revoke all on function set_family_goal(text, int, int) from public, anon, authenticated;
 grant execute on function set_family_goal(text, int, int) to authenticated;
 
 /**
@@ -749,7 +749,7 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 
-revoke all on function set_history_note(uuid, text) from public;
+revoke all on function set_history_note(uuid, text) from public, anon, authenticated;
 grant execute on function set_history_note(uuid, text) to authenticated;
 
 /** The daily login bonus. Server-side so it genuinely cannot be claimed twice. */
@@ -858,7 +858,7 @@ begin
   update families set week_resets_on = p_day where id = v_family;
   return jsonb_build_object('ok', true);
 end $$;
-revoke all on function set_week_reset_day(int) from public;
+revoke all on function set_week_reset_day(int) from public, anon, authenticated;
 grant execute on function set_week_reset_day(int) to authenticated;
 
 /**
@@ -943,7 +943,7 @@ begin
 end $$;
 
 grant execute on function reset_due_recurring_quests(text) to authenticated;
-revoke execute on function recurring_quest_due(text, text, date, date, int) from public;
+revoke execute on function recurring_quest_due(text, text, date, date, int) from public, anon, authenticated;
 
 /*
  * When the child chose the theme they are on, as the server saw it.

@@ -130,8 +130,8 @@ grant execute on function delete_push_subscription(text) to anon, authenticated;
 -- callable by anyone. These two return push endpoints, so they are revoked from
 -- PUBLIC and never re-granted: only the send endpoint, holding the service role
 -- key, may call them.
-revoke execute on function push_targets(uuid, text, uuid) from public;
-revoke execute on function record_push_failure(text, boolean) from public;
+revoke execute on function push_targets(uuid, text, uuid) from public, anon, authenticated;
+revoke execute on function record_push_failure(text, boolean) from public, anon, authenticated;
 
 /*
  * How many notices a family's devices may send through send-push in an hour.

@@ -65,7 +65,7 @@ returns boolean language sql stable security definer set search_path = public as
    where user_id = auth.uid() and tried_at > now() - interval '10 minutes';
 $$;
 
-revoke execute on function adult_invite_attempts_exhausted() from public;
+revoke execute on function adult_invite_attempts_exhausted() from public, anon, authenticated;
 
 /*
  * How many grown-ups one family may have.
@@ -78,7 +78,7 @@ revoke execute on function adult_invite_attempts_exhausted() from public;
 create or replace function max_adults_per_family()
 returns int language sql immutable as $$ select 6 $$;
 
-revoke execute on function max_adults_per_family() from public;
+revoke execute on function max_adults_per_family() from public, anon, authenticated;
 
 -- A six-character code from the readable alphabet, unique among live ones.
 create or replace function new_invite_code()
@@ -101,7 +101,7 @@ begin
   return v_code;
 end $$;
 
-revoke execute on function new_invite_code() from public;
+revoke execute on function new_invite_code() from public, anon, authenticated;
 
 /**
  * Invite another adult.
@@ -357,7 +357,7 @@ returns uuid language sql stable security definer set search_path = public as $$
    where user_id = auth.uid() and role = 'supporter';
 $$;
 
-revoke execute on function supporter_family_id() from public;
+revoke execute on function supporter_family_id() from public, anon, authenticated;
 
 /**
  * Everything a supporter sees, in one call.

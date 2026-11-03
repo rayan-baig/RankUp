@@ -179,9 +179,12 @@ supporter, cannot send one.
 
 **Push addresses are never readable from a browser.** Whoever holds one can
 make that phone buzz. `push_subscriptions` has no read policy, and the
-functions that list them are revoked from `PUBLIC` (Postgres grants new
-functions to `PUBLIC`, so revoking from `anon` and `authenticated` alone does
-nothing — `supabase/test/06-notifications.sql` caught exactly that once).
+functions that list them are revoked from `PUBLIC`, `anon` and `authenticated`
+together. Postgres grants new functions to `PUBLIC`, and Supabase also grants
+everything created in `public` to `anon` and `authenticated` by name, so
+revoking from only one side leaves them callable with the anon key
+(`supabase/test/00-shim.sql` sets up the same grants as Supabase, and
+`supabase/test/06-notifications.sql` checks).
 
 ---
 

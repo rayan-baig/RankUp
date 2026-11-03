@@ -37,3 +37,15 @@ exception when duplicate_object then null; end $$;
 grant usage on schema public, auth to anon, authenticated, app_user;
 grant authenticated, anon to app_user;
 
+
+-- What a real Supabase project does to everything the SQL editor creates in
+-- `public` (supabase/postgres, init-scripts/00000000000000-initial-schema.sql):
+-- every new table, function and sequence is granted to anon and authenticated
+-- by name, not only to PUBLIC. So `revoke ... from public` alone leaves a
+-- function callable with the anon key; a function the server alone may run has
+-- to be revoked from anon and authenticated as well. Without these lines the
+-- stand-in was kinder than the real thing, and every check that "a browser
+-- cannot call this" passed here while the hosted database let anyone call it.
+alter default privileges in schema public grant all on tables to anon, authenticated;
+alter default privileges in schema public grant all on functions to anon, authenticated;
+alter default privileges in schema public grant all on sequences to anon, authenticated;

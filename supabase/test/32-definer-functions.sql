@@ -325,7 +325,16 @@ begin
     'family_for_customer(text)', 'stripe_customer_for_family(uuid)', 'health_snapshot()',
     'record_job_run(text,boolean,text)', 'grant_trial(uuid,text,integer)', 'has_valid_consent(uuid)',
     'is_guild_member(uuid,uuid)', 'pending_billing_cancellations(uuid,text,integer)',
-    'finish_billing_cancellation(bigint,boolean,text)', 'billing_family_gone(uuid,text,text,boolean)']
+    'finish_billing_cancellation(bigint,boolean,text)', 'billing_family_gone(uuid,text,text,boolean)',
+    -- The trial emails' job, and a school's Stripe events.
+    'due_trial_reminders()', 'due_trial_reminders_at(timestamptz)',
+    'claim_trial_reminder(uuid,text,timestamptz)', 'finish_trial_reminder(uuid,text,boolean)',
+    'apply_school_refund(uuid,text,boolean,timestamptz,timestamptz)',
+    'apply_school_subscription(uuid,text,text,text,text,jsonb,timestamptz,timestamptz)',
+    'record_school_payment(uuid,text,integer,text)', 'attach_school_customer(uuid,text)',
+    'stripe_customer_for_school(uuid)', 'school_for_customer(text)',
+    'due_digests_at(timestamptz,integer,integer)', 'due_reminders_at(timestamptz,integer)',
+    'mark_reminder_sent_at(uuid,timestamptz)', 'claim_digest(uuid,text)']
   loop
     if to_regprocedure(f) is null then
       v_open := v_open || (f || ' (no longer exists — update this list)');

@@ -31,7 +31,7 @@ create table if not exists digest_sends (
 );
 
 alter table digest_sends enable row level security;
-revoke all on digest_sends from public;
+revoke all on digest_sends from public, anon, authenticated;
 
 /**
  * Keep the family's zone in step with whatever the reminder screen was told.
@@ -224,11 +224,11 @@ $$;
 
 -- Service role only. due_digests would otherwise hand any signed-in account a
 -- list of every family in the database along with how their week went.
-revoke execute on function due_digests(int, int) from public;
-revoke execute on function due_digests_at(timestamptz, int, int) from public;
-revoke execute on function claim_digest(uuid, text) from public;
-revoke execute on function mark_digest_sent(uuid, text) from public;
-revoke execute on function family_week_digest(uuid, date) from public;
+revoke execute on function due_digests(int, int) from public, anon, authenticated;
+revoke execute on function due_digests_at(timestamptz, int, int) from public, anon, authenticated;
+revoke execute on function claim_digest(uuid, text) from public, anon, authenticated;
+revoke execute on function mark_digest_sent(uuid, text) from public, anon, authenticated;
+revoke execute on function family_week_digest(uuid, date) from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- The free trial's two reminder emails.
@@ -357,7 +357,7 @@ begin
 end $$;
 
 -- Service role only: these list every family on a trial, with their email.
-revoke execute on function due_trial_reminders_at(timestamptz) from public;
-revoke execute on function due_trial_reminders() from public;
-revoke execute on function claim_trial_reminder(uuid, text, timestamptz) from public;
-revoke execute on function finish_trial_reminder(uuid, text, boolean) from public;
+revoke execute on function due_trial_reminders_at(timestamptz) from public, anon, authenticated;
+revoke execute on function due_trial_reminders() from public, anon, authenticated;
+revoke execute on function claim_trial_reminder(uuid, text, timestamptz) from public, anon, authenticated;
+revoke execute on function finish_trial_reminder(uuid, text, boolean) from public, anon, authenticated;

@@ -45,9 +45,9 @@ drop policy if exists alliances_read on alliances;
 drop policy if exists alliance_members_read on alliance_members;
 drop policy if exists alliance_results_read on alliance_results;
 
-revoke all on alliances from public;
-revoke all on alliance_members from public;
-revoke all on alliance_results from public;
+revoke all on alliances from public, anon, authenticated;
+revoke all on alliance_members from public, anon, authenticated;
+revoke all on alliance_results from public, anon, authenticated;
 
 /** Elite is the tier that includes alliances; everyone else gets a clear no. */
 create or replace function alliance_capacity(p_family_id uuid)
@@ -304,14 +304,14 @@ grant execute on function alliance_standings(date) to authenticated;
 -- grant to `authenticated` let any signed-in parent read any household's
 -- approved-chore count and plan tier by guessing a uuid. They are internals of
 -- alliance_standings and settle_alliances, which do their own checks.
-revoke execute on function alliance_capacity(uuid) from public;
-revoke execute on function alliance_score(uuid, date) from public;
+revoke execute on function alliance_capacity(uuid) from public, anon, authenticated;
+revoke execute on function alliance_score(uuid, date) from public, anon, authenticated;
 
 -- settle_alliances and mark_alliance_award_applied are deliberately NOT granted
 -- to authenticated. They decide and record real money off a real bill, so they
 -- are reachable only by the service role the monthly job runs as.
-revoke execute on function settle_alliances(date) from public;
-revoke execute on function mark_alliance_award_applied(uuid, date, text) from public;
+revoke execute on function settle_alliances(date) from public, anon, authenticated;
+revoke execute on function mark_alliance_award_applied(uuid, date, text) from public, anon, authenticated;
 
 /**
  * Every alliance prize decided but not yet given, with what billing needs.
