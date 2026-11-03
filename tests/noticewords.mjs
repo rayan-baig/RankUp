@@ -122,7 +122,7 @@ const render = app.slice(app.indexOf('function renderRoute'))
 const exact = new Set([...render.matchAll(/route === '([^']+)'/g)].map((m) => m[1]))
 // The screens App draws itself, outside the family's app, before renderRoute:
 // the school's own pages (a school admin is not a parent).
-for (const m of app.matchAll(/\n  if \(route === '([^']+)'\) {\n    return \(/g)) exact.add(m[1])
+for (const m of app.matchAll(/\n {2}if \(route === '([^']+)'\) {\n {4}return \(/g)) exact.add(m[1])
 const prefixes = [...render.matchAll(/route\.startsWith\('([^']+)'\)/g)].map((m) => m[1])
 const isRoute = (url) => {
   const path = String(url).replace(/^\/?#/, '').split('?')[0]
