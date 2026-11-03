@@ -1,7 +1,7 @@
 {
   "name": "rankup",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.7.1",
   "type": "module",
   "description": "RankUp — chores turned into a game. Mobile-first React web app.",
   "scripts": {
