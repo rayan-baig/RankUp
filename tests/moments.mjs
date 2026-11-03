@@ -7,13 +7,16 @@
  * levels is one level-up, not five in a queue.
  *
  * The first half runs the reducer in Node. The second opens the look-around
- * family in a browser (no account, no server) and times the real thing.
+ * family in a browser (no account, no server) and times the real thing, on a
+ * clock the test moves (Playwright's page.clock), so a slow machine cannot
+ * make a moment close before the test has looked at it.
  */
 import { launch, reporter, finish, BASE, SHOT_DIR } from './helpers.mjs'
 import { reducer } from '../src/state/reducer.js'
 import { createInitialState, makeKid } from '../src/state/initialState.js'
 import { totalXpForLevel, levelFromXp } from '../src/lib/xp.js'
 import { kids as kidMapper } from '../src/lib/sync/mappers.js'
+import { KID_THEME_MAP } from '../src/data/kidThemes.js'
 import {
   LEVEL_UP_MS, NEW_WORLD_MS, STREAK_MS, BADGE_MS, MOMENT_MAX_MS, foldLevelUp, foldStreak, foldBadges,
 } from '../src/lib/moments.js'
@@ -84,13 +87,24 @@ ok('a streak that went down is no moment', foldStreak(null, 'a', 6, 1) === null)
 ok('badges earned together are one toast, without repeats', JSON.stringify(foldBadges(['ten'], ['ten', 'fifty'])) === '["ten","fifty"]')
 
 /* ------------------------------------------------------------------ */
+// The page's clock is Playwright's, and it stands still while each moment
+// is up: the test moves it on by exactly as much as it means to. On wall
+// time, the browser's own steps between the moment opening and the tap
+// (the reload settling, finding the button, checking it holds still) took
+// over 2.5 seconds on a busy machine, the level-up closed itself first, and
+// a run failed that another passed. Stood still, nothing but the tap or the
+// test can close a moment, so "the tap closed it" and "it lasts 2.5 seconds"
+// are both checked to the millisecond, on any machine.
 console.log('\n=== In the browser: quick, and never in the way ===')
 const { browser, page, errors } = await launch()
+await page.clock.install()
 await page.goto(BASE, { waitUntil: 'networkidle' })
 await page.getByRole('button', { name: /Have a look around/ }).click()
 await page.waitForTimeout(1500)
 await page.getByTestId('demo-tour').getByRole('button', { name: /See Ava's world/ }).click()
 await page.waitForTimeout(900)
+// From here the clock moves only when the test moves it.
+await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000))
 
 /** Put a moment in the saved state and reload, as if it had just arrived. */
 async function arrive(patch) {
@@ -105,66 +119,80 @@ async function arrive(patch) {
   await page.reload({ waitUntil: 'networkidle' })
 }
 
-async function lifetime(testId) {
-  const el = page.getByTestId(testId)
-  await el.waitFor({ state: 'visible', timeout: 4000 })
-  const t0 = Date.now()
-  await el.waitFor({ state: 'detached', timeout: 8000 }).catch(() => {})
-  return Date.now() - t0
+/** Whether the moment is still on the page, given React time (real time) to take it off. */
+async function shown(testId) {
+  await page.waitForTimeout(500)
+  return (await page.getByTestId(testId).count()) > 0
+}
+const goneBy = (testId, ms = 3000) =>
+  page.getByTestId(testId).waitFor({ state: 'detached', timeout: ms }).then(() => true, () => false)
+
+/** How long the level-up should last: a new world opened by these levels has a line of story. */
+function levelUpMs(themeId, from, to) {
+  const world = KID_THEME_MAP[themeId]?.evolutions?.find((e) => !e.requires && from < e.level && to >= e.level)
+  return world ? NEW_WORLD_MS : LEVEL_UP_MS
 }
 
-const xpNow = await page.evaluate(() => {
+const ava = await page.evaluate(() => {
   const s = JSON.parse(localStorage.getItem('rankup.state.v1'))
-  return (s.kids.find((k) => k.id === s.session.kidId) || s.kids[0]).xp
+  const kid = s.kids.find((k) => k.id === s.session.kidId) || s.kids[0]
+  return { xp: kid.xp, themeId: kid.themeId }
 })
-const lvl = levelFromXp(xpNow).level
+const lvl = levelFromXp(ava.xp).level
 await arrive({ pendingLevelUp: { from: lvl, to: lvl + 3 }, pendingStreak: { count: 4 } })
 await page.getByTestId('level-up').waitFor({ state: 'visible', timeout: 4000 })
 const card = await page.getByTestId('level-up').innerText({ timeout: 1500 }).catch(() => '')
 await page.waitForTimeout(400)
 await page.screenshot({ path: `${SHOT_DIR}/moment-levelup.png` })
 ok('three levels in one card, with the streak riding along', /3 levels up/i.test(card) && /4 days in a row/.test(card), card)
-const gone = await page.getByTestId('level-up').waitFor({ state: 'detached', timeout: 4000 }).then(() => true, () => false)
-ok('and it goes by itself, within three seconds', gone)
+await page.clock.runFor(MOMENT_MAX_MS)
+ok('and it goes by itself, within three seconds', await goneBy('level-up'))
 
-await arrive({ pendingLevelUp: { from: lvl, to: lvl + 1 } })
-const lived = await lifetime('level-up')
-ok(`a level-up lasts about ${LEVEL_UP_MS} ms (measured ${lived})`, lived >= 1600 && lived <= 3400, String(lived))
-
+const oneUp = levelUpMs(ava.themeId, lvl, lvl + 1)
 await arrive({ pendingLevelUp: { from: lvl, to: lvl + 1 } })
 await page.getByTestId('level-up').waitFor({ state: 'visible', timeout: 4000 })
-// When the tap went down, and when the level-up left the page, timed in the
-// page itself, so a slow machine cannot blur "the tap closed it" with "it
-// timed out".
-await page.evaluate(() => {
-  window.__moment = {}
-  window.addEventListener('pointerdown', () => { window.__moment.tap = performance.now() }, { capture: true, once: true })
-  new MutationObserver((_, obs) => {
-    if (!document.querySelector('[data-testid="level-up"]')) { window.__moment.gone = performance.now(); obs.disconnect() }
-  }).observe(document.body, { childList: true, subtree: true })
-})
-await page.getByRole('button', { name: /Arcade/ }).first().click({ timeout: 2000 })
-await page.waitForTimeout(300)
-const hash = await page.evaluate(() => location.hash)
-ok('a tap on the screen behind it goes through (the arcade opens)', hash.startsWith('#/kid/arcade'), hash)
-const timing = await page.evaluate(() => window.__moment)
-ok('and the same tap closed the level-up', timing.tap != null && timing.gone != null && timing.gone - timing.tap < 500,
-  JSON.stringify(timing))
+await page.clock.runFor(oneUp - 1)
+const upAtEnd = await shown('level-up')
+await page.clock.runFor(1)
+ok(`a level-up lasts ${oneUp} ms: still up 1 ms before, gone on the dot`, upAtEnd && await goneBy('level-up'),
+  `up at ${oneUp - 1} ms: ${upAtEnd}`)
+
+// The tap comes in the moment's last millisecond, which is the closest a
+// tap gets to the timer closing it. With the clock standing still nothing
+// else can close it, so if it goes, the tap closed it.
+await arrive({ pendingLevelUp: { from: lvl, to: lvl + 1 } })
+await page.getByTestId('level-up').waitFor({ state: 'visible', timeout: 4000 })
+await page.clock.runFor(oneUp - 1)
+const upBeforeTap = await shown('level-up')
+// If the moment caught the tap instead, Playwright waits for it to let go,
+// which on a clock standing still is never: give up after five seconds.
+const tapError = await page.getByRole('button', { name: /Arcade/ }).first().click({ timeout: 5000 })
+  .then(() => '', (e) => e.message.split('\n')[0])
+const closedByTap = await goneBy('level-up')
+let hash = ''
+for (let i = 0; i < 20 && !hash.startsWith('#/kid/arcade'); i++) {
+  hash = await page.evaluate(() => location.hash)
+  if (!hash.startsWith('#/kid/arcade')) await page.waitForTimeout(100)
+}
+ok('a tap on the screen behind it goes through (the arcade opens)', hash.startsWith('#/kid/arcade'), tapError || hash)
+ok('and the same tap closed the level-up', upBeforeTap && closedByTap,
+  `up before the tap: ${upBeforeTap}, gone after it: ${closedByTap}`)
 
 await page.evaluate(() => { window.location.hash = '/kid' })
 await arrive({ pendingLevelUp: { from: lvl, to: lvl + 1 } })
 await page.getByTestId('level-up').waitFor({ state: 'visible', timeout: 4000 })
-await page.getByTestId('level-up').locator('h2').click()
-await page.waitForTimeout(250)
-ok('tapping the card itself skips it', (await page.getByTestId('level-up').count()) === 0)
+await page.getByTestId('level-up').locator('h2').click({ timeout: 5000 })
+ok('tapping the card itself skips it', await goneBy('level-up', 2000))
 
 await arrive({ pendingStreak: { count: 6 } })
 await page.getByTestId('streak-moment').waitFor({ state: 'visible', timeout: 4000 })
-// Read before the screenshot: on a busy machine a screenshot can take longer than the moment lasts.
 const streakText = await page.getByTestId('streak-moment').innerText({ timeout: 1500 }).catch(() => '')
 await page.screenshot({ path: `${SHOT_DIR}/moment-streak.png` })
 ok('a streak on its own says so', /6 days in a row/.test(streakText), streakText)
-const streakGone = await page.getByTestId('streak-moment').waitFor({ state: 'detached', timeout: 3200 }).then(() => true, () => false)
-ok(`and is gone within ${STREAK_MS} ms or so`, streakGone)
+await page.clock.runFor(STREAK_MS - 1)
+const streakUpAtEnd = await shown('streak-moment')
+await page.clock.runFor(1)
+ok(`and lasts ${STREAK_MS} ms: still up 1 ms before, gone on the dot`, streakUpAtEnd && await goneBy('streak-moment'),
+  `up at ${STREAK_MS - 1} ms: ${streakUpAtEnd}`)
 
 await finish(errors, fails, browser)
