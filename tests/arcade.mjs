@@ -20,7 +20,7 @@ const locked = await page.evaluate(() => document.body.innerText)
 ;/no tokens yet/i.test(locked)
   ? pass('with nothing approved the arcade is shut')
   : fail('arcade locked without a token', locked.slice(0, 140))
-;/that is where tokens come from|approved/i.test(locked)
+;/that is where tokens come from|approved|chore your parent accepts gives you 1 token/i.test(locked)
   ? pass('and it points back at the quest list')
   : fail('arcade explains where tokens come from', locked.slice(0, 140))
 // With no token the button says so rather than pretending it is playable.

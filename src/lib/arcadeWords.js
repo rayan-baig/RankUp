@@ -39,7 +39,7 @@ export function arcadeLimits({ tokens = 0, earnedToday = 0, unlimited = false, c
 
   let tokenLine
   if (unlimited) tokenLine = 'Play as much as you like. This is the look-around, so tokens never run out.'
-  else if (held === 0) tokenLine = `No tokens left. Every chore your parent accepts gives you 1 back (you can keep up to ${MAX_TOKENS}).`
+  else if (held === 0) tokenLine = `Every chore your parent accepts gives you 1 token, which plays one game (you can keep up to ${MAX_TOKENS}).`
   else if (held === MAX_TOKENS) tokenLine = `You have ${plural(held, 'token')}, the most you can keep. Play one so the next chore's token isn't wasted.`
   else tokenLine = `You have ${plural(held, 'token')} left. A game uses 1, and every chore your parent accepts gives you 1 more (up to ${MAX_TOKENS}).`
 

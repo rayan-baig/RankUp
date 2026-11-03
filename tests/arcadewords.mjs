@@ -21,7 +21,7 @@ const at = (h, m = 0) => new Date(2026, 10, 3, h, m)
 
 console.log('\n=== Tokens: how many are left, and where more come from ===')
 const none = arcadeLimits({ tokens: 0, now: at(15) })
-ok('none left: says so, and that an accepted chore gives one back', /No tokens left/.test(none.tokens) && /chore your parent accepts gives you 1 back/.test(none.tokens), none.tokens)
+ok('none: an accepted chore gives one, and how many can be kept', /chore your parent accepts gives you 1 token/.test(none.tokens) && none.tokens.includes(`up to ${MAX_TOKENS}`), none.tokens)
 const two = arcadeLimits({ tokens: 2, now: at(15) })
 ok('some left: the number, and the most a child can keep', two.tokens.includes('2 tokens left') && two.tokens.includes(`up to ${MAX_TOKENS}`), two.tokens)
 const one = arcadeLimits({ tokens: 1, now: at(15) })

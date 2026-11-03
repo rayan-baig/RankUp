@@ -312,7 +312,7 @@ export default function KidArcade() {
       {tokens === 0 && !unlimited ? (
         <EmptyState
           icon="🎮"
-          title="No tokens left"
+          title="No tokens yet"
           body={limits.tokens}
           action={<Button onClick={() => navigate('/kid/quests')}>See my quests</Button>}
         />
