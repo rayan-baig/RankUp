@@ -699,6 +699,12 @@ declare v_sub submissions;
 begin
   select * into v_sub from submissions where id = p_submission_id for update;
   if not found then return jsonb_build_object('ok', false, 'reason', 'not_found'); end if;
+  -- Sent again because the phone never heard back: this parent already sent
+  -- it back. Not "decided on another device", and not a second redo.
+  if v_sub.status = 'rejected' and v_sub.decided_by is not null and v_sub.decided_by = (
+       select id from parents where user_id = auth.uid() and family_id = v_sub.family_id and role = 'parent') then
+    return jsonb_build_object('ok', true, 'repeat', true);
+  end if;
   if v_sub.status <> 'pending' then return jsonb_build_object('ok', false, 'reason', 'decided'); end if;
 
   if not exists (select 1 from parents where user_id = auth.uid() and family_id = v_sub.family_id

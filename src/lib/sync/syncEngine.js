@@ -16,7 +16,7 @@
  */
 
 import { transport } from './transport.js'
-import { readOutbox, readySlice, removeOps, recordFailure, markSending, releaseSending } from './outbox.js'
+import { readOutbox, readySlice, removeOps, recordFailure, markSending, releaseSending, releaseBackoff } from './outbox.js'
 
 const CURSOR_KEY = 'rankup.sync.cursor.v1'
 /**
@@ -51,6 +51,13 @@ const PULL_VISIBLE_MAX_MS = 20000
 /** A hidden tab does no network at all; this is just how often it re-checks that. */
 const PULL_HIDDEN_MS = 60000
 const BACKOFF = 1.5
+/**
+ * While the server is down, each failed round waits twice as long as the
+ * last, up to a minute: an hour's outage is about sixty tries from a phone,
+ * not four hundred and fifty, and the first one after it comes back is never
+ * more than a minute away. Coming back online, or a tap, still tries at once.
+ */
+const OUTAGE_MAX_MS = 60000
 
 function cursorKey() {
   try {
@@ -186,11 +193,16 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare, sendN
   let inFlight = false
   let status = transport.isConfigured() ? SYNC_STATUS.IDLE : SYNC_STATUS.DISABLED
   let lastError = null
+  /** When this run of failed rounds began (null while the server answers), and when the last one ended. */
+  let downSince = null
+  let backAt = null
+  /** Failed rounds in a row, for the outage backoff. */
+  let failures = 0
 
   const setStatus = (next, error = null) => {
     status = next
     lastError = error
-    onStatus?.({ status: next, error, pending: readOutbox().length })
+    onStatus?.({ status: next, error, pending: readOutbox().length, downSince, backAt })
   }
 
   /** Send everything queued. Stops at the first retryable failure to keep order. */
@@ -329,8 +341,22 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare, sendN
     inFlight = true
     if (!silent) setStatus(SYNC_STATUS.SYNCING)
     try {
-      const pushed = await push()
+      let pushed = await push()
       const result = await pull()
+      /*
+       * The server answered. If it had been down, everything that has been
+       * resting since goes now, in this same round, instead of each change
+       * waiting out the rest of its backoff: a family whose server was down
+       * for an hour should see their chores arrive the moment it is back.
+       */
+      if (downSince != null) {
+        backAt = Date.now()
+        downSince = null
+        if (releaseBackoff()) pushed = await push()
+      }
+      // It answered, so the next round is at the usual pace. A write it is
+      // still turning away waits out its own backoff (see recordFailure).
+      failures = 0
       // A send that is waiting its turn again is still an error worth showing,
       // but the pull above ran regardless, so the screen is at least current.
       if (transport.needsSignIn?.()) {
@@ -339,6 +365,9 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare, sendN
       else setStatus(SYNC_STATUS.IDLE)
       return result
     } catch (err) {
+      // Not reaching the server at all, or it failing: either way a round
+      // that learned nothing, and the next one waits longer.
+      if (!err.auth) { downSince = downSince ?? Date.now(); failures += 1 }
       setStatus(err.status === 0 ? SYNC_STATUS.OFFLINE : SYNC_STATUS.ERROR, err.message)
       return { error: err.message }
     } finally {
@@ -380,6 +409,11 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare, sendN
       return
     }
     lastSyncAt = Date.now()
+    // The server is down: wait longer each time, up to a minute.
+    if (result?.error && failures > 0) {
+      schedule(Math.min(OUTAGE_MAX_MS, PULL_MIN_MS * 2 ** Math.min(failures - 1, 6)))
+      return
+    }
     // Work that is deliberately waiting out a backoff does not count as
     // movement: treating it as movement pinned the poll at its fastest rate for
     // as long as the server was unwell, which is the worst possible moment to
@@ -433,6 +467,8 @@ export function createSyncEngine({ dispatch, onStatus, onRefused, prepare, sendN
     pull,
     get status() { return status },
     get lastError() { return lastError },
+    get downSince() { return downSince },
+    get backAt() { return backAt },
     get pending() { return readOutbox().length },
   }
 }

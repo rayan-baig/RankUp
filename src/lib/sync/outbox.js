@@ -223,4 +223,20 @@ export function clearOutbox() {
   writeOutbox([])
 }
 
+/**
+ * The server is answering again after being down: everything resting goes
+ * now, rather than each operation sitting out the rest of its backoff (up to
+ * five minutes). Their tries and the day-long clock are kept; only the wait
+ * goes. Returns how many were resting.
+ */
+export function releaseBackoff(now = Date.now()) {
+  const ops = readOutbox()
+  let resting = 0
+  for (const op of ops) {
+    if (op.nextAttemptAt && op.nextAttemptAt > now) { delete op.nextAttemptAt; resting += 1 }
+  }
+  if (resting) writeOutbox(ops)
+  return resting
+}
+
 export const OUTBOX_MAX_ATTEMPTS = MAX_ATTEMPTS

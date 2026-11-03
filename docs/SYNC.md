@@ -108,6 +108,15 @@ changes nothing.
   server failing and at least 30 tries**. Waiting for somebody to sign in again
   does not count towards that day. When one is given up, the phone fetches the
   family afresh so it shows what the server really has.
+- **The server down for a long time** (an hour, say). The phone asks less
+  often, twice as long between rounds up to one a minute, and the sync line
+  says "RankUp's server has been down since 3:40 PM · 5 saved on this phone"
+  once it has been failing for a minute. The first round that gets an answer
+  sends everything waiting at once, without each change sitting out the rest
+  of its wait, and the line says "Back online · everything sent". So it is
+  back within a minute of the server, by itself. An accept or a send-back
+  whose answer was lost and is sent again by the same parent is answered as
+  done, not as "decided on another device". `tests/outage.mjs` plays the hour.
 - **The server saying no** (the change is not allowed) drops that change at
   once, says so on the phone where it matters (coins handed back, "already
   decided on another device"), and the phone fetches the family afresh.
@@ -116,7 +125,14 @@ changes nothing.
   into, so a slow connection cannot lose the second edit.
 - **Every call is safe to send twice.** A phone killed mid-send sends again on
   restart; purchases, games, taxes and payouts carry an id the server
-  recognises, so nothing is charged or paid twice.
+  recognises, so nothing is charged or paid twice. A chore sent twice is one
+  chore, and an accept or send-back sent twice by the same parent is one.
+- **Old history is let go of on the phone, never on the server.** Chores
+  accepted or sent back more than 60 days ago, one-off chores done that long
+  ago and notes read that long ago leave the phone once the server has them,
+  so a year of chores does not fill it (`src/lib/prune.js`). Nothing waiting
+  to be sent, nothing it names, and nothing the badges or the dragon fight are
+  counted from. `tests/storagegrowth.mjs` plays a busy year.
 - **Storage full.** The app says so at the top of the screen and keeps working
   from memory, still sending what it can; the warning goes once a save works.
 - **A pull never undoes a change still waiting to go.** If the server's copy of

@@ -163,13 +163,12 @@ begin
   perform ok('the streak advanced',
     (select streak_count from kids where id = 'cccccccc-0000-0000-0000-000000000001') = 1);
 
-  begin
-    perform approve_submission('ffffffff-0000-0000-0000-000000000001', 45, 9, 'again');
-    raise exception 'FAIL the same submission paid out twice';
-  exception when others then
-    if sqlerrm like 'FAIL%' then raise; end if;
-    raise notice '  PASS the same submission CANNOT pay out twice (%)', left(sqlerrm, 40);
-  end;
+  -- The same parent's phone sending it again, because it never heard back,
+  -- is answered quietly and pays nothing (26-sync-review.sql has another
+  -- parent's second approval, which is refused).
+  perform approve_submission('ffffffff-0000-0000-0000-000000000001', 45, 9, 'again');
+  perform ok('the same submission CANNOT pay out twice (a retry is answered, and pays nothing)',
+    (select xp from kids where id = 'cccccccc-0000-0000-0000-000000000001') = 130);
 
   select xp into v_xp from kids where id = 'cccccccc-0000-0000-0000-000000000001';
   perform ok('XP is still 130 after the double-approve attempt', v_xp = 130);

@@ -229,3 +229,59 @@ begin
     (select test_score from submissions where id = '7f666666-0000-0000-0000-0000000000a3') = 100);
 end $$;
 reset role;
+
+-- ---------- an hour's outage: a retried accept or send-back is a repeat ----------
+-- The server is down, or its answer is lost on the way back, and the phone
+-- sends the same decision again when it can. The same parent's second call
+-- is answered as done and changes nothing; another parent's is still told
+-- the chore was already decided.
+insert into auth.users (id, email) values ('7f111111-0000-0000-0000-00000000000c', 'sr-parent-c@example.com');
+insert into parents (user_id, family_id, name, role) values
+  ('7f111111-0000-0000-0000-00000000000c', '7f222222-0000-0000-0000-00000000000a', 'Lee', 'parent');
+insert into quests (id, family_id, kid_id, title, status) values
+  ('7f555555-0000-0000-0000-0000000000b1', '7f222222-0000-0000-0000-00000000000a', '7f444444-0000-0000-0000-0000000000a1', 'Outage accept', 'submitted'),
+  ('7f555555-0000-0000-0000-0000000000b2', '7f222222-0000-0000-0000-00000000000a', '7f444444-0000-0000-0000-0000000000a1', 'Outage send back', 'submitted');
+insert into submissions (id, family_id, quest_id, kid_id, status) values
+  ('7f666666-0000-0000-0000-0000000000b1', '7f222222-0000-0000-0000-00000000000a', '7f555555-0000-0000-0000-0000000000b1', '7f444444-0000-0000-0000-0000000000a1', 'pending'),
+  ('7f666666-0000-0000-0000-0000000000b2', '7f222222-0000-0000-0000-00000000000a', '7f555555-0000-0000-0000-0000000000b2', '7f444444-0000-0000-0000-0000000000a1', 'pending');
+set role app_user;
+do $$
+declare xp0 int; coins0 int; xp1 int; coins1 int; tokens1 int; events1 int; again jsonb; other jsonb;
+begin
+  perform become('7f111111-0000-0000-0000-00000000000a');
+  select xp, coins into xp0, coins0 from kids where id = '7f444444-0000-0000-0000-0000000000a1';
+  perform approve_submission('7f666666-0000-0000-0000-0000000000b1', 0, 0, 'well done');
+  select xp, coins, play_tokens into xp1, coins1, tokens1 from kids where id = '7f444444-0000-0000-0000-0000000000a1';
+  select count(*) into events1 from events where type = 'quest_approved' and meta->>'questId' = '7f555555-0000-0000-0000-0000000000b1';
+  perform ok('the accept lands and pays', xp1 > xp0);
+
+  -- The phone never heard back, and sends it again an hour later.
+  perform approve_submission('7f666666-0000-0000-0000-0000000000b1', 0, 0, 'well done');
+  perform ok('the same parent sending the accept again is answered, not refused', true);
+  perform ok('and pays nothing more: XP, coins and tokens as they were',
+    (select xp = xp1 and coins = coins1 and play_tokens = tokens1 from kids where id = '7f444444-0000-0000-0000-0000000000a1'));
+  perform ok('and records it once',
+    (select count(*) from events where type = 'quest_approved' and meta->>'questId' = '7f555555-0000-0000-0000-0000000000b1') = events1);
+
+  -- Another parent accepting the same chore is a different decision: refused.
+  perform become('7f111111-0000-0000-0000-00000000000c');
+  begin
+    perform approve_submission('7f666666-0000-0000-0000-0000000000b1', 0, 0, '');
+    raise exception 'FAIL a second parent paid the same chore again';
+  exception when others then
+    if sqlerrm like 'FAIL%' then raise; end if;
+    perform ok('another parent''s accept is still "already decided"', sqlerrm like '%already decided%', sqlerrm);
+  end;
+
+  -- The same for sending back.
+  perform become('7f111111-0000-0000-0000-00000000000a');
+  perform ok('the send-back lands', (reject_submission('7f666666-0000-0000-0000-0000000000b2', 'Not yet')->>'ok')::boolean);
+  again := reject_submission('7f666666-0000-0000-0000-0000000000b2', 'Not yet');
+  perform ok('sent again by the same parent, it is a repeat', (again->>'ok')::boolean and (again->>'repeat')::boolean, again::text);
+  perform ok('and the chore is sent back once, not twice',
+    (select redo_count from quests where id = '7f555555-0000-0000-0000-0000000000b2') = 1);
+  perform become('7f111111-0000-0000-0000-00000000000c');
+  other := reject_submission('7f666666-0000-0000-0000-0000000000b2', 'Me too');
+  perform ok('another parent''s send-back is still refused as decided', other->>'reason' = 'decided', other::text);
+end $$;
+reset role;

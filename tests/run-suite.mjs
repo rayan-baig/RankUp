@@ -62,6 +62,7 @@ const SUITES = {
     { file: 'outbox.mjs', weight: 1 },
     { file: 'offline.mjs', env: { TZ: 'America/New_York' }, weight: 1 },
     { file: 'syncfixes.mjs', weight: 1 },
+    { file: 'outage.mjs', weight: 1 },
     { file: 'notices.mjs', weight: 1 },
     { file: 'moments.mjs', weight: 20 },
     { file: 'themeswitch.mjs', weight: 15 },

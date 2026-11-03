@@ -981,11 +981,19 @@ begin
   -- same moment both read it as pending without this, and paid twice.
   select * into v_sub from submissions where id = p_submission_id for update;
   if not found then raise exception 'submission not found'; end if;
-  if v_sub.status <> 'pending' then raise exception 'submission already decided'; end if;
 
   -- A parent, not a supporter: approving pays the child.
   select id into v_parent from parents
    where user_id = auth.uid() and family_id = v_sub.family_id and role = 'parent';
+
+  -- Sent again because the phone never heard back (a server down for an
+  -- hour, an answer lost on the way): this parent's approval is already here.
+  -- Answered quietly and paid nothing more. Raising made the phone say
+  -- "accepted on another device", and drop the child's "Accepted!" notice.
+  if v_sub.status = 'approved' and v_parent is not null and v_sub.decided_by = v_parent then
+    return;
+  end if;
+  if v_sub.status <> 'pending' then raise exception 'submission already decided'; end if;
   if v_parent is null then raise exception 'only a parent in this family can approve'; end if;
 
   -- The chore must be this child's, in this family. Without this a submission
