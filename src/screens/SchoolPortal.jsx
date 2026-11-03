@@ -5,6 +5,7 @@ import { transport } from '../lib/sync/transport.js'
 import {
   schools, schoolError, schoolPrice, dollars, monthLabel,
   SCHOOL_PRICES, SCHOOL_TRIAL_DAYS, demoOverview, DEMO_LEAGUE,
+  SCHOOL_YEAR_MONTHS,
 } from '../lib/schools.js'
 import { Screen, Card, Button, SectionTitle, Banner, Field, TextInput, Modal, Chip, DemoTag } from '../components/ui.jsx'
 import { SchoolHeadline, LeagueTable, RivalryList, StarList } from '../components/SchoolParts.jsx'
@@ -117,7 +118,7 @@ function Landing({ onStart }) {
         {quote ? (
           <p className="text-sm">
             <strong>{quote.label}</strong>: {dollars(quote.monthlyCents)} a month, or{' '}
-            {dollars(quote.yearlyCents)} a year (two months free). First {quote.trialDays} days free.
+            {dollars(quote.yearlyCents)} a year ({12 - SCHOOL_YEAR_MONTHS} months free). First {quote.trialDays} days free.
           </p>
         ) : (
           <div className="grid grid-cols-2 gap-2">

@@ -1,6 +1,8 @@
 import { Screen, Card, Button, Banner } from './ui.jsx'
 import { ELITE_KID_PERKS, ELITE_PARENT_PERKS, TIERS } from '../state/initialState.js'
 import { billingLive } from '../lib/billing.js'
+import { priceTag } from '../lib/plans.js'
+import { guildsEnabled } from '../lib/guilds.js'
 import { navigate } from '../lib/router.js'
 
 /**
@@ -22,7 +24,7 @@ export default function EliteGate({ icon, title, body, perk }) {
         <h1 className="font-display text-xl font-extrabold mb-1">{title}</h1>
         <p className="text-sm text-muted mb-3">{body}</p>
         <span className="chip" style={{ borderColor: 'var(--accent-2)', color: 'var(--accent-2)' }}>
-          Elite Pass · ${TIERS.elite.price}/mo
+          {TIERS.elite.name} · {priceTag(TIERS.elite)}
         </span>
       </Card>
 
@@ -42,7 +44,7 @@ export default function EliteGate({ icon, title, body, perk }) {
       ))}
 
       <h2 className="section-title mt-4">And for your kids</h2>
-      {ELITE_KID_PERKS.map((p) => (
+      {ELITE_KID_PERKS.filter((p) => !p.needs || guildsEnabled()).map((p) => (
         <PerkRow key={p.title} perk={p} />
       ))}
     </Screen>

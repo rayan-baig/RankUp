@@ -123,6 +123,20 @@ export function planOf(state) {
 }
 
 /**
+ * The plan in words, for a parent: what they pay for, and the trial on top
+ * while one runs. "Starter", "Standard", "Starter · trying Elite Pass".
+ *
+ * Settings said "Standard" for every family that was not Elite, the free
+ * Starter ones included: it read `tier` as a yes/no for Elite. An unknown
+ * tier is Starter, the same as effectiveTier() and the database.
+ */
+export function planSummary(state) {
+  const paid = TIERS[state?.family?.tier] || TIERS.starter
+  if (!onTrial(state)) return paid.name
+  return `${paid.name} · trying ${planOf(state).name}`
+}
+
+/**
  * How many children this plan allows. Starter is one child; the point of
  * Standard is the second one.
  */

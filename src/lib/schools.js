@@ -23,6 +23,10 @@ export const SCHOOL_PRICES = [
 ]
 
 export const SCHOOL_TRIAL_DAYS = 30
+/** A Champion still on its trial gets this many more days (settle_schools in the SQL). */
+export const SCHOOL_CHAMPION_TRIAL_DAYS = 30
+/** A year is this many months' money: two free for paying up front. */
+export const SCHOOL_YEAR_MONTHS = 10
 export const SCHOOL_MIN_STUDENTS = 5
 
 /** What a school this size pays, worked out the same way the database does. */
@@ -34,8 +38,7 @@ export function schoolPrice(students) {
     band: row.band,
     label: row.label,
     monthlyCents: row.monthlyCents,
-    // A year is ten months: two free for paying up front.
-    yearlyCents: row.monthlyCents * 10,
+    yearlyCents: row.monthlyCents * SCHOOL_YEAR_MONTHS,
     trialDays: SCHOOL_TRIAL_DAYS,
   }
 }

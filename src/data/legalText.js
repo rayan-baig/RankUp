@@ -13,6 +13,10 @@
  * scratch. Do not launch on it unread.
  */
 
+import { TIERS } from '../state/initialState.js'
+import { priceWords } from '../lib/plans.js'
+import { SCHOOL_PRICES, SCHOOL_TRIAL_DAYS, SCHOOL_CHAMPION_TRIAL_DAYS, SCHOOL_YEAR_MONTHS, dollars } from '../lib/schools.js'
+
 export const CONSENT_VERSION = '2026-11'
 export const LAST_UPDATED = 'November 2026'
 /*
@@ -48,6 +52,16 @@ export const OPERATOR = {
 
 /** One sentence, used wherever RankUp says who is behind it. */
 export const PRODUCT_OF = `RankUp is a product of ${OPERATOR.name}.`
+
+/** "$29 a month up to 300, $59 up to 800, … and $149 above that", from the school price list. */
+function schoolPriceList() {
+  const bands = SCHOOL_PRICES.map((p, i) => {
+    const price = dollars(p.monthlyCents)
+    if (i === SCHOOL_PRICES.length - 1) return `and ${price} above that`
+    return `${price}${i === 0 ? ' a month' : ''} up to ${p.upTo.toLocaleString('en-US')}`
+  })
+  return bands.join(', ')
+}
 
 /** The fields of OPERATOR still holding a placeholder. */
 export const UNFILLED = Object.entries(OPERATOR).filter(([, v]) => v.startsWith('[')).map(([k]) => k)
@@ -198,10 +212,10 @@ export const TERMS = {
     {
       heading: 'Subscriptions',
       body: [
-        'Standard is $9.99 a month and Elite Pass is $15.99 a month, billed monthly until you cancel.',
+        `${TIERS.starter.name} is free. ${TIERS.standard.name} is ${priceWords(TIERS.standard)} or ${priceWords(TIERS.standard, 'year')}, and ${TIERS.elite.name} is ${priceWords(TIERS.elite)} or ${priceWords(TIERS.elite, 'year')}, billed monthly or yearly until you cancel.`,
         'You can cancel at any time from Settings. Your subscription runs to the end of the period you have paid for, and is not renewed.',
         'Deleting your account cancels your subscription straight away rather than at the end of the period, so you are not charged again.',
-        'If a payment fails we will retry, and your account moves to Standard features if it keeps failing. Nothing your child has earned is ever removed.',
+        `If a payment fails we will retry, and your account moves to ${TIERS.starter.name} while it is failing. Nothing your child has earned is ever removed.`,
       ],
     },
     {
@@ -222,9 +236,9 @@ export const TERMS = {
       heading: 'Schools',
       body: [
         'Whoever signs a school up must work there and be allowed to sign it up. We check every school before it joins a league, and we may suspend one that is not genuine or that misuses the league.',
-        'A school\'s plan is priced by its number of students: $29 a month up to 300, $59 up to 800, $99 up to 1,500, and $149 above that. A year costs ten months. The first 30 days are free, and nothing is charged until they end.',
+        `A school's plan is priced by its number of students: ${schoolPriceList()}. A year costs ${SCHOOL_YEAR_MONTHS === 10 ? 'ten' : SCHOOL_YEAR_MONTHS} months. The first ${SCHOOL_TRIAL_DAYS} days are free, and nothing is charged until they end.`,
         'A school can cancel at any time from its School League page. Its plan runs to the end of the period paid for. If a payment keeps failing, or the plan ends, the school stops being ranked until it is renewed.',
-        'Each month the best school in each district is named District Champion and its next month is free (or, during the free trial, the trial is extended by 30 days). This needs at least two ranked schools in the district.',
+        `Each month the best school in each district is named District Champion and its next month is free (or, during the free trial, the trial is extended by ${SCHOOL_CHAMPION_TRIAL_DAYS} days). This needs at least two ranked schools in the district.`,
         'Any prize a school gives its students is the school\'s own. A school must not use the league to identify, contact or single out any child outside the school\'s normal care of its students.',
       ],
     },

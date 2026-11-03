@@ -13,13 +13,24 @@ export const TRIAL_DAYS = 14
 /**
  * The three plans, cheapest first.
  *
- * `limits` is the machine-readable half — what the app actually enforces — and
- * `features` is the human half shown on the plan screen. They must agree: a
- * feature line that nothing enforces is a promise the app does not keep.
+ * `limits` (with `guildSize` and `xpMultiplier`) is what the app actually
+ * enforces. The words on the plan screen are worked out from it by
+ * lib/plans.js, never typed beside it: a feature line that nothing enforces
+ * is a promise the app does not keep. tests/planwords.mjs checks each limit
+ * against the code that enforces it.
  *
  * Standard and Elite are billed monthly or yearly (ten months' money). The
  * trial is free and asks for no card.
  */
+/* What only Elite unlocks, each one gated by isElite() in the app. */
+const NO_ELITE_TOOLS = {
+  overdrive: false,
+  profileFrames: false,
+  consequenceEngine: false,
+  blueprints: false,
+  alliances: false,
+}
+
 export const TIERS = {
   /*
    * Free, and that is the whole growth strategy in one number.
@@ -40,14 +51,7 @@ export const TIERS = {
     order: 0,
     guildSize: 0,
     xpMultiplier: 1,
-    limits: { maxKids: 1, guilds: false },
-    features: [
-      'Free, for as long as you like',
-      'One child',
-      'Unlimited quests and rewards',
-      'You accept every finished chore',
-      'All 15 kid themes and 10 parent themes',
-    ],
+    limits: { maxKids: 1, guilds: false, ...NO_ELITE_TOOLS },
   },
   standard: {
     id: 'standard',
@@ -66,12 +70,7 @@ export const TIERS = {
     order: 1,
     guildSize: 5,
     xpMultiplier: 1,
-    limits: { maxKids: Infinity, guilds: true },
-    features: [
-      'Unlimited children',
-      '5-player guilds',
-      'Everything in Starter',
-    ],
+    limits: { maxKids: Infinity, guilds: true, ...NO_ELITE_TOOLS },
   },
   elite: {
     id: 'elite',
@@ -81,17 +80,15 @@ export const TIERS = {
     order: 2,
     guildSize: 10,
     xpMultiplier: 1.5,
-    limits: { maxKids: Infinity, guilds: true },
-    features: [
-      'Everything in Standard',
-      'Permanent 1.5× XP boost',
-      'Overdrive — the richer look, on every theme',
-      '10-player Megacluster guilds',
-      'Exclusive profile customisation',
-      'The Parental Consequence Engine',
-      'Behaviour Blueprints',
-      'The 20% Discount Tournament',
-    ],
+    limits: {
+      maxKids: Infinity,
+      guilds: true,
+      overdrive: true,
+      profileFrames: true,
+      consequenceEngine: true,
+      blueprints: true,
+      alliances: true,
+    },
   },
 }
 
@@ -129,20 +126,21 @@ export const PLAN_COMPARISON = [
     label: `${PARENT_THEMES.length} parent dashboard themes`,
     value: () => true,
   },
-  { label: 'Guilds', value: (t) => (t.guildSize ? `${t.guildSize}-player` : false) },
+  { label: 'Guilds', needs: 'guilds', value: (t) => (t.guildSize ? `${t.guildSize}-player` : false) },
   { label: 'XP rate', value: (t) => (t.xpMultiplier > 1 ? `${t.xpMultiplier}×` : 'Normal') },
   { label: 'Sunday Market', value: () => true },
-  { label: 'Overdrive visuals', value: (t) => t.id === 'elite' },
-  { label: 'Profile frames', value: (t) => t.id === 'elite' },
-  { label: 'Consequence Engine', value: (t) => t.id === 'elite' },
-  { label: 'Behaviour Blueprints', value: (t) => t.id === 'elite' },
-  { label: 'Discount Tournament', value: (t) => t.id === 'elite' },
+  { label: 'Arcade', value: () => true },
+  { label: 'Overdrive visuals', value: (t) => t.limits.overdrive },
+  { label: 'Profile frames', value: (t) => t.limits.profileFrames },
+  { label: 'Consequence Engine', value: (t) => t.limits.consequenceEngine },
+  { label: 'Behaviour Blueprints', value: (t) => t.limits.blueprints },
+  { label: 'Discount Tournament', value: (t) => t.limits.alliances },
 ]
 
 export const ELITE_KID_PERKS = [
   { id: 'overdrive', icon: '✨', title: 'Overdrive', body: 'A slow aurora behind every screen in your own theme\u2019s colours, light coming off the buttons, a highlight running along the XP bar, a turning ring around your avatar, and a proper burst when you level up.' },
-  { id: 'guilds', icon: '👥', title: '10-Player Megacluster Guilds', body: 'Doubles the standard clan from 5 slots to 10, so a squad leader can invite more real-world classmates.' },
-  { id: 'xp', icon: '⚡', title: 'Permanent 1.5× XP Boost', body: 'A constant multiplier on every daily checklist and habit, so Elite kids level faster than Standard kids.' },
+  { id: 'guilds', needs: 'guilds', icon: '👥', title: `${TIERS.elite.guildSize}-Player Megacluster Guilds`, body: `Guilds of up to ${TIERS.elite.guildSize} instead of ${TIERS.standard.guildSize}, so a squad leader can invite more real-world classmates.` },
+  { id: 'xp', icon: '⚡', title: `Permanent ${TIERS.elite.xpMultiplier}× XP Boost`, body: 'A constant multiplier on every accepted chore, so Elite kids level faster than Standard kids.' },
   { id: 'frames', icon: '🔮', title: 'Exclusive Profile Customisation', body: 'Unlocks animated profile card frames and rare item drop selectors Standard users cannot access.' },
 ]
 

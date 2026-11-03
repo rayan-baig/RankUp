@@ -78,7 +78,7 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null })
                 {t.price ? <span className="text-[10px] font-semibold text-muted">/mo</span> : null}
               </div>
               <div className="text-[11px] text-muted leading-tight">
-                {t.name}{t.id === 'starter' ? ' · 1 child' : ''}
+                {t.name}{t.limits.maxKids !== Infinity ? ` · ${t.limits.maxKids} ${t.limits.maxKids === 1 ? 'child' : 'children'}` : ''}
               </div>
             </div>
           ))}

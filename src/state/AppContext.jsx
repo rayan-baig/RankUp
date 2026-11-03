@@ -467,7 +467,8 @@ export function useParentTheme() {
 
 export function useTier() {
   const { state } = useApp()
-  return TIERS[state.family.tier] || TIERS.standard
+  // An unknown or missing tier is the free plan, never a paid one.
+  return TIERS[state.family.tier] || TIERS.starter
 }
 
 export function useElite() {

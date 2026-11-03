@@ -8,6 +8,8 @@ import { findGame } from '../../data/minigames.js'
 import { MARKET_SKINS } from '../../data/marketSkins.js'
 import { activeLockout, familyGoalProgress } from '../../state/reducer.js'
 import { TIERS } from '../../state/initialState.js'
+import { priceTag } from '../../lib/plans.js'
+import { guildsEnabled } from '../../lib/guilds.js'
 import Avatar from '../../components/Avatar.jsx'
 import { Screen, Card, Button, SectionTitle, Stat, ProgressBar, EmptyState, Banner, Chip } from '../../components/ui.jsx'
 import SyncBadge from '../../components/SyncBadge.jsx'
@@ -246,8 +248,8 @@ export default function ParentDashboard() {
       </button>
 
       {!elite && (
-        <Banner tone="info" icon="⚡" title="Elite Pass — $15.99/mo" action={<Button className="px-3 py-2 min-h-0 text-xs shrink-0" onClick={() => navigate('/parent/plan')}>See it</Button>}>
-          Adds the Consequence Engine, Behaviour Blueprints, Parent Alliances, 10-player guilds and a permanent 1.5× XP boost for kids.
+        <Banner tone="info" icon="⚡" title={`${TIERS.elite.name} — ${priceTag(TIERS.elite)}`} action={<Button className="px-3 py-2 min-h-0 text-xs shrink-0" onClick={() => navigate('/parent/plan')}>See it</Button>}>
+          {elitePitch()}
         </Banner>
       )}
 
@@ -273,6 +275,16 @@ export default function ParentDashboard() {
       </Card>
     </Screen>
   )
+}
+
+/**
+ * What Elite adds, for the banner, from the plan list: the guild size and the
+ * XP rate are its numbers, and guilds are only mentioned when they are on.
+ */
+function elitePitch() {
+  const parts = ['the Consequence Engine', 'Behaviour Blueprints', 'Parent Alliances']
+  if (guildsEnabled()) parts.push(`${TIERS.elite.guildSize}-player guilds`)
+  return `Adds ${parts.join(', ')} and a permanent ${TIERS.elite.xpMultiplier}× XP boost for kids.`
 }
 
 // The words for what the events store as ids: "Plan changed to elite" and

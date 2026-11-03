@@ -6,6 +6,12 @@
  * market can change what a chore pays.
  */
 import { launch, reporter, setUpFamily, readState, finish, expireTrialInDatabase, SHOT_DIR } from './helpers.mjs'
+import { TIERS, TIER_LADDER } from '../src/state/initialState.js'
+import { planLines, annualSaving } from '../src/lib/plans.js'
+
+// The tests run with guilds switched on (supabase/test/up.sh), so the plan
+// screen mentions them; tests/planwords.mjs checks they vanish when off.
+const PLAN_OPTS = { guilds: true }
 
 const { browser, page, errors } = await launch()
 const { fails, pass, fail } = reporter()
@@ -42,6 +48,25 @@ body.includes('$9.99 a month') && body.includes('more than Standard')
   ? pass('there is a side-by-side comparison')
   : fail('comparison table', 'missing')
 
+console.log('\n=== Each plan says what it adds, in the plan list\'s own words ===')
+for (const tier of TIER_LADDER) {
+  const shown = await page.locator(`[data-testid="plan-lines-${tier.id}"]`).innerText().catch(() => '')
+  const missing = planLines(tier, PLAN_OPTS).filter((line) => !shown.includes(line))
+  missing.length === 0 && shown
+    ? pass(`${tier.name}: every line from the limits is on its card (${planLines(tier, PLAN_OPTS).length})`)
+    : fail(`${tier.name} lines shown`, `missing: ${missing.join(' / ')}`)
+  const extra = shown.split('\n').map((x) => x.replace(/^✓\s*/, '').trim()).filter(Boolean)
+    .filter((x) => !planLines(tier, PLAN_OPTS).includes(x))
+  extra.length === 0
+    ? pass(`${tier.name}: and nothing on it that the limits do not say`)
+    : fail(`${tier.name} has no extra lines`, extra.join(' / '))
+}
+const sellsThemes = /every theme/.test(body)
+sellsThemes
+  ? fail('Standard is not sold on themes', 'the screen says Standard adds every theme, which Starter already has')
+  : pass('no plan is sold on themes every plan already has')
+await page.screenshot({ path: `${SHOT_DIR}/plans-monthly.png`, fullPage: true })
+
 console.log('\n=== Nothing claims to remove ads, because there are none ===')
 ;/ad removal|remove ads|advertis/i.test(body)
   ? fail('no ad-removal claim', 'the plan screen still sells ad removal')
@@ -68,6 +93,14 @@ const showsSaving = /\$\d+\.\d\d saved/.test(yearly)
 showsSaving
   ? pass('each plan shows the money saved in cash, not a percentage')
   : fail('saving in cash', yearly.slice(0, 200))
+for (const tier of TIER_LADDER.filter((t) => annualSaving(t))) {
+  const s = annualSaving(tier)
+  const chip = await page.locator(`[data-testid="saving-${tier.id}"]`).innerText().catch(() => '')
+  chip.trim() === `$${s.saved} saved a year`
+    ? pass(`${tier.name}: saves $${s.saved}, twelve months at $${tier.price.toFixed(2)} less $${tier.yearPrice.toFixed(2)}`)
+    : fail(`${tier.name} saving`, `shows "${chip}", should be $${s.saved}`)
+}
+await page.screenshot({ path: `${SHOT_DIR}/plans-yearly.png`, fullPage: true })
 yearly.includes('Billed yearly')
   ? pass('and says plainly how it will be billed')
   : fail('billed yearly stated', 'phrase missing')
@@ -133,6 +166,23 @@ kidsBody.includes('covers one child')
 await page.getByRole('button', { name: '+ Add' }).isDisabled()
   ? pass('and the Add button is actually disabled')
   : fail('add disabled on Starter', 'still clickable')
+
+console.log('\n=== Settings names the plan they are really on ===')
+await page.evaluate(() => { window.location.hash = '/parent/settings' })
+await page.waitForTimeout(900)
+{
+  const summary = await page.getByRole('button', { name: /Parent account/ }).innerText().catch(() => '')
+  summary.includes(TIERS.starter.name) && !summary.includes(TIERS.standard.name)
+    ? pass(`a family on the free plan is shown as ${TIERS.starter.name}, not ${TIERS.standard.name}`)
+    : fail('Parent account names Starter', summary)
+  await page.getByRole('button', { name: /Parent account/ }).click().catch(() => {})
+  await page.waitForTimeout(300)
+  const chip = await page.locator('[data-testid="plan-chip"]').innerText().catch(() => '')
+  chip === `Plan: ${TIERS.starter.name}`
+    ? pass('and so does the plan line inside it')
+    : fail('plan chip names Starter', chip)
+  await page.screenshot({ path: `${SHOT_DIR}/plans-settings-starter.png` })
+}
 
 const before = (await readState(page)).kids.length
 await page.evaluate(() => {

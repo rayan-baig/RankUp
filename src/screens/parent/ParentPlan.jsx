@@ -4,18 +4,16 @@ import { effectiveTier, onTrial, trialDaysLeft } from '../../state/reducer.js'
 import { TIERS, TIER_LADDER, PLAN_COMPARISON, ELITE_KID_PERKS, ELITE_PARENT_PERKS } from '../../state/initialState.js'
 import { billingLive, startCheckout, openBillingPortal, fetchBillingStatus, billingError, billingNotice } from '../../lib/billing.js'
 import { Screen, Card, Button, SectionTitle, Banner, Chip, Modal } from '../../components/ui.jsx'
+import { guildsEnabled } from '../../lib/guilds.js'
+import { usd, toCents, priceTag, priceWords, annualSaving, yearlyNote, yearlyOffered, planLines, upgradeReason } from '../../lib/plans.js'
 
-/**
- * The single sentence that answers "why would I pay more than the tier below".
- * Kept beside the price so the question is answered where it gets asked.
+/*
+ * What each plan gives, the answer to "why would I pay more than the tier
+ * below", and every price are worked out from the plan list and its limits
+ * (lib/plans.js), so this screen cannot say something the app does not do.
+ * Guilds are only mentioned when this app has them switched on.
  */
-/** Dollars as a price is written: 99.9 is "99.90", the way docs/PAYMENTS.md and Stripe say it. */
-const usd = (n) => Number(n).toFixed(2)
-
-const UPGRADE_REASON = {
-  standard: 'more than one child, and every theme.',
-  elite: 'every chore pays 1.5×, the whole app switches to Overdrive, plus the parent tools.',
-}
+const PLAN_OPTS = { guilds: guildsEnabled() }
 
 export default function ParentPlan() {
   const { state, dispatch } = useApp()
@@ -119,10 +117,11 @@ export default function ParentPlan() {
         Two months free is the whole pitch for annual, so it is stated on the
         control rather than hidden inside the cards a tap away.
       */}
+      {yearlyOffered() && (
       <div className="flex gap-1.5 p-1 rounded-xl mt-3" style={{ background: 'var(--surface-2)' }} role="tablist" aria-label="Billing period">
         {[
           { id: 'month', label: 'Monthly' },
-          { id: 'year', label: 'Yearly', note: '2 months free' },
+          { id: 'year', label: 'Yearly', note: yearlyNote() },
         ].map((option) => (
           <button
             key={option.id}
@@ -142,11 +141,14 @@ export default function ParentPlan() {
           </button>
         ))}
       </div>
+      )}
 
       <div className="mt-3 space-y-3">
         {TIER_LADDER.map((tier, i) => {
           const active = tier.id === current
           const below = TIER_LADDER[i - 1]
+          const saving = annualSaving(tier)
+          const yearly = cycle === 'year' && saving
           return (
             <Card
               key={tier.id}
@@ -157,7 +159,7 @@ export default function ParentPlan() {
                 <span className="font-display font-extrabold text-xl">
                   {tier.price === 0
                     ? 'Free'
-                    : cycle === 'year'
+                    : yearly
                       ? <>${usd(tier.yearPrice)}<span className="text-xs font-normal text-muted">/yr</span></>
                       : <>${usd(tier.price)}<span className="text-xs font-normal text-muted">/mo</span></>}
                 </span>
@@ -170,29 +172,37 @@ export default function ParentPlan() {
                 <Chip>
                   {tier.price === 0
                     ? 'Free forever · no card'
-                    : cycle === 'year'
+                    : yearly
                       ? 'Billed yearly · cancel any time'
                       : 'Billed monthly · cancel any time'}
                 </Chip>
-                {tier.price > 0 && cycle === 'year' && (
-                  <Chip tone="var(--good)">
-                    ${(tier.price * 12 - tier.yearPrice).toFixed(2)} saved
+                {yearly && (
+                  <Chip tone="var(--good)" data-testid={`saving-${tier.id}`}>
+                    ${saving.saved} saved a year
                   </Chip>
                 )}
               </div>
+              {yearly && (
+                <p className="text-xs text-muted mt-1.5">
+                  Twelve months at ${usd(tier.price)} is ${usd((saving.savedCents + toCents(tier.yearPrice)) / 100)}.
+                  {saving.monthsFree
+                    ? ` A year is ${12 - saving.monthsFree} months' money, so ${saving.monthsFree} ${saving.monthsFree === 1 ? 'month is' : 'months are'} free.`
+                    : ` A year saves ${saving.percent}%.`}
+                </p>
+              )}
               {below && (
                 <p className="text-sm mt-2">
                   <strong>
                     {below.price === 0
-                      ? `$${tier.price.toFixed(2)} a month`
-                      : `$${(tier.price - below.price).toFixed(2)} more than ${below.name}`}
+                      ? priceWords(tier)
+                      : `$${usd((toCents(tier.price) - toCents(below.price)) / 100)} more than ${below.name}`}
                   </strong>
-                  {' — '}{UPGRADE_REASON[tier.id]}
+                  {' — '}{upgradeReason(tier, PLAN_OPTS)}
                 </p>
               )}
 
-              <ul className="mt-3 space-y-1.5">
-                {tier.features.map((f) => (
+              <ul className="mt-3 space-y-1.5" data-testid={`plan-lines-${tier.id}`}>
+                {planLines(tier, PLAN_OPTS).map((f) => (
                   <li key={f} className="text-sm flex gap-2">
                     <span style={{ color: 'var(--good)' }} aria-hidden="true">✓</span>
                     <span>{f}</span>
@@ -212,7 +222,7 @@ export default function ParentPlan() {
                     : tier.price === 0
                       ? `Stay on ${tier.name}`
                       : `${live ? 'Subscribe to' : 'Switch to'} ${tier.name} · `
-                        + (cycle === 'year' ? `$${usd(tier.yearPrice)}/yr` : `$${usd(tier.price)}/mo`)}
+                        + priceTag(tier, yearly ? 'year' : 'month')}
                 </Button>
               )}
             </Card>
@@ -243,14 +253,14 @@ export default function ParentPlan() {
                     className="block text-[10px] text-muted leading-tight"
                     style={{ fontVariantNumeric: 'tabular-nums' }}
                   >
-                    {t.price === 0 ? 'Free' : `$${usd(t.price)}/mo`}
+                    {priceTag(t)}
                   </span>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {PLAN_COMPARISON.map((row) => (
+            {PLAN_COMPARISON.filter((row) => !row.needs || PLAN_OPTS[row.needs]).map((row) => (
               <tr key={row.label}>
                 <th
                   scope="row"
@@ -283,7 +293,7 @@ export default function ParentPlan() {
       </Card>
 
       <SectionTitle>What Elite adds for kids</SectionTitle>
-      {ELITE_KID_PERKS.map((p) => (
+      {ELITE_KID_PERKS.filter((p) => !p.needs || PLAN_OPTS[p.needs]).map((p) => (
         <Card key={p.title} flat className="mb-2 flex gap-3">
           <span className="text-xl" aria-hidden="true">{p.icon}</span>
           <span className="min-w-0">
@@ -316,9 +326,9 @@ export default function ParentPlan() {
         }
       >
         <p className="text-sm mb-2">
-          {confirm && UPGRADE_REASON[confirm.id]
-            ? `On ${confirm.name}: ${UPGRADE_REASON[confirm.id]}`
-            : 'One child, free.'}
+          {confirm && upgradeReason(confirm, PLAN_OPTS)
+            ? `On ${confirm.name}: ${upgradeReason(confirm, PLAN_OPTS)}`
+            : `${planLines(TIER_LADDER[0], PLAN_OPTS)[0]}, free.`}
         </p>
         <p className="text-sm mb-2">
           Nothing your children have already earned is ever removed by changing plan — XP,

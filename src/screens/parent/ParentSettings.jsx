@@ -4,7 +4,7 @@ import { PARENT_THEMES } from '../../data/parentThemes.js'
 import { clearState, storageUsageBytes } from '../../lib/storage.js'
 import { relativeTime } from '../../lib/dates.js'
 import { canSyncAcrossDevices } from '../../lib/sync/index.js'
-import { isElite } from '../../state/reducer.js'
+import { isElite, planSummary } from '../../state/reducer.js'
 import { billingLive, buyFlashTickets, billingError, FLASH_TICKET_PACKS, perTicket, packSaving } from '../../lib/billing.js'
 import { guildsEnabled } from '../../lib/guilds.js'
 import { saveReminderSchedule } from '../../lib/notifications.js'
@@ -321,7 +321,7 @@ export default function ParentSettings() {
       </Section>
 
       <Section title="Parent account" icon="👤"
-        summary={`${state.family.name || 'Your family'} · ${state.family.tier === 'elite' ? 'Elite Pass' : 'Standard'}`}>
+        summary={`${state.family.name || 'Your family'} · ${planSummary(state)}`}>
       <Card flat>
         <Field label="Family name">
           <TextInput
@@ -347,7 +347,7 @@ export default function ParentSettings() {
             ))}
           </Select>
         </Field>
-        <Chip>Plan: {state.family.tier === 'elite' ? 'Elite Pass' : 'Standard'}</Chip>
+        <Chip data-testid="plan-chip">Plan: {planSummary(state)}</Chip>
       </Card>
 
       </Section>

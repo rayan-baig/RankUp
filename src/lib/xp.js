@@ -70,7 +70,7 @@ export function calcReward(quest, { elite = false, streak = 0, onTime = true } =
   }
   if (elite) {
     const bonus = Math.round(xp * (ELITE_XP_MULTIPLIER - 1))
-    lines.push({ label: 'Elite Pass 1.5× boost', value: bonus })
+    lines.push({ label: `Elite Pass ${ELITE_XP_MULTIPLIER}× boost`, value: bonus })
     xp += bonus
   }
 

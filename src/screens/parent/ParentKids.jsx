@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { canAddKid, planOf } from '../../state/reducer.js'
-import { makeKid } from '../../state/initialState.js'
+import { makeKid, TIERS } from '../../state/initialState.js'
+import { priceWords } from '../../lib/plans.js'
 import { ADAPTIVE_SUPPORTS } from '../../data/questTemplates.js'
 import { KID_THEMES, resolveKidTheme } from '../../data/kidThemes.js'
 import { storyProgress } from '../../lib/dragonFight.js'
@@ -63,8 +64,8 @@ export default function ParentKids() {
           title={`${planOf(state).name} covers one child`}
           action={<Button className="px-3 py-2 min-h-0 text-sm" onClick={() => navigate('/parent/plan')}>See plans</Button>}
         >
-          Standard ($9.99 a month) adds unlimited children. Nothing this child has earned is
-          affected either way.
+          {TIERS.standard.name} ({priceWords(TIERS.standard)}) adds as many children as you have.
+          Nothing this child has earned is affected either way.
         </Banner>
       )}
 
