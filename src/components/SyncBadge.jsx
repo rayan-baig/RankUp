@@ -69,13 +69,28 @@ export default function SyncBadge({ className = '' }) {
     )
   }
 
+  /*
+   * Short, and true to the outbox (lib/sync/outbox.js): a change is saved on
+   * this phone the moment it is made and sent, in order, whenever RankUp is
+   * open and can reach the server. With no signal it waits, for as long as
+   * it takes; nothing is dropped for being offline. A server that is having
+   * trouble is tried again by itself, so there is nothing for anyone to do.
+   */
+  const saved = `${pending} saved on this phone`
   const look = {
     [SYNC_STATUS.IDLE]: { dot: 'var(--good)', text: pending ? `${pending} waiting to send` : 'Up to date' },
     [SYNC_STATUS.SYNCING]: { dot: 'var(--accent)', text: 'Syncing…' },
-    [SYNC_STATUS.OFFLINE]: { dot: 'var(--warn)', text: pending ? `Offline · ${pending} waiting` : 'Offline' },
+    [SYNC_STATUS.OFFLINE]: {
+      dot: 'var(--warn)',
+      text: pending ? `No internet · ${saved}` : 'No internet',
+      hint: 'Everything is saved on this phone. It sends next time RankUp is open with internet.',
+    },
     [SYNC_STATUS.ERROR]: {
       dot: 'var(--bad)',
-      text: /sign in again/i.test(error || '') ? 'Sign in again to sync' : 'Sync problem',
+      text: /sign in again/i.test(error || '')
+        ? 'Sign in again to sync'
+        : pending ? `Can’t sync yet · ${saved}` : 'Can’t sync yet',
+      hint: /sign in again/i.test(error || '') ? null : 'Nothing is lost. RankUp keeps trying by itself.',
     },
   }[status] || { dot: 'var(--ink-muted)', text: '' }
 
@@ -103,7 +118,7 @@ export default function SyncBadge({ className = '' }) {
       onClick={needsSignIn && state.device?.role !== 'kid' && transport.isConfigured() ? () => setSigningIn(true) : syncNow}
       className={`inline-flex items-center gap-1.5 text-[11px] ${className}`}
       style={{ color: 'var(--ink-muted)' }}
-      title={error || 'Tap to sync now'}
+      title={look.hint || error || 'Tap to sync now'}
     >
       <span
         className={`w-1.5 h-1.5 rounded-full ${status === SYNC_STATUS.SYNCING ? 'anim-pulse' : ''}`}

@@ -1052,11 +1052,11 @@ export function reducer(state, action) {
       // first try whose answer was lost. The fresh pull shows it.
       if (['already_claimed', 'already_safe', 'already_pending', 'repeat'].includes(reason)) return state
       let next = state
-      let message = 'Something you did was not accepted by the server, so this phone is being brought up to date.'
+      let message = 'Something you did didn’t go through, so this phone is catching up.'
       // reject_submission answers 'decided'; approve_submission raises, and its
       // words arrive as the reason. Both mean another phone got there first.
       if (reason === 'decided' || /already decided/.test(reason || '')) {
-        message = 'That submission had already been decided on another device.'
+        message = 'That chore was already accepted or sent back on another device.'
       } else if (fn === 'submit_quest') {
         const quest = state.quests.find((q) => q.id === args.p_quest_id)
         next = {
@@ -1064,7 +1064,7 @@ export function reducer(state, action) {
           submissions: next.submissions.filter((sub) => !(sub.id === args.p_submission_id && sub.status === 'pending')),
           quests: next.quests.map((q) => (q.id === args.p_quest_id && q.status === 'submitted' ? { ...q, status: 'assigned' } : q)),
         }
-        message = `"${quest?.title || 'A quest'}" was not sent: it was not open on the server. Check it and try again.`
+        message = `"${quest?.title || 'A quest'}" didn’t send: it isn’t open any more. Check it and try again.`
       } else if (fn === 'redeem_reward') {
         const redemption = state.redemptions.find((r) => r.id === args.p_redemption_id)
         next = { ...next, redemptions: next.redemptions.filter((r) => r.id !== args.p_redemption_id) }
@@ -1074,10 +1074,10 @@ export function reducer(state, action) {
         // purchase was on its way, or the coins had gone on something else
         // (another phone, a tax) by the time it arrived.
         message = reason === 'reward_gone'
-          ? `${name} was taken off the rewards list before your purchase arrived, so nothing was spent and the coins are back.`
+          ? `${name} was taken off the rewards list before your purchase arrived. Nothing was spent: the coins are back.`
           : reason === 'insufficient'
-            ? `${name} could not be bought: by the time it reached the server there were not enough coins left. Nothing was spent.`
-            : `${name} could not be claimed, so the coins are back.`
+            ? `${name} couldn’t be bought: there were not enough coins left by the time it arrived. Nothing was spent.`
+            : `${name} couldn’t be claimed, so the coins are back.`
       } else if (fn === 'mark_redemption_given') {
         next = {
           ...next,

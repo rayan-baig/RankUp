@@ -44,6 +44,8 @@ const SUITES = {
     { file: 'isolation.mjs' },
     { file: 'release.mjs' },
     { file: 'sharecard.mjs' },
+    { file: 'howtoplay.mjs' },
+    { file: 'help.mjs' },
   ],
   // The app in a real browser, against the dev server on :5173 and the mock
   // API on :54321 (supabase/test/up.sh starts both).
@@ -74,6 +76,7 @@ const SUITES = {
     { file: 'embedded.mjs', weight: 50 },
     { file: 'cardgames.mjs', weight: 85 },
     { file: 'crash.mjs', weight: 16 },
+    { file: 'launchscreens.mjs', weight: 40 },
     { file: 'erase.mjs', weight: 19 },
     { file: 'oldphone.mjs', weight: 3 },
     { file: 'secretworlds.mjs', weight: 143 },

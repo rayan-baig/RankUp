@@ -130,7 +130,10 @@ export default function KidArcade() {
             Give up
           </Button>
         </div>
-        <p className="text-xs text-muted mb-3">{meta.howTo}</p>
+        {/* One line, before the first move: what to do in this game. */}
+        <p className="card-flat px-3 py-2 mb-3 text-sm" data-testid="how-to-play">
+          <span className="font-semibold">How to play:</span> {meta.howTo}
+        </p>
         <Suspense fallback={<Loading inline />}>
           <Game theme={theme} onDone={finish} />
         </Suspense>

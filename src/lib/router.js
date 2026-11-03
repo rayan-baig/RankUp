@@ -50,3 +50,15 @@ export function navigateThen(to, fn) {
   window.addEventListener('hashchange', fn, { once: true })
   navigate(to)
 }
+
+/**
+ * Where "Go home" leads from a screen at `route`: the home of whichever side
+ * of the app it is on. "/" for anything else, which the route guard in App
+ * turns into the right place for this phone.
+ */
+export function homeFor(route) {
+  const path = String(route || '').split('?')[0]
+  if (path.startsWith('/parent')) return '/parent'
+  if (path.startsWith('/kid')) return '/kid'
+  return '/'
+}

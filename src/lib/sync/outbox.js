@@ -2,9 +2,11 @@
  * The outbox.
  *
  * Every change a device makes is written to its own storage immediately and
- * queued here to be sent. That ordering matters: a kid photographing a chore in
+ * queued here to be sent. That ordering matters: a kid tapping "I did it!" in
  * a basement with no signal must not lose the submission, and a parent tapping
- * Approve on a train must not have to wait for a round trip.
+ * Accept on a train must not have to wait for a round trip. What the app says
+ * about it (SyncBadge, QuestDetail) is held to how this behaves: saved on the
+ * phone at once, sent in order whenever the app is open and online.
  *
  * The queue survives a reload, drains in order, and drops an operation only
  * once the server has accepted it — or once it has failed so many times that
@@ -22,7 +24,7 @@ const KEY_BASE = 'rankup.outbox.v1'
  * A failed CONNECTION, or a server that is having a bad afternoon, says nothing
  * about the write at all. Counting those the same way was how a child's chore
  * submission could be destroyed: eight polls is about a minute, so one minute
- * of the backend being down silently deleted the photo they had just taken,
+ * of the backend being down silently deleted the chore they had just sent,
  * with nothing on screen to say so. A retryable failure now only ever makes the
  * queue WAIT — longer each time, up to five minutes — and an operation is
  * abandoned for this reason only after a full day of failing, which is well
@@ -123,8 +125,8 @@ export function enqueue(op) {
   }
 
   ops.push(entry)
-  // Returns null when the write failed — a full quota is an expected state in
-  // an app that keeps base64 photos in localStorage. The caller must not record
+  // Returns null when the write failed — a full phone is an expected state
+  // for an app that keeps a family's history in localStorage. The caller must not record
   // this row as queued when it is not.
   return writeOutbox(ops) ? entry : null
 }

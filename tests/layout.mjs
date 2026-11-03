@@ -24,7 +24,7 @@ const errors = []
 const PARENT_ROUTES = [
   '/parent', '/parent/approvals', '/parent/assign', '/parent/kids', '/parent/blueprint',
   '/parent/override', '/parent/guilds', '/parent/alliance', '/parent/school', '/parent/plan',
-  '/parent/settings', '/parent/pair',
+  '/parent/settings', '/parent/pair', '/parent/help',
 ]
 const KID_ROUTES = [
   '/kid', '/kid/quests', '/kid/shop', '/kid/market', '/kid/arcade', '/kid/guild', '/kid/profile',

@@ -31,6 +31,12 @@ export const CATEGORIES = [
   { id: 'cards', name: 'Cards', icon: '🃏' },
 ]
 
+/*
+ * `howTo` is the one line a child reads before a game starts (KidArcade shows
+ * it above the game): what to do, in words a seven-year-old can follow, short
+ * enough for one line on a phone. tests/howtoplay.mjs holds every game, and
+ * every sport in SportsMania, to that.
+ */
 export const MINIGAMES = [
   {
     id: 'sports',
@@ -39,7 +45,7 @@ export const MINIGAMES = [
     icon: '🏆',
     category: 'sports',
     blurb: 'Ten sports in one. Football, golf, F1, cricket, hockey and more.',
-    howTo: 'Pick a sport and play one event. Your token is only spent when it ends.',
+    howTo: 'Pick a sport, then play one event.',
     minutes: 3,
   },
   {
@@ -49,7 +55,7 @@ export const MINIGAMES = [
     icon: '🎾',
     category: 'sports',
     blurb: 'A 3D career. Rankings, a tour calendar, best of three sets.',
-    howTo: 'Arrows move and aim. Space serves. J topspin, K slice, L lob. Needs the internet.',
+    howTo: 'Serve, then hit it back with Topspin, Slice or Lob. Needs the internet.',
     minutes: 8,
     needsNet: true,
   },
@@ -60,7 +66,7 @@ export const MINIGAMES = [
     icon: '🚗',
     category: 'sports',
     blurb: 'Football with cars. You cannot carry the ball, only hit it.',
-    howTo: 'Drag to drive. Seventy-five seconds. Shove the ball into the top goal.',
+    howTo: 'Drag to drive your car and push the ball into the top goal.',
     minutes: 2,
   },
   {
@@ -70,7 +76,7 @@ export const MINIGAMES = [
     icon: '🟦',
     category: 'puzzle',
     blurb: 'Falling shapes. Fill a row and it clears.',
-    howTo: 'Slide, rotate, drop. Clear ten lines for a perfect round.',
+    howTo: 'Slide, turn and drop the blocks. Fill a whole row to clear it.',
     minutes: 4,
   },
   {
@@ -80,7 +86,7 @@ export const MINIGAMES = [
     icon: '🍬',
     category: 'puzzle',
     blurb: 'Swap two sweets, line up three, watch the rest fall in.',
-    howTo: 'Twenty moves, no timer. A swap that matches nothing is free.',
+    howTo: 'Swap two sweets to make a line of three. You have twenty moves.',
     minutes: 5,
   },
   {
@@ -90,7 +96,7 @@ export const MINIGAMES = [
     icon: '🕵️',
     category: 'brain',
     blurb: 'Five crewmates. The crew tell the truth. One of them does not.',
-    howTo: 'Three meetings. Work out who is lying — every round has one answer.',
+    howTo: 'Read what each crewmate says and find the one who is lying.',
     minutes: 4,
   },
   {
@@ -100,7 +106,7 @@ export const MINIGAMES = [
     icon: '🛹',
     category: 'arcade',
     blurb: 'Three lanes, no brakes. Dodge what comes at you.',
-    howTo: 'Swipe to change lane, swipe up to jump. Sixty seconds.',
+    howTo: 'Swipe left or right to change lane, and swipe up to jump.',
     minutes: 1,
   },
   {
@@ -110,7 +116,7 @@ export const MINIGAMES = [
     icon: '🔥',
     category: 'cards',
     blurb: 'Match the colour or the number. First to an empty hand wins.',
-    howTo: 'Three opponents. Skips, pick-twos and wilds. No timer.',
+    howTo: 'Play a card that matches the colour or the number. Empty your hand to win.',
     minutes: 5,
   },
   {
@@ -120,7 +126,7 @@ export const MINIGAMES = [
     icon: '♠️',
     category: 'cards',
     blurb: 'Five cards. Keep what you like, swap the rest once.',
-    howTo: 'Five hands. The payout table is on screen — nothing is ever bet.',
+    howTo: 'Keep the cards you like, swap the rest once, and make the best hand.',
     minutes: 3,
   },
   {
@@ -130,7 +136,7 @@ export const MINIGAMES = [
     icon: '🃏',
     category: 'cards',
     blurb: 'Two in your hand, five on the table. Stay in or fold.',
-    howTo: 'Five hands, no chips. Win a showdown 2, fold 1, lose 0 — knowing when to fold is the game.',
+    howTo: 'Stay in with a good hand and fold a bad one. Nothing is ever bet.',
     minutes: 4,
   },
   {
@@ -140,7 +146,7 @@ export const MINIGAMES = [
     icon: '🂡',
     category: 'cards',
     blurb: 'Get closer to 21 than the dealer without going over.',
-    howTo: 'Six hands, nothing bet. The dealer hits below 17 and stands on 17, every time.',
+    howTo: 'Hit to take a card, stand to stop. Get closer to 21 than the dealer.',
     minutes: 3,
   },
   {
@@ -150,7 +156,7 @@ export const MINIGAMES = [
     icon: '🐟',
     category: 'cards',
     blurb: 'Collect four of a kind. Most books wins.',
-    howTo: 'You can only ask for a rank you already hold — so every question tells them something.',
+    howTo: 'Ask for a card you already have. Collect all four to make a book.',
     minutes: 4,
   },
   {
@@ -160,7 +166,7 @@ export const MINIGAMES = [
     icon: '🐍',
     category: 'arcade',
     blurb: 'Eat, grow, and run out of room. The one everybody already knows.',
-    howTo: 'Swipe, use the pad, or the arrow keys. Reach twenty-five long.',
+    howTo: 'Swipe or use the arrows to steer. Eat the apples, and don’t bite yourself.',
     minutes: 2,
   },
   {
@@ -170,7 +176,7 @@ export const MINIGAMES = [
     icon: '🔢',
     category: 'puzzle',
     blurb: 'Slide the board. Matching numbers join. Build the biggest tile.',
-    howTo: 'No timer. Every doubling scores; 2048 is perfect. Cash in whenever.',
+    howTo: 'Slide the tiles. Two the same join into one. Try to make 2048.',
     minutes: 6,
   },
   {
@@ -180,7 +186,7 @@ export const MINIGAMES = [
     icon: '🏓',
     category: 'arcade',
     blurb: 'A ball, a paddle, and a wall that will not clear itself.',
-    howTo: 'Drag the paddle. The edge sends the ball off at an angle. Three lives.',
+    howTo: 'Drag the paddle to bounce the ball and break the bricks.',
     minutes: 3,
   },
   {
@@ -190,7 +196,7 @@ export const MINIGAMES = [
     icon: '💣',
     category: 'brain',
     blurb: 'Ten mines hidden in sixty-four squares. Work out where.',
-    howTo: 'The numbers count the mines touching. Your first tap is always safe.',
+    howTo: 'Tap to open a square. A number says how many mines are touching it.',
     minutes: 5,
   },
   {
@@ -200,7 +206,7 @@ export const MINIGAMES = [
     icon: '🚀',
     category: 'arcade',
     blurb: 'One tap to fly. Gravity does the rest. Mind the gaps.',
-    howTo: 'Tap to lift. Fifteen gaps is a perfect run.',
+    howTo: 'Tap to fly up, and steer through the gaps.',
     minutes: 2,
   },
   {
@@ -210,7 +216,7 @@ export const MINIGAMES = [
     icon: '🔴',
     category: 'versus',
     blurb: 'You against the app. It plays properly, but you can beat it.',
-    howTo: 'Drop counters. Four across, down or slanted wins. You go first.',
+    howTo: 'Drop your counters. Get four in a row before the app does.',
     minutes: 4,
   },
   {
@@ -220,7 +226,7 @@ export const MINIGAMES = [
     icon: '🧩',
     category: 'puzzle',
     blurb: 'Fifteen tiles, one gap, one correct order.',
-    howTo: 'Tap a tile next to the gap. Green means it is already home. No timer.',
+    howTo: 'Tap a tile next to the gap to move it. Put them back in order.',
     minutes: 6,
   },
   {
@@ -230,7 +236,7 @@ export const MINIGAMES = [
     icon: '🟢',
     category: 'brain',
     blurb: 'Watch the colours. Play them back. It gets one longer each time.',
-    howTo: 'No timer. Get to a chain of ten for a perfect round.',
+    howTo: 'Watch the colours light up, then tap them back in the same order.',
     minutes: 3,
   },
   {
@@ -240,7 +246,7 @@ export const MINIGAMES = [
     icon: '💡',
     category: 'puzzle',
     blurb: 'Tap a tile and its neighbours flip. Turn them all off.',
-    howTo: 'A puzzle, not a race — there is no clock. Fewer moves scores more.',
+    howTo: 'Tapping a light flips it and the ones next to it. Turn them all off.',
     minutes: 4,
   },
   {
@@ -250,7 +256,7 @@ export const MINIGAMES = [
     icon: '⭐',
     category: 'arcade',
     blurb: 'Stars fall. Catch them. The rocks you do not.',
-    howTo: 'Thirty seconds. Drag the basket. Twenty stars is a great run.',
+    howTo: 'Drag the basket to catch the stars and dodge the rocks.',
     minutes: 1,
   },
   {
@@ -260,7 +266,7 @@ export const MINIGAMES = [
     icon: '🧱',
     category: 'arcade',
     blurb: 'Time your tap. Stack the tower. Do not wobble.',
-    howTo: 'Tap when the moving block lines up. Miss badly and the run ends.',
+    howTo: 'Tap to drop the moving block right on top of the tower.',
     minutes: 2,
   },
   {
@@ -270,7 +276,7 @@ export const MINIGAMES = [
     icon: '🃏',
     category: 'brain',
     blurb: 'Flip the cards, find the pairs, beat your time.',
-    howTo: 'Eight pairs. Fewer flips and less time means a better score.',
+    howTo: 'Flip two cards at a time and find all the pairs.',
     minutes: 3,
   },
 ]

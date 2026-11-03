@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { STICKER_MAP } from '../../data/stickers.js'
-import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
+import { useApp, useKid, useKidTheme, useElite, useSync } from '../../state/AppContext.jsx'
+import { readOutbox } from '../../lib/sync/outbox.js'
 import { DIFFICULTY, calcReward, liveStreak, finishedOnTime } from '../../lib/xp.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
 import { formatDuration } from '../../lib/dates.js'
@@ -24,6 +25,7 @@ export default function QuestDetail({ questId }) {
   const elite = useElite()
 
   const quest = state.quests.find((q) => q.id === questId)
+  const { configured, pending } = useSync()
 
   const [mode, setMode] = useState('detail') // detail | review
   const [note, setNote] = useState('')
@@ -209,10 +211,14 @@ export default function QuestDetail({ questId }) {
           <Button className="w-full" onClick={() => setMode('review')}>✅ I did it!</Button>
           <p className="text-xs text-muted text-center mt-2">Your parent accepts it before XP is awarded.</p>
         </>
+      ) : quest.status === 'submitted' && configured && pending > 0 && stillOnThisPhone(quest.id, state.syncQueue) ? (
+        <Banner tone="info" icon="📱" title="Saved on your phone">
+          It goes to your parent next time RankUp is open with internet. You get your XP when they
+          accept it.
+        </Banner>
       ) : quest.status === 'submitted' ? (
         <Banner tone="info" icon="⏳" title="Sent to your parent">
-          You have already sent this one in. You will get your XP when they approve it — there is
-          nothing else to do here.
+          You get your XP when they accept it. Nothing else to do here.
         </Banner>
       ) : (
         <>
@@ -242,6 +248,18 @@ export default function QuestDetail({ questId }) {
       )}
     </Screen>
   )
+}
+
+/**
+ * Is this quest's "I did it!" still waiting on this phone to be sent?
+ *
+ * Saying "Sent to your parent" while it sits in the outbox with no signal is
+ * not true yet. The outbox sends it, in order, the next time the app is open
+ * and online (lib/sync/outbox.js); until then the child is told just that.
+ */
+function stillOnThisPhone(questId, syncQueue = []) {
+  const waiting = (op) => op?.fn === 'submit_quest' && op.args?.p_quest_id === questId
+  return (syncQueue || []).some(waiting) || readOutbox().some((op) => op.type === 'rpc' && waiting(op))
 }
 
 /** What to do when a parent wants to see the result. */

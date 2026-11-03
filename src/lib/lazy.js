@@ -20,9 +20,9 @@ import { createElement, lazy } from 'react'
  * short while, so a server that is genuinely broken shows the screen's own
  * crash card instead of reloading forever.
  *
- * The phone is offline and has never fetched this piece. The screen's crash
- * card shows, and — because a failed load is forgotten rather than kept —
- * trying again once the signal is back loads it, without restarting the app.
+ * The phone is offline and has never fetched this piece. The screen's card
+ * says there is no internet (components/ScreenBoundary.jsx), and Try again,
+ * or the signal coming back, fetches it afresh without restarting the app.
  */
 const RELOADED_AT = 'rankup.reloadedForUpdate'
 const RELOAD_GAP_MS = 30_000
@@ -40,14 +40,34 @@ function reloadForNewVersion() {
   return true
 }
 
+/*
+ * Pieces whose download failed, each with a way to ask for it afresh.
+ *
+ * A failed piece stays failed until somebody asks again — Try again on the
+ * screen's card, or the phone coming back online. Swapping in a fresh
+ * download the moment one failed (as this first did) meant the error never
+ * reached the screen's card at all: React rendered again straight away,
+ * which started the next download, which failed in turn, and a phone with no
+ * signal sat on "Loading…" for ever instead of being told why.
+ */
+const failed = new Set()
+
+/** Fetch every piece that failed again, the next time it is shown. */
+export function retryFailedLoads() {
+  for (const reset of failed) reset()
+  failed.clear()
+}
+
+if (typeof window !== 'undefined') window.addEventListener('online', retryFailedLoads)
+
 export function lazyLoad(load) {
   let Loaded = lazy(attempt)
 
   function attempt() {
     return load().catch((err) => {
-      Loaded = lazy(attempt)
       // Never settles: the page is about to be replaced.
       if (reloadForNewVersion()) return new Promise(() => {})
+      failed.add(() => { Loaded = lazy(attempt) })
       throw err
     })
   }

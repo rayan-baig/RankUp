@@ -60,6 +60,8 @@ const ParentGuilds = lazyLoad(() => import('./screens/parent/ParentGuilds.jsx'))
 const ParentPairKid = lazyLoad(() => import('./screens/parent/ParentPairKid.jsx'))
 const ParentPlan = lazyLoad(() => import('./screens/parent/ParentPlan.jsx'))
 const ParentSettings = lazyLoad(() => import('./screens/parent/ParentSettings.jsx'))
+const ParentHelp = lazyLoad(() => import('./screens/parent/ParentHelp.jsx'))
+const NotFound = lazyLoad(() => import('./screens/NotFound.jsx'))
 
 const KID_NAV = [
   { to: '/kid', icon: '🏠', label: 'Home', exact: true },
@@ -188,12 +190,13 @@ export default function App() {
   // The privacy policy and terms are readable without an account — a parent
   // deciding whether to sign up should not have to sign up to read them.
   if (route.startsWith('/legal/')) {
+    const which = route === '/legal/terms' ? 'terms' : route === '/legal/privacy' ? 'privacy' : null
     return (
       <>
         <ParentBackground theme={parentTheme} />
         <ScreenBoundary key={route} route={route}>
           <Suspense fallback={<Loading />}>
-            <LegalDoc which={route.endsWith('terms') ? 'terms' : 'privacy'} />
+            {which ? <LegalDoc which={which} /> : <NotFound />}
           </Suspense>
         </ScreenBoundary>
       </>
@@ -351,6 +354,9 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route === '/legal/terms') return <LegalDoc which="terms" />
   if (route === '/legal/privacy') return <LegalDoc which="privacy" />
   if (route === '/switch' || route === '/') return <RoleSwitch />
+  // Set up already: the route guard is moving this phone on from the front
+  // door this very moment, so there is nothing to show for one frame.
+  if (route === '/welcome') return null
 
   if (route === '/kid') return <KidHome />
   if (route === '/kid/quests') return <KidQuests />
@@ -378,6 +384,10 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route === '/parent/pair') return <ParentPairKid />
   if (route === '/parent/plan') return <ParentPlan />
   if (route === '/parent/settings') return <ParentSettings />
+  if (route === '/parent/help') return <ParentHelp />
 
-  return <RoleSwitch />
+  // A link to somewhere that does not exist (an old bookmark, a typo, a
+  // screen that was renamed) says so, with a way home, rather than quietly
+  // showing a different screen.
+  return <NotFound />
 }
