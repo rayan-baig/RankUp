@@ -75,8 +75,10 @@ export function byDay(entries) {
   const days = []
   for (const e of entries) {
     const key = dayKey(new Date(e.at || 0))
-    if (days.at(-1)?.key !== key) days.push({ key, at: e.at, entries: [] })
-    days.at(-1).entries.push(e)
+    // days[days.length - 1], not days.at(-1): iPhone Safari before 15.4 has no
+    // Array.prototype.at, and this screen went blank there (vite.config.js).
+    if (days[days.length - 1]?.key !== key) days.push({ key, at: e.at, entries: [] })
+    days[days.length - 1].entries.push(e)
   }
   return days
 }

@@ -244,6 +244,19 @@ function publicSiteFiles(env) {
   }
 }
 
+/**
+ * The oldest browsers the app is built for: iPhone Safari 15 (iOS 15, 2021,
+ * still on phones a family hands down to a child) and Chrome, Edge and
+ * Firefox from about four years back. Newer syntax is rewritten for them at
+ * build time. Newer functions are not, so the code avoids those that iOS 15.0
+ * lacks (Array.prototype.at, structuredClone, Object.hasOwn, findLast and the
+ * like) or checks for them first (crypto.randomUUID, requestIdleCallback,
+ * BroadcastChannel); tests/oldbrowsers.mjs and tests/bundle.mjs hold that.
+ * CSS is the same story: every color-mix() in the stylesheet's shared pieces
+ * has a plain colour before it, which a browser without color-mix keeps.
+ */
+export const BROWSER_TARGET = ['es2020', 'safari15', 'ios15', 'chrome96', 'edge96', 'firefox91']
+
 export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
@@ -255,6 +268,7 @@ export default defineConfig(({ mode }) => ({
   define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   server: { host: true, port: 5173 },
   build: {
+    target: BROWSER_TARGET,
     outDir: 'dist',
     rollupOptions: { output: { manualChunks: vendorChunk } },
   },

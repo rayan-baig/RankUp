@@ -48,6 +48,18 @@ Once deployed, on the phone:
 It then opens full-screen with its own icon, with no browser address bar. This is what
 `public/manifest.webmanifest` is for.
 
+The app offers this itself, once, on the parent's dashboard after the family's first
+accepted chore (never on a child's phone): a button on Android, the two steps in words
+on an iPhone. `src/lib/installPrompt.js`.
+
+**Which phones.** The build is made for iPhone Safari 15 and later, and Chrome, Edge
+and Firefox from about four years back (`BROWSER_TARGET` in `vite.config.js`). Newer
+syntax is rewritten for them; functions those browsers lack are not used, or are
+checked for first (`tests/oldbrowsers.mjs`, `tests/oldsafari.mjs`, `tests/bundle.mjs`).
+On an iPhone before iOS 16.2 or Chrome before 111, which have no `color-mix()`, the
+cards and buttons keep plain colours and some small tints are missing; everything
+works.
+
 It is still a website — it updates when you deploy, with no app store involved. What it
 does *not* get is real push notifications on iOS (limited even when installed) or a
 listing in the App Store.

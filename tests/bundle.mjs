@@ -160,5 +160,29 @@ ok('no marker left in the page', !page.includes('{{SITE}}'))
 ok('robots.txt is there, keeping crawlers off /api/', /^Disallow: \/api\/$/m.test(texts.find((t) => t.f === 'robots.txt')?.text || ''))
 ok('and no sitemap, which would need the address', !files.some((f) => f.endsWith('sitemap.xml')))
 
+/*
+ * The oldest phones the build is for (BROWSER_TARGET in vite.config.js,
+ * iPhone Safari 15) lack these functions, and the build does not add them:
+ * one call is a blank screen there. tests/oldbrowsers.mjs reads the source;
+ * this reads what the build made of it, React and every other package
+ * included.
+ */
+console.log('\n=== Nothing in the build calls what iPhone Safari 15 lacks ===')
+const shipped = texts.filter((t) => /\.(js|mjs)$/.test(t.f) || t.f === 'index.html')
+for (const [name, re] of [
+  ['Array.prototype.at', /[\w)\]]\.at\((?:-?\d|[\w$])/],
+  ['structuredClone', /\bstructuredClone\(/],
+  ['Object.hasOwn', /\bObject\.hasOwn\(/],
+  ['findLast', /\.findLast(Index)?\(/],
+  ['toSorted / toReversed', /\.(toSorted|toReversed|toSpliced)\(/],
+  ['Object.groupBy', /\b(Object|Map)\.groupBy\(/],
+  ['AbortSignal.timeout', /\bAbortSignal\.(timeout|any)\(/],
+]) {
+  const hits = shipped.filter((t) => re.test(t.text)).map((t) => t.f)
+  ok(`no ${name}`, hits.length === 0, hits.join(', '))
+}
+const randomUuid = shipped.filter((t) => /randomUUID\(\)/.test(t.text) && !/crypto\.randomUUID\)return crypto\.randomUUID\(\)|&&crypto\.randomUUID\)return crypto\.randomUUID\(\)/.test(t.text))
+ok('crypto.randomUUID only behind a check', randomUuid.length === 0, randomUuid.map((t) => t.f).join(', '))
+
 console.log(fails === 0 ? '\nALL CHECKS PASSED' : `\n${fails} FAILED`)
 process.exit(fails === 0 ? 0 : 1)

@@ -91,7 +91,13 @@
    * background colour is still opaque enough to carry small grey type if
    * a browser refuses the blur.
    */
+  /* Each color-mix() below has a plain colour just before it: a browser
+     without color-mix (iPhone Safari before 16.2, Chrome before 111) drops
+     the line it cannot read and keeps the one before, rather than drawing a
+     card with no background and no edge. vite.config.js, BROWSER_TARGET. */
   .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
     background:
       linear-gradient(168deg,
         color-mix(in srgb, var(--surface) 72%, transparent) 0%,
@@ -108,6 +114,8 @@
   }
 
   .card-flat {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
     background: color-mix(in srgb, var(--surface-2) 64%, transparent);
     backdrop-filter: blur(12px) saturate(1.2);
     -webkit-backdrop-filter: blur(12px) saturate(1.2);
@@ -129,6 +137,7 @@
      gradient runs accent to accent-2, which every theme defines, and the
      text takes the page background so it stays readable on a light theme. */
   .btn-primary {
+    background: var(--accent);
     background: linear-gradient(97deg,
       var(--accent) 0%,
       color-mix(in srgb, var(--accent-2) 62%, var(--accent)) 100%);
@@ -138,14 +147,18 @@
   }
 
   .btn-ghost {
+    background: var(--surface);
     background: color-mix(in srgb, var(--surface) 55%, transparent);
     color: var(--ink);
+    border: 1px solid var(--line);
     border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
   }
 
   .btn-soft {
+    background: var(--surface-2);
     background: color-mix(in srgb, var(--surface-2) 88%, var(--accent) 12%);
     color: var(--ink);
+    border: 1px solid var(--line);
     border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
   }
 
@@ -157,14 +170,18 @@
 
   .chip {
     @apply inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full;
+    background: var(--surface-2);
     background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
+    border: 1px solid var(--line);
     border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
     color: var(--ink);
   }
 
   .field {
     @apply w-full px-4 py-3 outline-none;
+    background: var(--surface-2);
     background: color-mix(in srgb, var(--surface-2) 92%, var(--bg) 8%);
+    border: 1px solid var(--line);
     border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line));
     border-radius: 14px;
     color: var(--ink);
