@@ -102,6 +102,15 @@ Known limits, decided rather than missed:
 - **The 8-a-day cap is by approval day.** A parent accepting a week's chores at
   once counts at most 8 that day.
 
+## Scale, phones and schools
+
+| Thing | Status | Notes |
+|---|---|---|
+| 1,000 families syncing at once | 🟡 | Load-tested locally (docs/LOAD-TEST.md): the connection pool is the first limit, at 3,833 phones going flat out. Not yet measured on a Supabase project |
+| Older phones | ✅ | Built for iPhone Safari 15 and Chrome from about four years back; without `color-mix()` (iOS before 16.2) some small tints are missing |
+| "Add to Home Screen" | ✅ | After the first accepted chore, once, parent's dashboard only |
+| A school's monthly email | ✅ needs `EMAIL_*` | The league result, what it paid, the renewal, to each admin, once a month |
+
 ## Notifications
 
 | Thing | Status | Notes |
@@ -110,6 +119,7 @@ Known limits, decided rather than missed:
 | Push to the family's other phones | ✅ needs VAPID keys | A chore done (to the parents), accepted or sent back (to the child), a guild request (to the parents on both sides), reminders and the weekly digest (to the parents). Exact words, limits and hold times: [NOTIFICATIONS.md](NOTIFICATIONS.md) |
 | Daily reminders with the app closed | ✅ | `api/send-reminders.js`, on each family's own clock. **You have to schedule it** |
 | Weekly digest | ✅ | `api/send-digests.js`, Sunday evening in each family's time zone. **You have to schedule it** |
+| 10,000 notices at once | ✅ | Sent in claimed batches within a Cloudflare Function's limits, each once, over several runs; a run cut off is picked up five minutes later ([NOTIFICATIONS.md](NOTIFICATIONS.md)). Past about 7,000 due at the same moment, the scheduler should call again while the job says `more` |
 | A real phone receiving a push | 🟡 | Proven end to end against a stand-in push service (`tests/push.mjs`); not yet on a real phone |
 | Notifications on a child's phone | ❌ | Only a parent's phone has the switch, so "Accepted!" and "Back on your list" reach no phone yet ([ROADMAP.md](ROADMAP.md)) |
 | Guild request notice | ✅ needs VAPID keys | When a child asks to join a guild, the parents whose yes is still missing are told, in the child's family and in the guild's. Once per request; counted against each family's hourly ceiling |
