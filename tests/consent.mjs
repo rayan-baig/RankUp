@@ -95,7 +95,7 @@ await page.waitForTimeout(2000)
   : fail('consent leads onward', await page.locator('body').innerText().then((t) => t.slice(0, 150)))
 
 console.log('\n=== It was actually recorded ===')
-const recorded = await page.evaluate(async () => {
+const recorded = await page.evaluate(async (MOCK) => {
   const raw = localStorage.getItem('rankup.session.v1')
   if (!raw) return { skipped: 'no session' }
   const token = JSON.parse(raw).access_token
@@ -106,7 +106,7 @@ const recorded = await page.evaluate(async () => {
   })
   const data = await res.json()
   return { consents: data?.consents?.length ?? 0, signed: data?.consents?.[0]?.signed_name, version: data?.consents?.[0]?.version }
-})
+}, MOCK)
 recorded.consents === 1
   ? pass(`the consent is on the server, signed "${recorded.signed}"`)
   : fail('consent recorded server-side', JSON.stringify(recorded))
@@ -117,14 +117,14 @@ recorded.version === CONSENT_VERSION && CONSENT_VERSION === '2026-11'
 console.log('\n=== The words signed are the words stored ===')
 // What the database keeps as the record of what this parent agreed to must be
 // what the screen showed them, line for line.
-const stored = await page.evaluate(async (version) => {
+const stored = await page.evaluate(async ({ version, MOCK }) => {
   const res = await fetch(`${MOCK}/rest/v1/consent_notices?version=eq.${version}`,
     { headers: { apikey: 'local-anon-key' } })
   const current = await fetch(`${MOCK}/rest/v1/rpc/current_consent_version`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key' }, body: '{}',
   })
   return { rows: await res.json(), current: await current.json() }
-}, CONSENT_VERSION)
+}, { version: CONSENT_VERSION, MOCK })
 const flat = (t) => String(t || '').replace(/\s+/g, ' ').trim()
 const storedBody = flat(stored.rows?.[0]?.body)
 const lines = [CONSENT_NOTICE.title, ...CONSENT_NOTICE.sections.flatMap((x) => [x.heading, ...x.body]), CONSENT_NOTICE.affirmation]
