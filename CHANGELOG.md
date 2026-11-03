@@ -5,6 +5,16 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.9.0 — 2026-11-03
+
+Ready for many families at once, older phones, and schools that hear from us.
+
+- The database was load-tested with 1,000 families' phones syncing at once (docs/LOAD-TEST.md, tools/loadtest.mjs). The first thing to break was the connection pool, at 1,600 phones going flat out. The pull is now a third faster and about half as much again gets through: the checks that decide what each phone may see are worked out once per request instead of once per row, the guild roster reads one child's week by an index made for it, and the Sunday digest no longer reads the whole time zone database for every family (9 seconds at 1,000 families, now a third of a second).
+- Reminders and the weekly digest go out in batches the server claims first, within what one run of a Cloudflare Function may do. 10,000 reminders due at the same minute are each sent once, over several short runs; a run cut off part-way is picked up five minutes later without anyone getting two. Each push is cheaper to sign, and a slow push service can no longer hold the job.
+- "Add to Home Screen" is offered after the family's first accepted chore, once, on the parent's dashboard; never on a first visit, never on a child's phone, never while a child plays. Android gets an Install button; an iPhone gets the two steps.
+- Built for iPhone Safari 15 and Chrome from about four years back. The chore history no longer breaks on iPhones before iOS 15.4, and cards and buttons keep their colours on phones without color-mix().
+- Each school's admin gets a short email when the month closes: the league result, what the school paid that month, and when the plan renews.
+
 ## 0.8.1 — 2026-11-03
 
 - One tap on a reward is one purchase. A tap that landed while something else was about to be drawn (a level-up closing itself, a sync arriving) could leave two of the same reward on the child's phone, a few milliseconds apart: the one the server had, and a copy it never heard of. "Mark given" could then hand over the copy, so the real one stayed on the parent's dashboard. Every change on the phone now keeps its own ids and time however many times the app works it out, so the copy is the same purchase; the shop's button also ignores a second tap in the same frame. The coins were only ever taken once by the server. tests/oncetap.mjs taps as a level-up closes.
