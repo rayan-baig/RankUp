@@ -573,6 +573,25 @@ begin
     not (unsuspend_school(b)->>'ok')::boolean);
 end $$;
 
+-- ---------- what the operator's checklist is given ----------
+update auth.users set email_confirmed_at = now() where id = '5c111111-0000-0000-0000-00000000000a';
+do $$
+declare row jsonb := (select x from jsonb_array_elements(operator_schools()) x where x->>'name' = 'Pine Hill School');
+declare everyone jsonb := operator_schools();
+begin
+  perform ok('the operator sees each school''s district as the leagues group it',
+    row ? 'district_key' and (row->>'district_key') = (select district_key from schools where name = 'Pine Hill School'));
+  perform ok('and, for each member of staff, whether their email is confirmed',
+    (select bool_and(st ? 'email_confirmed') from jsonb_array_elements(everyone) x, jsonb_array_elements(x->'staff') st));
+  perform ok('true for one who clicked the link',
+    exists (select 1 from jsonb_array_elements(everyone) x, jsonb_array_elements(x->'staff') st
+             where (st->>'email_confirmed')::boolean
+               and st->>'email' = (select email from auth.users where id = '5c111111-0000-0000-0000-00000000000a')));
+  perform ok('false for one who has not',
+    exists (select 1 from jsonb_array_elements(everyone) x, jsonb_array_elements(x->'staff') st
+             where not (st->>'email_confirmed')::boolean));
+end $$;
+
 -- ---------- looking after the school ----------
 set role app_user;
 do $$

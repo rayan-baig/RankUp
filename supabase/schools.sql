@@ -1282,13 +1282,19 @@ create or replace function operator_schools()
 returns jsonb language sql stable security definer set search_path = public as $$
   select coalesce(jsonb_agg(jsonb_build_object(
            'id', s.id, 'name', s.name, 'district', s.district, 'city', s.city,
+           -- The district as the leagues group it, so the operator's checklist
+           -- can show the other schools in it, and any with the same name.
+           'district_key', s.district_key,
            'student_count', s.student_count, 'size_band', s.size_band,
            'status', s.status, 'verified', s.verified,
            'trial_ends_at', s.trial_ends_at, 'created_at', s.created_at,
            'paying', s.stripe_subscription_id is not null,
            'students_joined', (select count(*) from school_members m where m.school_id = s.id),
            'staff', (select coalesce(jsonb_agg(jsonb_build_object(
-                              'name', st.name, 'role', st.role, 'email', u.email)
+                              'name', st.name, 'role', st.role, 'email', u.email,
+                              -- Whether they clicked the link Supabase emailed:
+                              -- the address is really theirs.
+                              'email_confirmed', u.email_confirmed_at is not null)
                               order by st.role, st.name), '[]'::jsonb)
                        from school_staff st left join auth.users u on u.id = st.user_id
                       where st.school_id = s.id))

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Screen, Card, Button, SectionTitle, Banner, Field, TextInput, Chip } from '../components/ui.jsx'
 import { districtLabel } from '../lib/schools.js'
+import { schoolChecks } from '../lib/schoolChecks.js'
 
 /**
  * The operator's page for checking schools are real.
@@ -42,6 +43,13 @@ export default function OperatorSchools() {
   const [schools, setSchools] = useState(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
+  // The checklist ticks, per school, for this tab only.
+  const [ticked, setTicked] = useState({})
+  const tick = (schoolId, checkId) => setTicked((t) => {
+    const mine = new Set(t[schoolId] || [])
+    if (mine.has(checkId)) mine.delete(checkId); else mine.add(checkId)
+    return { ...t, [schoolId]: [...mine] }
+  })
 
   const load = useCallback(async (k) => {
     const res = await call(k)
@@ -98,8 +106,17 @@ export default function OperatorSchools() {
   const waiting = (schools || []).filter((s) => !s.verified && s.status !== 'suspended')
   const rest = (schools || []).filter((s) => s.verified || s.status === 'suspended')
 
-  const row = (s) => (
-    <Card key={s.id} className="mb-2">
+  const FLAG = { ok: ['✓', 'var(--good)'], look: ['?', 'var(--warn)'], warn: ['!', 'var(--bad)'] }
+  const checklist = (s) => {
+    const checks = schoolChecks(s, schools || [])
+    const done = new Set(ticked[s.id] || [])
+    return { checks, done, all: checks.every((c) => done.has(c.id)) }
+  }
+
+  const row = (s) => {
+    const list = !s.verified && s.status !== 'suspended' ? checklist(s) : null
+    return (
+    <Card key={s.id} className="mb-2" data-testid={`school-${s.id}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-semibold text-sm">{s.name}</p>
@@ -120,10 +137,29 @@ export default function OperatorSchools() {
           Signed up {new Date(s.created_at).toLocaleDateString()} · {s.students_joined} {s.students_joined === 1 ? 'child' : 'children'} joined
         </p>
       </div>
+      {list && (
+        <div className="mt-3" data-testid="school-checklist">
+          <p className="text-[11px] uppercase tracking-wider text-muted mb-1">
+            Before you verify ({list.done.size} of {list.checks.length} checked)
+          </p>
+          {list.checks.map((c) => (
+            <label key={c.id} className="flex gap-2 items-start py-1.5 text-xs" style={{ borderTop: '1px solid var(--line)' }}>
+              <input type="checkbox" className="mt-0.5" checked={list.done.has(c.id)} onChange={() => tick(s.id, c.id)} />
+              <span className="min-w-0">
+                <span className="block font-semibold text-sm">{c.label}</span>
+                <span className="block" style={{ color: FLAG[c.flag][1] }}>
+                  <span aria-hidden="true">{FLAG[c.flag][0]} </span>{c.fact}
+                </span>
+                <span className="block text-muted">{c.how}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
       <div className="flex gap-2 mt-3">
         {!s.verified && s.status !== 'suspended' && (
-          <Button className="flex-1 py-2 min-h-0 text-sm" disabled={Boolean(busy)} onClick={() => act(s, 'verify')}>
-            It is real: verify
+          <Button className="flex-1 py-2 min-h-0 text-sm" disabled={Boolean(busy) || !list?.all} onClick={() => act(s, 'verify')}>
+            {list?.all ? 'It is real: verify' : 'Tick every check to verify'}
           </Button>
         )}
         {s.verified && (
@@ -142,7 +178,8 @@ export default function OperatorSchools() {
         )}
       </div>
     </Card>
-  )
+    )
+  }
 
   return (
     <Screen>
@@ -163,8 +200,8 @@ export default function OperatorSchools() {
         <>
           <Card flat className="mb-3">
             <p className="text-xs text-muted">
-              Before verifying, check the school exists and that the person works there: a school email
-              address, the school’s website, or a call to its office. A verified school is ranked, can
+              Each school waiting has a checklist: what to check by hand, beside what RankUp already
+              knows that helps. Verify once every check is ticked. A verified school is ranked, can
               challenge rivals, and sees the first names parents agreed to share.
             </p>
           </Card>

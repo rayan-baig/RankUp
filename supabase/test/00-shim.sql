@@ -12,6 +12,8 @@ create table if not exists auth.users (
   id    uuid primary key default gen_random_uuid(),
   email text unique
 );
+-- Set by Supabase when the person clicks the confirmation link.
+alter table auth.users add column if not exists email_confirmed_at timestamptz;
 
 -- Supabase reads the signed-in user from a request-scoped JWT claim. Locally we
 -- fake it with a session setting the tests can change to "become" a user.

@@ -89,6 +89,7 @@ const SUITES = {
     { file: 'download.mjs', weight: 30 },
     { file: 'pinreset.mjs', weight: 25 },
     { file: 'schoolsignup.mjs', weight: 15 },
+    { file: 'schoolchecks.mjs', weight: 8 },
     { file: 'oldphone.mjs', weight: 3 },
     { file: 'secretworlds.mjs', weight: 143 },
     { file: 'plainsetup.mjs', weight: 25 },
