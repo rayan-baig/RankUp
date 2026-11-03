@@ -527,8 +527,8 @@ select lock_billing_columns();
 grant execute on function billing_status() to authenticated;
 grant execute on function lock_billing_columns() to postgres;
 -- Written by the webhook only. Postgres grants EXECUTE to PUBLIC on a new
--- function automatically, so these must be revoked from PUBLIC, not just from
--- anon and authenticated.
+-- function automatically, and Supabase grants it to anon and authenticated by
+-- name as well, so these are revoked from all three.
 revoke execute on function apply_subscription_change(uuid, text, text, text, text, timestamptz, text, jsonb, timestamptz) from public, anon, authenticated;
 revoke execute on function family_for_customer(text) from public, anon, authenticated;
 revoke execute on function stripe_customer_for_family(uuid) from public, anon, authenticated;
