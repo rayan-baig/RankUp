@@ -148,7 +148,7 @@ between phones ([SYNC.md](SYNC.md)).
 | You hear about crashes on other people's phones | `supabase/crashes.sql`: the screen and the error, never a name |
 | A scheduled job that stops being called | `/api/health` with the `CRON_SECRET`: each of the five jobs `ok`, `stale` or `never_run` |
 | A deleted family's subscription still not cancelled | The same check: `billing_cancellations_overdue` |
-| One address to point a monitor at | `GET /api/health` → `{"ok":true}`, or 503 |
+| One address to point a monitor at | `GET /api/health` → `{"ok":true,"version":"…"}`, or 503 |
 | What to do when one of them is red | [IF-SOMETHING-BREAKS.md](IF-SOMETHING-BREAKS.md) |
 
 None of this fixes a bug for you. It means you hear about it from a dashboard

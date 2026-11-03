@@ -1,0 +1,9 @@
+# RankUp has one public page: the front door. Every screen after it, the
+# privacy policy and terms included, is a hash route (#/parent, #/legal/terms)
+# inside that same page. A family's data is only ever fetched by the app,
+# behind their sign-in; it is never a page a crawler can reach.
+#
+# /api/ is the server functions: answers for the app, not pages for anyone to
+# find. The build adds a Sitemap line below once it knows the site's address.
+User-agent: *
+Disallow: /api/

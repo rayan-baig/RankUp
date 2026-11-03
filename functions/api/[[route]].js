@@ -68,14 +68,33 @@ function makeRes() {
   return { res, state, finished }
 }
 
+/**
+ * Every error this file answers itself is JSON with a code and nothing else:
+ * no message from the runtime, no stack, no file name. The handlers answer
+ * the same way (tests/api.mjs checks both); the reason, when there is one,
+ * goes to the log with console.error, where only the operator reads it.
+ */
+function jsonError(status, error) {
+  return new Response(JSON.stringify({ error }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
 export async function onRequest(context) {
   const { request, env, params } = context
   const name = Array.isArray(params.route) ? params.route.join('/') : String(params.route || '')
-  const load = ROUTES[name]
-  if (!load) return new Response('Not found', { status: 404 })
+  const load = Object.hasOwn(ROUTES, name) ? ROUTES[name] : null
+  if (!load) return jsonError(404, 'not_found')
 
   bridgeEnv(env)
-  const handler = (await load()).default
+  let handler
+  try {
+    handler = (await load()).default
+  } catch (err) {
+    console.error('[pages-adapter] could not load', name, err?.message)
+    return jsonError(500, 'server_error')
+  }
 
   // The Stripe webhook verifies a signature over the exact bytes it was sent,
   // so the body is read once as text and never re-serialised.
@@ -112,8 +131,9 @@ export async function onRequest(context) {
   try {
     await Promise.race([Promise.resolve(handler(req, res)).then(() => finished), finished])
   } catch (err) {
+    // A handler that threw before answering: the reason is logged, never sent.
     console.error('[pages-adapter]', name, err?.message)
-    if (!state.body) { state.status = 500; state.body = JSON.stringify({ error: 'server_error' }) }
+    if (!state.body) return jsonError(500, 'server_error')
   }
   return new Response(state.body, { status: state.status, headers: state.headers })
 }

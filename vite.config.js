@@ -165,8 +165,94 @@ function vendorChunk(id) {
   return undefined
 }
 
+/**
+ * The version, from package.json, built into the app as __APP_VERSION__ (read
+ * through src/lib/version.js). Never typed anywhere by hand: bump
+ * package.json and add its CHANGELOG.md entry, and Settings → About and
+ * /api/health both follow. tests/release.mjs checks the two agree.
+ */
+const APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
+
+/**
+ * The site's public address, from PUBLIC_SITE_URL, as an origin with no
+ * trailing slash — or '' when it is unset or not a real http(s) address.
+ *
+ * A link preview's picture and a sitemap's addresses must be whole addresses
+ * (https://rankup.<your domain>/og-image.png): a relative one is ignored by
+ * most of the apps a link gets pasted into, or worse, read against their own
+ * domain. So with no address to build from, they are left out rather than
+ * shipped half-made.
+ */
+export function publicSiteUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim())
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return ''
+    return url.origin
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * The link-preview tags in index.html, made whole.
+ *
+ * index.html carries og:image and twitter:image as a path after a marker
+ * (content="{{SITE}}/og-image.png"). Here the marker becomes the site's
+ * address, and og:url is added; with no address every og:image and
+ * twitter:image tag is removed, so a preview shows the title and description
+ * and no broken picture.
+ */
+export function shareCardHtml(html, site) {
+  if (site) {
+    return html
+      .replaceAll('{{SITE}}', site)
+      .replace('<meta property="og:type"', `<meta property="og:url" content="${site}/" />\n    <meta property="og:type"`)
+  }
+  return html
+    .replace(/^[ \t]*<meta (?:property="og:image[^"]*"|name="twitter:image")[^>]*>\r?\n/gm, '')
+    .replace('content="summary_large_image"', 'content="summary"')
+}
+
+/**
+ * robots.txt says where the sitemap is, and the sitemap lists the one public
+ * page: the front door. Everything else is a hash route (#/parent, #/legal/…)
+ * inside that one page, which a search engine does not treat as a page of its
+ * own, so there is nothing else to list. Both need the whole address, so with
+ * none the sitemap is not written and robots.txt names none.
+ */
+export function sitemapXml(site) {
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    `  <url><loc>${site}/</loc></url>`,
+    '</urlset>',
+    '',
+  ].join('\n')
+}
+
+function publicSiteFiles(env) {
+  const site = publicSiteUrl(env.PUBLIC_SITE_URL)
+  return {
+    name: 'rankup-public-site',
+    transformIndexHtml(html) { return shareCardHtml(html, site) },
+    writeBundle(options) {
+      if (!site) return
+      writeFileSync(join(options.dir, 'sitemap.xml'), sitemapXml(site))
+      const robots = join(options.dir, 'robots.txt')
+      if (existsSync(robots)) writeFileSync(robots, `${readFileSync(robots, 'utf8').trimEnd()}\n\nSitemap: ${site}/sitemap.xml\n`)
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), contentSecurityPolicy(loadEnv(mode, process.cwd(), '')), externalGames(), offlineFileList()],
+  plugins: [
+    react(),
+    contentSecurityPolicy(loadEnv(mode, process.cwd(), '')),
+    publicSiteFiles(loadEnv(mode, process.cwd(), '')),
+    externalGames(),
+    offlineFileList(),
+  ],
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   server: { host: true, port: 5173 },
   build: {
     outDir: 'dist',

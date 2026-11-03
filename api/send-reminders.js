@@ -89,7 +89,7 @@ export default async function handler(req, res) {
     due = await serviceRpc('due_reminders', { p_grace_minutes: GRACE_MINUTES })
   } catch (err) {
     await recordRun(serviceRpc, 'send-reminders', false, err.message)
-    return res.status(502).json({ error: 'lookup_failed', detail: err.message })
+    return res.status(502).json({ error: 'lookup_failed' })
   }
 
   const reminders = due?.reminders || []

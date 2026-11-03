@@ -51,7 +51,7 @@ export default async function handler(req, res) {
     owed = await serviceRpc('unapplied_school_awards', {})
   } catch (err) {
     await recordRun(serviceRpc, 'settle-schools', false, err.message)
-    return res.status(502).json({ error: 'settle_failed', detail: err.message })
+    return res.status(502).json({ error: 'settle_failed' })
   }
 
   const stripe = STRIPE_SECRET ? makeStripe(STRIPE_SECRET) : null
@@ -95,7 +95,8 @@ export default async function handler(req, res) {
         waiting.push({ school: award.name, month: award.month_key, reason: stripe ? 'plan_not_active' : 'stripe_not_configured' })
       }
     } catch (err) {
-      waiting.push({ school: award.name, month: award.month_key, reason: err.message })
+      console.error('[settle-schools] free month not given:', award.month_key, err.message)
+      waiting.push({ school: award.name, month: award.month_key, reason: 'stripe_error' })
     }
   }
 

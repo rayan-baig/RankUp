@@ -25,6 +25,12 @@
  */
 
 import { makeServiceRpc, secretMatches } from './_shared/job.js'
+// The version, from the one place it is written. Public at both depths: it
+// says which build answered, which is the first thing to know when something
+// looks wrong after a deploy, and nothing an outsider could use.
+import pkg from '../package.json' with { type: 'json' }
+
+const VERSION = pkg.version
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -47,7 +53,7 @@ function configured() {
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') {
-    return res.status(405).json({ error: 'Use GET.' })
+    return res.status(405).json({ error: 'method_not_allowed', version: VERSION })
   }
 
   const conf = configured()
@@ -60,8 +66,8 @@ export default async function handler(req, res) {
   // something is wrong, which is all an uptime monitor needs.
   if (!conf.database) {
     return deep
-      ? res.status(503).json({ ok: false, reason: 'database_not_configured', configured: conf })
-      : res.status(503).json({ ok: false })
+      ? res.status(503).json({ ok: false, version: VERSION, reason: 'database_not_configured', configured: conf })
+      : res.status(503).json({ ok: false, version: VERSION })
   }
 
   const serviceRpc = makeServiceRpc(SUPABASE_URL, SERVICE_KEY)
@@ -71,14 +77,16 @@ export default async function handler(req, res) {
     snapshot = await serviceRpc('health_snapshot', {})
   } catch (err) {
     // Reaching the database at all is the shallow check, so failing here is a
-    // genuine outage — but the reason why is still not public.
+    // genuine outage — but the reason why is still not public, and the
+    // database's own error text goes to the log, not into any answer.
+    console.error('[health] database unreachable:', err.message)
     return deep
-      ? res.status(503).json({ ok: false, reason: 'database_unreachable', detail: err.message })
-      : res.status(503).json({ ok: false })
+      ? res.status(503).json({ ok: false, version: VERSION, reason: 'database_unreachable' })
+      : res.status(503).json({ ok: false, version: VERSION })
   }
 
-  if (!deep) return res.status(200).json({ ok: true })
+  if (!deep) return res.status(200).json({ ok: true, version: VERSION })
 
   const ok = Boolean(snapshot?.ok)
-  return res.status(ok ? 200 : 503).json({ ...snapshot, configured: conf })
+  return res.status(ok ? 200 : 503).json({ ...snapshot, version: VERSION, configured: conf })
 }

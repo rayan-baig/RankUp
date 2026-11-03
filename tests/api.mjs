@@ -11,10 +11,12 @@
  * Needs the Cloudflare stack up:  supabase/test/up.sh --cf
  */
 import http from 'node:http'
-import { readdirSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import pg from 'pg'
 import Stripe from 'stripe'
 import { billingNotice, billingError } from '../src/lib/billing.js'
+
+const PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
 
 const BASE = process.env.API_BASE || 'http://localhost:8788'
 // Stripe ids are made unique per run, so the suite can run again on the same
@@ -119,10 +121,33 @@ for (const job of ['run-retention', 'send-reminders', 'send-digests', 'settle-al
 // what the last error said, how many crashes there were today.
 const shallow = await (await fetch(`${BASE}/api/health`)).json()
 ok('health answers a public uptime monitor', shallow.ok === true)
-ok('but tells it nothing about the inside',
-  Object.keys(shallow).length === 1, `keys: ${Object.keys(shallow).join(', ')}`)
+ok('but tells it nothing about the inside, only which version answered',
+  Object.keys(shallow).sort().join(',') === 'ok,version', `keys: ${Object.keys(shallow).join(', ')}`)
+ok('and that version is package.json\'s', shallow.version === PACKAGE_VERSION, `${shallow.version} vs ${PACKAGE_VERSION}`)
 const deep = await (await fetch(`${BASE}/api/health`, { headers: { Authorization: `Bearer ${CRON}` } })).json()
 ok('while the operator sees the jobs', Boolean(deep.jobs), `keys: ${Object.keys(deep).join(', ')}`)
+ok('and the version too', deep.version === PACKAGE_VERSION, String(deep.version))
+
+console.log('\n=== An error is a short JSON answer, never the inside of the server ===')
+for (const path of ['/api/no-such-function', '/api/constructor', '/api/__proto__', '/api/health/extra']) {
+  const res = await fetch(`${BASE}${path}`)
+  const text = await res.text()
+  let body = null
+  try { body = JSON.parse(text) } catch { body = null }
+  ok(`${path} is a 404 in JSON`, res.status === 404 && /application\/json/.test(res.headers.get('content-type') || '')
+    && body && Object.keys(body).join(',') === 'error' && body.error === 'not_found', `${res.status} ${text.slice(0, 120)}`)
+}
+const wrongVerb = await fetch(`${BASE}/api/health`, { method: 'DELETE' })
+const wrongVerbText = await wrongVerb.text()
+ok('a wrong method is refused in JSON, with a code and no message from the runtime',
+  wrongVerb.status === 405 && /^\{"error":"method_not_allowed"/.test(wrongVerbText), `${wrongVerb.status} ${wrongVerbText}`)
+const garbled = await fetch(`${BASE}/api/create-checkout`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${PARENT}` }, body: '{not json',
+})
+const garbledText = await garbled.text()
+ok('a body that is not JSON gets a JSON answer, with no stack or file name in it',
+  garbled.status >= 400 && garbled.status < 600 && (() => { try { JSON.parse(garbledText); return true } catch { return false } })()
+    && !/\bat\s+\S+\s*\(|\.js:\d+|stack|SyntaxError|Unexpected token/i.test(garbledText), `${garbled.status} ${garbledText.slice(0, 160)}`)
 
 console.log('\n=== The owner\'s console can count families, and nobody else can ===')
 const noKey = await fetch(`${BASE}/api/stats`)

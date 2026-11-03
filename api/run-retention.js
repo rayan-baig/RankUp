@@ -101,6 +101,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ ...(result || { ok: true }), billing_cancellations: billing })
   } catch (err) {
     await recordRun(serviceRpc, 'run-retention', false, err.message)
-    return res.status(502).json({ error: 'retention_failed', detail: err.message })
+    return res.status(502).json({ error: 'retention_failed' })
   }
 }

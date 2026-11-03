@@ -93,7 +93,7 @@ export default async function handler(req, res) {
     due = await serviceRpc('due_digests', { p_weekday: DIGEST_WEEKDAY, p_hour: DIGEST_HOUR })
   } catch (err) {
     await recordRun(serviceRpc, 'send-digests', false, err.message)
-    return res.status(502).json({ error: 'lookup_failed', detail: err.message })
+    return res.status(502).json({ error: 'lookup_failed' })
   }
 
   const digests = due?.digests || []

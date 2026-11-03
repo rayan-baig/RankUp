@@ -15,6 +15,8 @@ import DataRights from '../../components/DataRights.jsx'
 import InviteCard from '../../components/InviteCard.jsx'
 import AdultsCard from '../../components/AdultsCard.jsx'
 import { navigate } from '../../lib/router.js'
+import { APP_VERSION } from '../../lib/version.js'
+import { PRODUCT_OF } from '../../data/legalText.js'
 
 export default function ParentSettings() {
   const { state, dispatch } = useApp()
@@ -411,6 +413,41 @@ export default function ParentSettings() {
           left, but has no way to reach a payment screen.
         </p>
       </Card>
+      </Section>
+
+      <Section title="Help & about" icon="❓" summary={`Questions and answers · RankUp ${APP_VERSION}`}>
+        <Card flat>
+          <button
+            type="button"
+            onClick={() => navigate('/parent/help')}
+            className="w-full flex items-center gap-3 text-left"
+          >
+            <span className="text-2xl" aria-hidden="true">💬</span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold text-sm">Help</span>
+              <span className="block text-xs text-muted">
+                Linking a phone, PINs, XP, plans, the free trial, your data.
+              </span>
+            </span>
+            <span aria-hidden="true" className="text-muted">›</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/parent/plan')}
+            className="w-full flex items-center gap-3 text-left mt-3 pt-3"
+            style={{ borderTop: '1px solid var(--line)' }}
+          >
+            <span className="text-2xl" aria-hidden="true">💳</span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold text-sm">Your plan</span>
+              <span className="block text-xs text-muted">Prices, changing plan and cancelling.</span>
+            </span>
+            <span aria-hidden="true" className="text-muted">›</span>
+          </button>
+          <p className="text-xs text-muted mt-3 pt-3" style={{ borderTop: '1px solid var(--line)' }} data-testid="app-version">
+            RankUp version {APP_VERSION}. {PRODUCT_OF}
+          </p>
+        </Card>
       </Section>
 
       <Section title="Your data" icon="🗂️" summary="Download it, or delete the account">

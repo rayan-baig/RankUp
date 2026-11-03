@@ -16,8 +16,10 @@ You need three logins to hand: your **host** (Cloudflare or Vercel),
 https://rankup.<your domain>/api/health
 ```
 
-It answers `{"ok":true}` when the site is up and can reach the database, and an
-error (503) when it cannot. It is safe to leave public; it says nothing else.
+It answers `{"ok":true,"version":"…"}` when the site is up and can reach the
+database, and an error (503) when it cannot. The version is the one in
+`package.json` and `CHANGELOG.md`, so it also tells you which build is live. It
+is safe to leave public; it says nothing else.
 
 **2. The detailed check**, which needs your `CRON_SECRET`. Open a terminal and
 run (or give your monitor the same header):
@@ -27,7 +29,8 @@ curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://rankup.<your domain>/ap
 ```
 
 It answers 200 when all is well and 503 when anything below needs you, with the
-reason in the answer.
+reason in the answer. A job's last error is in its `last_error`; the server's
+own error messages go to the host's function logs, never into an answer.
 
 ---
 

@@ -79,7 +79,9 @@ export async function cancelPendingBilling({ stripe, serviceRpc, familyId = null
       p_family_id: familyId, p_customer_id: customerId, p_limit: limit,
     }) || []
   } catch (err) {
-    return { pending: null, cancelled: 0, failed: 0, error: err.message }
+    // The database's own words go to the log; the answer says only what failed.
+    console.error('[cancel-billing] could not read the queue:', err.message)
+    return { pending: null, cancelled: 0, failed: 0, error: 'database_unreachable' }
   }
 
   let cancelled = 0

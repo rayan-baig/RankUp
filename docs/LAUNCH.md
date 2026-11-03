@@ -247,7 +247,7 @@ Every job records each run, and `/api/health` reports how long each has been
 quiet. Silence is how these fail: no error, just reminders that stop arriving.
 
 ```
-GET https://rankup.<your domain>/api/health                                        -> {"ok":true}, or 503
+GET https://rankup.<your domain>/api/health                                        -> {"ok":true,"version":"…"}, or 503
 GET https://rankup.<your domain>/api/health  (Authorization: Bearer CRON_SECRET)   -> the detail, 503 if anything is wrong
 ```
 
@@ -337,7 +337,7 @@ every phone downloads. A secret in a `VITE_` name is a published secret.
 |---|---|---|
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | The project's address and public key, for the app. The server functions read the anon key too, when they ask the database something as the signed-in parent, so it must be set on the host, not only in a local file. | No |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | The same address, and the key that bypasses every database rule | **Yes** |
-| `PUBLIC_SITE_URL` | `https://rankup.<your domain>` (section 1a), no trailing slash. Stripe sends people back here; without it checkout and the billing portal refuse to start. | No |
+| `PUBLIC_SITE_URL` | `https://rankup.<your domain>` (section 1a), no trailing slash. Stripe sends people back here; without it checkout and the billing portal refuse to start. The build reads it too: a pasted link's preview picture, `sitemap.xml` and the sitemap line in `robots.txt` need the whole address, and are left out without it. | No |
 | `VITE_VAPID_PUBLIC_KEY` and `VAPID_PUBLIC_KEY` | The public push key, twice (the app and the server both need it) | No |
 | `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | The private push key, and `mailto:` a company address, e.g. `mailto:no-reply@rankup.<your domain>` | Private key: **yes** |
 | `VITE_STRIPE_ENABLED` | `true` to switch billing on | No |

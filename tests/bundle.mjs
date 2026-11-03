@@ -146,5 +146,19 @@ for (const [name, value] of [
     `_headers: ${(headers.match(new RegExp(`${name}: .*`)) || [''])[0]} vercel: ${vercelHeaders[name]}`)
 }
 
+/*
+ * PUBLIC_SITE_URL is the site's address, so the build uses it for the link
+ * preview's picture and the sitemap. Here it holds a sentinel that is no
+ * address at all, which is the case to check: with no real address, no
+ * picture tag, no half-made relative one, and no sitemap.
+ * tests/sharecard.mjs checks the same code with a real address.
+ */
+console.log('\n=== With no real site address, no half-made link preview ===')
+const page = texts.find((t) => t.f === 'index.html')?.text || ''
+ok('no og:image or twitter:image tag', !/og:image|twitter:image/.test(page))
+ok('no marker left in the page', !page.includes('{{SITE}}'))
+ok('robots.txt is there, keeping crawlers off /api/', /^Disallow: \/api\/$/m.test(texts.find((t) => t.f === 'robots.txt')?.text || ''))
+ok('and no sitemap, which would need the address', !files.some((f) => f.endsWith('sitemap.xml')))
+
 console.log(fails === 0 ? '\nALL CHECKS PASSED' : `\n${fails} FAILED`)
 process.exit(fails === 0 ? 0 : 1)
