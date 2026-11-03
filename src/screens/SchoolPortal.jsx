@@ -9,7 +9,7 @@ import {
 } from '../lib/schools.js'
 import { Screen, Card, Button, SectionTitle, Banner, Field, TextInput, Modal, Chip, DemoTag } from '../components/ui.jsx'
 import { SchoolHeadline, LeagueTable, RivalryList, StarList } from '../components/SchoolParts.jsx'
-import SignIn from './SignIn.jsx'
+import { humanError } from '../lib/errors.js'
 import { billingLive, billingError, startSchoolCheckout, openSchoolBillingPortal } from '../lib/billing.js'
 
 /**
@@ -28,6 +28,8 @@ export default function SchoolPortal() {
   const [school, setSchool] = useState(null)
   const [league, setLeague] = useState(null)
   const [error, setError] = useState('')
+  // The size typed on the front page, so the form does not ask for it again.
+  const [studentsGuess, setStudentsGuess] = useState('')
 
   const load = useCallback(async () => {
     if (demo) {
@@ -48,10 +50,6 @@ export default function SchoolPortal() {
 
   useEffect(() => { load() }, [load])
 
-  if (step === 'account') {
-    return <SignIn who="school" onDone={() => { setStep('loading'); load() }} onBack={() => setStep('landing')} />
-  }
-
   return (
     <Screen>
       <header className="mb-3 flex items-start justify-between gap-2">
@@ -67,8 +65,8 @@ export default function SchoolPortal() {
 
       {error && <Banner tone="warn" icon="⚠️" title="Not right now" className="mb-3">{error}</Banner>}
       {step === 'loading' && <Card><p className="text-sm text-muted">Loading…</p></Card>}
-      {step === 'landing' && <Landing onStart={() => setStep(transport.currentUserId() ? 'register' : 'account')} />}
-      {step === 'register' && <Register onDone={load} />}
+      {step === 'landing' && <Landing onStart={(students) => { setStudentsGuess(students); setStep('register') }} />}
+      {step === 'register' && <Register onDone={load} students={studentsGuess} onBack={() => setStep('landing')} />}
       {step === 'dashboard' && school && (
         <Dashboard school={school} league={league} demo={demo} onChange={load} />
       )}
@@ -149,7 +147,7 @@ function Landing({ onStart }) {
           School sign-up opens when RankUp launches. Prices above are what you will pay.
         </Banner>
       )}
-      <Button className="w-full" disabled={!transport.isConfigured()} onClick={onStart}>
+      <Button className="w-full" disabled={!transport.isConfigured()} onClick={() => onStart(students)}>
         Sign your school up
       </Button>
     </>
@@ -158,17 +156,52 @@ function Landing({ onStart }) {
 
 // ---------------------------------------------------------------- register
 
-function Register({ onDone }) {
-  const [form, setForm] = useState({ name: '', district: '', city: '', students: '', yourName: '' })
+/*
+ * One screen from "Sign your school up" to the school's page.
+ *
+ * The account and the school used to be two screens: an email and password
+ * with their own button, then the school's details with another. They are
+ * one form now, with one button, and the number of students typed on the
+ * front page to see the price is already filled in. Signed in already (a
+ * parent signing their child's school up, say), the account part is not
+ * shown at all. tests/schoolsignup.mjs walks it and counts the steps.
+ */
+function Register({ onDone, students = '', onBack }) {
+  const signedIn = Boolean(transport.currentUserId())
+  const [form, setForm] = useState({ name: '', district: '', city: '', students: String(students || ''), yourName: '' })
+  const [account, setAccount] = useState({ email: '', password: '' })
+  const [haveAccount, setHaveAccount] = useState(false)
   const [staffCode, setStaffCode] = useState('')
   const [asStaff, setAsStaff] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
   const quote = schoolPrice(form.students)
+  const accountReady = signedIn || (account.email.trim() && account.password.length >= 8)
 
   const submit = async () => {
     setBusy(true)
+    setError('')
+    if (!transport.currentUserId()) {
+      try {
+        const email = account.email.trim()
+        const session = haveAccount
+          ? await transport.signIn(email, account.password)
+          : await transport.signUp(email, account.password)
+        if (!session?.access_token) {
+          // Email confirmation is on: the account exists, the school waits.
+          // Everything typed stays; after the link, one tap finishes it.
+          setHaveAccount(true)
+          setError('Check your email for a confirmation link, then tap the button again. Everything here is kept.')
+          setBusy(false)
+          return
+        }
+      } catch (err) {
+        setError(humanError(err, 'That did not work. Please try again.'))
+        setBusy(false)
+        return
+      }
+    }
     const res = asStaff ? await schools.joinStaff(staffCode, form.yourName) : await schools.register(form)
     setBusy(false)
     if (!res.ok) { setError(schoolError(res.reason)); return }
@@ -188,6 +221,26 @@ function Register({ onDone }) {
         ))}
       </div>
 
+      {!signedIn && (
+        <div data-testid="school-account">
+          <p className="text-xs text-muted mb-2">
+            {haveAccount ? 'Sign in with your school account.' : 'Your account: use your school email. We check every school is real before it joins a league.'}
+          </p>
+          <Field label="Email">
+            <TextInput type="email" inputMode="email" autoComplete="email" value={account.email}
+                       onChange={(e) => setAccount((a) => ({ ...a, email: e.target.value }))} placeholder="you@yourschool.edu" />
+          </Field>
+          <Field label="Password" hint={haveAccount ? null : 'At least 8 characters.'}>
+            <TextInput type="password" autoComplete={haveAccount ? 'current-password' : 'new-password'} value={account.password}
+                       onChange={(e) => setAccount((a) => ({ ...a, password: e.target.value }))} />
+          </Field>
+          <button type="button" className="text-xs underline text-muted mb-3"
+                  onClick={() => { setHaveAccount((h) => !h); setError('') }}>
+            {haveAccount ? 'I need to create an account' : 'I already have an account'}
+          </button>
+        </div>
+      )}
+
       <Field label="Your name" hint="As parents and other staff will see it, e.g. Ms Lane.">
         <TextInput value={form.yourName} onChange={set('yourName')} maxLength={60} />
       </Field>
@@ -203,7 +256,9 @@ function Register({ onDone }) {
           <Field label="School district" hint="Schools in the same district compete with each other.">
             <TextInput value={form.district} onChange={set('district')} maxLength={80} />
           </Field>
-          <Field label="Town or city"><TextInput value={form.city} onChange={set('city')} maxLength={60} /></Field>
+          <Field label="Town or city" hint="Optional. It helps us check the school is real.">
+            <TextInput value={form.city} onChange={set('city')} maxLength={60} />
+          </Field>
           <Field label="Number of students">
             <TextInput type="number" inputMode="numeric" min={1} max={20000} value={form.students} onChange={set('students')} />
           </Field>
@@ -216,9 +271,10 @@ function Register({ onDone }) {
       )}
 
       {error && <p className="text-sm mb-3" style={{ color: 'var(--bad)' }} role="alert">{error}</p>}
-      <Button className="w-full" disabled={busy} onClick={submit}>
+      <Button className="w-full" disabled={busy || !accountReady} onClick={submit}>
         {busy ? 'Working…' : asStaff ? 'Join my school' : 'Sign the school up'}
       </Button>
+      <button type="button" className="w-full text-xs underline text-muted mt-3" onClick={onBack}>Back</button>
     </Card>
   )
 }

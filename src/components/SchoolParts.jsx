@@ -84,7 +84,7 @@ export function LeagueTable({ league, demo = false }) {
   return (
     <>
       <SectionTitle action={demo ? <DemoTag /> : null}>{league?.district || 'District'} league</SectionTitle>
-      <Card className="p-0 overflow-hidden mb-3">
+      <Card className="p-0 overflow-hidden mb-3" data-testid="league-table">
         {rows.length === 0 && <p className="text-sm text-muted p-4">No schools to show yet.</p>}
         {rows.map((s, i) => (
           <div
