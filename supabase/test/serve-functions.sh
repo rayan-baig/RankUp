@@ -21,6 +21,10 @@ VP=$(sed -n 1p "$VAPID_FILE"); VS=$(sed -n 2p "$VAPID_FILE")
 # FUNCTIONS_PORT and MOCK_URL let a second copy run beside another on one machine.
 PORT="${FUNCTIONS_PORT:-8788}"
 MOCK="${MOCK_URL:-http://localhost:54321}"
+# The stand-ins tests/api.mjs and tests/billingwalk.mjs start for Stripe and
+# the email provider; the same variables move them there.
+STRIPE_STANDIN="http://localhost:${STRIPE_STANDIN_PORT:-12111}"
+EMAIL_STANDIN="http://localhost:${EMAIL_STANDIN_PORT:-12112}"
 exec npx wrangler pages dev dist --port "$PORT" --compatibility-flags nodejs_compat \
   --binding SUPABASE_URL="$MOCK" \
   --binding VITE_SUPABASE_ANON_KEY=local-anon-key \
@@ -43,11 +47,12 @@ exec npx wrangler pages dev dist --port "$PORT" --compatibility-flags nodejs_com
   --binding STRIPE_PRICE_SCHOOL_LARGE_YEAR=price_test_school_large_year \
   --binding STRIPE_PRICE_SCHOOL_XL=price_test_school_xl \
   --binding STRIPE_PRICE_SCHOOL_XL_YEAR=price_test_school_xl_year \
-  --binding STRIPE_API_BASE=http://localhost:12111 \
+  --binding STRIPE_API_BASE="$STRIPE_STANDIN" \
   --binding EMAIL_API_KEY=re_test_local_only \
   --binding EMAIL_FROM="RankUp <no-reply@rankup.example.test>" \
   --binding EMAIL_REPLY_TO=help@example.test \
-  --binding EMAIL_API_BASE=http://localhost:12112 \
+  --binding ERRORS_EMAIL=errors@example.test \
+  --binding EMAIL_API_BASE="$EMAIL_STANDIN" \
   --binding PUBLIC_SITE_URL="http://localhost:$PORT" \
   --binding VAPID_PUBLIC_KEY="$VP" \
   --binding VAPID_PRIVATE_KEY="$VS" \

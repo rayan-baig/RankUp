@@ -50,6 +50,7 @@ const SUITES = {
     { file: 'planwords.mjs' },
     { file: 'dataexport.mjs' },
     { file: 'noticewords.mjs' },
+    { file: 'emails.mjs' },
     { file: 'arcadewords.mjs' },
     { file: 'schoolhelp.mjs' },
     { file: 'installcard.mjs' },

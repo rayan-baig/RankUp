@@ -5,7 +5,8 @@ needs your accounts, your bank details, and a decision about the legal side
 (section 7). Work down the list in order; nothing here is optional.
 
 When something goes wrong after launch, see
-[IF-SOMETHING-BREAKS.md](IF-SOMETHING-BREAKS.md).
+[IF-SOMETHING-BREAKS.md](IF-SOMETHING-BREAKS.md). To try a change before it
+goes live, set up the second copy in [STAGING.md](STAGING.md).
 
 ---
 
@@ -233,7 +234,7 @@ Six jobs:
 |---|---|---|
 | `/api/send-reminders` | every 15 minutes | Daily reminders never arrive |
 | `/api/send-digests` | hourly | The weekly digest never goes out |
-| `/api/send-trial-emails` | hourly | No email three days before a free trial ends, or on the day. Needs `EMAIL_API_KEY` and `EMAIL_FROM` ([EMAILS.md](EMAILS.md)) |
+| `/api/send-trial-emails` | hourly | No email three days before a free trial ends, or on the day, and no error report to `ERRORS_EMAIL`. Needs `EMAIL_API_KEY` and `EMAIL_FROM` ([EMAILS.md](EMAILS.md)) |
 | `/api/run-retention` | daily | Old activity piles up, and a deleted family's Stripe cancellation that failed is never retried |
 | `/api/settle-alliances` | monthly (the 2nd) | Nobody is ever given their 20% discount |
 | `/api/settle-schools` | monthly (the 2nd) | No District Champion, no School Stars, no free month, and no monthly email to each school's admin |
@@ -325,7 +326,9 @@ changes no other row in any table):
 | What | Once older than |
 |---|---|
 | Activity log entries (`events`), including the chore-edit history | 90 days (`RETENTION_EVENT_DAYS`) |
-| Crash reports | 90 days (the same setting) |
+| Crash reports, and the server functions' errors | 90 days (the same setting) |
+| What the error report remembers: which errors it has told you about, and its sends | 90 days quiet; its sends after 2 days |
+| The daily usage totals (no family in them) | 400 days |
 | Pairing codes, counted from when they expired | 2 days (`RETENTION_PAIRING_DAYS`) |
 | Pairing guess counts (the rate limit) | 2 days (the same setting) |
 | Retry receipts (what stops a resent purchase charging twice) | 30 days |
@@ -410,9 +413,11 @@ every phone downloads. A secret in a `VITE_` name is a published secret.
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe's secret key and the webhook's signing secret | **Yes** |
 | `STRIPE_PRICE_*` | The price ids from section 3 | No |
 | `CRON_SECRET` | One long random string (`openssl rand -hex 32`) that protects all six scheduled jobs and the detailed health check | **Yes** |
-| `EMAIL_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | The email provider's API key, who RankUp's own emails are from (`RankUp <no-reply@rankup.<your domain>>`), and an optional support address for replies. Only the trial reminders use them ([EMAILS.md](EMAILS.md)). Without the first two, `/api/send-trial-emails` sends nothing and the health check says so. Leave `EMAIL_API_BASE` unset: it is for the tests | Key: **yes** |
+| `EMAIL_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | The email provider's API key, who RankUp's own emails are from (`RankUp <no-reply@rankup.<your domain>>`), and an optional support address for replies. RankUp's own emails use them: the trial reminders, a school's month, the error report ([EMAILS.md](EMAILS.md)). Without the first two, `/api/send-trial-emails` sends nothing and the health check says so. Leave `EMAIL_API_BASE` unset: it is for the tests | Key: **yes** |
+| `ERRORS_EMAIL` | Optional. One inbox for the error report: new crashes on phones and errors in the server functions, from the hourly email job, each error at most once an hour and at most 20 reports a day, with no name, email or family id in it ([EMAILS.md](EMAILS.md#rankups-own-the-error-report)) | No |
+| `SUPPORT_EMAIL` | Optional. The support address the app shows under Settings → Help & about and on both help pages, built in when the app is built; the emails use it too when `EMAIL_REPLY_TO` is unset. Without it, the contact email in `src/data/legalText.js` once filled in (section 5) | No |
 | `OPERATOR_SECRET` | A different long random string: your key to `/#/operator`, where you check each school is real | **Yes** |
-| `STATS_KEY` | Optional. Lets your own console read two counts (families, active families) from `/api/stats`. Unset, that address does not exist. | **Yes** |
+| `STATS_KEY` | Optional. Lets your own console read two counts (families, active families) and the daily usage totals for the last 30 days from `/api/stats`. Unset, that address does not exist. | **Yes** |
 | `VITE_GUILDS_ENABLED` | Leave unset for launch (section 7) | No |
 | `RETENTION_*`, `REMINDER_GRACE_MINUTES`, `DIGEST_WEEKDAY`, `DIGEST_HOUR` | Optional; the defaults are in `.env.example` | No |
 
@@ -478,7 +483,10 @@ the phone.
 - [ ] Sign a test school up at `/#/school` (one form: your account and the
       school), then open `/#/operator` with `OPERATOR_SECRET`: the school is
       waiting, with a checklist of what to check and what RankUp knows.
-      Tick every check, verify, and see it ranked.
+      Tick every check, verify, and see it ranked. The same page shows
+      RankUp's daily usage totals for the last 30 days (families signed up,
+      chores accepted, rewards bought, games played, schools signed up, help
+      page views): counts only, with no family in them.
 - [ ] With a test family three days from the end of its free trial, check
       the trial email arrives (and again on the last day), from
       `no-reply@rankup.<your domain>`. In the database:

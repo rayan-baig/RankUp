@@ -23,6 +23,7 @@
 import { makeStripe, verifyWebhook } from './_shared/stripe.js'
 import { schoolIdOf, schoolPriceId, schoolCycle } from './_shared/schoolBilling.js'
 import { cancelPendingBilling } from './_shared/cancelBilling.js'
+import { reportError } from './_shared/job.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -259,7 +260,7 @@ export default async function handler(req, res) {
     event = await verifyWebhook(stripe, body, req.headers['stripe-signature'], WEBHOOK_SECRET)
   } catch (err) {
     // An unverified event is an attacker or a misconfiguration. Never act on it.
-    console.error('[stripe-webhook] bad signature:', err.message)
+    await reportError('stripe-webhook:signature', `bad signature: ${err.message}`)
     return res.status(400).json({ error: 'invalid_signature' })
   }
 
@@ -456,7 +457,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ received: true, ignored: event.type })
   } catch (err) {
     // A 500 makes Stripe retry, which is what we want for a transient failure.
-    console.error('[stripe-webhook]', event?.type, err.message)
+    await reportError('stripe-webhook', `${event?.type || 'event'}: ${err.message}`)
     return res.status(500).json({ error: 'handler_failed' })
   }
 }

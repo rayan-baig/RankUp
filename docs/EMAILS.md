@@ -11,6 +11,7 @@ code.
 | **3 days left of your trial** | RankUp, `/api/send-trial-emails` | Three days before a family's free trial ends, in its own time zone | `EMAIL_API_KEY`, `EMAIL_FROM`, the hourly job (below) |
 | **Last day of your free trial** | RankUp, `/api/send-trial-emails` | On the day it ends, in its own time zone (late the evening before, for a trial that ends in the first two hours of a day, which an hourly job could miss) | The same |
 | **Your School League month** (to a school's admin) | RankUp, `/api/settle-schools` | Once a month, when the month is closed (the 2nd) | `EMAIL_API_KEY`, `EMAIL_FROM`, the monthly job |
+| **The error report** (to whoever runs RankUp, not a family) | RankUp, `/api/send-trial-emails` | Hourly, when there is a new error: each error at most once an hour, at most 20 a day | `ERRORS_EMAIL`, with `EMAIL_API_KEY` and `EMAIL_FROM` |
 | **Receipt** | Stripe | Each payment | Stripe dashboard (below) |
 | **A payment failed** | Stripe | A renewal's card is declined | Stripe dashboard (below) |
 | **Your plan has ended** | Stripe, if your account offers it; otherwise nobody | A subscription is cancelled, or Stripe stops retrying | Stripe dashboard (below) |
@@ -79,7 +80,8 @@ DMARC on the parent domain).
 
 - **Settings** (`.env.example`, section 6a): `EMAIL_API_KEY` (the provider's
   API key, a secret), `EMAIL_FROM`, and optionally `EMAIL_REPLY_TO` (the
-  company's support address; without it the email points only to Help).
+  company's support address; without it, `SUPPORT_EMAIL` if that is set,
+  and otherwise the email points only to Help).
   The code is written for Resend's HTTP API (`POST /emails`): a Cloudflare
   Worker cannot send SMTP. Another provider needs `sendEmail` in
   `api/_shared/email.js` changed to its API.
@@ -145,6 +147,77 @@ DMARC on the parent domain).
   again, nobody else can call it), `tests/noticewords.mjs` (every variant's
   words) and `tests/api.mjs` (the job under workerd against a stand-in
   provider).
+
+---
+
+## RankUp's own: the error report
+
+`api/_shared/errorReport.js`, sent by the hourly `api/send-trial-emails.js`
+after the trial reminders; words in `api/_shared/email.js`
+(`errorReportEmail`); what goes in it decided in `supabase/crashes.sql`
+(`claim_error_report`, `finish_error_report`).
+
+- **Who.** One address, `ERRORS_EMAIL`: whoever runs RankUp. Unset, nothing
+  is claimed and nothing is sent; the errors are still kept for 90 days.
+- **What.** Crashes on phones (`crash_reports`, as before) and, new, errors
+  in the server functions (`server_errors`): every function that used to
+  write an error only to the host's log now also records it with
+  `reportError` (`api/_shared/job.js`), and so does a scheduled job's failed
+  run. Each line says where (a screen, or a function's name), how many times
+  since it was last reported, the message, and "New." the first time.
+- **Never a family in it.** No child's or adult's name, no email, no family
+  id, no request, no token. Emails, tokens, ids (a family's is a uuid;
+  Stripe's), quoted values and long numbers are taken out when an error is
+  recorded (`error_scrub`, and `scrubErrorText` in the function before it
+  is sent); every word that is anybody's name in RankUp (any child's, adult's
+  or family's) is taken out when the report is written (`error_name_scrub`),
+  because only the database knows them all; and the email is scrubbed again
+  as it is written.
+- **How often.** Each distinct error (where, and what it said once scrubbed)
+  at most once an hour; at most 20 reports in any 24 hours; at most 20 errors
+  in one report, with "and N more" for the next. A report that could not be
+  sent gives its errors back for the next run; a run that died after
+  claiming gives them back after half an hour; the idempotency key stops a
+  retried send arriving twice.
+- **The words:**
+
+  > **Subject:** RankUp: 2 errors to look at, 1 new
+  >
+  > Hello,
+  >
+  > RankUp recorded 2 kinds of error since the last report.
+  >
+  > New. On a phone, on /parent/settings, 3 times: TypeError: rewards.map is not a function
+  >
+  > In the server function billing-portal, once: Request failed with status 500
+  >
+  > No family is named in this email: names, emails, ids and tokens are
+  > taken out before it is written.
+  >
+  > What to do about each: docs/IF-SOMETHING-BREAKS.md in RankUp's code. ...
+  >
+  > --
+  > RankUp is a product of MTRX Horizyn.
+  > You get this because ERRORS_EMAIL is set to this address. Each error at
+  > most once an hour, and at most 20 of these a day.
+
+- **Tested** by `supabase/test/48-error-report.sql` (scrubbing, a child's
+  and an adult's name and an email in a message never reaching the report,
+  once an hour, 20 a day, given back, only the job can call it),
+  `tests/api.mjs` (the job under workerd: a crash with a child's name and a
+  parent's email in it, and the email that goes out has neither) and
+  `tests/emails.mjs`.
+
+---
+
+## Every email, checked
+
+`tests/emails.mjs` renders every email RankUp's own code sends, in every
+variant (each plan, each kind of school month, with and without a site and a
+support address), and checks each has a plain-text part, no blank left
+unfilled, the footer once in each part, nothing wider than 600px, and the
+same words and links in both parts. A new kind of email in
+`api/_shared/email.js` fails it until its variants are added.
 
 ---
 

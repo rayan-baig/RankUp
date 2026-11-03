@@ -53,10 +53,17 @@ ok('no town given', schoolChecks({ ...base, city: '' }, []).find((c) => c.id ===
 console.log('\n=== On the operator page ===')
 const { browser, page, errors } = await launch()
 let schools = [base, twin, neighbour]
+// The daily usage totals, as usage_daily_counts (supabase/health.sql) gives them.
+const METRICS = ['families_signed_up', 'chores_accepted', 'rewards_bought', 'games_played', 'schools_signed_up', 'help_views']
+const usageDays = Array.from({ length: 30 }, (_, i) => {
+  const day = new Date(Date.UTC(2026, 9, 5 + i)).toISOString().slice(0, 10)
+  return { day, ...Object.fromEntries(METRICS.map((m, k) => [m, (i * (k + 3)) % 17])) }
+})
+const usage = { days: usageDays, totals: Object.fromEntries(METRICS.map((m) => [m, usageDays.reduce((n, d) => n + d[m], 0)])) }
 await page.route('**/api/operator-schools', async (route) => {
   const body = route.request().postDataJSON?.()
   if (body?.action === 'verify') schools = schools.map((s) => (s.id === body.school_id ? { ...s, verified: true } : s))
-  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, schools }) })
+  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, schools, usage }) })
 })
 await page.goto(`${BASE}/#/operator`, { waitUntil: 'networkidle' })
 await page.locator('input[type=password]').fill('any-key-the-test-answers')
@@ -70,6 +77,15 @@ ok('verified schools do not', (await page.getByTestId('school-checklist').count(
 const verify = card.getByRole('button', { name: /verify/ }).first()
 ok('Verify waits until every check is ticked', await verify.isDisabled())
 await page.screenshot({ path: `${SHOT_DIR}/operator-checklist.png`, fullPage: true })
+const usageCard = page.getByTestId('usage')
+const chores = await page.getByTestId('usage-chores_accepted').innerText().catch(() => '')
+ok('the last 30 days of usage are on the page, each count with its total and today',
+  await usageCard.isVisible() && chores.startsWith('Chores accepted') && chores.includes(usage.totals.chores_accepted.toLocaleString('en-US'))
+    && chores.includes(`today ${usageDays[29].chores_accepted}`), chores)
+ok('one bar a day', (await page.getByTestId('usage-help_views').locator('span[title]').count()) === 30)
+ok('and nothing wider than the phone', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1))
+await usageCard.scrollIntoViewIfNeeded()
+await usageCard.screenshot({ path: `${SHOT_DIR}/operator-usage.png` })
 const boxes = card.locator('input[type=checkbox]')
 for (let i = 0; i < await boxes.count(); i++) await boxes.nth(i).check()
 ok('and then it can be pressed', await card.getByRole('button', { name: 'It is real: verify' }).isEnabled())

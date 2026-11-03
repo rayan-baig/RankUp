@@ -81,6 +81,19 @@ a supporter can do, removal cutting them off at once and taking their unused
 invitations with them, being invited back, and an invitation past its seven
 days.
 
+`48-error-report.sql` — a server function's error is stored with emails,
+tokens, ids and quoted values taken out, 60 an hour from one function at
+most; the error report never carries a child's or an adult's name, an email,
+a family id or a token, even when the message had them; each error at most
+once an hour, at most 20 reports a day; a report not sent, or claimed by a
+run that died, gives its errors back; only the scheduled job can call it.
+
+`49-usage-counts.sql` — the six daily usage totals each go up by one for the
+thing they count, through the app's own functions, and for nothing else; a
+count holds a day, a name and a number, nothing that could point at a
+family; the last 30 days come back whole, to the server only; anybody can
+count a help page view and do nothing else; kept 400 days.
+
 `refusals.mjs` (`npm run test:refusals`) — reads every
 `jsonb_build_object('ok', false, 'reason', ...)` out of the SQL files, applies
 them to a scratch database with each one marked so it raises a notice naming

@@ -171,6 +171,7 @@ export const PRIVACY_POLICY = {
       body: [
         'RankUp is designed for children and is subject to COPPA in the United States, the UK\'s Age Appropriate Design Code, and GDPR where it applies.',
         'We ask for verifiable parental consent before collecting anything from a child, we collect the minimum needed for the app to work, and we give parents access, deletion and withdrawal rights.',
+        'To see how RankUp is used, we keep a few daily totals across all families together (such as how many chores were accepted that day) for 400 days, with no names, ids, times of day or cookies and no outside service, so a count can never be traced back to a family or a child.',
       ],
     },
     {

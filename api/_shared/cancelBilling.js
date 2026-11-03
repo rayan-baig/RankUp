@@ -22,6 +22,8 @@
  * has been confirmed for 30 days. See docs/PAYMENTS.md.
  */
 
+import { reportError } from './job.js'
+
 /** Statuses that can still lead to a charge. */
 const LIVE = new Set(['active', 'trialing', 'past_due', 'unpaid', 'incomplete', 'paused'])
 
@@ -80,7 +82,7 @@ export async function cancelPendingBilling({ stripe, serviceRpc, familyId = null
     }) || []
   } catch (err) {
     // The database's own words go to the log; the answer says only what failed.
-    console.error('[cancel-billing] could not read the queue:', err.message)
+    await reportError('cancel-billing', `could not read the queue: ${err.message}`)
     return { pending: null, cancelled: 0, failed: 0, error: 'database_unreachable' }
   }
 
@@ -99,7 +101,7 @@ export async function cancelPendingBilling({ stripe, serviceRpc, familyId = null
       cancelled += 1
     } catch (err) {
       failed += 1
-      console.error('[cancel-billing] still queued:', row.id, err?.message)
+      await reportError('cancel-billing', `still queued: ${err?.message || 'failed'}`)
       try {
         // eslint-disable-next-line no-await-in-loop
         await serviceRpc('finish_billing_cancellation', {

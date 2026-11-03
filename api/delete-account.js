@@ -20,7 +20,7 @@
  */
 
 import { makeStripe } from './_shared/stripe.js'
-import { makeServiceRpc, userHeaders } from './_shared/job.js'
+import { makeServiceRpc, reportError, userHeaders } from './_shared/job.js'
 import { cancelPendingBilling } from './_shared/cancelBilling.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
     if (!r.ok) return res.status(r.status >= 500 ? 502 : 403).json({ ok: false, reason: 'not_allowed' })
     result = await r.json()
   } catch (err) {
-    console.error('[delete-account]', err.message)
+    await reportError('delete-account', err)
     return res.status(502).json({ ok: false, reason: 'database_unreachable' })
   }
   if (!result?.ok) return res.status(400).json({ ok: false, reason: result?.reason || 'not_deleted' })

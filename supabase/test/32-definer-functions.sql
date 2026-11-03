@@ -342,7 +342,10 @@ begin
     'record_push_failures(jsonb)',
     -- A school's month, by email.
     'school_month_summary(uuid,text)', 'claim_school_month_emails(date,integer)',
-    'finish_school_month_email(uuid,text,boolean)']
+    'finish_school_month_email(uuid,text,boolean)',
+    -- The error report, and the daily usage counts.
+    'record_server_error(text,text)', 'claim_error_report(integer)', 'finish_error_report(bigint,boolean)',
+    'usage_bump(text)', 'usage_daily_counts(integer)', 'usage_count_row()']
   loop
     if to_regprocedure(f) is null then
       v_open := v_open || (f || ' (no longer exists — update this list)');

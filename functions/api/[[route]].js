@@ -10,6 +10,10 @@
  * Deploying to Cloudflare Pages therefore changes nothing about the handlers,
  * and Vercel keeps working untouched as a fallback.
  */
+// Imported statically, unlike the handlers below: it reads its settings when
+// it is called, not when it is loaded.
+import { reportError } from '../../api/_shared/job.js'
+
 /*
  * Imported lazily, and that is not a style choice.
  *
@@ -132,8 +136,9 @@ export async function onRequest(context) {
   try {
     await Promise.race([Promise.resolve(handler(req, res)).then(() => finished), finished])
   } catch (err) {
-    // A handler that threw before answering: the reason is logged, never sent.
-    console.error('[pages-adapter]', name, err?.message)
+    // A handler that threw before answering: the reason is logged (and goes
+    // in the error report), never sent.
+    await reportError(name, err)
     if (!state.body) return jsonError(500, 'server_error')
   }
   return new Response(state.body, { status: state.status, headers: state.headers })

@@ -95,6 +95,24 @@ begin
       greatest(7, p_event_days)) into v_crashes;
   end if;
 
+  -- The server functions' errors (crashes.sql) are kept as long as the
+  -- crashes. What the error report remembers about them goes with them: which
+  -- kinds it has told you about, once quiet for as long, and its own sends
+  -- after two days (it counts only the last 24 hours).
+  if to_regclass('public.server_errors') is not null then
+    execute format('delete from server_errors where created_at < now() - make_interval(days => %s)',
+                   greatest(7, p_event_days));
+    execute format('delete from error_report_kinds where coalesce(last_reported_at, first_seen_at) < now() - make_interval(days => %s)',
+                   greatest(7, p_event_days));
+    delete from error_report_sends where claimed_at < now() - interval '2 days';
+  end if;
+
+  -- The daily usage counts (health.sql): totals only, kept for 400 days, a
+  -- year and a bit, so this month can be set beside the same month last year.
+  if to_regclass('public.usage_daily') is not null then
+    execute 'delete from usage_daily where day < (now() at time zone ''utc'')::date - 400';
+  end if;
+
   return jsonb_build_object(
     'ok', true,
     'crashes_deleted', coalesce(v_crashes, 0),

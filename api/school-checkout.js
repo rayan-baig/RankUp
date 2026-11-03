@@ -8,7 +8,7 @@
 
 import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
 import { schoolCycle, schoolPriceId, schoolTrialEnd } from './_shared/schoolBilling.js'
-import { userHeaders } from './_shared/job.js'
+import { reportError, userHeaders } from './_shared/job.js'
 import { returnOrigin } from './_shared/site.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -98,7 +98,7 @@ export default async function handler(req, res) {
     })
     return res.status(200).json({ url: session.url })
   } catch (err) {
-    console.error('[school-checkout]', err.message)
+    await reportError('school-checkout', err)
     return res.status(stripeUnavailable(err) ? 503 : 502).json({ error: stripeUnavailable(err) ? 'stripe_unavailable' : 'checkout_failed' })
   }
 }

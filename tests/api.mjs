@@ -95,7 +95,7 @@ const emailStandIn = http.createServer((req, res) => {
     res.end(JSON.stringify({ id: `email_${emails.length}` }))
   })
 })
-await new Promise((resolve) => emailStandIn.listen(12112, resolve))
+await new Promise((resolve) => emailStandIn.listen(Number(process.env.EMAIL_STANDIN_PORT || 12112), resolve))
 
 const post = (path, body, token) =>
   fetch(`${BASE}${path}`, {
@@ -183,8 +183,30 @@ if (STATS_KEY_FOR_TEST) {
   const raw = await counted.text()
   let body = {}
   try { body = JSON.parse(raw) } catch { body = {} }
-  ok('and answer the console with two numbers only', counted.status === 200 && Number.isInteger(body.users)
-    && Number.isInteger(body.active_users) && Object.keys(body).length === 2, raw)
+  ok('and answer the console with two numbers and the daily totals, nothing more', counted.status === 200 && Number.isInteger(body.users)
+    && Number.isInteger(body.active_users) && Object.keys(body).sort().join(',') === 'active_users,daily,users', raw.slice(0, 200))
+  const METRICS = ['chores_accepted', 'families_signed_up', 'games_played', 'help_views', 'rewards_bought', 'schools_signed_up']
+  const days = body.daily?.days || []
+  ok('the daily totals are the last 30 days, oldest first, ending today (UTC)',
+    days.length === 30 && days[29]?.day === new Date().toISOString().slice(0, 10) && days[0].day < days[29].day, JSON.stringify(days.slice(-1)))
+  ok('each day is a date and the six counts, and nothing else: no id, no name, no family',
+    days.every((d) => Object.keys(d).sort().join(',') === ['day', ...METRICS].sort().join(',')
+      && METRICS.every((m) => Number.isInteger(d[m]) && d[m] >= 0)), JSON.stringify(days[29]))
+  ok('with the totals over the 30 days',
+    METRICS.every((m) => body.daily.totals[m] === days.reduce((n, d) => n + d[m], 0)), JSON.stringify(body.daily?.totals))
+
+  // A help page view, counted with the public key alone, as the app sends it.
+  const helpBefore = days[29]?.help_views || 0
+  const viewed = await fetch(`${MOCK}/rest/v1/rpc/count_help_view`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: 'Bearer local-anon-key' }, body: '{}',
+  })
+  const after = await (await fetch(`${BASE}/api/stats`, { headers: { Authorization: `Bearer ${STATS_KEY_FOR_TEST}` } })).json()
+  ok('a help page view, sent with no sign-in at all, is counted', viewed.ok && after.daily.days[29].help_views === helpBefore + 1,
+    `${viewed.status}: ${helpBefore} -> ${after.daily?.days?.[29]?.help_views}`)
+  const nosy = await fetch(`${MOCK}/rest/v1/rpc/usage_daily_counts`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: `Bearer ${PARENT}` }, body: '{}',
+  })
+  ok('but a parent cannot read the counts from the database themselves', !nosy.ok, `status ${nosy.status}`)
   ok('the numbers are counts, not a family\'s anything',
     body.users === Number((await db.query('select count(*) from families')).rows[0].count), raw)
   ok('and nothing more rides along in the headers',
@@ -286,6 +308,9 @@ ok('and without it nothing can be changed either', unkeyedVerify.status === 401)
 const listed = await (await operator('test-operator-secret')).json()
 ok('the operator sees every school, with who signed it up',
   listed.ok && listed.schools.some((s) => s.id === SCHOOL && Array.isArray(s.staff)))
+ok('and the last 30 days of usage, totals only',
+  listed.usage?.days?.length === 30 && typeof listed.usage?.totals?.chores_accepted === 'number'
+    && !/family_id|kid_id|user_id|email/.test(JSON.stringify(listed.usage)), JSON.stringify(listed.usage?.totals))
 const verified = await operator('test-operator-secret', { action: 'verify', school_id: SCHOOL })
 ok('and can verify one', verified.status === 200 &&
   (await db.query('select verified from schools where id = $1', [SCHOOL])).rows[0].verified === true)
@@ -345,7 +370,7 @@ const stripeStandIn = http.createServer((req, res) => {
     return send(404, { error: { type: 'invalid_request_error', message: 'no such route in the stand-in' } })
   })
 })
-await new Promise((resolve) => stripeStandIn.listen(12111, resolve))
+await new Promise((resolve) => stripeStandIn.listen(Number(process.env.STRIPE_STANDIN_PORT || 12111), resolve))
 const lastCall = (path) => [...stripeCalls].reverse().find((c) => c.path === path)
 const asUser = (path, body, token) => fetch(`${BASE}${path}`, {
   method: 'POST',
@@ -373,10 +398,15 @@ console.log('\n=== The billing portal when Stripe is down ===')
     && lastCall('/v1/billing_portal/sessions')?.params.get('return_url') === `${BASE}/#/parent/plan`)
 
   stripeMode = 'error500'
+  const errorsBefore = Number((await db.query(`select count(*) from server_errors where where_at = 'billing-portal'`)).rows[0].count)
   const broken = await asUser('/api/billing-portal', {}, PARENT)
   const brokenBody = await broken.json().catch(() => ({}))
   ok('Stripe answering 500 gives a plain "Stripe is not answering", not a crash',
     broken.status === 503 && brokenBody.error === 'stripe_unavailable', `status ${broken.status} ${JSON.stringify(brokenBody)}`)
+  const recorded = await db.query(`select message from server_errors where where_at = 'billing-portal' order by id desc limit 1`)
+  ok('and the function writes its error down for the error report, without the customer or the request',
+    Number((await db.query(`select count(*) from server_errors where where_at = 'billing-portal'`)).rows[0].count) === errorsBefore + 1
+      && !/cus_api_live|@|a0000000/.test(recorded.rows[0]?.message || ''), recorded.rows[0]?.message)
 
   stripeMode = 'drop'
   const started = Date.now()
@@ -949,6 +979,64 @@ console.log('\n=== A school\'s month, by email, after settlement ===')
   await Promise.all([run(), run()])
   ok('once per school per month, however often the job runs', ours().length === 1, `${ours().length} emails`)
   await db.query('delete from schools where id = $1', [SCHOOL])
+}
+console.log('\n=== The error report: one short email, and never a family in it ===')
+{
+  // A child with a name nobody would mistake, in the API family, and the
+  // parent's email address: both put into a crash, the way an older phone
+  // that did not clean its report could send them.
+  const KID = 'a0000000-0000-4000-8000-00000000c0e1'
+  const kidName = 'Wilhelmina'
+  const parentEmail = 'api-parent@example.com'
+  await db.query('delete from error_report_sends')
+  await db.query(`insert into parental_consents (family_id, parent_id, version, method, signed_name)
+                  select $1, id, '2026-01', 'payment_card', 'Test Parent' from parents where user_id = $2
+                  on conflict do nothing`, [FAMILY, PARENT])
+  await db.query(`insert into kids (id, family_id, name) values ($1, $2, $3) on conflict (id) do update set name = excluded.name`,
+    [KID, FAMILY, kidName])
+  const crash = await fetch(`${MOCK}/rest/v1/rpc/record_crash`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: `Bearer ${PARENT}` },
+    body: JSON.stringify({ p_where: `/parent/kid/${kidName}`, p_message: `TypeError ${RUN}: ${kidName}'s streak is undefined for ${parentEmail} in ${FAMILY}`, p_stack: '', p_agent: 'test' }),
+  })
+  ok('(an older phone\'s crash report, with the name in it, is stored)', crash.ok, `status ${crash.status}`)
+  // And a server function's error with both in its message, written as a
+  // function writes one (reportError, with the service key).
+  const serverError = await fetch(`${MOCK}/rest/v1/rpc/record_server_error`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: 'service-role-key', Authorization: 'Bearer service-role-key' },
+    body: JSON.stringify({ p_where: 'create-checkout', p_message: `Stripe ${RUN}: no such customer for ${parentEmail} (${kidName}), family ${FAMILY}` }),
+  })
+  ok('(and a server function\'s error)', serverError.ok, `status ${serverError.status}`)
+  const blocked = await fetch(`${MOCK}/rest/v1/rpc/record_server_error`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: `Bearer ${PARENT}` },
+    body: JSON.stringify({ p_where: 'create-checkout', p_message: 'made up' }),
+  })
+  ok('a parent cannot write into the server\'s error log', !blocked.ok, `status ${blocked.status}`)
+
+  emailMode = 'ok'
+  const reports = () => emails.filter((e) => e.body.to?.includes('errors@example.test'))
+  const before = reports().length
+  const run = () => fetch(`${BASE}/api/send-trial-emails`, { method: 'POST', headers: { Authorization: `Bearer ${CRON}` } })
+  const first = await (await run()).json().catch(() => ({}))
+  const report = reports()[before]?.body || {}
+  const text = report.text || ''
+  const html = report.html || ''
+  ok('the hourly email job sends one report to ERRORS_EMAIL', reports().length === before + 1 && first.error_report?.sent === 1,
+    JSON.stringify(first.error_report))
+  ok('listing the crash and the server error', text.includes(`TypeError ${RUN}`) && text.includes(`Stripe ${RUN}`), text.slice(0, 400))
+  ok('the child\'s name is not in it, in either part', !new RegExp(kidName, 'i').test(text) && !new RegExp(kidName, 'i').test(html))
+  ok('nor the parent\'s email, nor any email', !text.includes(parentEmail) && !html.includes(parentEmail) && !/[\w.+-]+@example\.com/.test(text + html))
+  ok('nor the family\'s id', !text.includes(FAMILY) && !html.includes(FAMILY))
+  ok('a plain-text part, an HTML part, and the MTRX Horizyn footer once in each',
+    /^<!doctype html>/i.test(html) && text.split('RankUp is a product of MTRX Horizyn.').length === 2
+      && html.split('RankUp is a product of MTRX Horizyn.').length === 2)
+  ok('with an idempotency key, so a retried send is one email', /^errors-\d+$/.test(reports()[before]?.key || ''), reports()[before]?.key)
+
+  await run()
+  ok('run again within the hour: no second report about the same errors', reports().length === before + 1, `${reports().length - before} reports`)
+  await db.query('delete from error_report_sends')
 }
 emailStandIn.close()
 

@@ -21,7 +21,7 @@
  * month is still closed and the emails wait.
  */
 
-import { recordRun, secretMatches, makeServiceRpc } from './_shared/job.js'
+import { recordRun, reportError, secretMatches, makeServiceRpc } from './_shared/job.js'
 import { makeStripe } from './_shared/stripe.js'
 import { championReward } from './_shared/schoolBilling.js'
 import { emailSettings, emailConfigured, sendEmail, schoolMonthEmail } from './_shared/email.js'
@@ -106,7 +106,7 @@ export default async function handler(req, res) {
         waiting.push({ school: award.name, month: award.month_key, reason: stripe ? 'plan_not_active' : 'stripe_not_configured' })
       }
     } catch (err) {
-      console.error('[settle-schools] free month not given:', award.month_key, err.message)
+      await reportError('settle-schools', `free month not given for ${award.month_key}: ${err.message}`)
       waiting.push({ school: award.name, month: award.month_key, reason: 'stripe_error' })
     }
   }
@@ -141,7 +141,7 @@ async function sendMonthEmails(serviceRpc, month) {
     try {
       batch = await serviceRpc('claim_school_month_emails', { p_month: month, p_limit: 25 })
     } catch (err) {
-      console.error('[settle-schools] could not claim the month emails:', err.message)
+      await reportError('settle-schools', `could not claim the month emails: ${err.message}`)
       out.failed += 1
       break
     }

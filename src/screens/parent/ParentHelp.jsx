@@ -1,6 +1,8 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { parentHelp } from '../../data/parentHelp.js'
-import { OPERATOR, UNFILLED, PRODUCT_OF } from '../../data/legalText.js'
+import { PRODUCT_OF } from '../../data/legalText.js'
+import { SUPPORT_EMAIL } from '../../lib/support.js'
+import { countHelpView } from '../../lib/usage.js'
 import { APP_VERSION } from '../../lib/version.js'
 import { Screen, Section, SectionTitle, Button, Card } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
@@ -13,7 +15,9 @@ import { navigate } from '../../lib/router.js'
  */
 export default function ParentHelp() {
   const sections = useMemo(() => parentHelp(), [])
-  const email = UNFILLED.includes('email') ? null : OPERATOR.email
+  const email = SUPPORT_EMAIL || null
+  // One to today's count of help page views: a number, nothing about who.
+  useEffect(() => { countHelpView() }, [])
 
   return (
     <Screen>

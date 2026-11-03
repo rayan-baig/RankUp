@@ -4,7 +4,8 @@ import { districtLabel } from '../lib/schools.js'
 import { schoolChecks } from '../lib/schoolChecks.js'
 
 /**
- * The operator's page for checking schools are real.
+ * The operator's page for checking schools are real, and RankUp's daily
+ * usage totals for the last 30 days.
  *
  * Not linked from anywhere in the app: whoever runs RankUp opens /#/operator
  * and types the OPERATOR_SECRET. The key is kept for this browser tab only
@@ -35,12 +36,96 @@ async function call(key, body) {
   }
 }
 
+/** The six daily counts (supabase/health.sql), in the order they are shown. */
+const USAGE = [
+  ['families_signed_up', 'Families signed up'],
+  ['chores_accepted', 'Chores accepted'],
+  ['rewards_bought', 'Rewards bought'],
+  ['games_played', 'Games played'],
+  ['schools_signed_up', 'Schools signed up'],
+  ['help_views', 'Help page views'],
+]
+
+const shortDay = (day) => {
+  const d = new Date(`${day}T00:00:00Z`)
+  return Number.isNaN(d.getTime()) ? day : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+}
+
+/**
+ * The last 30 days of usage: totals only, by day (UTC). One small bar strip
+ * per count, the oldest day on the left, and every number in a table below.
+ * Nothing here is about any one family; the database keeps no such thing.
+ */
+function UsageCard({ usage }) {
+  const days = usage?.days || []
+  if (!days.length) return null
+  return (
+    <Card className="mb-3" data-testid="usage">
+      <p className="font-semibold text-sm">Usage, last 30 days</p>
+      <p className="text-xs text-muted mb-2">
+        Daily totals across every family (UTC days). Counts only: no names, ids or cookies.
+      </p>
+      {USAGE.map(([key, label]) => {
+        const values = days.map((d) => Number(d[key]) || 0)
+        const max = Math.max(1, ...values)
+        const total = Number(usage.totals?.[key]) || 0
+        return (
+          <div key={key} className="py-2" style={{ borderTop: '1px solid var(--line)' }} data-testid={`usage-${key}`}>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-sm">{label}</span>
+              <span className="text-sm font-semibold tabular-nums">
+                {total.toLocaleString('en-US')}
+                <span className="text-xs text-muted font-normal"> · today {values[values.length - 1].toLocaleString('en-US')}</span>
+              </span>
+            </div>
+            <div className="flex items-end mt-1" style={{ height: 28, gap: 2 }} aria-hidden="true">
+              {values.map((v, i) => (
+                <span key={days[i].day} title={`${shortDay(days[i].day)}: ${v}`}
+                      style={{
+                        flex: '1 1 0', minWidth: 0,
+                        height: v ? `${Math.max(8, Math.round((v / max) * 100))}%` : 2,
+                        background: v ? 'var(--accent)' : 'var(--line)',
+                        borderRadius: '2px 2px 0 0',
+                      }} />
+              ))}
+            </div>
+          </div>
+        )
+      })}
+      <details className="mt-2 text-xs">
+        <summary className="cursor-pointer text-muted">Each day, as numbers</summary>
+        <div className="overflow-x-auto mt-2">
+          <table className="w-full tabular-nums" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr className="text-muted">
+                <th className="text-left font-normal pr-2">Day</th>
+                {USAGE.map(([key, label]) => (
+                  <th key={key} className="text-right font-normal px-1" title={label}>{label.split(' ')[0]}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[...days].reverse().map((d) => (
+                <tr key={d.day} style={{ borderTop: '1px solid var(--line)' }}>
+                  <td className="pr-2 py-0.5 whitespace-nowrap">{shortDay(d.day)}</td>
+                  {USAGE.map(([key]) => <td key={key} className="text-right px-1">{Number(d[key]) || 0}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </Card>
+  )
+}
+
 const STATUS_TONE = { trial: 'var(--accent)', active: 'var(--good)', lapsed: 'var(--warn)', suspended: 'var(--bad)' }
 
 export default function OperatorSchools() {
   const [key, setKey] = useState(readKey)
   const [typed, setTyped] = useState('')
   const [schools, setSchools] = useState(null)
+  const [usage, setUsage] = useState(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
   // The checklist ticks, per school, for this tab only.
@@ -65,6 +150,7 @@ export default function OperatorSchools() {
     }
     setError('')
     setSchools(res.schools || [])
+    setUsage(res.usage || null)
   }, [])
 
   useEffect(() => { if (key) load(key) }, [key, load])
@@ -198,6 +284,7 @@ export default function OperatorSchools() {
 
       {schools && (
         <>
+          <UsageCard usage={usage} />
           <Card flat className="mb-3">
             <p className="text-xs text-muted">
               Each school waiting has a checklist: what to check by hand, beside what RankUp already

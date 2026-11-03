@@ -49,7 +49,7 @@ console.log('\n=== The version is built in, never typed ===')
 const vite = readFileSync('vite.config.js', 'utf8')
 ok('vite.config.js reads it from package.json',
   /readFileSync\(new URL\('\.\/package\.json', import\.meta\.url\), 'utf8'\)\)\.version/.test(vite))
-ok('and defines __APP_VERSION__ from it', /define: \{ __APP_VERSION__: JSON\.stringify\(APP_VERSION\) \}/.test(vite))
+ok('and defines __APP_VERSION__ from it', /define: \{\s*__APP_VERSION__: JSON\.stringify\(APP_VERSION\),?\s/.test(vite))
 const versionModule = readFileSync('src/lib/version.js', 'utf8')
 ok('the app reads it through src/lib/version.js', /__APP_VERSION__/.test(versionModule))
 const health = readFileSync('api/health.js', 'utf8')

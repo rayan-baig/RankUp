@@ -3,9 +3,10 @@
  *
  * Most of RankUp's email is not sent from here: sign-up confirmations and
  * password resets are Supabase's, and receipts and payment problems are
- * Stripe's. Both are set up in those dashboards (docs/EMAILS.md). Two kinds
+ * Stripe's. Both are set up in those dashboards (docs/EMAILS.md). Three kinds
  * are sent from this code: the free trial's two reminders
- * (api/send-trial-emails.js) and a school's month (api/settle-schools.js).
+ * (api/send-trial-emails.js), a school's month (api/settle-schools.js), and
+ * the error report to whoever runs RankUp (api/_shared/errorReport.js).
  *
  * Sent through the email provider's HTTP API, because a Cloudflare Worker
  * cannot speak SMTP. Written for Resend's API (POST /emails): one call, a
@@ -20,6 +21,7 @@
  */
 import { TIERS } from '../../src/state/initialState.js'
 import { PRODUCT_OF } from '../../src/data/legalText.js'
+import { scrubErrorText } from './job.js'
 
 const escapeMap = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => escapeMap[c])
@@ -29,7 +31,9 @@ export function emailSettings() {
   return {
     apiKey: process.env.EMAIL_API_KEY || '',
     from: process.env.EMAIL_FROM || '',
-    replyTo: process.env.EMAIL_REPLY_TO || '',
+    // The support address: EMAIL_REPLY_TO, or SUPPORT_EMAIL (the one the
+    // app shows under Help & about) when that is all that is set.
+    replyTo: process.env.EMAIL_REPLY_TO || process.env.SUPPORT_EMAIL || '',
     base: (process.env.EMAIL_API_BASE || 'https://api.resend.com').replace(/\/+$/, ''),
   }
 }
@@ -113,7 +117,9 @@ export function trialEmail({ kind, trialTier, paidTier, endsLocal, daysLeft = 3,
       // Sent late the evening before for a trial that ends just after
       // midnight their time (due_trial_reminders): "today" would be wrong.
       ? `Your free trial of ${trial} ends ${Number(daysLeft) >= 1 ? 'tonight' : 'today'}.`
-      : `Your free trial of ${trial} ends ${days === 1 ? 'tomorrow' : `in ${days} days`}, on ${endsLocal}.`,
+      // Without the date (the database always gives it; a blank must never
+      // read "on undefined"), the sentence stops at the days.
+      : `Your free trial of ${trial} ends ${days === 1 ? 'tomorrow' : `in ${days} days`}${endsLocal ? `, on ${endsLocal}` : ''}.`,
     `After that you are on ${after}, unless you choose a plan. Nothing is charged by itself.`,
     'Everything your children have earned stays exactly where it is.',
     `To keep ${trial}, open RankUp and go to Settings, then Your plan.`,
@@ -233,4 +239,41 @@ export function schoolMonthEmail(m, { site, replyTo } = {}) {
     ...foot,
   ].join('\n\n')
   return { subject, text, html: toHtml(paragraphs, link, help, foot) }
+}
+
+const times = (n) => (Number(n) === 1 ? 'once' : Number(n) === 2 ? 'twice' : `${Number(n) || 0} times`)
+
+/**
+ * The error report, to ERRORS_EMAIL: what went wrong since the last one
+ * (claim_error_report, supabase/crashes.sql). For whoever runs RankUp, not a
+ * family. Each line says where (a screen on a phone, or a server function),
+ * how often, and the message, which the database has already stripped of
+ * names, emails, ids and tokens; it is scrubbed again here all the same,
+ * because this is the one email whose words come from outside the code.
+ */
+export function errorReportEmail(report, { site } = {}) {
+  const kinds = report?.kinds || []
+  const fresh = kinds.filter((k) => k.new).length
+  const more = Number(report?.more) || 0
+  const subject = `RankUp: ${kinds.length} ${kinds.length === 1 ? 'error' : 'errors'} to look at${fresh ? `, ${fresh} new` : ''}`
+  const lines = kinds.map((k) => {
+    const where = scrubErrorText(k.where).slice(0, 80)
+    const what = scrubErrorText(k.message).slice(0, 300)
+    const place = k.source === 'app' ? `On a phone, on ${where}` : `In the server function ${where}`
+    return `${k.new ? 'New. ' : ''}${place}, ${times(k.count)}: ${what}`
+  })
+  const paragraphs = [
+    'Hello,',
+    `RankUp recorded ${kinds.length === 1 ? 'one kind of error' : `${kinds.length} kinds of error`} since the last report${more ? `, and ${more} more that will be in the next one` : ''}.`,
+    ...lines,
+    'No family is named in this email: names, emails, ids and tokens are taken out before it is written.',
+  ]
+  const base = site ? site.replace(/\/+$/, '') : ''
+  const help = `What to do about each: docs/IF-SOMETHING-BREAKS.md in RankUp's code. Every crash and error is in the crash_reports and server_errors tables in Supabase${base ? `, and ${base}/api/health with the scheduler's key counts them` : ''}.`
+  const foot = [
+    PRODUCT_OF,
+    'You get this because ERRORS_EMAIL is set to this address. Each error at most once an hour, and at most 20 of these a day.',
+  ]
+  const text = [...paragraphs, help, '--', ...foot].join('\n\n')
+  return { subject, text, html: toHtml(paragraphs, null, help, foot) }
 }

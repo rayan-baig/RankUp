@@ -22,7 +22,7 @@
  *    after a half-finished run.
  */
 
-import { recordRun } from './_shared/job.js'
+import { recordRun, reportError } from './_shared/job.js'
 import { makeStripe } from './_shared/stripe.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -158,7 +158,7 @@ export default async function handler(req, res) {
     } catch (err) {
       // Left unapplied on purpose, so the next run tries it again rather than
       // it silently looking paid.
-      console.error('[settle-alliances] credit not applied:', award.alliance_id, err.message)
+      await reportError('settle-alliances', `credit not applied: ${err.message}`)
       failed.push({ alliance_id: award.alliance_id, reason: 'stripe_error' })
     }
   }

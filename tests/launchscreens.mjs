@@ -1,7 +1,8 @@
 /**
  * The screens added for launch, in a real browser at 390x844:
  *
- *   - Settings shows the version (package.json's, built in) and links to Help;
+ *   - Settings shows the plan, the version (package.json's, built in) and
+ *     links to Help;
  *   - Help answers the questions, with the plan list's prices;
  *   - a link to nowhere shows "not found" and a way home, on either side of
  *     the app, and the nav bar stays;
@@ -29,6 +30,26 @@ const go = async (hash, wait = 900) => {
 }
 const VERSION = JSON.parse(readFileSync('package.json', 'utf8')).version
 
+/** Today's help page views, from the daily totals (supabase/health.sql). */
+async function helpViewsToday() {
+  const { default: pg } = await import('pg')
+  const client = new pg.Client({
+    host: process.env.PGHOST || '/tmp',
+    port: Number(process.env.PGPORT || 55432),
+    user: process.env.PGUSER || 'postgres',
+    database: process.env.PGDATABASE || 'rankup_test',
+  })
+  await client.connect()
+  const { rows } = await client.query(`select coalesce(sum(n), 0)::int as n from usage_daily
+                                         where metric = 'help_views' and day = (now() at time zone 'utc')::date`)
+  await client.end()
+  return rows[0].n
+}
+const helpCounts = []
+page.on('request', (req) => {
+  if (req.url().includes('/rpc/count_help_view')) helpCounts.push(req.headers().authorization || '')
+})
+
 await setUpFamily(page)
 await asParent(page)
 
@@ -40,11 +61,18 @@ await page.getByRole('button', { name: /Help & about/ }).click()
 await page.waitForTimeout(300)
 const versionLine = await page.getByTestId('app-version').innerText().catch(() => '')
 ok('and, opened, says which version and whose', versionLine.includes(VERSION) && /MTRX Horizyn/.test(versionLine), versionLine)
+const planLine = await page.getByTestId('about-plan').innerText().catch(() => '')
+ok('which plan the family is on', Object.values(TIERS).some((t) => planLine.startsWith(t.name)), planLine)
 await page.getByTestId('app-version').scrollIntoViewIfNeeded()
 await page.screenshot({ path: `${SHOT_DIR}/launch-settings-about.png` })
+const viewsBefore = await helpViewsToday()
 await page.getByRole('button', { name: /^Help/ }).filter({ hasText: 'Linking a phone' }).click()
 await page.waitForTimeout(900)
 ok('Help opens from Settings', page.url().endsWith('#/parent/help'), page.url())
+ok('and the view is counted once, in today\'s total', (await helpViewsToday()) === viewsBefore + 1,
+  `${viewsBefore} -> ${await helpViewsToday()}`)
+ok('sent with the public key only, never the parent\'s sign-in',
+  helpCounts.length === 1 && helpCounts[0] === `Bearer ${process.env.VITE_SUPABASE_ANON_KEY || 'local-anon-key'}`, helpCounts.join(' | ').slice(0, 80))
 
 console.log('\n=== Help ===')
 const help = await text()

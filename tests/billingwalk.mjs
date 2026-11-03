@@ -79,7 +79,7 @@ const stripeStandIn = http.createServer((req, res) => {
     return send(404, { error: { type: 'invalid_request_error', message: 'no such route in the stand-in' } })
   })
 })
-await new Promise((resolve) => stripeStandIn.listen(12111, resolve))
+await new Promise((resolve) => stripeStandIn.listen(Number(process.env.STRIPE_STANDIN_PORT || 12111), resolve))
 const lastCall = (path) => [...calls].reverse().find((c) => c.path === path)
 
 const signer = new Stripe('sk_test_routing_only')

@@ -1,6 +1,8 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { schoolHelp } from '../data/schoolHelp.js'
-import { OPERATOR, UNFILLED, PRODUCT_OF } from '../data/legalText.js'
+import { PRODUCT_OF } from '../data/legalText.js'
+import { SUPPORT_EMAIL } from '../lib/support.js'
+import { countHelpView } from '../lib/usage.js'
 import { Screen, Section, Card } from '../components/ui.jsx'
 import { navigate } from '../lib/router.js'
 
@@ -12,7 +14,9 @@ import { navigate } from '../lib/router.js'
  */
 export default function SchoolHelp() {
   const questions = useMemo(() => schoolHelp(), [])
-  const email = UNFILLED.includes('email') ? null : OPERATOR.email
+  const email = SUPPORT_EMAIL || null
+  // One to today's count of help page views: a number, nothing about who.
+  useEffect(() => { countHelpView() }, [])
   return (
     <Screen>
       <header className="mb-3 flex items-start justify-between gap-2">

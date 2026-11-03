@@ -211,6 +211,20 @@ export const transport = {
       ? Promise.resolve(null)
       : request(`/rest/v1/rpc/${fn}`, { method: 'POST', body: JSON.stringify(args) })),
 
+  /**
+   * Call a function as nobody: the public key only, never this phone's
+   * sign-in, so not even the request can say who asked. For counting a help
+   * page view (count_help_view, supabase/health.sql). Never throws.
+   */
+  anonymousRpc: (fn, args = {}) =>
+    (paused || !isConfigured()
+      ? Promise.resolve(null)
+      : fetch(`${BASE}/rest/v1/rpc/${fn}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: ANON, Authorization: `Bearer ${ANON}` },
+        body: JSON.stringify(args),
+      }).then(() => null, () => null)),
+
   /** Insert or replace a row. Row level security decides whether it is allowed. */
   upsert: (table, row) =>
     (paused

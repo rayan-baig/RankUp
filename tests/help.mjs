@@ -19,6 +19,7 @@ import { TIERS, TIER_LADDER, TRIAL_DAYS } from '../src/state/initialState.js'
 import { CODE_TTL_MS, MAX_ATTEMPTS } from '../src/lib/pairing.js'
 import { DIFFICULTY_LIST, xpToNext } from '../src/lib/xp.js'
 import { MAX_TOKENS, DAILY_COIN_CAP } from '../src/data/minigames.js'
+import { supportEmail } from '../vite.config.js'
 
 let fails = 0
 const ok = (label, cond, detail = '') => {
@@ -114,6 +115,21 @@ ok('which is a route inside Parent Mode', /route === '\/parent\/help'\) return <
 const links = questions.filter((q) => q.to).map((q) => q.to.path)
 const routed = links.filter((p) => !app.includes(`route === '${p}'`))
 ok('every button in an answer opens a screen that exists', routed.length === 0, routed.join(', '))
+
+console.log('\n=== Settings, Help & about: the plan, the version, help, and where to write ===')
+{
+  const settings = readFileSync('src/screens/parent/ParentSettings.jsx', 'utf8')
+  const about = settings.slice(settings.indexOf('title="Help & about"'), settings.indexOf('title="Your data"'))
+  ok('it shows the family\'s plan', /planSummary\(state\)/.test(about) && about.includes('data-testid="about-plan"'))
+  ok('the version', /APP_VERSION/.test(about) && about.includes('data-testid="app-version"'))
+  ok('the help page', about.includes("navigate('/parent/help')"))
+  ok('and the support address, when there is one', /SUPPORT_EMAIL &&/.test(about) && about.includes('mailto:${SUPPORT_EMAIL}'))
+  const helpPages = ['src/screens/parent/ParentHelp.jsx', 'src/screens/SchoolHelp.jsx'].map((f) => readFileSync(f, 'utf8'))
+  ok('both help pages give the same address', helpPages.every((t) => /SUPPORT_EMAIL/.test(t) && !/OPERATOR\.email/.test(t)))
+  ok('SUPPORT_EMAIL is built in when it is an address', supportEmail(' help@rankup.example.test ') === 'help@rankup.example.test')
+  for (const junk of ['', 'help', 'help@', '<b>@x.com', 'a b@example.test', 'sentinel-support_email-4f1c9a', 'javascript:x@y.zz"'])
+    ok(`and left out when it is ${JSON.stringify(junk)}`, supportEmail(junk) === '')
+}
 
 console.log(fails === 0 ? '\nALL CHECKS PASSED' : `\n${fails} FAILED`)
 process.exit(fails === 0 ? 0 : 1)

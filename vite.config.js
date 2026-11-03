@@ -257,19 +257,37 @@ function publicSiteFiles(env) {
  */
 export const BROWSER_TARGET = ['es2020', 'safari15', 'ios15', 'chrome96', 'edge96', 'firefox91']
 
-export default defineConfig(({ mode }) => ({
-  plugins: [
-    react(),
-    contentSecurityPolicy(loadEnv(mode, process.cwd(), '')),
-    publicSiteFiles(loadEnv(mode, process.cwd(), '')),
-    externalGames(),
-    offlineFileList(),
-  ],
-  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
-  server: { host: true, port: 5173 },
-  build: {
-    target: BROWSER_TARGET,
-    outDir: 'dist',
-    rollupOptions: { output: { manualChunks: vendorChunk } },
-  },
-}))
+/**
+ * SUPPORT_EMAIL, the optional address a parent or a school writes to for
+ * help, built in as __SUPPORT_EMAIL__ (read through src/lib/support.js) and
+ * shown under Settings, Help & about and on both help pages. Public by
+ * nature: it is printed on the screen. Only an address goes in; anything
+ * else set there is left out.
+ */
+export function supportEmail(value) {
+  const text = String(value || '').trim()
+  return /^[^\s@<>"'`]+@[^\s@<>"'`]+\.[A-Za-z]{2,}$/.test(text) ? text : ''
+}
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  return {
+    plugins: [
+      react(),
+      contentSecurityPolicy(env),
+      publicSiteFiles(env),
+      externalGames(),
+      offlineFileList(),
+    ],
+    define: {
+      __APP_VERSION__: JSON.stringify(APP_VERSION),
+      __SUPPORT_EMAIL__: JSON.stringify(supportEmail(env.SUPPORT_EMAIL)),
+    },
+    server: { host: true, port: 5173 },
+    build: {
+      target: BROWSER_TARGET,
+      outDir: 'dist',
+      rollupOptions: { output: { manualChunks: vendorChunk } },
+    },
+  }
+})

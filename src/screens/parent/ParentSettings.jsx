@@ -17,6 +17,7 @@ import AdultsCard from '../../components/AdultsCard.jsx'
 import { navigate } from '../../lib/router.js'
 import { APP_VERSION } from '../../lib/version.js'
 import { PRODUCT_OF } from '../../data/legalText.js'
+import { SUPPORT_EMAIL } from '../../lib/support.js'
 
 export default function ParentSettings() {
   const { state, dispatch } = useApp()
@@ -429,7 +430,7 @@ export default function ParentSettings() {
       </Card>
       </Section>
 
-      <Section title="Help & about" icon="❓" summary={`Questions and answers · RankUp ${APP_VERSION}`}>
+      <Section title="Help & about" icon="❓" summary={`Help, your plan · RankUp ${APP_VERSION}`}>
         <Card flat>
           <button
             type="button"
@@ -454,10 +455,26 @@ export default function ParentSettings() {
             <span className="text-2xl" aria-hidden="true">💳</span>
             <span className="min-w-0 flex-1">
               <span className="block font-semibold text-sm">Your plan</span>
-              <span className="block text-xs text-muted">Prices, changing plan and cancelling.</span>
+              <span className="block text-xs text-muted" data-testid="about-plan">
+                {planSummary(state)}. Prices, changing plan and cancelling.
+              </span>
             </span>
             <span aria-hidden="true" className="text-muted">›</span>
           </button>
+          {SUPPORT_EMAIL && (
+            <a
+              href={`mailto:${SUPPORT_EMAIL}`}
+              className="w-full flex items-center gap-3 text-left mt-3 pt-3"
+              style={{ borderTop: '1px solid var(--line)' }}
+              data-testid="about-support"
+            >
+              <span className="text-2xl" aria-hidden="true">✉️</span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold text-sm">Write to us</span>
+                <span className="block text-xs text-muted break-words">{SUPPORT_EMAIL}. A person reads it.</span>
+              </span>
+            </a>
+          )}
           <p className="text-xs text-muted mt-3 pt-3" style={{ borderTop: '1px solid var(--line)' }} data-testid="app-version">
             RankUp version {APP_VERSION}. {PRODUCT_OF}
           </p>

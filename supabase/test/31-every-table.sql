@@ -77,6 +77,12 @@ insert into push_subscriptions (endpoint, keys, family_id, kid_id, user_id, role
 insert into schools (id, name, district, district_key, student_count, size_band) values
   ('31a00000-0000-4000-8000-0000000005c1', 'T31 School', 'T31 District', 't31 district', 10, 'small');
 insert into school_month_emails (school_id, month_key) values ('31a00000-0000-4000-8000-0000000005c1', '2026-01');
+-- The server's error log, what the error report remembers, and the daily
+-- usage counts: none of them is any family's, and none may be read by one.
+insert into server_errors (where_at, message) values ('t31', 'T31');
+insert into error_report_kinds (fingerprint) values ('t31');
+insert into error_report_sends (kinds) values ('[]');
+select usage_bump('help_views');
 -- A tombstone in `deletions`, the way a real delete leaves one.
 insert into quests (id, family_id, kid_id, title) values
   ('31a00000-0000-4000-8000-0000000000d1', '31a00000-0000-4000-8000-00000000000f', '31a00000-0000-4000-8000-00000000000c', 'T31 deleted');

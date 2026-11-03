@@ -5,6 +5,16 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.10.0 — 2026-11-03
+
+In line with the company's other apps: errors come to one inbox, usage is counted without counting anybody, and a staging copy.
+
+- Errors to one inbox. The server functions now write their errors down (a checkout that could not start, Stripe or the database not answering, a scheduled run that failed), as phones already did their crashes. Set `ERRORS_EMAIL` and the hourly email job sends one short report of what is new: each error at most once an hour, at most 20 reports a day. No child's or adult's name, no email, no family id, no request and no token is ever in it: they are taken out when an error is written down, every name RankUp knows is taken out again when the report is written, and the email is scrubbed once more. `/api/health` counts the server's errors beside the crashes.
+- Daily usage totals: families signed up, chores accepted, rewards bought, games played, schools signed up and help page views. Totals only, by day: no id, no name, no time of day, no cookie and no outside service; counted inside the database as each thing happens (a help page view is sent with the public key alone, so not even the request says who). The operator page shows the last 30 days, and `/api/stats` gives them to the MTRX Horizyn console. Kept 400 days. The privacy policy says so in one sentence.
+- Settings → Help & about shows the family's plan beside the version and Help, and the support address when there is one: the new optional `SUPPORT_EMAIL`, which both help pages and the emails use too.
+- docs/STAGING.md: a second copy at `staging.rankup.<your domain>` with its own Supabase project, Pages project, Stripe test mode and email sandbox, never sharing a key with live; the SQL files run there first; and how a tested commit is promoted to live.
+- Every email RankUp sends itself is checked in every variant (tests/emails.mjs): a plain-text part, no blank, the footer once, nothing wider than 600px, the same words and links in both parts. A trial reminder with no end date no longer says "on undefined".
+
 ## 0.9.0 — 2026-11-03
 
 Ready for many families at once, older phones, and schools that hear from us.

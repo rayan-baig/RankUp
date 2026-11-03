@@ -70,6 +70,19 @@ insert into events (family_id, kid_id, type, created_at) values
 insert into crash_reports (family_id, where_at, message, created_at) values
   ('34a00000-0000-4000-8000-00000000000f', 'T34', 'old', now() - interval '91 days'),
   ('34a00000-0000-4000-8000-00000000000f', 'T34', 'new', now() - interval '89 days');
+insert into server_errors (where_at, message, created_at) values
+  ('t34', 'old', now() - interval '91 days'),
+  ('t34', 'new', now() - interval '89 days');
+insert into error_report_kinds (fingerprint, first_seen_at, last_reported_at) values
+  ('t34-old', now() - interval '200 days', now() - interval '91 days'),
+  ('t34-never-sent', now() - interval '91 days', null),
+  ('t34-new', now() - interval '200 days', now() - interval '89 days');
+insert into error_report_sends (claimed_at, sent_at) values
+  (now() - interval '3 days', now() - interval '3 days'),
+  (now() - interval '1 day', now() - interval '1 day');
+insert into usage_daily (day, metric, shard, n) values
+  ((now() at time zone 'utc')::date - 401, 'help_views', 0, 1),
+  ((now() at time zone 'utc')::date - 399, 'help_views', 0, 1);
 insert into pairing_codes (code, kid_name, expires_at) values
   ('934001', 'Old', now() - interval '3 days'),
   ('934002', 'New', now() - interval '1 day');
@@ -119,6 +132,10 @@ declare
     'pairing_codes',          'x.expires_at < now() - interval ''2 days''',
     'pairing_claim_attempts', 'x.tried_at < now() - interval ''2 days''',
     'rpc_receipts',           'x.created_at < now() - interval ''30 days''',
+    'server_errors',          'x.created_at < now() - interval ''90 days''',
+    'error_report_kinds',     'coalesce(x.last_reported_at, x.first_seen_at) < now() - interval ''90 days''',
+    'error_report_sends',     'x.claimed_at < now() - interval ''2 days''',
+    'usage_daily',            'x.day < (now() at time zone ''utc'')::date - 400',
     'billing_cancellations',  'x.done_at is not null and (x.done_at < now() - interval ''30 days'' or (x.stripe_customer_id is null and x.stripe_subscription_id is null and x.queued_at < now() - interval ''7 days''))');
   k text;
   v_before jsonb;

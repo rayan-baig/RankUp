@@ -16,7 +16,7 @@
 
 import webpush from 'web-push'
 import { sendPush, failureFor } from './_shared/push.js'
-import { userHeaders } from './_shared/job.js'
+import { reportError, userHeaders } from './_shared/job.js'
 import { NOTICES, PUSH_KINDS, VALUE_MAX, reminderPush } from '../src/data/noticeWords.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -69,7 +69,7 @@ async function claimSend(familyId) {
   try {
     return (await rpc('claim_push_send', { p_family_id: familyId }, SERVICE_KEY)) !== false
   } catch (err) {
-    console.error('[send-push] could not count sends:', err.message)
+    await reportError('send-push', `could not count sends: ${err.message}`)
     return true
   }
 }
@@ -164,7 +164,7 @@ export default async function handler(req, res) {
   try {
     targets = await rpc('push_targets', { p_family_id: familyId, p_role: role, p_kid_id: kidId || null }, SERVICE_KEY)
   } catch (err) {
-    console.error('[send-push] could not read targets:', err.message)
+    await reportError('send-push', `could not read targets: ${err.message}`)
     return res.status(502).json({ error: 'lookup_failed' })
   }
 
@@ -226,7 +226,7 @@ async function sendGuildRequest(res, token, { familyId, kidId, guildId }) {
     claim = await rpc('claim_guild_request_notice',
       { p_guild_id: guildId, p_kid_id: kidId, p_family_id: familyId }, SERVICE_KEY)
   } catch (err) {
-    console.error('[send-push] could not read the guild request:', err.message)
+    await reportError('send-push', `could not read the guild request: ${err.message}`)
     return res.status(502).json({ error: 'lookup_failed' })
   }
   // Nothing waiting, or already told: an answer, not a failure to retry.
@@ -241,7 +241,7 @@ async function sendGuildRequest(res, token, { familyId, kidId, guildId }) {
       const phones = await rpc('push_targets', { p_family_id: family, p_role: 'parent', p_kid_id: null }, SERVICE_KEY)
       targets.push(...(phones || []).filter((t) => approvers.has(t.user_id)))
     } catch (err) {
-      console.error('[send-push] could not read targets:', err.message)
+      await reportError('send-push', `could not read targets: ${err.message}`)
     }
   }
   return res.status(200).json(await deliver(targets, message))

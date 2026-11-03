@@ -12,7 +12,7 @@
  */
 
 import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
-import { userHeaders } from './_shared/job.js'
+import { reportError, userHeaders } from './_shared/job.js'
 import { returnOrigin } from './_shared/site.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -219,7 +219,7 @@ export default async function handler(req, res) {
   } catch (err) {
     // Logged here, not returned: Stripe's message can describe this
     // deployment's configuration ("No such price ...").
-    console.error('[create-checkout]', err.message)
+    await reportError('create-checkout', err)
     return res.status(stripeUnavailable(err) ? 503 : 502).json({ error: stripeUnavailable(err) ? 'stripe_unavailable' : 'checkout_failed' })
   }
 }

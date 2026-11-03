@@ -2,8 +2,9 @@
  * Serverless function: the operator checking schools are real.
  *
  * GET lists every school, the ones waiting to be checked first, with who
- * signed each up. POST does one thing to one school: verify, unverify,
- * suspend or unsuspend. A school is in no league and sees no child's name
+ * signed each up, and RankUp's daily usage totals for the last 30 days.
+ * POST does one thing to one school: verify, unverify, suspend or
+ * unsuspend. A school is in no league and sees no child's name
  * until it has been verified here.
  *
  * Behind OPERATOR_SECRET, its own secret rather than the scheduler's: the
@@ -11,7 +12,7 @@
  * school able to see children's first names.
  */
 
-import { makeServiceRpc, secretMatches } from './_shared/job.js'
+import { makeServiceRpc, reportError, secretMatches } from './_shared/job.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -47,9 +48,15 @@ export default async function handler(req, res) {
       if (!result?.ok) return res.status(404).json({ error: 'no_such_school' })
       console.log(`[operator-schools] ${body.action} ${body.school_id}`)
     }
-    return res.status(200).json({ ok: true, schools: await rpc('operator_schools', {}) })
+    const [schools, usage] = await Promise.all([
+      rpc('operator_schools', {}),
+      // The daily usage totals for the operator's page (supabase/health.sql).
+      // Counts only; a database without them still lists the schools.
+      rpc('usage_daily_counts', { p_days: 30 }).catch(() => null),
+    ])
+    return res.status(200).json({ ok: true, schools, usage })
   } catch (err) {
-    console.error('[operator-schools]', err.message)
+    await reportError('operator-schools', err)
     return res.status(502).json({ error: 'failed' })
   }
 }
