@@ -294,6 +294,9 @@ begin
         select jsonb_agg(to_jsonb(s))
           from submissions s where s.family_id = v_family), '[]'::jsonb),
     'rewards',     coalesce((select jsonb_agg(to_jsonb(r)) from rewards r where r.family_id = v_family), '[]'::jsonb),
+    -- What each child spent their currency on. The readable summary the app
+    -- builds from this export lists it per child; it was missing from both.
+    'redemptions', coalesce((select jsonb_agg(to_jsonb(r) order by r.created_at) from redemptions r where r.family_id = v_family), '[]'::jsonb),
     'notes',       coalesce((select jsonb_agg(to_jsonb(n)) from notes n where n.family_id = v_family), '[]'::jsonb),
     'activity',    coalesce((select jsonb_agg(to_jsonb(e)) from events e where e.family_id = v_family), '[]'::jsonb)
   );

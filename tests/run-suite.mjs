@@ -48,6 +48,7 @@ const SUITES = {
     { file: 'help.mjs' },
     { file: 'prices.mjs' },
     { file: 'planwords.mjs' },
+    { file: 'dataexport.mjs' },
   ],
   // The app in a real browser, against the dev server on :5173 and the mock
   // API on :54321 (supabase/test/up.sh starts both).
@@ -80,6 +81,7 @@ const SUITES = {
     { file: 'crash.mjs', weight: 16 },
     { file: 'launchscreens.mjs', weight: 40 },
     { file: 'erase.mjs', weight: 19 },
+    { file: 'download.mjs', weight: 30 },
     { file: 'oldphone.mjs', weight: 3 },
     { file: 'secretworlds.mjs', weight: 143 },
     { file: 'plainsetup.mjs', weight: 25 },

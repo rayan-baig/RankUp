@@ -160,6 +160,15 @@ begin
   end;
 end $$;
 
+-- What each child spent: one redemption here, one in the family that signed
+-- the old notice. The export must carry this family's and only this family's.
+reset role;
+insert into redemptions (family_id, kid_id, name, cost, status)
+select 'd2222222-0000-0000-0000-000000000001', id, 'Pick the film', 50, 'given' from kids where name = 'Dot';
+insert into redemptions (family_id, kid_id, name, cost)
+select 'd8888888-0000-0000-0000-0000000000f1', id, 'Someone else''s treat', 40 from kids where name = 'Early Kid';
+set role app_user;
+
 -- Export and deletion: the rights a parent actually has.
 do $$
 declare dump jsonb; res jsonb;
@@ -169,6 +178,10 @@ begin
   dump := export_family_data();
   perform ok('a parent can download everything held about their family',
     jsonb_array_length(dump->'children') = 1 and dump->'family'->>'name' = 'Consent Family');
+  perform ok('the export says what each child spent their currency on',
+    jsonb_array_length(dump->'redemptions') = 1 and dump->'redemptions'->0->>'name' = 'Pick the film');
+  perform ok('and never what another family''s child spent',
+    (dump->'redemptions')::text not like '%Someone else%');
   perform ok('the export records what was consented to',
     jsonb_array_length(dump->'consents') = 1);
   perform ok('the export holds no photo or photo-check field, because there are none',

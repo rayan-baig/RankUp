@@ -5,6 +5,7 @@ import { clearState } from '../lib/storage.js'
 import { Card, Button, Banner, SectionTitle, Modal, TextInput, Field } from './ui.jsx'
 import { navigate } from '../lib/router.js'
 import { humanError } from '../lib/errors.js'
+import { familySummaryHtml } from '../lib/dataExport.js'
 
 const DELETE_URL = import.meta.env?.VITE_DELETE_ACCOUNT_URL || '/api/delete-account'
 
@@ -52,6 +53,9 @@ export default function DataRights() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmWithdraw, setConfirmWithdraw] = useState(false)
   const [typed, setTyped] = useState('')
+  // The two files of the last download, kept so either can be saved again
+  // if the phone stopped the second one.
+  const [files, setFiles] = useState([])
 
   /** Everything held about this family, as a file they can keep. */
   const download = async () => {
@@ -71,14 +75,27 @@ export default function DataRights() {
       payload = { exported_at: new Date().toISOString(), source: 'this device only', ...state }
     }
 
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `rankup-data-${new Date().toISOString().slice(0, 10)}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-    setNote('Downloaded.')
+    /*
+     * Two files: the JSON, which is everything, and a page anyone can read,
+     * made here from that same JSON, so it cannot hold anything the JSON
+     * does not (lib/dataExport.js).
+     */
+    const day = new Date().toISOString().slice(0, 10)
+    files.forEach((f) => URL.revokeObjectURL(f.url))
+    const made = [
+      { name: `rankup-data-${day}.json`, label: 'Everything (JSON)', blob: new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }) },
+      { name: `rankup-summary-${day}.html`, label: 'Easy to read (opens in a browser)', blob: new Blob([familySummaryHtml(payload)], { type: 'text/html' }) },
+    ].map((f) => ({ ...f, url: URL.createObjectURL(f.blob) }))
+    for (const f of made) {
+      const a = document.createElement('a')
+      a.href = f.url
+      a.download = f.name
+      a.click()
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, 400))
+    }
+    setFiles(made)
+    setNote('Downloaded two files: everything as JSON, and an easy-to-read summary.')
     setBusy(false)
   }
 
@@ -127,7 +144,17 @@ export default function DataRights() {
         <Button variant="soft" className="w-full mb-2" disabled={busy} onClick={download}>
           ⬇ Download my data
         </Button>
-        {note && <p className="text-xs text-muted mb-2">{note}</p>}
+        {note && <p className="text-xs text-muted mb-2" role="status">{note}</p>}
+        {files.length > 0 && (
+          <ul className="text-xs mb-2 space-y-1" data-testid="download-files">
+            {files.map((f) => (
+              <li key={f.name}>
+                <a className="underline" href={f.url} download={f.name}>{f.label}</a>
+                <span className="text-muted"> · {f.name}</span>
+              </li>
+            ))}
+          </ul>
+        )}
 
         <div className="flex gap-2">
           <Button variant="ghost" className="flex-1 text-sm" onClick={() => navigate('/legal/privacy')}>

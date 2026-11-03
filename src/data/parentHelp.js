@@ -175,7 +175,8 @@ export function parentHelp() {
           id: 'download',
           q: "How do I download my family's data?",
           a: [
-            'Go to Settings → Your data → Download my data. You get one file with everything RankUp holds about your family.',
+            'Go to Settings → Your data → Download my data. You get two files: everything RankUp holds about your family, as JSON, and an easy-to-read summary of your children, chores, history and rewards that opens in any browser.',
+            'Only your own family is in them, and only a parent can download them.',
           ],
           to: { path: '/parent/settings', label: 'Open Settings' },
         },
