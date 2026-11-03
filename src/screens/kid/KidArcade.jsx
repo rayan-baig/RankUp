@@ -5,7 +5,8 @@ import {
   MAX_TOKENS, DAILY_COIN_CAP, payout, possibleScore,
 } from '../../data/minigames.js'
 import { dayKey } from '../../lib/dates.js'
-import { Screen, Card, Button, SectionTitle, Banner, Stat, EmptyState, Segmented, Loading } from '../../components/ui.jsx'
+import { arcadeLimits } from '../../lib/arcadeWords.js'
+import { Screen, Card, Button, SectionTitle, Stat, EmptyState, Segmented, Loading } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
 import HeroArt from '../../components/HeroArt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
@@ -108,6 +109,8 @@ export default function KidArcade() {
   const tokens = unlimited ? Infinity : kid.playTokens || 0
   const earnedToday = kid.gameDay && kid.gameDay >= dayKey() ? kid.gameCoinsToday || 0 : 0
   const capped = earnedToday >= DAILY_COIN_CAP
+  // What is left today, and when it comes back, in a child's words.
+  const limits = arcadeLimits({ tokens: unlimited ? 0 : tokens, earnedToday, unlimited, currency: theme?.currency?.name })
   const bests = kid.bestScores || {}
 
   const finish = (claimed) => {
@@ -157,9 +160,7 @@ export default function KidArcade() {
               +{result.coins} {theme.currency.name}
             </div>
             {result.coins === 0 && (
-              <p className="text-xs text-muted mt-1">
-                You have hit today&apos;s arcade limit. Play for the score — it resets tomorrow.
-              </p>
+              <p className="text-xs text-muted mt-1" data-testid="arcade-cap-words">{limits.coins}</p>
             )}
           </Card>
           <div className="flex gap-2">
@@ -308,19 +309,21 @@ export default function KidArcade() {
         <Stat icon="🏆" value={`${played}/${MINIGAMES.length}`} label="Tried" tone="var(--good)" />
       </div>
 
-      {tokens === 0 && !unlimited && (
+      {tokens === 0 && !unlimited ? (
         <EmptyState
           icon="🎮"
-          title="No tokens yet"
-          body="Finish a chore and get it approved — that is where tokens come from."
+          title="No tokens left"
+          body={limits.tokens}
           action={<Button onClick={() => navigate('/kid/quests')}>See my quests</Button>}
         />
-      )}
-
-      {capped && tokens > 0 && (
-        <Banner tone="info" icon="🏁" title="That is today's winnings">
-          You can still play as much as you like — it just will not pay out again until tomorrow.
-        </Banner>
+      ) : (
+        <Card flat className="mb-4" data-testid="arcade-limits">
+          <p className="text-[11px] uppercase tracking-wider text-muted mb-1">Today in the arcade</p>
+          <p className="text-sm mb-1.5"><span aria-hidden="true">🎮 </span>{limits.tokens}</p>
+          <p className="text-sm" style={capped ? { color: 'var(--accent-2)' } : undefined}>
+            <span aria-hidden="true">{capped ? '🏁 ' : `${theme.currency.icon} `}</span>{limits.coins}
+          </p>
+        </Card>
       )}
 
       <SectionTitle>Today&apos;s pick</SectionTitle>
