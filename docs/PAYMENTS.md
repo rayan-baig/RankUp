@@ -124,8 +124,12 @@ for a payment problem, on the parent dashboard.
 | `unpaid` / `incomplete_expired` (Stripe gave up) | Starter | "Your plan has stopped" |
 | `paused` (a trial ended with no card) | Starter | "Your plan is paused" |
 | `charge.refunded`, the plan's payment **in full** | Starter, status `refunded` | "Your payment was refunded" |
+| ... and then Stripe says `active` again for the **same period** (cancelling in the portal does this) | stays Starter, `refunded` | still "Your payment was refunded" |
+| ... and then a renewal into a **new period** | the plan they pay for | the notice goes |
 | `charge.refunded`, partly, or an earlier period's payment (a later invoice was paid since) | unchanged | nothing |
 | `charge.refunded`, a Flash Ticket pack in full | unchanged | the pack's tickets are taken back, as many as are left (never below zero) |
+| `active`, but cancelled in the portal (`cancel_at_period_end`) | unchanged until it ends | "Your plan is ending", with the date, on the plan screen only |
+| `customer.subscription.deleted` (the plan ended) | Starter, status `canceled` | "Your plan has ended", on the plan screen only |
 | back to `active` | the plan they pay for | the notice goes |
 
 Every status Stripe sends can be stored. The column used to accept only five
@@ -135,7 +139,28 @@ paying for. Each of these, and a refund or a pack credited once however often
 it is replayed, is checked by `tests/api.mjs` through the real runtime.
 
 **A refund in full does not cancel the subscription in Stripe.** Cancel it
-there too, or the next renewal charges the card and puts the plan back.
+there too, or the next renewal charges the card and puts the plan back. Until
+then Stripe goes on calling the subscription `active`, and cancelling it in the
+portal at the end of the period says `active` once more: the webhook used to
+take that as the plan coming back, so a refunded family had its plan again,
+free, until the period ended. A period refunded in full now stays refunded
+until a renewal starts a new one (`apply_subscription_change`).
+
+A plan that has ended says so as it is: the family is on Starter from the
+moment Stripe ends it. The plan screen used to say "It runs until" the end of
+the period for a plan cancelled at once, to a family already on Starter. A plan
+cancelled in the portal and still running says "Your plan is ending" and the
+date it stops.
+
+**All of it, one family's whole life in order:** `tests/billingwalk.mjs`
+subscribes a family monthly, renews, fails a payment, refunds, cancels and
+subscribes again for a year, through the real checkout, portal and signed
+webhook against a stand-in Stripe, delivering events twice and out of order at
+every step. After each step it checks the plan the database holds, the plan
+screen's and the dashboard's words, and what the child can use: the plan the
+child's own phone works out, the XP a chore pays (Elite's boost), and whether a
+second child can be added. It does the same for a school. The database's half
+on its own is `supabase/test/41-billing-walk.sql`.
 
 When Stripe itself is down, checkout and the billing portal answer
 `stripe_unavailable` within about twenty seconds, and the app says Stripe is
@@ -305,7 +330,16 @@ it in Stripe too.
   alone.
 - **The webhook** you already have handles schools as well. A school's events
   carry `school_id`; they switch the school on and off and never touch a
-  family's plan. A failing card keeps the school playing while Stripe retries.
+  family's plan. A failing card keeps the school playing while Stripe retries,
+  and the school's page tells its admin "A payment failed" and where to change
+  the card. As for a family: events older than the school's latest are ignored
+  (a late "active" used to put a school whose plan had ended back in the
+  league); a refund in full of the current period takes the school out of the
+  league (it was answered and ignored, so a refunded school stayed in as a
+  paying one), and "active" for that same period does not put it back; a plan
+  cancelled in the portal says when it stops. A paying school's admin reaches
+  "Card, invoices and cancelling": the portal used to refuse exactly the
+  schools that were paying.
 - **Each month**, schedule `api/settle-schools.js` the same way as the alliance
   job (it is in `vercel.json`, a day after the month ends):
 

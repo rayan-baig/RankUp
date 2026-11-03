@@ -83,7 +83,13 @@ export default function AdultsCard() {
               <Button
                 variant="ghost"
                 disabled={busy}
-                onClick={() => act(() => adults.remove(a.id))}
+                onClick={() => {
+                  // One tap took a co-parent out of the family, with their
+                  // phone erased, and nothing to say it was about to.
+                  if (window.confirm(`Remove ${a.name} from the family? Their phone stops seeing the children at once, and any invitation they sent stops working. You can invite them again later.`)) {
+                    act(() => adults.remove(a.id))
+                  }
+                }}
               >
                 Remove
               </Button>
@@ -94,7 +100,15 @@ export default function AdultsCard() {
 
       {(info.invites || []).map((i) => (
         <div key={i.code} className="flex items-center gap-2 py-1.5">
-          <code className="font-display font-extrabold tracking-[0.2em] flex-1">{i.code}</code>
+          <span className="flex-1 min-w-0">
+            <code className="block font-display font-extrabold tracking-[0.2em]">{i.code}</code>
+            {/* It stops working on its own; say when, so nobody sends a dead one. */}
+            {i.expiresAt && (
+              <span className="block text-[11px] text-muted">
+                {i.role === 'supporter' ? 'For a supporter. ' : ''}Works until {new Date(i.expiresAt).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}, once.
+              </span>
+            )}
+          </span>
           <Button variant="soft" onClick={() => share(i.code)}>
             {copied === i.code ? 'Copied' : 'Send'}
           </Button>

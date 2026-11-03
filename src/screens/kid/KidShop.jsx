@@ -7,6 +7,7 @@ import HeroArt from '../../components/HeroArt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
 import { isMarketOpen, nextOpeningLabel } from '../../data/marketSkins.js'
 import { navigate } from '../../lib/router.js'
+import { rewardLeftThisWeek, rewardFreesUpAt } from '../../state/reducer.js'
 
 export default function KidShop() {
   const { state, dispatch } = useApp()
@@ -110,7 +111,10 @@ export default function KidShop() {
         <EmptyState icon="🎁" title="No rewards yet" body="Ask your parent to add some in Parent Mode." />
       ) : (
         state.rewards.map((r) => {
-          const affordable = kid.coins >= r.cost
+          // The parent's weekly limit, as the server counts it. Null: none.
+          const left = rewardLeftThisWeek(state, kid.id, r)
+          const freesUp = left === 0 ? rewardFreesUpAt(state, kid.id, r) : null
+          const affordable = kid.coins >= r.cost && left !== 0
           return (
             <Card key={r.id} className="mb-2.5 flex items-center gap-3">
               <span
@@ -127,6 +131,13 @@ export default function KidShop() {
               <div className="min-w-0 flex-1">
                 <div className="font-semibold text-sm truncate">{r.name}</div>
                 {r.description && <div className="text-xs text-muted truncate">{r.description}</div>}
+                {left !== null && (
+                  <div className="text-xs text-muted truncate">
+                    {left === 0
+                      ? `All used this week. Next one ${new Date(freesUp).toLocaleDateString(undefined, { weekday: 'long' })}.`
+                      : `${left} left this week`}
+                  </div>
+                )}
               </div>
               <Button
                 variant={affordable ? 'primary' : 'soft'}

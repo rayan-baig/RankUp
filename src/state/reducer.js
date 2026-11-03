@@ -4,7 +4,7 @@ import { submissionReward, levelFromXp, liveStreak } from '../lib/xp.js'
 import { createInitialState, TIERS, makeKid } from './initialState.js'
 import { findSkin, isMarketOpen, ticketCost } from '../data/marketSkins.js'
 import { DAILY_COIN_CAP, MAX_TOKENS, possibleScore, coinsForScore } from '../data/minigames.js'
-import { ENTITIES, familyGoals } from '../lib/sync/mappers.js'
+import { ENTITIES, familyGoals, weeklyLimitOf } from '../lib/sync/mappers.js'
 import { pendingRows } from '../lib/sync/shadow.js'
 import { questsDueToReturn, dayOf } from '../lib/recurrence.js'
 import { STICKER_MAP } from '../data/stickers.js'
@@ -172,6 +172,36 @@ export function overrideHasExpired(override) {
 /* ------------------------------------------------------------------ */
 /* Reducer                                                             */
 /* ------------------------------------------------------------------ */
+
+const WEEK_MS = 7 * 86400000
+
+/**
+ * A child's redemptions of one reward in the last seven days, newest last.
+ * The same count redeem_reward makes on the server (any seven days, not a
+ * calendar week, so there is no week boundary for a phone and the database
+ * to disagree about). Purchases still queued on this phone are in
+ * state.redemptions already, so they count.
+ */
+export function rewardRedemptionsThisWeek(state, kidId, rewardId, now = Date.now()) {
+  return (state.redemptions || [])
+    .filter((r) => r.kidId === kidId && r.rewardId === rewardId && (r.at || 0) > now - WEEK_MS)
+    .sort((a, b) => (a.at || 0) - (b.at || 0))
+}
+
+/** How many more times this child may take it in the next seven days; null when it has no limit. */
+export function rewardLeftThisWeek(state, kidId, reward, now = Date.now()) {
+  const limit = weeklyLimitOf(reward?.weeklyLimit)
+  if (!limit) return null
+  return Math.max(0, limit - rewardRedemptionsThisWeek(state, kidId, reward.id, now).length)
+}
+
+/** When the next one frees up, for a child who has used them all: a time, or null. */
+export function rewardFreesUpAt(state, kidId, reward, now = Date.now()) {
+  if (rewardLeftThisWeek(state, kidId, reward, now) !== 0) return null
+  const used = rewardRedemptionsThisWeek(state, kidId, reward.id, now)
+  const limit = weeklyLimitOf(reward.weeklyLimit)
+  return (used[used.length - limit]?.at || now) + WEEK_MS
+}
 
 /**
  * What a child is owed: the lines, added up.
@@ -1034,6 +1064,17 @@ export function reducer(state, action) {
       return logEvent(rejected, { type: 'quest_rejected', kidId: submission.kidId, meta: { questId: submission.questId, reason: action.note || '' } })
     }
 
+    // A parent's note on a past chore, from Chore history. Nothing else about
+    // it changes: see set_history_note in supabase/sync.sql.
+    case 'SET_HISTORY_NOTE': {
+      const note = String(action.note || '').trim().slice(0, 300)
+      if (!state.submissions.some((s) => s.id === action.submissionId)) return state
+      return queueRpc({
+        ...state,
+        submissions: state.submissions.map((s) => (s.id === action.submissionId ? { ...s, historyNote: note } : s)),
+      }, 'set_history_note', { p_submission_id: action.submissionId, p_note: note }, `set_history_note:${action.submissionId}`)
+    }
+
     case 'CLEAR_LEVEL_UP':
       return { ...state, pendingLevelUp: null }
 
@@ -1089,6 +1130,9 @@ export function reducer(state, action) {
         // (another phone, a tax) by the time it arrived.
         message = reason === 'reward_gone'
           ? `${name} was taken off the rewards list before your purchase arrived. Nothing was spent: the coins are back.`
+          : reason === 'weekly_limit'
+            // Another phone (a parent's, say) had already used this week's.
+            ? `${name} has been claimed as often as it can be this week. Nothing was spent: the coins are back.`
           : reason === 'insufficient'
             ? `${name} couldn’t be bought: there were not enough coins left by the time it arrived. Nothing was spent.`
             : `${name} couldn’t be claimed, so the coins are back.`
@@ -1179,13 +1223,30 @@ export function reducer(state, action) {
         ...state,
         allowance: action.entries,
         allowancePots: action.pots,
+        // Earned, added and paid over every line, per child: the record's totals.
+        allowanceTotals: action.totals || null,
         // The moment the answer describes, not the moment it arrived: a line
         // written while the request was in flight is still in flight.
         allowanceAt: action.at,
       }
 
     case 'ADD_REWARD':
-      return { ...state, rewards: [...state.rewards, { id: uid('rw'), createdAt: Date.now(), ...action.reward }] }
+      return {
+        ...state,
+        rewards: [...state.rewards, {
+          id: uid('rw'), createdAt: Date.now(), ...action.reward, weeklyLimit: weeklyLimitOf(action.reward?.weeklyLimit),
+        }],
+      }
+
+    // A parent changing a reward's weekly limit (or anything else about it).
+    // The row syncs like any other reward; redeem_reward reads the limit.
+    case 'UPDATE_REWARD':
+      return {
+        ...state,
+        rewards: state.rewards.map((r) => (r.id === action.rewardId
+          ? { ...r, ...action.patch, ...('weeklyLimit' in (action.patch || {}) ? { weeklyLimit: weeklyLimitOf(action.patch.weeklyLimit) } : {}) }
+          : r)),
+      }
 
     case 'DELETE_REWARD':
       return { ...state, rewards: state.rewards.filter((r) => r.id !== action.rewardId) }
@@ -1194,6 +1255,10 @@ export function reducer(state, action) {
       const reward = state.rewards.find((r) => r.id === action.rewardId)
       const kid = state.kids.find((k) => k.id === action.kidId)
       if (!reward || !kid || kid.coins < reward.cost) return state
+      // The parent's weekly limit, counted the way redeem_reward counts it,
+      // purchases still queued on this phone included: a child with no
+      // signal cannot queue past it either.
+      if (rewardLeftThisWeek(state, kid.id, reward) === 0) return state
       let next = mapKid(state, kid.id, (k) => ({ ...k, coins: k.coins - reward.cost }))
       const redemptionId = uid('rd')
       next = {

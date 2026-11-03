@@ -481,7 +481,7 @@ Say so honestly when you launch.
 
 | | Why |
 |---|---|
-| **Notifications on a child's phone** | Only a parent's phone has the switch, so "Approved!" and "Sent back" reach no phone yet; the child sees them on opening RankUp. See [NOTIFICATIONS.md](NOTIFICATIONS.md). |
+| **Notifications on a child's phone** | Only a parent's phone has the switch, so "Accepted!" and "Back on your list" reach no phone yet; the child sees them on opening RankUp. See [NOTIFICATIONS.md](NOTIFICATIONS.md). |
 | **A real phone receiving a push** | Proven against a stand-in push service, not yet a real one. Section 6. |
 | **Forgot password** | No screen; you send a reset link from the Supabase dashboard (section 2a). |
 | **Guilds** | Built and tested, switched off. Turn on with `VITE_GUILDS_ENABLED=true` once you are ready for child-to-child contact and the moderation it needs. |

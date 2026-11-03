@@ -192,6 +192,10 @@ export const submissions = {
     status: row.status,
     decidedAt: ms(row.decided_at),
     parentNote: row.parent_note || '',
+    // Which adult accepted it or sent it back, and their note on it since:
+    // the Chore history screen shows both.
+    decidedBy: row.decided_by || null,
+    historyNote: row.history_note || '',
     sticker: row.sticker || null,
     awarded:
       row.awarded_xp != null
@@ -224,11 +228,20 @@ export const rewards = {
   fromRow: (row) => ({
     id: row.id, name: row.name, description: row.description || '',
     icon: row.icon || '🎁', cost: row.cost, createdAt: ms(row.created_at), rev: row.rev,
+    // How often one child may take it in any seven days; null is no limit.
+    weeklyLimit: row.weekly_limit ?? null,
   }),
   toRow: (r, familyId) => ({
     id: r.id, family_id: familyId, name: r.name,
     description: r.description || '', icon: r.icon || '🎁', cost: r.cost,
+    weekly_limit: weeklyLimitOf(r.weeklyLimit),
   }),
+}
+
+/** A limit the database will hold: a whole number from 1 to 50, or none. */
+export function weeklyLimitOf(value) {
+  const n = Number(value)
+  return Number.isInteger(n) && n >= 1 && n <= 50 ? n : null
 }
 
 export const redemptions = {

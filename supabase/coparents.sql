@@ -319,6 +319,14 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'cannot_remove_owner');
   end if;
 
+  -- The invitations they sent and nobody has used yet go with them. They
+  -- stayed live: an adult removed from the family (a separation, a falling
+  -- out) could still hand a code to somebody else, who then joined the family
+  -- the owner had just taken them out of.
+  update parent_invites set revoked_at = now()
+   where family_id = v_family and invited_by = p_parent_id
+     and claimed_at is null and revoked_at is null;
+
   delete from parents where id = p_parent_id;
   return jsonb_build_object('ok', true);
 end $$;

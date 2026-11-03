@@ -58,6 +58,29 @@ starts) is stamped by the database alone and sent to every phone.
 there, an account in no family, a name left blank, a guild or an alliance with
 no seat left, a family with six adults, a school with three rivals already.
 
+`41-billing-walk.sql` — a family's plan and a school's, one Stripe event at a
+time: a period refunded in full stays refunded when Stripe goes on saying
+"active" for it (cancelling in the portal does), a plan cancelled in the
+portal keeps the date it stops, an ended plan ended when Stripe ended it, and a
+school is protected from late news and refunds as a family is.
+`tests/billingwalk.mjs` walks the same through the real webhook.
+
+`42-reward-limits.sql` — a reward's weekly limit per child: redeem_reward
+counts the child's own redemptions of it over the last seven days, so a
+purchase queued offline cannot go over it; a retried purchase is not counted
+twice; only a parent sets it, from 1 to 50.
+
+`43-history-and-money.sql` — the one thing a parent may change about a past
+chore is a note on it, and that moves nothing else; who sent a chore back is
+recorded; the pocket money record holds each child's own latest lines however
+busy a brother's ledger, with totals that add up to the pot.
+
+`44-coparent-walk.sql` — a co-parent from invitation to removal: invite,
+accept, the same code again (by somebody else, and by them), what a parent and
+a supporter can do, removal cutting them off at once and taking their unused
+invitations with them, being invited back, and an invitation past its seven
+days.
+
 `refusals.mjs` (`npm run test:refusals`) — reads every
 `jsonb_build_object('ok', false, 'reason', ...)` out of the SQL files, applies
 them to a scratch database with each one marked so it raises a notice naming

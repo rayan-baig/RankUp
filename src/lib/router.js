@@ -62,3 +62,25 @@ export function homeFor(route) {
   if (path.startsWith('/kid')) return '/kid'
   return '/'
 }
+
+/**
+ * Where Parent Mode opens once the PIN is right.
+ *
+ * A link into the parent side (a notification's "chores waiting for you", the
+ * weekly digest, the way back from Stripe) meets the PIN first, and the PIN
+ * screen used to open the dashboard afterwards: the link had led nowhere in
+ * particular. The route guard sends `/switch?next=<where it was going>`, and
+ * this reads it back. Only a parent screen, and only a path: anything else
+ * opens the dashboard.
+ */
+export function lockedLink(path) {
+  const target = String(path || '')
+  return target.startsWith('/parent/') ? `/switch?next=${encodeURIComponent(target)}` : '/switch'
+}
+
+export function afterUnlock(hash = typeof window !== 'undefined' ? window.location.hash : '') {
+  const query = String(hash || '').replace(/^#/, '').split('?').slice(1).join('?')
+  let next = null
+  try { next = new URLSearchParams(query).get('next') } catch { next = null }
+  return next && /^\/parent(\/[\w-]+)*(\?[\w=&%.-]*)?$/.test(next) ? next : '/parent'
+}

@@ -706,8 +706,11 @@ begin
     raise exception 'only a parent in this family can send work back';
   end if;
 
+  -- Who sent it back, as approve_submission records who accepted: the
+  -- parent's Chore history says which adult decided, and this was left empty.
   update submissions
-     set status = 'rejected', decided_at = now(), parent_note = coalesce(p_note, '')
+     set status = 'rejected', decided_at = now(), parent_note = coalesce(p_note, ''),
+         decided_by = (select id from parents where user_id = auth.uid() and family_id = v_sub.family_id)
    where id = p_submission_id;
 
   update quests
@@ -720,6 +723,34 @@ begin
 
   return jsonb_build_object('ok', true);
 end $$;
+
+/**
+ * A parent's note on a chore in its history: "did it without being asked",
+ * "we agreed to count this one". The only thing about a past chore that can
+ * be changed. What it paid, whether it was accepted, and when, are left alone:
+ * the XP has been spent, levelled and streaked on since, and the School
+ * League and Alliances have counted it, so changing them after the fact is
+ * not a correction but a second, hidden decision. The child can read the
+ * note, as they can read the rest of their own history.
+ */
+create or replace function set_history_note(p_submission_id uuid, p_note text)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_sub submissions;
+begin
+  select * into v_sub from submissions where id = p_submission_id for update;
+  if not found or not exists (select 1 from parents where user_id = auth.uid()
+                                and family_id = v_sub.family_id and role = 'parent') then
+    -- Another family's chore says the same as one that does not exist.
+    return jsonb_build_object('ok', false, 'reason', 'not_found');
+  end if;
+  update submissions set history_note = left(trim(coalesce(p_note, '')), 300)
+   where id = p_submission_id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+revoke all on function set_history_note(uuid, text) from public;
+grant execute on function set_history_note(uuid, text) to authenticated;
 
 /** The daily login bonus. Server-side so it genuinely cannot be claimed twice. */
 -- Gained p_tz, the phone's time zone: see family_today.
@@ -1114,6 +1145,18 @@ begin
   end if;
   if v_kid.coins < v_reward.cost then
     return jsonb_build_object('ok', false, 'reason', 'insufficient');
+  end if;
+  -- A parent's limit on how often one child may take this reward: at most
+  -- weekly_limit in any seven days. Counted here, under the child's row lock
+  -- taken above, so two phones' purchases (one queued with no signal, one
+  -- made on the parent's phone) take turns and the second is refused rather
+  -- than both landing. Counted from when each purchase reached the server,
+  -- which is the only clock a child cannot set.
+  if v_reward.weekly_limit is not null and (
+       select count(*) from redemptions
+        where kid_id = p_kid_id and reward_id = p_reward_id
+          and created_at > now() - interval '7 days') >= v_reward.weekly_limit then
+    return jsonb_build_object('ok', false, 'reason', 'weekly_limit', 'limit', v_reward.weekly_limit);
   end if;
 
   update kids set coins = coins - v_reward.cost where id = p_kid_id;

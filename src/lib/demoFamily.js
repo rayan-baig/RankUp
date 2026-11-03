@@ -145,7 +145,7 @@ export function buildDemoFamily() {
 
   const rewards = [
     { name: "Pick Friday's film", cost: 60, icon: '🎬', description: 'Whatever you want, nobody argues.' },
-    { name: 'An hour later bedtime', cost: 90, icon: '🌙', description: 'One night, your choice.' },
+    { name: 'An hour later bedtime', cost: 90, icon: '🌙', description: 'One night, your choice.', weeklyLimit: 2 },
     { name: 'Day out, you choose', cost: 250, icon: '🎢', description: 'Anywhere within reason.' },
   ]
   s = run(s, ...rewards.map((reward) => ({ type: 'ADD_REWARD', reward })))

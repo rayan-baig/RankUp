@@ -226,3 +226,54 @@ export function demoMySchools(kids = [], onlyKidId = null) {
 }
 
 export const demoOverview = () => ({ ok: true, school: demoSchoolCard({ staff: true }) })
+
+/**
+ * What a school's staff are told about its plan, from school_overview()'s
+ * `billing_status`, `billing_ends_at` and `status`. Null when there is
+ * nothing to say.
+ *
+ * A failing card keeps a school playing while Stripe tries again, and the
+ * page said nothing about it until the school dropped out of the league with
+ * no warning. Mirrors billingNotice in billing.js for a family.
+ */
+export function schoolBillingNotice(school) {
+  if (!school) return null
+  const state = school.billing_status
+  const until = school.billing_ends_at ? new Date(school.billing_ends_at) : null
+  const after = school.status === 'trial' ? 'back on what is left of your free trial' : 'out of the league for now'
+  switch (state) {
+    case 'past_due':
+      return {
+        tone: 'bad', icon: '⚠️', title: 'A payment failed',
+        body: 'The card was declined when your plan renewed. Your school is still in the league while Stripe tries again. Update the card in “Card, invoices and cancelling”.',
+      }
+    case 'unpaid':
+    case 'incomplete_expired':
+      return {
+        tone: 'bad', icon: '⚠️', title: 'Your plan has stopped',
+        body: `Stripe could not take the payment after several tries, so your school is ${after}. Choose a plan below to start again. Your students’ points are kept.`,
+      }
+    case 'refunded':
+      return {
+        tone: 'info', icon: '↩️', title: 'Your payment was refunded',
+        body: `The payment was handed back in full, so that period is not paid for and your school is ${after}. Choose a plan below whenever you want it back. Your students’ points are kept.`,
+      }
+    case 'canceled':
+      if (school.status === 'active') return null
+      return {
+        tone: 'info', icon: 'ℹ️', title: 'Your plan has ended',
+        body: `Your school is ${after}. Choose a plan below to start again. Your students’ points are kept.`,
+      }
+    case 'active':
+    case 'trialing':
+      if (until && until.getTime() > Date.now()) {
+        return {
+          tone: 'info', icon: '📅', title: 'Your plan is ending',
+          body: `It was cancelled, so it stops on ${until.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}. Nothing changes until then. Changed your mind? Use “Card, invoices and cancelling”.`,
+        }
+      }
+      return null
+    default:
+      return null
+  }
+}

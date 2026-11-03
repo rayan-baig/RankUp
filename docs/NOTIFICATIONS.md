@@ -22,27 +22,47 @@ never registers for push. See "What does not happen yet" below.
 
 ## What triggers one, and the exact words
 
-The words are fixed in the code (`api/send-push.js`, `api/send-reminders.js`,
-`api/send-digests.js`, and `NOTICES` in `src/lib/notifications.js` for the
-on-this-phone copy). A phone asking for a push names the kind of notice and at
-most two values (a name, a chore); it cannot supply its own sentence.
+The words are fixed in one file, `src/data/noticeWords.js`, which the server
+functions (`api/send-push.js`, `api/send-reminders.js`, `api/send-digests.js`)
+and the app (`src/lib/notifications.js`, for the on-this-phone copy) all
+import, so a notice reads the same however it arrives. A phone asking for a
+push names the kind of notice and at most two values (a name, a chore); it
+cannot supply its own sentence.
 
 | When | Who is told | Title | Body | Tapping opens |
 |---|---|---|---|---|
-| A child taps **I did it!** | Every parent's phone in the family | `Ava finished a quest` | `"Make your bed" is waiting for you to review.` | Approvals |
-| A parent taps **Accept** | That child's phones | `Approved! 🎉` | `"Make your bed" earned you 45 XP.` | The child's home |
-| A parent sends it back | That child's phones | `Sent back to redo` | `"Make your bed" needs another go. Tap to see why.` | The child's quests |
-| A daily reminder is due (server job) | Every parent's phone | The reminder's name, e.g. `Morning quests` | `Time to check in on today's quests.` | Approvals |
-| A daily reminder is due (RankUp open) | This phone | `RankUp` | The reminder's name | Quests |
+| A child taps **I did it!** | Every parent's phone in the family | `Ava finished a chore` | `"Make your bed" is ready for you to check.` | Review |
+| A parent taps **Accept** | That child's phones | `Accepted! 🎉` | `"Make your bed" earned you 45 XP.` (`was accepted.` if it paid no XP) | The child's home |
+| A parent sends it back | That child's phones | `Back on your list` | `"Make your bed" needs another go. You've got this.` | The child's quests |
+| A daily reminder is due (server job) | The phones the reminder is for | The reminder's name, e.g. `Morning quests` | A parent: `Time to check in on today's chores.` A child: `Time for your quests.` | A parent: Review. A child: their quests |
+| A daily reminder is due (RankUp open) | This phone | The reminder's name | The same as the server's, for whoever uses this phone | The same |
 | A child asks to join a guild | The parents whose yes is still missing: in the child's family, and in the family whose guild it is. Not supporters | `A guild request needs you` | `Juno wants to join Sock Hunters. Nobody joins without you.` | Guilds |
-| The weekly digest (server job) | Every parent's phone | `Your week in RankUp` | e.g. `9 chores done, up from 5 last week. Ava led with 6. Quietest day: Wednesday. 2 chores are waiting for you to check.` | Approvals if chores are waiting, otherwise Behaviour Blueprint |
-| **Send me a test notification** (Settings) | This phone | `Someone finished a quest` | `"a test quest" is waiting for you to review.` | Approvals |
+| The weekly digest (server job) | Every parent's phone | `Your week in RankUp` | e.g. `9 chores done, up from 5 last week. Ava led with 6. Quietest day: Wednesday. 2 chores are waiting for you to check.` | Review if chores are waiting, otherwise Behaviour Blueprint |
+| **Send me a test notification** (Settings) | This phone | `Notifications are on` | `This is how RankUp tells you a chore is ready for you to check.` | Review |
 
-The digest's sentence is built from the week: "A quiet week — nothing finished
-since last Sunday" when nothing was done, "up from" / "down from" / "the same
-as" last week otherwise, the child who did most when there is more than one,
-and the number of chores waiting only when there are some. It is cut at 220
-characters.
+The rules for the words, which `tests/noticewords.mjs` holds every notice to
+with the longest name and chore title it can carry:
+
+- **Short.** A title is at most 60 characters and a body 130 (the digest 200),
+  so neither is cut off by the phone; anything longer is cut at a word with
+  "…".
+- **Friendly, never shaming.** A chore sent back is "another go", never
+  "rejected" or "failed"; no word that blames, no shouting, at most one emoji.
+- **True to what happened.** The parent taps Accept, so the child is told it
+  was accepted. A chore sent back does not say "Tap to see why": the note is
+  optional, and there may be no why. The test notification says it is a test.
+- **Every tap goes somewhere real.** Each link is a screen the app has (read
+  from `renderRoute` in `src/App.jsx`), and survives the Parent Mode PIN: a
+  link into the parent side meets the PIN first, and the PIN used to open the
+  dashboard afterwards, so "2 chores are waiting" led nowhere in particular.
+  It now opens where the link was going. The trial email's link and Stripe's
+  ways back are checked the same way.
+
+The digest's sentence is built from the week: "A quiet week, with no chores
+finished. 3 were done the week before." when nothing was done, "up from" /
+"down from" / "the same as" last week otherwise, the child who did most when
+there is more than one (and nobody named for doing least), and the number of
+chores waiting only when there are some.
 
 Names and chore titles put into a notice are cut to 40 characters, put on one
 line, and have links and phone numbers removed, so a notice cannot be made to
@@ -148,9 +168,9 @@ it from the icon → turn notifications on.
 sign-in and asks the database, as that person, which family they are in.
 Without this anyone could buzz any family's phones by guessing an id.
 
-**"Approved!" and "Sent back" are a parent's to send.** The database is asked
+**"Accepted!" and "Back on your list" are a parent's to send.** The database is asked
 whether the caller is a parent; a child's phone cannot send a sibling
-"Approved!".
+"Accepted!".
 
 **A guild request is the child's, or their parent's, to send.** The database
 is asked whether the caller may act for that child (`may_act_for_kid`), and
@@ -194,7 +214,7 @@ nothing — `supabase/test/06-notifications.sql` caught exactly that once).
 
 - **A child's phone never gets a push.** Only Parent Settings has the
   notifications switch, and a child's phone has no Parent Mode, so it never
-  registers. "Approved!" and "Sent back" are sent to the child's phones and,
+  registers. "Accepted!" and "Back on your list" are sent to the child's phones and,
   in practice, reach none; the child sees the result next time they open
   RankUp. Reminders are only ever saved for parents. Fixing this needs a
   switch on the child's phone (and a parent's say on whether a child's phone

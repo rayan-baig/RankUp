@@ -5,7 +5,7 @@ import { storyProgress } from '../lib/dragonFight.js'
 import { levelFromXp } from '../lib/xp.js'
 import Avatar from '../components/Avatar.jsx'
 import { Card, Button, TextInput } from '../components/ui.jsx'
-import { navigate } from '../lib/router.js'
+import { navigate, afterUnlock } from '../lib/router.js'
 import Logo from '../components/Logo.jsx'
 import PinReset from '../components/PinReset.jsx'
 
@@ -36,7 +36,7 @@ export default function RoleSwitch() {
      */
     if (!needsPin) {
       dispatch({ type: 'UNLOCK_PARENT' })
-      navigate('/parent')
+      navigate(afterUnlock())
     }
   }
 
@@ -44,7 +44,8 @@ export default function RoleSwitch() {
     dispatch({ type: 'UNLOCK_PARENT' })
     setPin('')
     setError('')
-    navigate('/parent')
+    // Where a link was going (a notification, the digest), or the dashboard.
+    navigate(afterUnlock())
   }
 
   const submitPin = () => {

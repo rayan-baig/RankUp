@@ -20,6 +20,7 @@
 import { recordRun, secretMatches, makeServiceRpc } from './_shared/job.js'
 import webpush from 'web-push'
 import { sendPush, failureFor } from './_shared/push.js'
+import { digestNotice } from '../src/data/noticeWords.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -36,42 +37,8 @@ function whole(value, fallback, min, max) {
 const DIGEST_WEEKDAY = whole(process.env.DIGEST_WEEKDAY, 7, 1, 7)   // 7 = Sunday
 const DIGEST_HOUR = whole(process.env.DIGEST_HOUR, 18, 0, 23)
 
-/**
- * The week in one line.
- *
- * A bare number says nothing — "nine" means nothing, "nine, up from five" is
- * the whole message. And the last sentence is the only part that asks for
- * anything: a parent with chores waiting to be checked is the one case where opening the app
- * tonight actually matters.
- */
-function digestMessage(d) {
-  const done = Number(d.approved) || 0
-  const before = Number(d.approved_last_week) || 0
-  const top = (d.kids || []).find((k) => Number(k.done) > 0)
-
-  let body
-  if (done === 0) body = `A quiet week — nothing finished since last Sunday. ${before} the week before.`
-  else if (before === 0) body = `${done} ${done === 1 ? 'chore' : 'chores'} done this week.`
-  else if (done > before) body = `${done} chores done, up from ${before} last week.`
-  else if (done < before) body = `${done} chores done, down from ${before} last week.`
-  else body = `${done} chores done, the same as last week.`
-
-  if (top && (d.kids || []).length > 1) body += ` ${top.name} led with ${top.done}.`
-  if (d.quietest_day && done > 0) body += ` Quietest day: ${d.quietest_day}.`
-
-  const waiting = Number(d.waiting_for_you) || 0
-  // Chores, not photos: RankUp takes none, and a parent checks the chore itself.
-  if (waiting > 0) body += ` ${waiting} ${waiting === 1 ? 'chore is' : 'chores are'} waiting for you to check.`
-
-  return {
-    title: 'Your week in RankUp',
-    // Trimmed, because a push notification that runs past three lines is
-    // truncated by the phone at whatever word it happens to reach.
-    body: body.slice(0, 220),
-    tag: 'digest',
-    url: waiting > 0 ? '/#/parent/approvals' : '/#/parent/blueprint',
-  }
-}
+/** The week in one line: digestNotice in src/data/noticeWords.js, with every other notice's words. */
+const digestMessage = digestNotice
 
 export default async function handler(req, res) {
   // GET as well as POST: Vercel's scheduler issues GET, and a POST-only handler

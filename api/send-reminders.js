@@ -25,6 +25,7 @@
 import { recordRun } from './_shared/job.js'
 import webpush from 'web-push'
 import { sendPush, failureFor } from './_shared/push.js'
+import { reminderPush } from '../src/data/noticeWords.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -115,12 +116,8 @@ export default async function handler(req, res) {
       continue
     }
 
-    const message = JSON.stringify({
-      title: String(r.label || 'RankUp').slice(0, 120),
-      body: r.role === 'kid' ? 'Time for your quests.' : 'Time to check in on today’s quests.',
-      tag: 'reminder',
-      url: r.role === 'kid' ? '/#/kid/quests' : '/#/parent/approvals',
-    })
+    // The words are in src/data/noticeWords.js, the same as the app's own.
+    const message = JSON.stringify(reminderPush(r.label, r.role))
 
     const results = await Promise.allSettled(
       // Held by the push service only as long as it would still be on time:

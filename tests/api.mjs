@@ -615,7 +615,11 @@ console.log('\n=== A failed renewal drops the plan, and the parent is told why =
     && row.tier === 'starter' && row.subscription_status === 'refunded', JSON.stringify(row))
   notice = billingNotice(await billingAs(RENEW_PARENT))
   ok('and the parent is told it was refunded', notice?.title === 'Your payment was refunded', JSON.stringify(notice))
-  await signed({ id: `evt_api_renew_again_${Date.now()}`, type: 'customer.subscription.updated', created: tick(), data: { object: renewal('active') } })
+  // Back on the plan for the pack checks below. A renewal into a new period:
+  // "active" for the period that was refunded keeps it refunded
+  // (tests/billingwalk.mjs, 41-billing-walk.sql).
+  await signed({ id: `evt_api_renew_again_${Date.now()}`, type: 'customer.subscription.updated', created: tick(),
+    data: { object: { ...renewal('active'), current_period_end: Math.floor(Date.now() / 1000) + 30 * 86400 } } })
 
   console.log('\n=== Flash Ticket packs: replayed, refunded ===')
   await db.query('update families set flash_tickets = 0 where id = $1', [RENEW])

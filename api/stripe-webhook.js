@@ -179,6 +179,35 @@ async function familyIdFor(object, stripe) {
   }
 }
 
+const iso = (seconds) => (seconds ? new Date(seconds * 1000).toISOString() : null)
+const eventTime = (event) => iso(event?.created)
+
+/**
+ * The end of the period being paid for. On the subscription in older Stripe
+ * API versions, on its item since 2025: reading only the old place left this
+ * empty for every family.
+ */
+const periodEnd = (sub) => iso(sub?.current_period_end || sub?.items?.data?.[0]?.current_period_end)
+
+/**
+ * When the plan stops. `cancel_at`: a plan cancelled in the portal, still
+ * running until then (Stripe sets cancel_at, or only cancel_at_period_end on
+ * older versions). `ended_at`: a plan that has ended, which for one cancelled
+ * at once is now, not the end of the period it would have run to.
+ */
+function endDates(event, sub) {
+  const ended = event.type === 'customer.subscription.deleted' || ['canceled', 'unpaid', 'incomplete_expired'].includes(sub?.status)
+  if (ended) return { ended_at: iso(sub?.ended_at || event.created) }
+  const cancelAt = sub?.cancel_at || (sub?.cancel_at_period_end ? (sub?.current_period_end || sub?.items?.data?.[0]?.current_period_end) : null)
+  return cancelAt ? { cancel_at: iso(cancelAt) } : {}
+}
+
+/** A charge handed back in full: Stripe's flag, or every penny of it. */
+function refundedInFull(charge) {
+  const amount = Number(charge?.amount || 0)
+  return charge?.refunded === true || (amount > 0 && Number(charge?.amount_refunded || 0) >= amount)
+}
+
 const LIVE_STATUSES = ['active', 'trialing', 'past_due', 'unpaid', 'incomplete', 'paused']
 const customerOf = (object) => (typeof object?.customer === 'string' ? object.customer : object?.customer?.id) || null
 
@@ -250,9 +279,23 @@ export default async function handler(req, res) {
           p_customer_id: customerId || null,
           p_subscription_id: object.id,
           p_stripe_event: event.id,
-          p_payload: { type: event.type },
+          p_payload: { type: event.type, ...endDates(event, object) },
+          // Stripe does not deliver in order: older news than the school's
+          // latest is ignored, as it is for a family.
+          p_event_created: eventTime(event),
+          p_period_end: periodEnd(object),
         })
         if (event.type !== 'customer.subscription.deleted') await keepSchoolOnItsBand(stripe, schoolId, object)
+      } else if (event.type === 'charge.refunded') {
+        // Answered and dropped before this: a school refunded in full stayed
+        // in the league as a paying school. See apply_school_refund.
+        await serviceRpc('apply_school_refund', {
+          p_school_id: schoolId,
+          p_charge_id: object.id,
+          p_full: refundedInFull(object),
+          p_event_created: eventTime(event),
+          p_charge_created: object.created ? new Date(object.created * 1000).toISOString() : null,
+        })
       } else if (event.type === 'invoice.paid' || event.type === 'invoice.payment_succeeded') {
         const paid = Number(object.amount_paid ?? object.amount_due ?? 0)
         if (paid > 0) {
@@ -333,16 +376,14 @@ export default async function handler(req, res) {
         p_tier: tierFor(object),
         p_customer_id: typeof object.customer === 'string' ? object.customer : null,
         p_subscription_id: object.id,
-        // On the subscription in older Stripe API versions, on its item since
-        // 2025. Reading only the old place left this empty for every family.
-        p_period_end: (object.current_period_end || object.items?.data?.[0]?.current_period_end)
-          ? new Date((object.current_period_end || object.items.data[0].current_period_end) * 1000).toISOString()
-          : null,
+        p_period_end: periodEnd(object),
         p_stripe_event: event.id,
-        p_payload: { type: event.type },
+        // When a plan cancelled in the portal will stop, and when an ended
+        // one did: the plan screen says so.
+        p_payload: { type: event.type, ...endDates(event, object) },
         // Stripe does not deliver in order. Older news than the family's
         // latest is ignored by the database.
-        p_event_created: event.created ? new Date(event.created * 1000).toISOString() : null,
+        p_event_created: eventTime(event),
       })
       return res.status(200).json({ received: true })
     }
@@ -390,15 +431,14 @@ export default async function handler(req, res) {
       // there is no plan or ticket left here to take back.
       const gone = await goneFamily(stripe, familyId, object)
       if (gone) return res.status(200).json(gone)
-      const amount = Number(object.amount || 0)
-      const full = object.refunded === true || (amount > 0 && Number(object.amount_refunded || 0) >= amount)
+      const full = refundedInFull(object)
       const result = await serviceRpc('apply_charge_refund', {
         p_family_id: familyId,
         p_charge_id: object.id,
         p_payment_intent: typeof object.payment_intent === 'string'
           ? object.payment_intent : object.payment_intent?.id || null,
         p_full: full,
-        p_event_created: event.created ? new Date(event.created * 1000).toISOString() : null,
+        p_event_created: eventTime(event),
         // When the refunded payment was made: refunding last month's charge
         // after this month's was paid leaves the current period standing.
         p_charge_created: object.created ? new Date(object.created * 1000).toISOString() : null,

@@ -18,6 +18,7 @@
 
 import { transport, freshAccessToken } from './sync/transport.js'
 import { dayKey } from './dates.js'
+import { NOTICES } from '../data/noticeWords.js'
 
 const VAPID_PUBLIC_KEY = import.meta.env?.VITE_VAPID_PUBLIC_KEY || ''
 const PREF_KEY = 'rankup.notifications.v1'
@@ -270,39 +271,11 @@ export function remindersToFire(reminders, now = new Date(), fired = {}) {
   return { due, fired: next }
 }
 
-/** The wording for each thing worth interrupting someone about. */
-export const NOTICES = {
-  submission: (kidName, questTitle) => ({
-    title: `${kidName} finished a quest`,
-    body: `"${questTitle}" is waiting for you to review.`,
-    tag: 'submission',
-    url: '/#/parent/approvals',
-  }),
-  approved: (questTitle, xp) => ({
-    title: 'Approved! 🎉',
-    body: `"${questTitle}" earned you ${xp} XP.`,
-    tag: 'decision',
-    url: '/#/kid',
-  }),
-  rejected: (questTitle) => ({
-    title: 'Sent back to redo',
-    body: `"${questTitle}" needs another go. Tap to see why.`,
-    tag: 'decision',
-    url: '/#/kid/quests',
-  }),
-  guildRequest: (kidName, guildName) => ({
-    title: 'A guild request needs you',
-    body: `${kidName} wants to join ${guildName}. Nobody joins without you.`,
-    tag: 'guild',
-    url: '/#/parent/guilds',
-  }),
-  reminder: (label) => ({
-    title: 'RankUp',
-    body: label,
-    tag: 'reminder',
-    url: '/#/kid/quests',
-  }),
-}
+/**
+ * The wording for each thing worth interrupting someone about. One copy, in
+ * src/data/noticeWords.js, which the server functions read too.
+ */
+export { NOTICES } from '../data/noticeWords.js'
 
 /**
  * Push this device's reminder times up to the server.

@@ -193,21 +193,34 @@ grant execute on function record_gift(uuid, int, text, uuid) to authenticated;
  * function that somebody could change.
  *
  * The pots are summed over EVERY line; the lines themselves stop at the most
- * recent two hundred, because a screen showing four years of pocket money is
- * not one anybody reads. Those two facts are why the app must take the pot
- * from here rather than adding up the lines it was sent — doing that would
- * quietly lose every penny older than the two hundredth line.
+ * recent two hundred per child, because a screen showing four years of pocket
+ * money is not one anybody reads. Those two facts are why the app must take
+ * the pot from here rather than adding up the lines it was sent — doing that
+ * would quietly lose every penny older than the two hundredth line.
+ *
+ * Per child, not per family: the cut used to be the family's newest two
+ * hundred, so a child with a busy brother could find their own lines gone
+ * from the record altogether. Each pot also says what went in and out over
+ * all time and when money was last handed over, and each line who recorded
+ * it, so the pocket money record can say "paid, and when, and by whom" from
+ * the same numbers the pot is made of.
  */
 create or replace function allowance_summary()
 returns jsonb language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
     'currency', (select currency from families where id = current_family_id()),
     'pots', coalesce((
-      select jsonb_agg(jsonb_build_object('kidId', k.id, 'name', k.name, 'pence', p.pence)
+      select jsonb_agg(jsonb_build_object('kidId', k.id, 'name', k.name, 'pence', p.pence,
+                                          'earned', p.earned, 'added', p.added, 'paid', p.paid,
+                                          'lastPaidAt', p.last_paid_at)
                      order by k.name)
         from kids k
         join lateral (
-          select coalesce(sum(e.pence), 0) as pence
+          select coalesce(sum(e.pence), 0) as pence,
+                 coalesce(sum(e.pence) filter (where e.kind = 'earned'), 0) as earned,
+                 coalesce(sum(e.pence) filter (where e.kind in ('gift', 'adjustment')), 0) as added,
+                 coalesce(-sum(e.pence) filter (where e.kind = 'paid'), 0) as paid,
+                 max(e.created_at) filter (where e.kind = 'paid') as last_paid_at
             from allowance_entries e where e.kid_id = k.id
         ) p on true
        where k.family_id = current_family_id()
@@ -216,12 +229,15 @@ returns jsonb language sql stable security definer set search_path = public as $
     'entries', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', e.id, 'kidId', e.kid_id, 'pence', e.pence,
-               'kind', e.kind, 'note', e.note, 'at', e.created_at)
+               'kind', e.kind, 'note', e.note, 'at', e.created_at,
+               -- Who recorded it, for a line an adult typed: a payout, a gift.
+               'by', (select name from parents where id = e.created_by))
              order by e.created_at desc)
-        from (select * from allowance_entries
+        from (select *, row_number() over (partition by kid_id order by created_at desc, id) as n
+                from allowance_entries
                where family_id = current_family_id()
-                 and (is_parent() or kid_id = current_kid_id())
-               order by created_at desc limit 200) e
+                 and (is_parent() or kid_id = current_kid_id())) e
+       where e.n <= 200
     ), '[]'::jsonb)
   );
 $$;

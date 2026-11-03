@@ -5,6 +5,7 @@ import { fetchAllowance, mergeFrom } from '../lib/allowance.js'
 import { formatMoney, parseMoney, symbolFor } from '../lib/money.js'
 import { Card, Button, TextInput, Banner, Modal } from './ui.jsx'
 import { CountUp } from './Motion.jsx'
+import { navigate } from '../lib/router.js'
 
 /**
  * What each child is owed, and the button that settles it.
@@ -114,6 +115,11 @@ export default function PocketMoney({ kidId = null }) {
           })}
         </div>
       )}
+
+      <button type="button" className="text-xs underline text-muted mt-3"
+              onClick={() => navigate(kidId ? `/parent/money?kid=${kidId}` : '/parent/money')}>
+        See the whole record: what was paid, and when
+      </button>
 
       <Modal
         open={Boolean(paying)}

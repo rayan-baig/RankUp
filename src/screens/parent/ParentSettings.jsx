@@ -35,7 +35,7 @@ export default function ParentSettings() {
   }
   const [note, setNote] = useState('')
   const [noteKid, setNoteKid] = useState(state.kids[0]?.id || '')
-  const [reward, setReward] = useState({ name: '', cost: 50, description: '', icon: '🎁' })
+  const [reward, setReward] = useState({ name: '', cost: 50, description: '', icon: '🎁', weeklyLimit: null })
   const [goal, setGoal] = useState(state.familyGoal || { name: '', targetXp: 2000 })
 
   const usageKb = Math.round(storageUsageBytes() / 1024)
@@ -90,13 +90,22 @@ export default function ParentSettings() {
           What kids can spend their currency on. Real-world things work best.
         </p>
         {state.rewards.map((r) => (
-          <div key={r.id} className="flex items-center gap-2 py-2" style={{ borderBottom: '1px solid var(--line)' }}>
-            <span aria-hidden="true">{r.icon || '🎁'}</span>
-            <span className="flex-1 min-w-0 text-sm truncate">{r.name}</span>
-            <span className="text-sm font-semibold">{r.cost}</span>
-            <button type="button" className="text-muted px-2" onClick={() => dispatch({ type: 'DELETE_REWARD', rewardId: r.id })} aria-label={`Delete ${r.name}`}>
-              ✕
-            </button>
+          <div key={r.id} className="py-2" style={{ borderBottom: '1px solid var(--line)' }}>
+            <div className="flex items-center gap-2">
+              <span aria-hidden="true">{r.icon || '🎁'}</span>
+              <span className="flex-1 min-w-0 text-sm truncate">{r.name}</span>
+              <span className="text-sm font-semibold">{r.cost}</span>
+              <button type="button" className="text-muted px-2" onClick={() => dispatch({ type: 'DELETE_REWARD', rewardId: r.id })} aria-label={`Delete ${r.name}`}>
+                ✕
+              </button>
+            </div>
+            {/* How often each child may take it. Held by the database too,
+                so purchases queued offline cannot go over it. */}
+            <label className="flex items-center gap-2 mt-1.5 text-xs text-muted">
+              <span className="shrink-0">Each child can take it</span>
+              <WeeklyLimit value={r.weeklyLimit} name={r.name}
+                           onChange={(weeklyLimit) => dispatch({ type: 'UPDATE_REWARD', rewardId: r.id, patch: { weeklyLimit } })} />
+            </label>
           </div>
         ))}
         <div className="grid grid-cols-[1fr_88px] gap-2 mt-3">
@@ -108,13 +117,18 @@ export default function ParentSettings() {
             aria-label="Cost"
           />
         </div>
+        <label className="flex items-center gap-2 mt-2 text-xs text-muted">
+          <span className="shrink-0">Each child can take it</span>
+          <WeeklyLimit value={reward.weeklyLimit} name="the new reward"
+                       onChange={(weeklyLimit) => setReward({ ...reward, weeklyLimit })} />
+        </label>
         <Button
           variant="soft"
           className="w-full mt-2"
           disabled={!reward.name.trim()}
           onClick={() => {
             dispatch({ type: 'ADD_REWARD', reward: { ...reward, name: reward.name.trim() } })
-            setReward({ name: '', cost: 50, description: '', icon: '🎁' })
+            setReward({ name: '', cost: 50, description: '', icon: '🎁', weeklyLimit: null })
           }}
         >
           Add reward
@@ -543,5 +557,22 @@ function ReminderList({ reminders, dispatch }) {
         ))}
       </div>
     </>
+  )
+}
+
+/** "No limit", or 1 to 7 times a week: how often each child may take a reward. */
+function WeeklyLimit({ value, name, onChange }) {
+  return (
+    <select
+      className="field appearance-none py-1 min-h-0 text-xs flex-1"
+      value={value || ''}
+      aria-label={`How often each child may take ${name} in a week`}
+      onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+    >
+      <option value="">as often as they like</option>
+      {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+        <option key={n} value={n}>{n === 1 ? 'once a week' : n === 2 ? 'twice a week' : `${n} times a week`}</option>
+      ))}
+    </select>
   )
 }

@@ -367,7 +367,7 @@ const syncs = (state) =>
       try { fired = JSON.parse(localStorage.getItem(FIRED_KEY) || '{}') } catch { fired = {} }
       // See remindersToFire: once a day, on this phone's own date.
       const result = remindersToFire(state.settings.reminders, new Date(), fired)
-      result.due.forEach((reminder) => notifyLocally(NOTICES.reminder(reminder.label)))
+      result.due.forEach((reminder) => notifyLocally(NOTICES.reminder(reminder.label, latest.current.device?.role === 'kid' ? 'kid' : 'parent')))
       if (result.due.length) {
         try { localStorage.setItem(FIRED_KEY, JSON.stringify(result.fired)) } catch { /* storage full: worst case, a repeat */ }
       }

@@ -56,7 +56,7 @@ if (routeNotice) {
     routeNotice(submitted, { deviceRole: 'kid', showHere: true, pushReady: true }).local === null)
   const shared = routeNotice(submitted, { deviceRole: 'parent', showHere: true, pushReady: false })
   ok('on a phone the family shares, a chore done in the child\'s view is shown for the parent',
-    shared.local?.title === 'Ava finished a quest', JSON.stringify(shared))
+    shared.local?.title === 'Ava finished a chore', JSON.stringify(shared))
   ok('and not when the parent has notifications off',
     routeNotice(submitted, { deviceRole: 'parent', showHere: false, pushReady: false }).local === null)
 }

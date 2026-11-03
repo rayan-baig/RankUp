@@ -117,6 +117,25 @@ begin
     return jsonb_build_object('ok', true, 'ignored', 'out_of_date', 'tier', v_fam.tier);
   end if;
 
+  -- A period refunded in full stays refunded. A refund does not cancel the
+  -- subscription at Stripe, which goes on sending "active" for it: when the
+  -- parent then cancelled in the portal (an update that still says active),
+  -- the family was put straight back on the plan it had just been refunded
+  -- for, free until the period ended. Only a new period (a renewal, which
+  -- charges the card again) or a different subscription brings the plan back.
+  -- What the event says about the end date is still kept, so the plan screen
+  -- can say when it stops.
+  if v_fam.subscription_status = 'refunded' and p_status in ('active', 'trialing')
+     and (p_subscription_id is null or p_subscription_id = v_fam.stripe_subscription_id)
+     and (p_period_end is null
+          or (v_fam.subscription_renews_at is not null and p_period_end <= v_fam.subscription_renews_at)) then
+    update families
+       set billing_event_at = greatest(billing_event_at, p_event_created),
+           subscription_ends_at = nullif(p_payload->>'cancel_at', '')::timestamptz
+     where id = p_family_id;
+    return jsonb_build_object('ok', true, 'ignored', 'refunded_period', 'tier', v_fam.tier);
+  end if;
+
   -- Fail closed: an unpaid subscription drops to the cheapest plan, never to a
   -- plan it did not pay for. An unrecognised tier name is treated the same way.
   v_tier := case
@@ -136,8 +155,21 @@ begin
          stripe_subscription_id = case when p_status in ('canceled', 'unpaid', 'incomplete_expired') then null
                                        else coalesce(p_subscription_id, stripe_subscription_id) end,
          billing_event_at = greatest(billing_event_at, p_event_created),
-         subscription_renews_at = p_period_end,
-         subscription_ends_at = case when p_status in ('canceled', 'unpaid') then p_period_end else null end
+         -- A refund names no period (apply_charge_refund passes none): the
+         -- period it refunded is kept, so the rule above can tell a renewal
+         -- from more news about the period that was handed back.
+         subscription_renews_at = case when p_status = 'refunded' then subscription_renews_at else p_period_end end,
+         -- When the plan stops. Ended: the moment Stripe ended it, which is
+         -- now for a plan cancelled at once, not the end of the period it
+         -- would have run to (the plan screen said "It runs until" a date
+         -- for a family already on Starter). Still running but cancelled in
+         -- the portal: the date it will stop, so the parent is told.
+         subscription_ends_at = case
+           when p_status in ('canceled', 'unpaid')
+             then coalesce(nullif(p_payload->>'ended_at', '')::timestamptz, p_period_end)
+           when p_status in ('active', 'trialing')
+             then nullif(p_payload->>'cancel_at', '')::timestamptz
+           else null end
    where id = p_family_id;
 
   return jsonb_build_object('ok', true, 'tier', v_tier);

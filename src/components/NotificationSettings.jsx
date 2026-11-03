@@ -97,7 +97,7 @@ export default function NotificationSettings() {
           <Button
             variant="soft"
             className="w-full mt-3"
-            onClick={() => notifyLocally(NOTICES.submission('Someone', 'a test quest'))}
+            onClick={() => notifyLocally(NOTICES.test())}
           >
             Send me a test notification
           </Button>

@@ -18,7 +18,7 @@ import TrialBanner from '../../components/TrialBanner.jsx'
 import { activityFeed } from '../../lib/activity.js'
 import CharityWeek from '../../components/CharityWeek.jsx'
 import InstallPrompt from '../../components/InstallPrompt.jsx'
-import { billingNotice } from '../../lib/billing.js'
+import { dashboardBillingNotice } from '../../lib/billing.js'
 import HowItWorks from '../../components/HowItWorks.jsx'
 import FirstWeek from '../../components/FirstWeek.jsx'
 import DemoTour from '../../components/DemoTour.jsx'
@@ -50,10 +50,7 @@ export default function ParentDashboard() {
 
   // A paid plan that stopped because of a payment, said where a parent looks
   // every day. A plan they cancelled themselves is not news, so not here.
-  const stopped = ['past_due', 'unpaid', 'incomplete', 'incomplete_expired', 'paused', 'refunded']
-    .includes(state.family.subscriptionStatus) && !state.demo
-    ? billingNotice({ status: state.family.subscriptionStatus, paid_tier: state.family.lastPaidTier })
-    : null
+  const stopped = dashboardBillingNotice(state.family, { demo: state.demo })
 
   // On a phone the family shares: out of Parent Mode, locked behind them.
   const handOver = () => {
@@ -255,7 +252,14 @@ export default function ParentDashboard() {
 
       <InstallPrompt />
 
-      <SectionTitle>Recent activity</SectionTitle>
+      <div className="flex items-baseline justify-between">
+        <SectionTitle>Recent activity</SectionTitle>
+        {state.submissions.length > 0 && (
+          <button type="button" className="text-xs underline text-muted" onClick={() => navigate('/parent/history')}>
+            Chore history
+          </button>
+        )}
+      </div>
       <Card>
         {feed.length === 0 ? (
           <p className="text-sm text-muted">Nothing yet.</p>

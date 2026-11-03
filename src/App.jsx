@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo } from 'react'
 import { useApp, pendingSubmissions } from './state/AppContext.jsx'
 import { activeLockout, guildsAllowedByPlan, overdriveActive } from './state/reducer.js'
-import { useRoute, navigate } from './lib/router.js'
+import { useRoute, navigate, lockedLink } from './lib/router.js'
 import { applyTheme } from './lib/applyTheme.js'
 import { resolveKidTheme } from './data/kidThemes.js'
 import { storyProgress } from './lib/dragonFight.js'
@@ -61,6 +61,8 @@ const ParentPairKid = lazyLoad(() => import('./screens/parent/ParentPairKid.jsx'
 const ParentPlan = lazyLoad(() => import('./screens/parent/ParentPlan.jsx'))
 const ParentSettings = lazyLoad(() => import('./screens/parent/ParentSettings.jsx'))
 const ParentHelp = lazyLoad(() => import('./screens/parent/ParentHelp.jsx'))
+const ParentHistory = lazyLoad(() => import('./screens/parent/ParentHistory.jsx'))
+const ParentMoney = lazyLoad(() => import('./screens/parent/ParentMoney.jsx'))
 const NotFound = lazyLoad(() => import('./screens/NotFound.jsx'))
 
 const KID_NAV = [
@@ -181,9 +183,10 @@ export default function App() {
       navigate('/kid')
       return
     }
-    // Parent Mode always needs the PIN gate, even on a direct link.
+    // Parent Mode always needs the PIN gate, even on a direct link. The
+    // link is kept, so the PIN opens where it was going.
     if (state.onboarded && isParentArea && !state.session.parentUnlocked) {
-      navigate('/switch')
+      navigate(lockedLink(path))
     }
   }, [state.onboarded, state.session.parentUnlocked, state.device?.role, route, isParentArea])
 
@@ -385,6 +388,8 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route === '/parent/plan') return <ParentPlan />
   if (route === '/parent/settings') return <ParentSettings />
   if (route === '/parent/help') return <ParentHelp />
+  if (route === '/parent/history') return <ParentHistory initialKidId={queryParam(fullPath, 'kid')} />
+  if (route === '/parent/money') return <ParentMoney initialKidId={queryParam(fullPath, 'kid')} />
 
   // A link to somewhere that does not exist (an old bookmark, a typo, a
   // screen that was renamed) says so, with a way home, rather than quietly

@@ -23,7 +23,9 @@ async function schoolPortal(req, res, token) {
       body: '{}',
     })
     const info = await infoRes.json()
-    if (!info?.ok) return res.status(403).json({ error: info?.reason || 'not_school_admin' })
+    // "Already paying" is a refusal to start a second checkout, and the very
+    // school that should reach the portal: its card, invoices and cancelling.
+    if (!info?.ok && info?.reason !== 'already_paying') return res.status(403).json({ error: info?.reason || 'not_school_admin' })
     if (!info.has_customer) return res.status(400).json({ error: 'no_subscription' })
 
     const customerRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/stripe_customer_for_school`, {

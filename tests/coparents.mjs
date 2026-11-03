@@ -65,7 +65,13 @@ const second = await ctx.newPage()
 track(first, 'first')
 track(second, 'second')
 
-const state = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('rankup.state.v1')))
+// Each page's own store: a page opened with ?device=x keeps its state under
+// its own key (src/lib/storage.js), and reading the plain key read the first
+// parent's phone whichever page was asked.
+const state = (p) => p.evaluate(() => {
+  const device = new URLSearchParams(window.location.search).get('device')
+  return JSON.parse(localStorage.getItem(`rankup.state.v1${device ? `.${device}` : ''}`))
+})
 
 console.log('\n=== One parent sets the family up ===')
 await first.goto(BASE, { waitUntil: 'networkidle' })
@@ -157,7 +163,7 @@ await second.getByRole('button', { name: 'Join' }).click()
  * thing worth checking is that the JOIN itself put them in the right place.
  */
 await second.waitForFunction(() => {
-  const s = JSON.parse(localStorage.getItem('rankup.state.v1') || '{}')
+  const s = JSON.parse(localStorage.getItem('rankup.state.v1.second') || '{}')
   return s.onboarded === true
 }, null, { timeout: 15000 }).catch(() => {})
 const joined = await state(second)
@@ -193,5 +199,72 @@ const listed = await first.evaluate(() => document.body.innerText)
 !new RegExp(code).test(listed)
   ? pass('and the spent invitation is no longer offered')
   : fail('spent invite hidden', 'the used code is still on screen')
+
+console.log('\n=== The same code again, after it was accepted ===')
+const third = await ctx.newPage()
+track(third, 'third')
+await third.goto(`${BASE}?device=third`, { waitUntil: 'networkidle' })
+await third.waitForTimeout(600)
+await third.getByRole('button', { name: /I'm a parent/ }).click()
+await third.waitForTimeout(400)
+await third.locator('input[type=email]').fill(`third${stamp}@example.com`)
+await third.locator('input[type=password]').fill('correct-horse-battery')
+await third.getByRole('button', { name: 'Create account' }).click()
+await third.waitForTimeout(1600)
+await third.getByText(/Join their family instead/).click()
+await third.waitForTimeout(600)
+await third.locator('input').nth(0).fill('Jo')
+await third.locator('input[aria-label="Invitation code"]').fill(code)
+await third.locator('input[inputmode=numeric]').fill('2468')
+await third.getByRole('button', { name: 'Join' }).click()
+await third.waitForTimeout(1500)
+const reused = await third.evaluate(() => document.body.innerText)
+;/already been used/i.test(reused)
+  ? pass('a code already accepted is refused, and says so')
+  : fail('reused code refused', reused.slice(0, 200))
+;(await state(third))?.onboarded !== true
+  ? pass('and that phone joined nothing')
+  : fail('reused code joined nothing', 'the third phone is set up')
+
+console.log('\n=== The first parent removes the second ===')
+await first.evaluate(() => { window.location.hash = '/parent/settings' })
+await first.waitForTimeout(1200)
+let asked = ''
+first.once('dialog', (d) => { asked = d.message(); d.dismiss() })
+await first.getByRole('button', { name: 'Remove' }).click()
+await first.waitForTimeout(800)
+;/Remove Alex/.test(asked) && /invite them again/.test(asked)
+  ? pass('removing asks first, and says what it does')
+  : fail('remove asks first', asked)
+;/Alex/.test(await first.evaluate(() => document.body.innerText))
+  ? pass('saying no keeps them in the family')
+  : fail('dismissed remove kept them', 'Alex is gone')
+first.once('dialog', (d) => d.accept())
+await first.getByRole('button', { name: 'Remove' }).click()
+await first.waitForTimeout(1500)
+await first.screenshot({ path: `${SHOT_DIR}/coparent-removed.png` })
+!/Alex/.test(await first.evaluate(() => document.body.innerText))
+  ? pass('yes takes them out of the list')
+  : fail('removed adult unlisted', 'Alex is still listed')
+
+// The second phone finds out on its next sync, and erases what it held. Two
+// answers of "no family" in a row are needed, so one odd answer cannot erase a
+// phone; a phone in use asks every few seconds (a touch wakes it), and a tab
+// in the background here would not ask at all.
+await second.bringToFront()
+for (let i = 0; i < 8; i += 1) {
+  if (await second.evaluate(() => Boolean(document.querySelector('[data-testid="device-wiped"]')))) break
+  // A touch, as the person holding it would give, without pressing anything.
+  await second.evaluate(() => window.dispatchEvent(new PointerEvent('pointerdown'))).catch(() => {})
+  await second.waitForTimeout(9000)
+}
+const gone = await second.evaluate(() => document.querySelector('[data-testid="device-wiped"]')?.textContent || '')
+;/no longer part of a family/.test(gone)
+  ? pass("the removed parent's phone says so and keeps nothing")
+  : fail('removed phone wiped', gone || (await second.evaluate(() => document.body.innerText)).slice(0, 200))
+!(await state(second))?.kids?.length
+  ? pass('no child is left on it')
+  : fail('removed phone holds no child', JSON.stringify((await state(second))?.kids?.map((k) => k.name)))
+await second.screenshot({ path: `${SHOT_DIR}/coparent-removed-phone.png` })
 
 await finish(errors, fails, browser)

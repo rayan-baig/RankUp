@@ -4,12 +4,12 @@ Every suite is listed, file by file, in **`tests/run-suite.mjs`**, which runs it
 
 | Suite | Command | Needs | What it covers |
 |---|---|---|---|
-| static | `npm run test:static` | nothing | Every setting the code reads is in `.env.example`; the Cloudflare route table matches `api/`; the scheduled jobs in `vercel.json`, `/api/health` and the jobs agree; the SQL files are in one order everywhere (`config.mjs`, `wiring.mjs`); RankUp shares nothing with the sites beside it on its parent domain: no cookie, no CORS, no wildcard in the policy, a service worker and a way back from Stripe that never lead to a sibling (`isolation.mjs`); the version has a CHANGELOG entry and is built in, never typed (`release.mjs`); every icon exists, the link preview's picture is a whole address or left out, robots.txt and the sitemap show only the front door (`sharecard.mjs`); every arcade game and sport has a short how-to line (`howtoplay.mjs`); the parent help page covers what parents ask, with the plan list's prices (`help.mjs`); the readable copy of a family's data escapes everything typed and reads both export shapes (`dataexport.mjs`); no price or trial length is typed by hand anywhere in `src/` (`prices.mjs`); what the plan screen says each plan gives is what the app enforces, and the yearly saving is the real difference (`planwords.mjs`) |
+| static | `npm run test:static` | nothing | Every setting the code reads is in `.env.example`; the Cloudflare route table matches `api/`; the scheduled jobs in `vercel.json`, `/api/health` and the jobs agree; the SQL files are in one order everywhere (`config.mjs`, `wiring.mjs`); RankUp shares nothing with the sites beside it on its parent domain: no cookie, no CORS, no wildcard in the policy, a service worker and a way back from Stripe that never lead to a sibling (`isolation.mjs`); the version has a CHANGELOG entry and is built in, never typed (`release.mjs`); every icon exists, the link preview's picture is a whole address or left out, robots.txt and the sitemap show only the front door (`sharecard.mjs`); every arcade game and sport has a short how-to line (`howtoplay.mjs`); the parent help page covers what parents ask, with the plan list's prices (`help.mjs`); the readable copy of a family's data escapes everything typed and reads both export shapes (`dataexport.mjs`); no price or trial length is typed by hand anywhere in `src/` (`prices.mjs`); what the plan screen says each plan gives is what the app enforces, and the yearly saving is the real difference (`planwords.mjs`); every notification's words fit a lock screen with the longest values, never shame, say what happened, and every link in a notice, the weekly digest, an email or Stripe's way back is a real screen that survives the Parent Mode PIN (`noticewords.mjs`) |
 | smoke | `npm run test:smoke` | the dev server and the stand-in API | The app in a real browser, screen by screen |
 | sync | `npm run test:sync` | the same | Two and three phones against a real Postgres |
 | awards | `npm run test:awards` | Postgres | The rules, in Node, against the app's own code and the database |
 | built | `npm run test:built` | a browser | The production build: no secrets in it, the security policy, the arcade's framed games |
-| api | `npm run test:api` | `up.sh --cf` | Every function in `api/`, under the runtime Cloudflare uses, against stand-ins for Stripe and the email provider |
+| api | `npm run test:api` | `up.sh --cf` | Every function in `api/`, under the runtime Cloudflare uses, against stand-ins for Stripe and the email provider; a family's and a school's whole plan, start to finish (`billingwalk.mjs`) |
 | SQL | `npm run test:db` | Postgres | About a thousand checks on the database rules (`supabase/test/`) |
 | refusals | `npm run test:refusals` | Postgres | Every `{ ok: false, reason }` in the SQL is actually given while the SQL suite runs |
 
@@ -80,6 +80,21 @@ offline (one charge, never below zero), one purchase retried while the first
 try is still running, a purchase racing a tax, a reward deleted while a child
 buys it offline, and "Mark given" tapped on two parents' phones together.
 The one-call-at-a-time versions are `supabase/test/29-money-floor.sql`.
+
+**`billingwalk.mjs`** walks one family, then one school, through a plan's
+whole life in Stripe's test mode as the code sees it: subscribe monthly, renew,
+a payment fails, a refund, cancel, subscribe again for a year. Checkout and the
+billing portal ask a stand-in Stripe; every event is signed and posted to the
+real webhook under workerd, some twice and some late. After each step: the
+plan the database holds, the words on the plan screen and the dashboard, and
+what the child can use (the plan their own phone works out, the XP a chore
+pays, whether a second child can be added); for a school, whether its students
+are in the league and what its admin is told.
+
+**`rewardlimits.mjs`** runs the app's reducer as a child's phone and a
+parent's, both offline, buying a reward with a weekly limit: the phone refuses
+a tap past the limit, and when both sync at once the server lets only the
+limit through, the other phone gets its coins back and is told why.
 
 **`bundle.mjs`** builds the app with every server-only setting in
 `.env.example` given a fake value (the service role key as a real-looking

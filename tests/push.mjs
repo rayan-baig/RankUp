@@ -135,7 +135,7 @@ if (live) {
 }
 ok('the body is encrypted (the words are not in it)', live && !live.body.toString('latin1').includes('Make the bed'))
 ok('and decrypts, with the phone’s own keys, to the right notice',
-  notice?.title === 'Ava finished a quest' && String(notice?.body).includes('Make the bed'), JSON.stringify(notice))
+  notice?.title === 'Ava finished a chore' && String(notice?.body).includes('Make the bed'), JSON.stringify(notice))
 
 console.log('\n=== Failures land on the right phone ===')
 const rows = (await db.query('select endpoint, failures from push_subscriptions where family_id = $1', [FAMILY])).rows

@@ -109,7 +109,7 @@ Known limits, decided rather than missed:
 | Daily reminders with the app closed | ✅ | `api/send-reminders.js`, on each family's own clock. **You have to schedule it** |
 | Weekly digest | ✅ | `api/send-digests.js`, Sunday evening in each family's time zone. **You have to schedule it** |
 | A real phone receiving a push | 🟡 | Proven end to end against a stand-in push service (`tests/push.mjs`); not yet on a real phone |
-| Notifications on a child's phone | ❌ | Only a parent's phone has the switch, so "Approved!" and "Sent back" reach no phone yet ([ROADMAP.md](ROADMAP.md)) |
+| Notifications on a child's phone | ❌ | Only a parent's phone has the switch, so "Accepted!" and "Back on your list" reach no phone yet ([ROADMAP.md](ROADMAP.md)) |
 | Guild request notice | ✅ needs VAPID keys | When a child asks to join a guild, the parents whose yes is still missing are told, in the child's family and in the guild's. Once per request; counted against each family's hourly ceiling |
 
 ## Not built

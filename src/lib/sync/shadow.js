@@ -275,6 +275,8 @@ export function pendingRows(ops, state = null) {
     else if (op.type === 'rpc' && op.fn === 'set_kid_look' && op.args?.p_kid_id) pending.add(`kids:${op.args.p_kid_id}`)
     // A goal this phone has just set must not be put back by an older copy.
     else if (op.type === 'rpc' && op.fn === 'set_family_goal') pending.add('family_goals')
+    // A note added in Chore history: an older pull must not wipe it on screen.
+    else if (op.type === 'rpc' && op.fn === 'set_history_note' && op.args?.p_submission_id) pending.add(`submissions:${op.args.p_submission_id}`)
     /*
      * A chore sent, accepted or sent back, still on its way. A pull already in
      * flight carries the rows as they were a moment before, and merging it

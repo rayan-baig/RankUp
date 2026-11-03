@@ -5,7 +5,7 @@ import { transport } from '../lib/sync/transport.js'
 import {
   schools, schoolError, schoolPrice, dollars, monthLabel,
   SCHOOL_PRICES, SCHOOL_TRIAL_DAYS, demoOverview, DEMO_LEAGUE,
-  SCHOOL_YEAR_MONTHS,
+  SCHOOL_YEAR_MONTHS, schoolBillingNotice,
 } from '../lib/schools.js'
 import { Screen, Card, Button, SectionTitle, Banner, Field, TextInput, Modal, Chip, DemoTag } from '../components/ui.jsx'
 import { SchoolHeadline, LeagueTable, RivalryList, StarList } from '../components/SchoolParts.jsx'
@@ -357,6 +357,12 @@ function Dashboard({ school, league, demo, onChange }) {
 
       <Card className="mb-3">
         <SectionTitle>Plan</SectionTitle>
+        {admin && schoolBillingNotice(school) && (
+          <Banner tone={schoolBillingNotice(school).tone} icon={schoolBillingNotice(school).icon}
+                  title={schoolBillingNotice(school).title} className="mb-2">
+            {schoolBillingNotice(school).body}
+          </Banner>
+        )}
         <p className="text-sm">
           {school.price?.label}, {dollars(school.price?.monthly_cents || 0)} a month
           {trialDays !== null && <> · <Chip tone="var(--accent)">{trialDays} days of free trial left</Chip></>}

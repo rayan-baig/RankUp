@@ -49,6 +49,7 @@ const SUITES = {
     { file: 'prices.mjs' },
     { file: 'planwords.mjs' },
     { file: 'dataexport.mjs' },
+    { file: 'noticewords.mjs' },
   ],
   // The app in a real browser, against the dev server on :5173 and the mock
   // API on :54321 (supabase/test/up.sh starts both).
@@ -92,7 +93,7 @@ const SUITES = {
   sync: [
     { file: 'sync.mjs', weight: 119 },
     { file: 'devicewipe.mjs', weight: 46 },
-    { file: 'coparents.mjs', weight: 32 },
+    { file: 'coparents.mjs', weight: 75 },
     { file: 'guilds.mjs', weight: 69 },
     { file: 'consent.mjs', weight: 10 },
   ],
@@ -116,6 +117,7 @@ const SUITES = {
     { file: 'cards.mjs' },
     { file: 'money.mjs' },
     { file: 'rewardraces.mjs' },
+    { file: 'rewardlimits.mjs' },
     { file: 'charity.mjs' },
     { file: 'dragon.mjs' },
     { file: 'battles.mjs' },
@@ -127,6 +129,7 @@ const SUITES = {
   api: [
     { file: 'api.mjs' },
     { file: 'push.mjs' },
+    { file: 'billingwalk.mjs' },
   ],
   // A production build: no secrets in it, the policy, the framed games.
   built: [

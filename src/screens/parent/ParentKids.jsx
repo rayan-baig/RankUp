@@ -106,6 +106,9 @@ export default function ParentKids() {
                 <Button variant="soft" className="flex-1 py-2 min-h-0 text-sm" onClick={() => navigate(`/parent/assign?kid=${kid.id}`)}>
                   Assign
                 </Button>
+                <Button variant="soft" className="flex-1 py-2 min-h-0 text-sm" onClick={() => navigate(`/parent/history?kid=${kid.id}`)}>
+                  History
+                </Button>
                 <Button variant="ghost" className="px-3 py-2 min-h-0 text-sm" onClick={() => setRemoving(kid)} aria-label={`Remove ${kid.name}`}>
                   🗑
                 </Button>

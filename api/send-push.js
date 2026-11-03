@@ -17,6 +17,7 @@
 import webpush from 'web-push'
 import { sendPush, failureFor } from './_shared/push.js'
 import { userHeaders } from './_shared/job.js'
+import { NOTICES, PUSH_KINDS, VALUE_MAX, reminderPush } from '../src/data/noticeWords.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -27,7 +28,7 @@ const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:support@example.com'
 const ALLOWED_ROLES = new Set(['parent', 'kid'])
 
 /**
- * The wording lives here, not in the request.
+ * The wording is the server's, not the request's.
  *
  * This endpoint used to take a title and body straight from the caller and push
  * them to every phone in the family. Membership was checked; the CONTENT was
@@ -36,44 +37,11 @@ const ALLOWED_ROLES = new Set(['parent', 'kid'])
  * under the app's name. For a children's app that is the wrong side of a line.
  *
  * So a caller names a notice and supplies at most two short values to slot into
- * it. Everything a phone finally displays is written here, and the values are
+ * it. Everything a phone finally displays is written in src/data/noticeWords.js
+ * (the app shows the same words when it notifies locally), and the values are
  * clipped and stripped of newlines so they cannot forge a second line.
- *
- * Mirrors NOTICES in src/lib/notifications.js, which still renders the local
- * copy on the device that already has the data.
  */
-const NOTICES = {
-  submission: (who, what) => ({
-    title: `${who} finished a quest`,
-    body: `"${what}" is waiting for you to review.`,
-    tag: 'submission',
-    url: '/#/parent/approvals',
-  }),
-  approved: (what, xp) => ({
-    title: 'Approved! 🎉',
-    body: `"${what}" earned you ${xp} XP.`,
-    tag: 'decision',
-    url: '/#/kid',
-  }),
-  rejected: (what) => ({
-    title: 'Sent back to redo',
-    body: `"${what}" needs another go. Tap to see why.`,
-    tag: 'decision',
-    url: '/#/kid/quests',
-  }),
-  guildRequest: (who, what) => ({
-    title: 'A guild request needs you',
-    body: `${who} wants to join ${what}. Nobody joins without you.`,
-    tag: 'guild',
-    url: '/#/parent/guilds',
-  }),
-  reminder: () => ({
-    title: 'RankUp',
-    body: 'Time to check in on today\u2019s quests.',
-    tag: 'reminder',
-    url: '/#/kid/quests',
-  }),
-}
+const noticeFor = (kind, role, args) => (kind === 'reminder' ? reminderPush(args[0], role) : NOTICES[kind](...args))
 
 /**
  * One line, bounded. A name or a quest title, never a paragraph, and never a
@@ -86,7 +54,7 @@ const clean = (value) => String(value ?? '')
   .replace(/[+()\d][\d\s().-]{6,}\d/g, '')
   .replace(/\s{2,}/g, ' ')
   .trim()
-  .slice(0, 40)
+  .slice(0, VALUE_MAX)
 
 /** Telling a child their work was approved or sent back is a parent's to do. */
 const PARENT_ONLY = new Set(['approved', 'rejected'])
@@ -163,13 +131,13 @@ export default async function handler(req, res) {
     try { body = JSON.parse(body) } catch { body = null }
   }
   const { familyId, role, kidId, kind, args, guildId } = body || {}
-  if (!familyId || !ALLOWED_ROLES.has(role) || !NOTICES[kind]) {
+  if (!familyId || !ALLOWED_ROLES.has(role) || !PUSH_KINDS.includes(kind)) {
     return res.status(400).json({ error: 'familyId, role and a known kind are required.' })
   }
   if (kind === 'guildRequest' && !(UUID.test(String(guildId)) && UUID.test(String(kidId)))) {
     return res.status(400).json({ error: 'A guild request names the guild and the child.' })
   }
-  const message = NOTICES[kind](...(Array.isArray(args) ? args.slice(0, 2).map(clean) : []))
+  const notice = noticeFor(kind, role, Array.isArray(args) ? args.slice(0, 2).map(clean) : [])
 
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
   if (!token) return res.status(401).json({ error: 'Sign in first.' })
@@ -200,7 +168,7 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: 'lookup_failed' })
   }
 
-  return res.status(200).json(await deliver(targets || [], message))
+  return res.status(200).json(await deliver(targets || [], notice))
 }
 
 /**

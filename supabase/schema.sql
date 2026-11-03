@@ -1461,6 +1461,24 @@ alter table submissions drop constraint if exists submissions_sticker_values;
 alter table submissions add constraint submissions_sticker_values
   check (sticker in ('proud','spotless','fast','effort','kind','above','funny','thanks'));
 
+-- How many times one child may take a reward in any seven days, set by a
+-- parent. Null is no limit. Enforced by redeem_reward (sync.sql), which counts
+-- the child's own redemptions of it over the last seven days, so purchases
+-- queued on a phone with no signal cannot go over it when they arrive; the
+-- app checks the same thing first so a child is told before spending.
+alter table rewards add column if not exists weekly_limit int;
+alter table rewards drop constraint if exists rewards_weekly_limit_range;
+alter table rewards add constraint rewards_weekly_limit_range
+  check (weekly_limit between 1 and 50);
+-- What that count reads: one child's redemptions of one reward, newest first.
+create index if not exists redemptions_kid_reward_idx on redemptions (kid_id, reward_id, created_at desc);
+
+-- A parent's note on a chore in its history (set_history_note, sync.sql). The
+-- one thing about a past chore that can change; see that function for why.
+alter table submissions add column if not exists history_note text not null default '';
+alter table submissions drop constraint if exists submissions_history_note_size;
+alter table submissions add constraint submissions_history_note_size check (length(history_note) <= 300);
+
 /*
  * A submission's verdict, and when it was given, belong to the functions that
  * give it: approve_submission and reject_submission, which stamp the time

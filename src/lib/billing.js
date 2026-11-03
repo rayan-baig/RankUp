@@ -167,6 +167,9 @@ export function billingError(reason) {
 
 const PLAN_NAMES = { standard: 'Standard', elite: 'Elite' }
 
+/** A date on a plan notice, in words: "15 November 2026", not "11/15/2026". */
+export const planDate = (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+
 /**
  * What a parent is told when their plan has stopped, and why.
  *
@@ -210,11 +213,39 @@ export function billingNotice(status) {
         body: `Your last payment was handed back in full, so that period is not paid for and you are on Starter. Choose a plan below whenever you want it back. ${kept}`,
       }
     case 'canceled':
+      // Stripe says "canceled" once the plan has ended, and the family is on
+      // Starter from that moment. This used to say "It runs until" the end
+      // of the period for a plan cancelled at once, to a family already on
+      // Starter.
       return {
         tone: 'info', icon: 'ℹ️', title: 'Your plan has ended',
-        body: `${until && until.getTime() > Date.now() ? `It runs until ${until.toLocaleDateString()}, then` : 'You are now on'} Starter. Choose a plan below to start again. ${kept}`,
+        body: `Your ${plan} plan has ended, so you are on Starter now. Choose a plan below to start again. ${kept}`,
       }
+    case 'active':
+    case 'trialing':
+      // Cancelled in the portal and still running: nothing has changed yet,
+      // and the parent should not find out on the day.
+      if (until && until.getTime() > Date.now()) {
+        return {
+          tone: 'info', icon: '📅', title: 'Your plan is ending',
+          body: `You cancelled, so your ${PLAN_NAMES[status?.tier] || plan} plan stops on ${planDate(until)}. Nothing changes until then. Changed your mind? Use “Manage billing”.`,
+        }
+      }
+      return null
     default:
       return null
   }
+}
+
+/** The statuses that mean a payment stopped the plan, which the dashboard shows. */
+const PAYMENT_STOPPED = ['past_due', 'unpaid', 'incomplete', 'incomplete_expired', 'paused', 'refunded']
+
+/**
+ * The notice on the parent dashboard, from the synced family row: only a
+ * plan a payment stopped. A plan they cancelled themselves, or one ending on
+ * a date they chose, is not news there; the plan screen says it.
+ */
+export function dashboardBillingNotice(family, { demo = false } = {}) {
+  if (demo || !PAYMENT_STOPPED.includes(family?.subscriptionStatus)) return null
+  return billingNotice({ status: family.subscriptionStatus, paid_tier: family.lastPaidTier })
 }
