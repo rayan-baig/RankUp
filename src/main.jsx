@@ -5,6 +5,7 @@ import { AppProvider } from './state/AppContext.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { reportEnvironment } from './lib/env.js'
 import { keepAppForOffline } from './lib/offline.js'
+import { listenForInstall } from './lib/installPrompt.js'
 import './styles/index.css'
 
 // Shout about a half-configured deploy at start-up rather than letting it fail
@@ -13,6 +14,10 @@ reportEnvironment()
 
 // After the first visit, the app opens with no signal too.
 keepAppForOffline()
+
+// Chrome offers to install once, as the page loads; kept for the moment the
+// app asks (after the first accepted chore), not shown when Chrome likes.
+listenForInstall()
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>

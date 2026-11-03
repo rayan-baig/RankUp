@@ -52,6 +52,7 @@ const SUITES = {
     { file: 'noticewords.mjs' },
     { file: 'arcadewords.mjs' },
     { file: 'schoolhelp.mjs' },
+    { file: 'installcard.mjs' },
   ],
   // The app in a real browser, against the dev server on :5173 and the mock
   // API on :54321 (supabase/test/up.sh starts both).
@@ -93,6 +94,7 @@ const SUITES = {
     { file: 'schoolsignup.mjs', weight: 15 },
     { file: 'schoolchecks.mjs', weight: 8 },
     { file: 'oldphone.mjs', weight: 3 },
+    { file: 'installprompt.mjs', weight: 30 },
     { file: 'secretworlds.mjs', weight: 143 },
     { file: 'plainsetup.mjs', weight: 25 },
     { file: 'layout.mjs', weight: 150 },

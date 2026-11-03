@@ -97,6 +97,8 @@ export default function ParentDashboard() {
       <DemoTour />
       <HowItWorks />
       <FirstWeek />
+      {/* After the first accepted chore, once; never on a child's phone. */}
+      <InstallPrompt />
 
       <div className="flex gap-2 mb-3">
         <Stat icon="📥" value={pending.length} label="To review" tone={pending.length ? 'var(--warn)' : undefined} />
@@ -249,8 +251,6 @@ export default function ParentDashboard() {
           {elitePitch()}
         </Banner>
       )}
-
-      <InstallPrompt />
 
       <div className="flex items-baseline justify-between">
         <SectionTitle>Recent activity</SectionTitle>

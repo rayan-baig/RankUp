@@ -11,7 +11,6 @@ import { Screen, Card, Button, ProgressBar, Stat, SectionTitle, EmptyState, Bann
 import { Words, CountUp } from '../../components/Motion.jsx'
 import SyncBadge from '../../components/SyncBadge.jsx'
 import { navigate } from '../../lib/router.js'
-import InstallPrompt from '../../components/InstallPrompt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
 import { useKidSchool } from './useKidSchool.js'
 import { familyGoalProgress } from '../../state/reducer.js'
@@ -353,8 +352,6 @@ export default function KidHome() {
           <span aria-hidden="true" className="text-muted">›</span>
         </button>
       )}
-
-      <InstallPrompt />
 
       <SectionTitle action={<button type="button" className="text-xs text-muted underline" onClick={() => navigate('/kid/quests')}>See all</button>}>
         Today's quests
