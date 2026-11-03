@@ -265,7 +265,8 @@ revoke all on trial_reminder_sends from public, anon, authenticated;
  * (a family already paying for Elite loses nothing when an Elite trial ends,
  * and is told nothing), and
  *   three_days  it ends within three days, but not today where they live;
- *   last_day    it ends today where they live.
+ *   last_day    it ends today where they live, or within two hours (late
+ *               the evening before, for a trial that ends just after midnight).
  * A family that missed the first (the job was down) gets only the second.
  * Only parents are written to, never a supporter, and only an account with an
  * email address.
@@ -287,8 +288,13 @@ begin
        and (case f.trial_tier when 'elite' then 2 when 'standard' then 1 else 0 end)
          > (case f.tier       when 'elite' then 2 when 'standard' then 1 else 0 end)
   ), due as (
+    -- The last two hours count as the last day too. The job runs hourly, and
+    -- a trial ends at the time of day the family signed up: one ending at
+    -- 00:20 where they live had twenty minutes of its own day, which an hourly
+    -- run at 35 past never landed in, so its last reminder was never sent.
     select r.*,
            case when (r.trial_ends_at at time zone r.tz)::date = (p_now at time zone r.tz)::date
+                  or r.trial_ends_at <= p_now + interval '2 hours'
                 then 'last_day' else 'three_days' end as kind
       from running r
   )

@@ -170,5 +170,18 @@ for (const file of ['api/send-push.js', 'api/send-reminders.js', 'api/send-diges
 ok('a phone can ask the server for every kind but the local test', PUSH_KINDS.every((k) => NOTICES[k]) && !PUSH_KINDS.includes('test'))
 ok('the server clips a value to the length these words were measured with', /\.slice\(0, VALUE_MAX\)/.test(read('api/send-push.js')))
 
+/* ------------------------------------------------------------------ */
+console.log('\n=== The trial\'s last-day email ===')
+
+{
+  const { trialEmail } = await import('../api/_shared/email.js')
+  const today = trialEmail({ kind: 'last_day', trialTier: 'elite', paidTier: 'starter', daysLeft: 0 })
+  // A trial that ends just after midnight is reminded late the evening before
+  // (due_trial_reminders): "ends today" would be a day out.
+  const evening = trialEmail({ kind: 'last_day', trialTier: 'elite', paidTier: 'starter', daysLeft: 1 })
+  ok('on the day, it ends today', /ends today\./.test(today.text))
+  ok('the evening before, it ends tonight', /ends tonight\./.test(evening.text) && !/ends today/.test(evening.text), evening.text.split('\n\n')[1])
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL CHECKS PASSED')
 process.exit(fails ? 1 : 0)

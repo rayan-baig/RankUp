@@ -110,7 +110,9 @@ export function trialEmail({ kind, trialTier, paidTier, endsLocal, daysLeft = 3,
   const paragraphs = [
     'Hello,',
     last
-      ? `Your free trial of ${trial} ends today.`
+      // Sent late the evening before for a trial that ends just after
+      // midnight their time (due_trial_reminders): "today" would be wrong.
+      ? `Your free trial of ${trial} ends ${Number(daysLeft) >= 1 ? 'tonight' : 'today'}.`
       : `Your free trial of ${trial} ends ${days === 1 ? 'tomorrow' : `in ${days} days`}, on ${endsLocal}.`,
     `After that you are on ${after}, unless you choose a plan. Nothing is charged by itself.`,
     'Everything your children have earned stays exactly where it is.',

@@ -9,7 +9,7 @@ code.
 | **Confirm your email** (the welcome) | Supabase Auth | Sign-up, if **Confirm email** is on | Supabase dashboard: the template below |
 | **Reset your password** | Supabase Auth | When you send one from the dashboard (the app has no "forgot password" screen yet) | Supabase dashboard: the template below |
 | **3 days left of your trial** | RankUp, `/api/send-trial-emails` | Three days before a family's free trial ends, in its own time zone | `EMAIL_API_KEY`, `EMAIL_FROM`, the hourly job (below) |
-| **Last day of your free trial** | RankUp, `/api/send-trial-emails` | On the day it ends, in its own time zone | The same |
+| **Last day of your free trial** | RankUp, `/api/send-trial-emails` | On the day it ends, in its own time zone (late the evening before, for a trial that ends in the first two hours of a day, which an hourly job could miss) | The same |
 | **Receipt** | Stripe | Each payment | Stripe dashboard (below) |
 | **A payment failed** | Stripe | A renewal's card is declined | Stripe dashboard (below) |
 | **Your plan has ended** | Stripe, if your account offers it; otherwise nobody | A subscription is cancelled, or Stripe stops retrying | Stripe dashboard (below) |
@@ -72,7 +72,8 @@ DMARC on the parent domain).
   > email about it, on the day it ends.
 
   On the day: **"Last day of your free trial"**, "Your free trial of Elite
-  Pass ends today", and "This is the last email about it." Plan names come
+  Pass ends today" ("ends tonight" when it goes the evening before), and
+  "This is the last email about it." Plan names come
   from the plan list, so they follow it.
 
 - **Settings** (`.env.example`, section 6a): `EMAIL_API_KEY` (the provider's

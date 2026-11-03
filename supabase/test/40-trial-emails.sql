@@ -101,6 +101,28 @@ begin
   perform ok('a Standard family trying Elite is reminded too', r->>'paid_tier' = 'standard' and r->>'kind' = 'three_days');
 end $$;
 
+-- ---------- a trial that ends just after midnight still gets "the day" ----------
+-- The job runs once an hour, at 35 past (docs/LAUNCH.md). A trial ends at the
+-- time of day the family signed up, so one that ends at 00:20 where they live
+-- had twenty minutes of "its day" before it ended, with no run in them: its
+-- last reminder was never sent. Every hourly run in its final three days is
+-- tried here, and one of them has to be the last-day reminder.
+do $$
+declare v_kinds text[];
+begin
+  update families set trial_ends_at = '2026-11-10 00:20 America/Los_Angeles'
+   where id = '40a00000-0000-4000-8000-00000000000d';
+  select array_agg(distinct d->>'kind') into v_kinds
+    from generate_series(timestamptz '2026-11-06 23:35 America/Los_Angeles',
+                         timestamptz '2026-11-10 00:35 America/Los_Angeles', interval '1 hour') run
+    cross join lateral (select t40_due(run, '40a00000-0000-4000-8000-00000000000d') as d) x
+   where d is not null;
+  perform ok('a trial ending at 00:20 their time is still sent its last-day reminder by an hourly job',
+    'last_day' = any(v_kinds) and 'three_days' = any(v_kinds), coalesce(v_kinds::text, 'nothing due'));
+  perform ok('which is not sent a day early',
+    t40_due('2026-11-09 12:35 America/Los_Angeles', '40a00000-0000-4000-8000-00000000000d')->>'kind' = 'three_days');
+end $$;
+
 -- ---------- once, and only once ----------
 do $$
 declare first boolean; second boolean; r jsonb;
