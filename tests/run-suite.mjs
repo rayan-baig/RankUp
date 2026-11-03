@@ -82,6 +82,7 @@ const SUITES = {
     { file: 'launchscreens.mjs', weight: 40 },
     { file: 'erase.mjs', weight: 19 },
     { file: 'download.mjs', weight: 30 },
+    { file: 'pinreset.mjs', weight: 25 },
     { file: 'oldphone.mjs', weight: 3 },
     { file: 'secretworlds.mjs', weight: 143 },
     { file: 'plainsetup.mjs', weight: 25 },

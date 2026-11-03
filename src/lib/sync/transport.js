@@ -279,6 +279,29 @@ export const transport = {
   },
 
   /**
+   * Check an account's password without changing who this phone is signed
+   * in as. Answers the session the server would give, or throws (a wrong
+   * password is a 400). The caller decides whether to keep it: the PIN reset
+   * keeps it only when it is the same account already signed in here, so a
+   * correct password for some other account changes nothing.
+   */
+  checkPassword: (email, password) =>
+    request('/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      auth: false,
+      body: JSON.stringify({ email, password }),
+    }),
+
+  /** Keep a session checkPassword gave, once the caller has checked it is this phone's account. */
+  keepSession: (session) => { setSession(session); signInNeeded = false },
+
+  /** The signed-in account's email, if it has one. A child's phone signs in anonymously and has none. */
+  currentEmail: () => {
+    const user = getSession()?.user
+    return user && !user.is_anonymous && user.email ? user.email : null
+  },
+
+  /**
    * A kid's phone signs in anonymously.
    *
    * It genuinely has no account — no email, no password — but it still needs an

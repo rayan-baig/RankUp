@@ -20,6 +20,7 @@ Getting ready for launch.
 - `robots.txt` keeps search engines off `/api/`, and a sitemap lists the front door.
 - Settings names the plan a family is really on: a free family is on Starter, not "Standard".
 - Every price and trial length comes from the plan list, including the dashboard's Elite banner and the terms.
+- A forgotten Parent Mode PIN can be reset: "Forgot your PIN?" asks for the account's password again, then a new PIN. Not on a child's phone.
 - "Download my data" also gives an easy-to-read summary (children, chores, history, rewards) beside the full JSON, and the JSON now includes what each child spent.
 - The plan screen says what each plan adds, in plain words, from the limits the app enforces, and what a year saves against twelve months.
 

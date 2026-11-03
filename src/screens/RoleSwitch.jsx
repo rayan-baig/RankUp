@@ -7,6 +7,7 @@ import Avatar from '../components/Avatar.jsx'
 import { Card, Button, TextInput } from '../components/ui.jsx'
 import { navigate } from '../lib/router.js'
 import Logo from '../components/Logo.jsx'
+import PinReset from '../components/PinReset.jsx'
 
 /**
  * Who is holding the phone?
@@ -19,6 +20,7 @@ export default function RoleSwitch() {
   const { state, dispatch } = useApp()
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
+  const [resetting, setResetting] = useState(false)
   const needsPin = !(state.demo || !state.family.pin)
 
   const openParent = () => {
@@ -121,11 +123,16 @@ export default function RoleSwitch() {
         )}
         {error && <p className="text-xs mt-2" style={{ color: 'var(--bad)' }} role="alert">{error}</p>}
         {needsPin && (
-          <p className="text-[11px] text-muted mt-2">
-            Forgotten it? There is no reset yet — the PIN is stored with the rest of the local data.
-          </p>
+          <button
+            type="button"
+            className="text-xs underline text-muted mt-2"
+            onClick={() => setResetting(true)}
+          >
+            Forgot your PIN?
+          </button>
         )}
       </Card>
+      <PinReset open={resetting} onClose={() => setResetting(false)} onDone={unlock} />
     </div>
   )
 }

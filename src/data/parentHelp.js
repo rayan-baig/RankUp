@@ -1,6 +1,7 @@
 import { TIERS, TIER_LADDER, TRIAL_DAYS } from '../state/initialState.js'
 import { FLASH_TICKET_PACKS } from '../lib/billing.js'
 import { CODE_TTL_MS, MAX_ATTEMPTS } from '../lib/pairing.js'
+import { MAX_TRIES as PIN_TRIES, LOCK_MINUTES as PIN_LOCK_MINUTES } from '../lib/pinReset.js'
 import { DIFFICULTY_LIST, xpToNext, streakMultiplier, ELITE_XP_MULTIPLIER } from '../lib/xp.js'
 import { MAX_TOKENS, DAILY_COIN_CAP } from '../data/minigames.js'
 
@@ -66,7 +67,9 @@ export function parentHelp() {
           id: 'pin-forgot',
           q: 'I forgot my PIN. What now?',
           a: [
-            'There is no PIN reset yet, so pick one you will remember.',
+            'On the “Who\'s playing?” screen, tap “Forgot your PIN?”. Sign in again with the password of the account this phone uses, then choose a new PIN.',
+            `After ${PIN_TRIES} wrong passwords it waits ${PIN_LOCK_MINUTES} minutes before you can try again.`,
+            "A child's own phone has no Parent Mode, so there is no reset on it, and a child on your phone would need your password.",
             'While you are in Parent Mode you can change it any time in Settings → Parent account.',
           ],
         },

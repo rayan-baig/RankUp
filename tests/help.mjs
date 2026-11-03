@@ -86,6 +86,15 @@ ok(`the first level takes ${xpToNext(1)} XP`, answer('xp').includes(`${xpToNext(
 ok(`the arcade: ${MAX_TOKENS} tokens, ${DAILY_COIN_CAP} coins a day`,
   answer('arcade').includes(`up to ${MAX_TOKENS}`) && answer('arcade').includes(`${DAILY_COIN_CAP} a day`))
 
+console.log('\n=== A forgotten PIN can be reset, and the answer says how ===')
+const { MAX_TRIES, LOCK_MINUTES } = await import('../src/lib/pinReset.js')
+const roleSwitch = readFileSync('src/screens/RoleSwitch.jsx', 'utf8')
+ok('the answer no longer says there is no reset', !/no PIN reset/i.test(answer('pin-forgot')))
+ok('it names the button, and the button is on the PIN screen', answer('pin-forgot').includes('Forgot your PIN?') && roleSwitch.includes('Forgot your PIN?'))
+ok('it says the account password is what proves it', /password/.test(answer('pin-forgot')))
+ok(`and the wait after ${MAX_TRIES} wrong passwords is the code's (${LOCK_MINUTES} minutes)`,
+  answer('pin-forgot').includes(`${MAX_TRIES} wrong passwords`) && answer('pin-forgot').includes(`${LOCK_MINUTES} minutes`))
+
 console.log('\n=== What the answers promise, the app does ===')
 ok('no photos: RankUp never takes, sends or keeps one', /never takes, sends or keeps a photo/.test(answer('photos')))
 const settings = readFileSync('src/screens/parent/ParentSettings.jsx', 'utf8')

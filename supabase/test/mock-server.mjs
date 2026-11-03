@@ -48,6 +48,14 @@ const send = (res, code, body) => {
  */
 const SERVICE_KEY = process.env.MOCK_SERVICE_ROLE_KEY || 'service-role-key'
 
+/*
+ * Passwords given at sign-up through this stand-in, so a wrong one is refused
+ * the way Supabase refuses it (the PIN reset depends on that). Held in memory
+ * and only for accounts made here: a fixture inserted straight into
+ * auth.users has none, and signs in with anything, as before.
+ */
+const PASSWORDS = new Map()
+
 function isServiceRole(req) {
   const auth = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
   return Boolean(auth) && auth === SERVICE_KEY
@@ -234,7 +242,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     // --- accounts -----------------------------------------------------------
-    // Passwords are NOT checked here. This harness exists to exercise row level
+    // Passwords are checked only for accounts signed up here (PASSWORDS above),
+    // and are kept in plain memory. This harness exists to exercise row level
     // security, and a real auth server is what checks credentials. Never deploy it.
     if (url.pathname.startsWith('/auth/v1/')) {
       const body = await readBody(req)
@@ -250,6 +259,7 @@ const server = http.createServer(async (req, res) => {
         if (existing.rows.length) return send(res, 400, { message: 'User already registered' })
         const out = await pool.query('insert into auth.users (email) values ($1) returning id', [body.email])
         const id = out.rows[0].id
+        if (body.password) PASSWORDS.set(String(body.email), String(body.password))
         return send(res, 200, session(id, { id, email: body.email }))
       }
 
@@ -264,6 +274,10 @@ const server = http.createServer(async (req, res) => {
       if (url.pathname.startsWith('/auth/v1/token')) {
         const out = await pool.query('select id from auth.users where email = $1', [body.email])
         if (!out.rows.length) return send(res, 400, { message: 'Invalid login credentials' })
+        const known = PASSWORDS.get(String(body.email))
+        if (known !== undefined && known !== String(body.password ?? '')) {
+          return send(res, 400, { message: 'Invalid login credentials' })
+        }
         const id = out.rows[0].id
         return send(res, 200, session(id, { id, email: body.email }))
       }

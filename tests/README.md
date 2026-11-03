@@ -124,6 +124,16 @@ each other, words cut off without "…", and a code ("not_on_this_plan",
 "undefined", "elite") where words belong; and checks a new family's empty
 screens say something that makes sense for a family with nothing yet.
 
+**`pinreset.mjs`** resets a forgotten PIN on a parent's phone: a wrong
+password changes nothing, five wrong ones wait fifteen minutes, the right one
+leads to a new PIN that then opens Parent Mode while the old one does not, and
+a signed-out phone or a child's own phone offers no reset. The stand-in API
+checks passwords for accounts signed up through it.
+
+**`download.mjs`** downloads a family's data from the real app: two files,
+the JSON and a readable summary, with this family's child, chores, history
+and rewards, and nothing of a second family set up beside it.
+
 **`plainsetup.mjs`** starts the app on its own ports with guilds and payments
 switched off, and again with no backend at all, and finishes setup on each.
 
