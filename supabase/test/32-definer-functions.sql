@@ -77,6 +77,11 @@ begin
       values (overlay(f.fam::text placing 'e5' from 35)::uuid, f.kid, f.fam, 'leader', 'active', true, true);
     insert into guild_messages (id, guild_id, kid_id, body)
       values (overlay(f.fam::text placing 'e6' from 35)::uuid, overlay(f.fam::text placing 'e5' from 35)::uuid, f.kid, f.word || ' says hi');
+    -- A finished theme of the child's own (Theme Genesis), ready to send.
+    insert into kid_themes (id, family_id, kid_id, name, design, status)
+      values (overlay(f.fam::text placing 'eb' from 35)::uuid, f.fam, f.kid, f.word || ' Theme',
+        jsonb_build_object('v', 1, 'vibe', 'space', 'base', 'aura', 'bg', '#0b0f2e', 'a', '#7cc4ff', 'a2', '#ffd166',
+          'pat', 'stars', 'mascot', '🚀', 'cur', f.word || ' Bits', 'worlds', jsonb_build_array('One', 'Two', 'Three', 'Four')), 'ready');
   end loop;
 end $$;
 
@@ -216,13 +221,15 @@ declare
     'guild', '32a00000-0000-4000-8000-0000000000e5', 'message', '32a00000-0000-4000-8000-0000000000e6',
     'school', '32a00000-0000-4000-8000-0000000000e8', 'rival', '32a00000-0000-4000-8000-0000000000e8',
     'rivalry', '32a00000-0000-4000-8000-0000000000ea', 'parent', '32a00000-0000-4000-8000-0000000000ab',
-    'kid_user', '32a00000-0000-4000-8000-0000000000a2', 'school_id', '32a00000-0000-4000-8000-0000000000e8');
+    'kid_user', '32a00000-0000-4000-8000-0000000000a2', 'school_id', '32a00000-0000-4000-8000-0000000000e8',
+    'theme', '32a00000-0000-4000-8000-0000000000eb');
   v_b jsonb := jsonb_build_object(
     'family', '32b00000-0000-4000-8000-00000000000f', 'kid', '32b00000-0000-4000-8000-00000000000c',
     'quest', '32b00000-0000-4000-8000-0000000000e7', 'submission', '32b00000-0000-4000-8000-0000000000e2',
     'reward', '32b00000-0000-4000-8000-0000000000e3', 'redemption', '32b00000-0000-4000-8000-0000000000e4',
     'guild', '32b00000-0000-4000-8000-0000000000e5', 'message', '32b00000-0000-4000-8000-0000000000e6',
-    'school', '32b00000-0000-4000-8000-0000000000e8', 'parent', '32b00000-0000-4000-8000-0000000000bb');
+    'school', '32b00000-0000-4000-8000-0000000000e8', 'parent', '32b00000-0000-4000-8000-0000000000bb',
+    'theme', '32b00000-0000-4000-8000-0000000000eb');
 begin
   a_ids := array(select value::uuid from jsonb_each_text(v_all_a))
         || array['32a00000-0000-4000-8000-0000000000a1', '32a00000-0000-4000-8000-0000000000a3',
@@ -345,7 +352,10 @@ begin
     'finish_school_month_email(uuid,text,boolean)',
     -- The error report, and the daily usage counts.
     'record_server_error(text,text)', 'claim_error_report(integer)', 'finish_error_report(bigint,boolean)',
-    'usage_bump(text)', 'usage_daily_counts(integer)', 'usage_count_row()']
+    'usage_bump(text)', 'usage_daily_counts(integer)', 'usage_count_row()',
+    -- Theme Genesis: the operator's inbox and Seasons, and the triggers.
+    'operator_theme_inbox()', 'operator_create_season(integer,text,date)', 'operator_pick_theme(uuid,uuid)',
+    'operator_decline_theme(uuid)', 'operator_remove_theme(uuid)', 'kid_theme_gone()', 'season_theme_uncredit()']
   loop
     if to_regprocedure(f) is null then
       v_open := v_open || (f || ' (no longer exists — update this list)');

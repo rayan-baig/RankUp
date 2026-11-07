@@ -27,6 +27,11 @@ export const LAST_UPDATED = 'November 2026'
  * 2026-01 stay signed; only new parents see and sign 2026-11. A version that
  * collects MORE would need every parent asked again; see docs/LEGAL.md.
  *
+ * The policy was updated for Theme Genesis without a new consent version:
+ * a child's own themes stay in the family (the notice's "the theme they
+ * choose"), and sending one to RankUp is a separate, explicit yes a parent
+ * gives in Parent Mode for that one theme, which says there what is sent.
+ *
  * The policy and terms were updated for the School League without a new
  * consent version: joining a school is a
  * separate, explicit choice a parent makes on the School League screen, which
@@ -142,6 +147,22 @@ export const PRIVACY_POLICY = {
       ],
     },
     {
+      heading: 'Themes your child makes',
+      body: [
+        'In Theme Genesis your child can make up to five themes of their own: a name, colours, a background pattern, a mascot chosen from a set of emoji, and names for the theme\'s worlds and coins. No photographs, and nothing typed is sent to any other company or to any AI service.',
+        'These themes stay in your family. Your children\'s phones and yours sync them through our database; nobody outside your family can see them. You can see, rename and remove every one in Settings → Kids\' own themes, and names with rude words are refused.',
+      ],
+    },
+    {
+      heading: 'Sending a theme to RankUp for a Season',
+      body: [
+        'Your child can ask to send a finished theme to RankUp. Nothing is sent unless a parent approves it in Parent Mode.',
+        'What is sent is the theme itself: its name, colours, pattern, mascot and the names of its worlds and coins. If you wish, you add a credit line, a first name or a nickname; left blank it reads "by a RankUp family". Your child\'s name is never added for you. Each child can send one theme a month.',
+        'Each month we look at what was sent and may pick themes for the next Season. A picked theme, with its credit line, is shown to every RankUp family in their theme picker from the day the Season starts, and your family is told in the app. Themes we do not pick, and ones we decline, are deleted 90 days after they were sent.',
+        'If you delete your child or your account, everything you sent that was not picked is deleted with it. A theme already in a Season stays there for the families playing it, and its credit line is removed.',
+      ],
+    },
+    {
       heading: 'The School League, if you join it',
       body: [
         'If your child\'s school takes part, you can add your child to it with a code the school gives you. Only a parent can do this; a school can never add a child.',
@@ -155,6 +176,7 @@ export const PRIVACY_POLICY = {
       heading: 'How long we keep it',
       body: [
         'Everything: until you delete your account, which removes it immediately and permanently.',
+        'A theme sent to RankUp for a Season that we decline or do not pick: 90 days from when it was sent.',
         'If you pay for a plan, deleting your account also cancels the subscription at once, so nothing more is charged. Stripe keeps its record of the payments you made (invoices and receipts), because payment records have to be kept for tax and are needed if a refund is due. We keep only Stripe\'s reference to your billing, and only until the cancellation is confirmed and 30 days have passed.',
       ],
     },
@@ -163,6 +185,7 @@ export const PRIVACY_POLICY = {
       body: [
         'Nobody, except the services that make the app work: Supabase (hosting and database), Stripe (payments, only if you subscribe), a push notification service if you enable notifications, and an email service that sends your account emails (your email address only, never anything about your children).',
         'If you add your child to a school\'s league, that school sees what is described under "The School League" above, and nothing more.',
+        'If you send one of your child\'s themes to RankUp and we pick it for a Season, every RankUp family sees that theme and its credit line, as described above, and nothing else about your family.',
         'We do not sell data. We do not share it for advertising. We show children no advertising.',
       ],
     },

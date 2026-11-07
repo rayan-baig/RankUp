@@ -1043,6 +1043,65 @@ console.log('\n=== The error report: one short email, and never a family in it =
 }
 emailStandIn.close()
 
+console.log('\n=== Theme Genesis: only the operator sees the themes sent for a Season ===')
+{
+  // A child's finished theme, sent by their parent through the same function
+  // the app calls, as that parent.
+  const KID = 'a0000000-0000-4000-8000-00000000c0e2'
+  const THEME = 'a0000000-0000-4000-8000-00000000c0e3'
+  const kidName = 'Ottoline'
+  await db.query(`insert into parental_consents (family_id, parent_id, version, method, signed_name)
+                  select $1, id, '2026-01', 'payment_card', 'Test Parent' from parents where user_id = $2
+                  on conflict do nothing`, [FAMILY, PARENT])
+  await db.query(`insert into kids (id, family_id, name) values ($1, $2, $3) on conflict (id) do nothing`, [KID, FAMILY, kidName])
+  await db.query('delete from theme_submissions where kid_id = $1', [KID])
+  await db.query('delete from kid_themes where kid_id = $1', [KID])
+  await db.query(`insert into kid_themes (id, family_id, kid_id, name, design, status) values ($1, $2, $3, $4, $5, 'ready')`, [THEME, FAMILY, KID,
+    `Api Reef ${RUN}`.slice(0, 24), JSON.stringify({ v: 1, vibe: 'ocean', base: 'aura', bg: '#052a3a', a: '#3ee0d0', a2: '#ffb3c1',
+      pat: 'waves', mascot: '🐬', cur: 'Pearls', worlds: ['Coral Reef', 'Kelp Forest', 'Shipwreck Bay', 'The Deep'] })])
+  const sent = await fetch(`${MOCK}/rest/v1/rpc/submit_kid_theme`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: `Bearer ${PARENT}` },
+    body: JSON.stringify({ p_theme_id: THEME, p_credit: 'Otto' }),
+  })
+  ok('a parent sends their child\'s theme to RankUp', (await sent.json())?.ok === true)
+
+  const themes = (key, body) => fetch(`${BASE}/api/operator-themes`, {
+    method: body ? 'POST' : 'GET',
+    headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  })
+  ok('nobody without the operator key sees the inbox', (await themes(null)).status === 401)
+  ok('not with the scheduler’s key, nor a parent’s sign-in', (await themes(CRON)).status === 401 && (await themes(PARENT)).status === 401)
+  ok('and nothing can be picked without it', (await themes(null, { action: 'decline', submission_id: THEME })).status === 401)
+  const inbox = await (await themes('test-operator-secret')).json()
+  const mine = (inbox.submissions || []).find((x) => x.name === `Api Reef ${RUN}`.slice(0, 24))
+  ok('the operator sees it, with its credit line and month', Boolean(mine) && mine.credit === 'Otto' && /^\d{4}-\d{2}$/.test(mine.month))
+  ok('and nothing that leads to the family or the child',
+    !JSON.stringify(inbox).includes(FAMILY) && !JSON.stringify(inbox).includes(KID) && !JSON.stringify(inbox).includes(kidName)
+      && !/family_id|kid_id|user_id|email/.test(JSON.stringify(inbox)))
+
+  const number = 500 + Math.floor(Math.random() * 400)
+  await db.query('delete from seasons where number = $1', [number])
+  const start = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10)
+  const made = await themes('test-operator-secret', { action: 'season', number, name: `Api Season ${RUN}`.slice(0, 40), starts_on: start })
+  const madeBody = await made.json()
+  const season = (madeBody.seasons || []).find((x) => x.number === number)
+  ok('the operator makes the next Season', made.status === 200 && Boolean(season) && !season.live, JSON.stringify(madeBody).slice(0, 200))
+  ok('a Season with a number already taken is refused, and says why',
+    (await themes('test-operator-secret', { action: 'season', number, name: 'Again', starts_on: start })).status === 409)
+  const picked = await themes('test-operator-secret', { action: 'pick', submission_id: mine?.id, season_id: season?.id })
+  ok('and picks the theme for it', picked.status === 200
+    && (await db.query('select picked_season from kid_themes where id = $1', [THEME])).rows[0]?.picked_season === number)
+  const declineAfter = await themes('test-operator-secret', { action: 'decline', submission_id: mine?.id })
+  ok('a picked theme cannot then be declined', declineAfter.status === 409 && (await declineAfter.json()).error === 'already_picked')
+  ok('an action it does not know is refused', (await themes('test-operator-secret', { action: 'publish', submission_id: mine?.id })).status === 400)
+  const removed = await themes('test-operator-secret', { action: 'remove', submission_id: mine?.id })
+  ok('and "Remove" takes it out of the inbox and the Season', removed.status === 200
+    && (await db.query('select count(*)::int n from season_themes where season_id = $1', [season?.id])).rows[0].n === 0)
+  await db.query('delete from seasons where number = $1', [number])
+  await db.query('delete from kid_themes where kid_id = $1', [KID])
+}
+
 console.log('\n=== A route that does not exist is a 404, not a stack trace ===')
 const missing = await fetch(`${BASE}/api/not-a-real-endpoint`, { method: 'POST' })
 ok('an unknown endpoint is a plain 404', missing.status === 404, `status ${missing.status}`)

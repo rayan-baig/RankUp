@@ -10,7 +10,8 @@ import { pruneHistory } from '../lib/prune.js'
 import { enqueue as enqueueOp, readOutbox } from '../lib/sync/outbox.js'
 import { transport } from '../lib/sync/transport.js'
 import { NOTICES, notifyLocally, notifyRemote, pushRequest, routeNotice, pushConfigured, remindersToFire, getPrefs as notificationPrefs, disable as disableNotifications } from '../lib/notifications.js'
-import { resolveKidTheme } from '../data/kidThemes.js'
+import { resolveKidTheme, setExtraThemes } from '../data/kidThemes.js'
+import { themesFromState, cleanSeasons, SEASON_CHECK_MS } from '../data/themeGenesis.js'
 import { storyProgress } from '../lib/dragonFight.js'
 import { resolveParentTheme } from '../data/parentThemes.js'
 import { levelFromXp } from '../lib/xp.js'
@@ -229,6 +230,36 @@ const syncs = (state) =>
     const engine = engineRef.current
     engine.start()
     return () => engine.stop()
+  }, [syncing])
+
+  /*
+   * Theme Genesis: the children's own themes and the Season themes are data,
+   * built into themes here, before any screen below resolves one by id. Done
+   * during render rather than in an effect so the first frame already has
+   * them; it only runs again when one of the two lists changes.
+   */
+  useMemo(() => setExtraThemes(themesFromState(state)), [state.kidThemes, state.seasons])
+
+  /*
+   * The Seasons that have started, the same for every family. Asked for when
+   * the app opens and then once an hour, apart from the family's own sync:
+   * a new Season appears on the day it starts without anything else moving.
+   * Kept on the phone, so the Season themes are there offline too.
+   */
+  useEffect(() => {
+    if (!syncing) return undefined
+    let stopped = false
+    const check = async () => {
+      try {
+        const seasons = await transport.rpc('live_seasons', {})
+        if (stopped || !Array.isArray(seasons)) return
+        const clean = cleanSeasons(seasons)
+        if (JSON.stringify(clean) !== JSON.stringify(latest.current.seasons || [])) dispatch({ type: 'SET_SEASONS', seasons: clean })
+      } catch { /* offline, or a server without Seasons yet: what this phone has stays */ }
+    }
+    check()
+    const timer = setInterval(check, SEASON_CHECK_MS)
+    return () => { stopped = true; clearInterval(timer) }
   }, [syncing])
 
   /**

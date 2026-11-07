@@ -46,6 +46,7 @@ const KidProfile = lazyLoad(() => import('./screens/kid/KidProfile.jsx'))
 const KidStory = lazyLoad(() => import('./screens/kid/KidStory.jsx'))
 const KidDragon = lazyLoad(() => import('./screens/kid/KidDragon.jsx'))
 const KidSchool = lazyLoad(() => import('./screens/kid/KidSchool.jsx'))
+const ThemeGenesis = lazyLoad(() => import('./screens/kid/ThemeGenesis.jsx'))
 const ParentApprovals = lazyLoad(() => import('./screens/parent/ParentApprovals.jsx'))
 const ParentAssign = lazyLoad(() => import('./screens/parent/ParentAssign.jsx'))
 const ParentKids = lazyLoad(() => import('./screens/parent/ParentKids.jsx'))
@@ -128,7 +129,9 @@ export default function App() {
     () => (activeKid
       ? resolveKidTheme(activeKid.themeId, levelFromXp(activeKid.xp).level, storyProgress(state, activeKid))
       : null),
-    [activeKid, state.submissions, state.quests],
+    // The children's own themes and the Season themes are themes too: a
+    // change to one (a new colour, a rename) is a change to the look.
+    [activeKid, state.submissions, state.quests, state.kidThemes, state.seasons],
   )
   const parentTheme = useMemo(() => resolveParentTheme(state.family.parentThemeId), [state.family.parentThemeId])
   const pendingTheme = state.pendingPairing
@@ -312,7 +315,9 @@ export default function App() {
     )
   }
 
+  // Chores waiting, and any theme a child has asked a parent about (Theme Genesis).
   const pending = pendingSubmissions(state).length
+    + (state.kidThemes || []).filter((t) => t.useAsk || (t.sendAsk && !t.sentAt)).length
   // The arrival glitch keeps tearing the screen until the child has watched
   // the chapter that explains it.
   const glitch = Boolean(kidTheme?.evolution?.glitchIntro && !activeKid?.storySeen?.[kidTheme.evolution.chapter])
@@ -398,6 +403,7 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route.startsWith('/kid/story/')) return <KidStory chapter={route.replace('/kid/story/', '')} />
   if (route === '/kid/dragon') return <KidDragon />
   if (route === '/kid/school') return <KidSchool />
+  if (route === '/kid/genesis') return <ThemeGenesis key={fullPath} kidId={activeKid?.id} editId={queryParam(fullPath, 'edit')} area="kid" />
 
   if (route === '/parent') return <ParentDashboard />
   if (route === '/parent/approvals') return <ParentApprovals />
@@ -414,6 +420,9 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route === '/parent/help') return <ParentHelp />
   if (route === '/parent/history') return <ParentHistory initialKidId={queryParam(fullPath, 'kid')} />
   if (route === '/parent/money') return <ParentMoney initialKidId={queryParam(fullPath, 'kid')} />
+  if (route === '/parent/genesis') {
+    return <ThemeGenesis key={fullPath} kidId={queryParam(fullPath, 'kid') || activeKid?.id} editId={queryParam(fullPath, 'edit')} area="parent" />
+  }
 
   // A link to somewhere that does not exist (an old bookmark, a typo, a
   // screen that was renamed) says so, with a way home, rather than quietly

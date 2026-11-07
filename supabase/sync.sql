@@ -373,6 +373,8 @@ begin
     'notes',       coalesce((select jsonb_agg(to_jsonb(n)) from notes n       where n.rev > cutoff), '[]'::jsonb),
     'overrides',   coalesce((select jsonb_agg(to_jsonb(o)) from overrides o   where o.rev > cutoff), '[]'::jsonb),
     'family_goals', family_goal_since(cutoff),
+    -- The children's own themes (Theme Genesis, below). A child sees their own.
+    'kid_themes',  coalesce((select jsonb_agg(to_jsonb(t) - 'family_id') from kid_themes t where t.rev > cutoff), '[]'::jsonb),
     -- Only what a device reads from a tombstone.
     'deletions',   coalesce((select jsonb_agg(jsonb_build_object('rev', d.rev, 'table_name', d.table_name,
                                                                  'row_id', d.row_id))
@@ -1311,3 +1313,438 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 grant execute on function unlink_kid_device(uuid) to authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- Theme Genesis: a child's own themes, and the Seasons.
+--
+-- A child makes a theme of their own: a name, three colours, a background
+-- pattern, a mascot from a set, and names for the four worlds and the coins,
+-- laid over the structure of a built-in theme (src/data/themeGenesis.js). It
+-- is a look and some names, never a rule: nothing here touches XP, coins,
+-- streaks, rewards or unlocks.
+--
+--   kid_themes         the family's own themes. Synced like any row (rev,
+--                      tombstones, family_snapshot). A parent reads and writes
+--                      every one in the family; a child only their own.
+--                      Nobody outside the family, ever.
+--   theme_submissions  a theme a parent has agreed to send to RankUp for a
+--                      Season. Made only by submit_kid_theme, from the theme
+--                      itself; read only by the operator's page (service role).
+--   seasons,           the official Season themes, picked by the operator.
+--   season_themes      Readable by any signed-in account once the Season has
+--                      started, and not a moment before. They hold the theme
+--                      and its optional credit line, nothing about a family.
+--
+-- The word list and the lists of what a design may hold are the same as the
+-- app's (src/lib/kidWords.js, src/data/themeGenesis.js); tests/genesiswords.mjs
+-- fails if they drift apart.
+-- ---------------------------------------------------------------------------
+
+/** True when the text has none of the rude words. Mirrors wordsOk in src/lib/kidWords.js. */
+create or replace function kid_words_ok(p_text text) returns boolean
+language plpgsql immutable set search_path = public as $$
+declare
+  v_words text[] := array['arse', 'arsehole', 'ass', 'asses', 'asshole', 'bastard', 'bollocks', 'boobs', 'bugger',
+    'cock', 'cocks', 'crap', 'damn', 'dick', 'dickhead', 'dicks', 'fag', 'fags', 'kys', 'naked', 'nazi', 'nazis',
+    'nude', 'piss', 'pissed', 'prick', 'retard', 'retarded', 'sex', 'sexy', 'tit', 'tits', 'titty', 'hitler'];
+  v_parts text[] := array['bitch', 'cunt', 'dildo', 'fagg', 'fuck', 'nigg', 'penis', 'porn', 'pussy', 'shit',
+    'slut', 'twat', 'vagina', 'wank', 'whore'];
+  v_norm text;
+  v_word text;
+  v_squashed text;
+  v_collapsed text;
+  v_part text;
+begin
+  if p_text is null or p_text = '' then return true; end if;
+  -- Numbers and symbols people use for letters, read back as letters.
+  v_norm := translate(lower(p_text), '013457@$!', 'oieastasi');
+  foreach v_word in array regexp_split_to_array(v_norm, '[^a-z]+') loop
+    continue when v_word = '';
+    if v_word = any (v_words) or regexp_replace(v_word, '(.)\1+', '\1', 'g') = any (v_words) then
+      return false;
+    end if;
+  end loop;
+  v_squashed := regexp_replace(v_norm, '[^a-z]', '', 'g');
+  v_collapsed := regexp_replace(v_squashed, '(.)\1+', '\1', 'g');
+  foreach v_part in array v_parts loop
+    if position(v_part in v_squashed) > 0 or position(v_part in v_collapsed) > 0 then return false; end if;
+  end loop;
+  return true;
+end $$;
+
+/** A short plain name: 1 to p_max characters, no control characters or angle brackets, no rude words. */
+create or replace function kid_theme_name_ok(p_text text, p_max int) returns boolean
+language sql immutable set search_path = public as $$
+  select p_text is not null and length(trim(p_text)) between 1 and p_max
+     and p_text !~ '[[:cntrl:]<>]' and kid_words_ok(p_text);
+$$;
+
+/**
+ * A design holds only what Theme Genesis makes, from the app's own lists.
+ * Mirrors cleanDesign in src/data/themeGenesis.js.
+ */
+create or replace function kid_theme_design_ok(p_design jsonb) returns boolean
+language plpgsql immutable set search_path = public as $$
+declare v_world jsonb;
+begin
+  if p_design is null or jsonb_typeof(p_design) <> 'object' or length(p_design::text) > 700 then return false; end if;
+  if exists (select 1 from jsonb_object_keys(p_design) k
+              where k not in ('v', 'vibe', 'base', 'bg', 'a', 'a2', 'pat', 'mascot', 'cur', 'worlds')) then
+    return false;
+  end if;
+  if coalesce(p_design->>'vibe', '') not in ('space', 'ocean', 'jungle', 'candy', 'robots', 'new')
+     or coalesce(p_design->>'base', '') not in ('matrixblocks', 'aura', 'campfire', 'sugarrush', 'cybergrid', 'pegasus')
+     or coalesce(p_design->>'pat', '') not in ('stars', 'waves', 'leaves', 'dots', 'circuits', 'confetti', 'zigzag', 'bubbles')
+     or coalesce(p_design->>'mascot', '') not in ('🚀', '🐬', '🐒', '🍭', '🤖', '🦄', '🦖', '🐉', '🐱', '🐶', '🦊', '🐼',
+                                                  '🐸', '🐙', '🦈', '🦁', '🐧', '👾', '⚡', '🌈', '⭐', '🍩', '🎮', '🏰')
+     or coalesce(p_design->>'bg', '') !~ '^#[0-9a-f]{6}$'
+     or coalesce(p_design->>'a', '') !~ '^#[0-9a-f]{6}$'
+     or coalesce(p_design->>'a2', '') !~ '^#[0-9a-f]{6}$'
+     or not kid_theme_name_ok(p_design->>'cur', 16)
+     or jsonb_typeof(p_design->'worlds') is distinct from 'array'
+     or jsonb_array_length(p_design->'worlds') <> 4 then
+    return false;
+  end if;
+  for v_world in select value from jsonb_array_elements(p_design->'worlds') loop
+    if jsonb_typeof(v_world) <> 'string' or not kid_theme_name_ok(v_world #>> '{}', 20) then return false; end if;
+  end loop;
+  return true;
+end $$;
+
+create table if not exists kid_themes (
+  id            uuid primary key default gen_random_uuid(),
+  family_id     uuid not null references families(id) on delete cascade,
+  kid_id        uuid not null references kids(id) on delete cascade,
+  name          text not null,
+  design        jsonb not null,
+  status        text not null default 'draft' check (status in ('draft', 'ready')),
+  -- The child asking a parent: to wear it (on their own phone, where the
+  -- theme lock needs a parent), or to send it to RankUp for a Season.
+  use_ask       boolean not null default false,
+  send_ask      boolean not null default false,
+  -- Written only by the server: when a parent sent it, and the Season it was
+  -- picked for. The guard below keeps a browser's copy of these out.
+  sent_at       timestamptz,
+  picked_season int,
+  created_at    timestamptz not null default now(),
+  rev           bigint not null default nextval('sync_rev')
+);
+create index if not exists kid_themes_sync_idx on kid_themes (family_id, rev);
+create index if not exists kid_themes_kid_idx on kid_themes (kid_id);
+alter table kid_themes enable row level security;
+
+drop policy if exists kid_themes_read on kid_themes;
+create policy kid_themes_read on kid_themes
+  for select using (family_id = (select current_family_id())
+                    and ((select is_parent()) or kid_id = (select current_kid_id())));
+drop policy if exists kid_themes_write on kid_themes;
+create policy kid_themes_write on kid_themes
+  for all using (family_id = (select current_family_id())
+                 and ((select is_parent()) or kid_id = (select current_kid_id())))
+  with check (family_id = (select current_family_id()) and kid_in_caller_family(kid_id)
+              and ((select is_parent()) or kid_id = (select current_kid_id())));
+
+drop trigger if exists kid_themes_rev on kid_themes;
+create trigger kid_themes_rev before update on kid_themes for each row execute function bump_rev();
+drop trigger if exists kid_themes_deleted on kid_themes;
+create trigger kid_themes_deleted after delete on kid_themes for each row execute function record_deletion();
+
+/*
+ * What a browser may write to a theme, and how many a child may keep.
+ *
+ * The look, the names, finished or not, and the two requests. Never when it
+ * was sent or what Season it was picked for (the server's), never moved to
+ * another child or family, never more than five a child, and never a name
+ * with a rude word in it. A refused write raises, so the phone that sent it
+ * drops it and fetches the family afresh.
+ */
+create or replace function guard_kid_theme() returns trigger
+language plpgsql as $$
+declare
+  v_trusted boolean := current_user = (select tableowner from pg_tables where schemaname = 'public' and tablename = 'kid_themes')
+                       or current_user = 'service_role'
+                       or (select rolsuper from pg_roles where rolname = current_user);
+begin
+  if not v_trusted then
+    if tg_op = 'INSERT' then
+      new.sent_at := null; new.picked_season := null;
+    else
+      new.sent_at := old.sent_at; new.picked_season := old.picked_season;
+      new.family_id := old.family_id; new.kid_id := old.kid_id; new.created_at := old.created_at;
+    end if;
+  end if;
+  new.name := regexp_replace(trim(new.name), '\s+', ' ', 'g');
+  if not kid_theme_name_ok(new.name, 24) then raise exception 'kid_theme_name'; end if;
+  if not kid_theme_design_ok(new.design) then raise exception 'kid_theme_design'; end if;
+  if tg_op = 'INSERT' then
+    -- One at a time per child, so two phones saving at once cannot make six.
+    perform pg_advisory_xact_lock(hashtext('kid_themes:' || new.kid_id::text));
+    if (select count(*) from kid_themes where kid_id = new.kid_id) >= 5 then
+      raise exception 'kid_theme_limit';
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists kid_themes_guard on kid_themes;
+create trigger kid_themes_guard before insert or update on kid_themes
+  for each row execute function guard_kid_theme();
+
+/*
+ * A theme removed while a child is wearing it: they go back to the built-in
+ * theme it was made from, on every phone, with nothing about their progress
+ * moved. Runs as the owner because a child (removing their own theme) cannot
+ * write the kids row.
+ */
+create or replace function kid_theme_gone() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if exists (select 1 from families where id = old.family_id) then
+    update kids set theme_id = coalesce(old.design->>'base', 'matrixblocks')
+     where family_id = old.family_id and theme_id = 'custom-' || old.id::text;
+  end if;
+  return old;
+end $$;
+revoke execute on function kid_theme_gone() from public, anon, authenticated;
+drop trigger if exists kid_themes_gone on kid_themes;
+create trigger kid_themes_gone after delete on kid_themes for each row execute function kid_theme_gone();
+
+/* ---------- the Seasons ---------- */
+
+create table if not exists seasons (
+  id         uuid primary key default gen_random_uuid(),
+  number     int not null unique check (number between 1 and 999),
+  name       text not null check (length(name) between 1 and 40),
+  starts_on  date not null,
+  created_at timestamptz not null default now()
+);
+alter table seasons enable row level security;
+-- Official, the same for every family, and secret until the day it starts.
+drop policy if exists seasons_read on seasons;
+create policy seasons_read on seasons
+  for select to authenticated using (starts_on <= (now() at time zone 'utc')::date);
+
+create table if not exists theme_submissions (
+  id              uuid primary key default gen_random_uuid(),
+  family_id       uuid not null references families(id) on delete cascade,
+  kid_id          uuid not null references kids(id) on delete cascade,
+  -- The theme it was sent from, to tell the family if it is picked. No
+  -- foreign key: the family may delete their copy, and what was sent stays.
+  source_theme_id uuid,
+  -- The theme itself, built by submit_kid_theme from the theme row: its
+  -- name and design, and nothing else.
+  payload         jsonb not null,
+  credit          text check (credit is null or length(credit) <= 20),
+  status          text not null default 'new' check (status in ('new', 'picked', 'declined')),
+  season_id       uuid references seasons(id) on delete set null,
+  created_at      timestamptz not null default now(),
+  decided_at      timestamptz
+);
+create index if not exists theme_submissions_kid_idx on theme_submissions (kid_id, created_at);
+alter table theme_submissions enable row level security;
+-- No policy at all: only the server reads or writes it.
+revoke all on theme_submissions from public, anon, authenticated;
+
+create table if not exists season_themes (
+  id            uuid primary key default gen_random_uuid(),
+  season_id     uuid not null references seasons(id) on delete cascade,
+  submission_id uuid references theme_submissions(id) on delete set null,
+  name          text not null check (length(name) between 1 and 24),
+  design        jsonb not null check (length(design::text) <= 700),
+  credit        text check (credit is null or length(credit) <= 20),
+  created_at    timestamptz not null default now()
+);
+alter table season_themes enable row level security;
+drop policy if exists season_themes_read on season_themes;
+create policy season_themes_read on season_themes
+  for select to authenticated using (
+    exists (select 1 from seasons s where s.id = season_id and s.starts_on <= (now() at time zone 'utc')::date));
+
+/*
+ * A family leaving (or a child deleted) takes everything they sent with it.
+ * A theme already in a Season stays there for the families playing it, but
+ * its credit line goes: it reads "by a RankUp family" from then on.
+ */
+create or replace function season_theme_uncredit() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  update season_themes set credit = null, submission_id = null where submission_id = old.id;
+  return old;
+end $$;
+revoke execute on function season_theme_uncredit() from public, anon, authenticated;
+drop trigger if exists theme_submissions_uncredit on theme_submissions;
+create trigger theme_submissions_uncredit before delete on theme_submissions
+  for each row execute function season_theme_uncredit();
+
+/*
+ * A parent sends a child's finished theme to RankUp for a Season.
+ *
+ * What is sent is built here, from the theme row, field by field: its name
+ * and the design's colours, pattern, mascot, vibe, base and the names of its
+ * worlds and coins. Nothing about the child or the family goes into it. The
+ * credit is the parent's to give, a first name or nickname in letters only,
+ * or nothing ("by a RankUp family"). The words are checked again here, and
+ * each child may send one theme a calendar month (UTC).
+ */
+create or replace function submit_kid_theme(p_theme_id uuid, p_credit text default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_theme  kid_themes;
+  v_credit text := nullif(regexp_replace(trim(coalesce(p_credit, '')), '\s+', ' ', 'g'), '');
+  v_design jsonb;
+begin
+  select * into v_theme from kid_themes where id = p_theme_id;
+  if not found or v_theme.family_id is distinct from current_family_id() or not is_parent() then
+    return jsonb_build_object('ok', false, 'reason', 'not_allowed');
+  end if;
+  if v_theme.status <> 'ready' then
+    return jsonb_build_object('ok', false, 'reason', 'not_ready');
+  end if;
+  if v_theme.sent_at is not null then
+    return jsonb_build_object('ok', false, 'reason', 'already_sent');
+  end if;
+  if v_credit is not null and (length(v_credit) > 20 or v_credit !~ '^[[:alpha:]][[:alpha:] .''-]*$') then
+    return jsonb_build_object('ok', false, 'reason', 'bad_credit');
+  end if;
+  if not kid_theme_name_ok(v_theme.name, 24) or not kid_theme_design_ok(v_theme.design) or not kid_words_ok(v_credit) then
+    return jsonb_build_object('ok', false, 'reason', 'words');
+  end if;
+  perform pg_advisory_xact_lock(hashtext('theme_submissions:' || v_theme.kid_id::text));
+  if exists (select 1 from theme_submissions
+              where kid_id = v_theme.kid_id
+                and created_at >= date_trunc('month', now() at time zone 'utc') at time zone 'utc') then
+    return jsonb_build_object('ok', false, 'reason', 'limit');
+  end if;
+  v_design := jsonb_build_object(
+    'v', 1, 'vibe', v_theme.design->'vibe', 'base', v_theme.design->'base', 'bg', v_theme.design->'bg',
+    'a', v_theme.design->'a', 'a2', v_theme.design->'a2', 'pat', v_theme.design->'pat',
+    'mascot', v_theme.design->'mascot', 'cur', v_theme.design->'cur', 'worlds', v_theme.design->'worlds');
+  insert into theme_submissions (family_id, kid_id, source_theme_id, payload, credit)
+  values (v_theme.family_id, v_theme.kid_id, v_theme.id,
+          jsonb_build_object('name', v_theme.name, 'design', v_design), v_credit);
+  update kid_themes set sent_at = now(), send_ask = false where id = v_theme.id;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke all on function submit_kid_theme(uuid, text) from public, anon, authenticated;
+grant execute on function submit_kid_theme(uuid, text) to authenticated;
+
+/**
+ * The Seasons that have started, with their themes, for every family. Not
+ * security definer: row level security decides, so a Season is invisible
+ * until its first day. The app asks once an hour.
+ */
+-- One pass over each table, grouped, rather than a query per Season: the
+-- planner priced the per-Season version high enough to compile it (JIT) on
+-- every call, 200 ms each for a handful of rows.
+create or replace function live_seasons() returns jsonb
+language sql stable set search_path = public as $$
+  with themes as (
+    select t.season_id,
+           jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name, 'design', t.design, 'credit', t.credit)
+                     order by t.created_at, t.id) as list
+      from season_themes t group by t.season_id)
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'number', s.number, 'name', s.name, 'starts_on', s.starts_on,
+           'themes', coalesce(themes.list, '[]'::jsonb)) order by s.number), '[]'::jsonb)
+    from seasons s left join themes on themes.season_id = s.id;
+$$;
+revoke all on function live_seasons() from public, anon, authenticated;
+grant execute on function live_seasons() to authenticated;
+
+/*
+ * The operator's inbox (api/operator-themes.js, with the service role,
+ * behind OPERATOR_SECRET). Each submission is its theme, its credit line,
+ * the month it came in and what was decided: no family, no child, no id
+ * that leads to either.
+ */
+create or replace function operator_theme_inbox() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'submissions', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', ts.id, 'month', to_char(ts.created_at at time zone 'utc', 'YYYY-MM'),
+               'name', ts.payload->>'name', 'design', ts.payload->'design', 'credit', ts.credit,
+               'status', ts.status, 'season', se.number, 'created_at', ts.created_at)
+             order by ts.created_at desc)
+        from theme_submissions ts left join seasons se on se.id = ts.season_id), '[]'::jsonb),
+    'seasons', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', s.id, 'number', s.number, 'name', s.name, 'starts_on', s.starts_on,
+               'live', s.starts_on <= (now() at time zone 'utc')::date,
+               'themes', (select count(*) from season_themes t where t.season_id = s.id))
+             order by s.number desc)
+        from seasons s), '[]'::jsonb));
+$$;
+revoke execute on function operator_theme_inbox() from public, anon, authenticated;
+
+/** The operator names the next Season and the day it starts. */
+create or replace function operator_create_season(p_number int, p_name text, p_starts_on date)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  if p_number is null or p_number not between 1 and 999 or p_starts_on is null
+     or length(trim(coalesce(p_name, ''))) not between 1 and 40 then
+    return jsonb_build_object('ok', false, 'reason', 'bad_season');
+  end if;
+  if exists (select 1 from seasons where number = p_number) then
+    return jsonb_build_object('ok', false, 'reason', 'season_exists');
+  end if;
+  insert into seasons (number, name, starts_on) values (p_number, trim(p_name), p_starts_on) returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end $$;
+revoke execute on function operator_create_season(int, text, date) from public, anon, authenticated;
+
+/*
+ * "Pick for next Season": the theme joins a Season that has not started yet,
+ * as official data every family's app reads on the first day (no deploy), and
+ * the family it came from is told in the app by their own theme row.
+ */
+create or replace function operator_pick_theme(p_submission_id uuid, p_season_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_sub theme_submissions; v_season seasons;
+begin
+  select * into v_sub from theme_submissions where id = p_submission_id for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_submission'); end if;
+  if v_sub.status = 'picked' then return jsonb_build_object('ok', false, 'reason', 'already_picked'); end if;
+  select * into v_season from seasons where id = p_season_id;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_season'); end if;
+  if v_season.starts_on <= (now() at time zone 'utc')::date then
+    return jsonb_build_object('ok', false, 'reason', 'season_started');
+  end if;
+  insert into season_themes (season_id, submission_id, name, design, credit)
+  values (v_season.id, v_sub.id, v_sub.payload->>'name', v_sub.payload->'design', v_sub.credit);
+  update theme_submissions set status = 'picked', season_id = v_season.id, decided_at = now() where id = v_sub.id;
+  update kid_themes set picked_season = v_season.number where id = v_sub.source_theme_id;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke execute on function operator_pick_theme(uuid, uuid) from public, anon, authenticated;
+
+/** "Decline": not this time. Kept 90 days, then deleted by run_retention. */
+create or replace function operator_decline_theme(p_submission_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_status text;
+begin
+  select status into v_status from theme_submissions where id = p_submission_id for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_submission'); end if;
+  if v_status = 'picked' then return jsonb_build_object('ok', false, 'reason', 'already_picked'); end if;
+  update theme_submissions set status = 'declined', decided_at = now() where id = p_submission_id;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke execute on function operator_decline_theme(uuid) from public, anon, authenticated;
+
+/** "Remove": gone now, and out of any Season it was picked for. */
+create or replace function operator_remove_theme(p_submission_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from theme_submissions where id = p_submission_id) then
+    return jsonb_build_object('ok', false, 'reason', 'no_submission');
+  end if;
+  delete from season_themes where submission_id = p_submission_id;
+  delete from theme_submissions where id = p_submission_id;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke execute on function operator_remove_theme(uuid) from public, anon, authenticated;
+
+-- kid_words_ok, kid_theme_name_ok and kid_theme_design_ok stay callable: the
+-- guard above runs as the browser that is writing, and asks them. They read
+-- nothing and write nothing, so there is nothing to keep from anybody.

@@ -16,6 +16,10 @@
 --   consent_notices  readable by any SIGNED-IN account: it is the published
 --                    wording of the consent notice, the same text the app
 --                    ships, and holds nothing about anybody. Not the anon key.
+--   seasons,         readable by any signed-in account once a Season has
+--   season_themes    started: the official Season themes every family plays
+--                    (Theme Genesis). A theme and its credit line, nothing
+--                    that leads to a family. Not the anon key.
 -- ---------------------------------------------------------------------------
 
 \set ON_ERROR_STOP on
@@ -69,6 +73,11 @@ begin
     insert into push_sends (family_id) values (f.fam);
     insert into crash_reports (family_id, where_at, message) values (f.fam, 'T31', 'T31');
     insert into rpc_receipts (id, kid_id, fn, result) values (gen_random_uuid(), f.kid, 'T31', '{}');
+    -- Theme Genesis: a child's own theme, and one sent to RankUp.
+    insert into kid_themes (family_id, kid_id, name, design) values (f.fam, f.kid, 'T31 theme ' || f.tag,
+      jsonb_build_object('v', 1, 'vibe', 'space', 'base', 'aura', 'bg', '#0b0f2e', 'a', '#7cc4ff', 'a2', '#ffd166',
+        'pat', 'stars', 'mascot', '🚀', 'cur', 'Bits', 'worlds', jsonb_build_array('One', 'Two', 'Three', 'Four')));
+    insert into theme_submissions (family_id, kid_id, payload) values (f.fam, f.kid, '{"name":"T31"}');
   end loop;
 end $$;
 insert into push_subscriptions (endpoint, keys, family_id, kid_id, user_id, role) values
@@ -83,6 +92,12 @@ insert into server_errors (where_at, message) values ('t31', 'T31');
 insert into error_report_kinds (fingerprint) values ('t31');
 insert into error_report_sends (kinds) values ('[]');
 select usage_bump('help_views');
+-- A Season that has started, with a theme in it: official, the same for every
+-- family. Removed again at the end of this file, so the app's tests that run
+-- on this database afterwards do not open on a "New Season!" moment.
+insert into seasons (id, number, name, starts_on) values
+  ('31a00000-0000-4000-8000-0000000005e1', 931, 'T31 Season', (now() at time zone 'utc')::date - 1);
+insert into season_themes (season_id, name, design) values ('31a00000-0000-4000-8000-0000000005e1', 'T31 Official', '{}');
 -- A tombstone in `deletions`, the way a real delete leaves one.
 insert into quests (id, family_id, kid_id, title) values
   ('31a00000-0000-4000-8000-0000000000d1', '31a00000-0000-4000-8000-00000000000f', '31a00000-0000-4000-8000-00000000000c', 'T31 deleted');
@@ -118,7 +133,8 @@ declare
   v_tables int := 0;
   v_state  text;
   v_msg    text;
-  v_readable_exceptions text[] := case when p_role = 'anon' then '{}'::text[] else array['consent_notices'] end;
+  v_readable_exceptions text[] := case when p_role = 'anon' then '{}'::text[]
+                                       else array['consent_notices', 'seasons', 'season_themes'] end;
 begin
   for t in
     select c.oid::regclass as rel, c.relname, c.relkind, c.relrowsecurity
@@ -323,4 +339,14 @@ do $$ begin
                  and attnum > 0 and not attisdropped and atttypid = 'uuid'::regtype));
 end $$;
 
+do $$ begin
+  perform ok('the Season tables hold nothing that leads to a family, a child or an adult',
+    not exists (select 1 from pg_attribute where attrelid in ('seasons'::regclass, 'season_themes'::regclass)
+                 and attnum > 0 and not attisdropped and attname in ('family_id', 'kid_id', 'user_id', 'parent_id'))
+    and not exists (select 1 from pg_constraint where contype = 'f'
+                     and conrelid in ('seasons'::regclass, 'season_themes'::regclass)
+                     and confrelid in ('families'::regclass, 'kids'::regclass, 'parents'::regclass)));
+end $$;
+
 drop function t31_tenancy(text, uuid, uuid[], uuid, uuid, text);
+delete from seasons where number = 931;

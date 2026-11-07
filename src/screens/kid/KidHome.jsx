@@ -12,6 +12,8 @@ import { Words, CountUp } from '../../components/Motion.jsx'
 import SyncBadge from '../../components/SyncBadge.jsx'
 import { navigate } from '../../lib/router.js'
 import AppHeader from '../../components/AppHeader.jsx'
+import SeasonMoment from '../../components/SeasonMoment.jsx'
+import { PickedNotice } from '../../components/KidThemesParent.jsx'
 import { useKidSchool } from './useKidSchool.js'
 import { familyGoalProgress } from '../../state/reducer.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
@@ -83,6 +85,8 @@ export default function KidHome() {
       <AppHeader theme={theme} />
 
       <SyncBadge />
+      <SeasonMoment />
+      <PickedNotice who="kid" />
 
       {/* The header card: who you are and how far along you are. */}
       <Card className="mb-3 fx-hero">

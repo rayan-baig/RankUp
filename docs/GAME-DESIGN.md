@@ -89,6 +89,18 @@ Themes are picked at signup and locked. Changing one needs the parent PIN. That 
 deliberate anti-churn rule — the point is investment in a world, and a theme swapped
 every day is not an investment.
 
+### Theme Genesis: themes children make
+
+A child can make up to five themes of their own (Spark, Design, Build,
+Launch). Each is a look and some names over one of six five-form built-in
+themes: the same forms at 1/10/25/50/100 and worlds at 10/25/50/100, so XP,
+coins, rewards and unlocks are exactly the same. The currency formula above
+does not change; only its name and icon do. Wearing one is a theme change
+like any other, so the PIN lock applies.
+
+A parent can send a finished theme to RankUp; picked themes become a Season's
+official themes for every family, on the same structure.
+
 ### Block Craft evolutions
 
 The only theme with level gates. Each rewrites the palette and the background scene from

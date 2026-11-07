@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
 import { levelFromXp, formatXp, liveStreak } from '../../lib/xp.js'
-import { KID_THEME_MAP, nextEvolution } from '../../data/kidThemes.js'
+import { themeById, nextEvolution } from '../../data/kidThemes.js'
 import { storyProgress } from '../../lib/dragonFight.js'
 import { PROFILE_FRAMES, DROP_SELECTORS } from '../../state/initialState.js'
 import Avatar, { avatarTier, tiersFor } from '../../components/Avatar.jsx'
@@ -13,6 +13,7 @@ import KidPot from '../../components/KidPot.jsx'
 import { navigate } from '../../lib/router.js'
 import BadgeShelf from '../../components/BadgeShelf.jsx'
 import { activityFeed } from '../../lib/activity.js'
+import { MAX_KID_THEMES } from '../../data/themeGenesis.js'
 import { choreCounts } from '../../lib/prune.js'
 
 export default function KidProfile() {
@@ -43,6 +44,7 @@ export default function KidProfile() {
   const { level } = levelFromXp(kid.xp)
   const tier = avatarTier(level, theme)
   const evolution = nextEvolution(kid.themeId, level, storyProgress(state, kid))
+  const ownThemes = (state.kidThemes || []).filter((t) => t.kidId === kid.id).length
 
   // A kid's own device holds no PIN — the parent's PIN lives on the parent's
   // phone. Without this guard an empty box would match the empty stored value
@@ -168,7 +170,7 @@ export default function KidProfile() {
       */}
       <SectionTitle>Your story</SectionTitle>
       <Card className="mb-3">
-        <p className="text-sm">{KID_THEME_MAP[kid.themeId]?.story}</p>
+        <p className="text-sm">{themeById(kid.themeId)?.story}</p>
         {theme.evolution?.story && (
           <p className="text-sm mt-2 pt-2" style={{ borderTop: '1px solid var(--line)' }}>
             <strong style={{ color: 'var(--accent-2)' }}>{theme.evolution.label}.</strong>{' '}
@@ -186,7 +188,7 @@ export default function KidProfile() {
           <p className="text-sm">
             {evolution.requires === 'dragonDefeated'
               ? <>🔒 Something is waiting on the other side of this fight. Beat the dragon to find out what.</>
-              : <>🔒 Reach level <strong style={{ color: 'var(--accent-2)' }}>{evolution.level}</strong> and {KID_THEME_MAP[kid.themeId].name} changes into somewhere new. Where is a secret until you get there.</>}
+              : <>🔒 Reach level <strong style={{ color: 'var(--accent-2)' }}>{evolution.level}</strong> and {themeById(kid.themeId)?.name} changes into somewhere new. Where is a secret until you get there.</>}
           </p>
         </Card>
       )}
@@ -236,9 +238,18 @@ export default function KidProfile() {
       <SectionTitle>Theme</SectionTitle>
       <Card className="mb-3">
         <p className="text-sm mb-2">
-          You are playing <strong>{KID_THEME_MAP[kid.themeId]?.name}</strong>. Themes are locked once chosen —
+          You are playing <strong>{themeById(kid.themeId)?.name}</strong>. Themes are locked once chosen —
           a parent has to enter the PIN to change it.
         </p>
+        {/*
+          Making a theme changes nothing until it is worn, so it is not
+          behind the lock: any child can open Theme Genesis and build one.
+          Wearing it is the same as any other theme change.
+        */}
+        <Button variant="soft" className="w-full mb-2" onClick={() => navigate('/kid/genesis')} data-testid="open-genesis">
+          ✨ Make your own theme
+          {ownThemes > 0 && <span className="text-xs font-normal"> · {ownThemes} of {MAX_KID_THEMES} made</span>}
+        </Button>
         {!themeUnlocked ? (
           canUnlockHere ? (
             <Button variant="soft" className="w-full" onClick={() => setPinOpen(true)}>
@@ -251,7 +262,7 @@ export default function KidProfile() {
           )
         ) : (
           <div className="mt-3">
-            <ThemePicker value={draftTheme} onChange={setDraftTheme} previewLevel={level} />
+            <ThemePicker value={draftTheme} onChange={setDraftTheme} previewLevel={level} kidId={kid.id} onMake={() => navigate('/kid/genesis')} />
             <div className="flex gap-2 mt-3">
               <Button variant="ghost" className="flex-1" onClick={() => { setThemeUnlocked(false); setDraftTheme(kid.themeId) }}>
                 Cancel

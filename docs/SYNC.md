@@ -80,8 +80,9 @@ link the new one.
 ## What travels, and how
 
 Chores, submissions, accepts and send-backs, XP and coins, rewards and
-redemptions, notes, overrides (taxes and lockouts), the family's plan, and the
-**family goal** all travel between every phone in the family.
+redemptions, notes, overrides (taxes and lockouts), the family's plan, the
+**family goal** and the children's **own themes** all travel between every
+phone in the family.
 
 **Every change is saved on the phone first** and put in the phone's
 **outbox**, then sent in order. Each phone asks the server for "everything
@@ -173,6 +174,38 @@ same bar on each.
   since stands.
 
 `supabase/test/28-family-goal.sql` and `tests/familygoal.mjs` check these.
+
+### A child's own themes (Theme Genesis)
+
+A theme a child makes is a row of its own (`kid_themes`, in sync.sql), synced
+like the others: saved on the phone first, sent through the outbox, pulled by
+`family_snapshot`, deleted with a tombstone. A child's phone may write it
+directly (it is the second table a child writes, after notes); row level
+security holds them to their own themes, and a guard trigger to the look and
+the names. The rest is the server's:
+
+- **Seen only by the family.** A parent reads and writes every theme in the
+  family, a child only their own, nobody else any. Never in a guild, a school
+  or a league.
+- **Five a child**, and every name checked against the rude-word list, by the
+  phone and again by the database. A refused write is dropped and the family
+  fetched afresh, like any refusal.
+- **Wearing one** is an ordinary theme change (`set_kid_look` or the kids
+  row): `custom-<id>` in `theme_id`. Switching is as quick as any and keeps
+  all progress. Removing the theme a child wears puts them, on every phone, on
+  the built-in theme it was made from.
+- **Sending one to RankUp** is `submit_kid_theme`, a parent only, from the
+  outbox like any call. It builds what is sent from the theme row (the theme
+  alone) and holds a child to one a month. The family hears that it was sent,
+  and later that it was picked, through their own theme row.
+- **Seasons** are not family data: `live_seasons` gives every signed-in phone
+  the Seasons that have started, asked when the app opens and once an hour,
+  and kept on the phone for offline. A Season is invisible to everyone until
+  its first day (UTC).
+
+`supabase/test/50-theme-genesis.sql`, `tests/genesissync.mjs` (a parent's
+phone, a child's phone and another family) and `tests/themeswitch.mjs` check
+these.
 
 ### Two parents editing one chore: the edit history
 

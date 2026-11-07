@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import Avatar, { avatarTier, tiersFor } from './Avatar.jsx'
 import { Button, SparkleBurst } from './ui.jsx'
 import { CountUp } from './Motion.jsx'
-import { nextEvolution, KID_THEME_MAP } from '../data/kidThemes.js'
+import { nextEvolution, themeById } from '../data/kidThemes.js'
 import { navigate } from '../lib/router.js'
 import { LEVEL_UP_MS, NEW_WORLD_MS, STREAK_MS } from '../lib/moments.js'
 
@@ -60,7 +60,7 @@ export default function LevelUpOverlay({ levelUp, streak = null, kid, theme, onC
   const newForm = tierAfter > tierBefore
   // Worlds opened by a story milestone (Block Craft's last, by beating the
   // dragon) arrive with that milestone, not with a level.
-  const evolutionHit = KID_THEME_MAP[kid.themeId]?.evolutions?.find(
+  const evolutionHit = themeById(kid.themeId)?.evolutions?.find(
     (e) => !e.requires && levelUp.from < e.level && levelUp.to >= e.level,
   )
   const upcoming = nextEvolution(kid.themeId, levelUp.to)

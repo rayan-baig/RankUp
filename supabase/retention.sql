@@ -13,6 +13,8 @@
 --   pairing_codes              a six-digit code lives ten minutes. The row
 --                              outlived it by years.
 --   pairing_claim_attempts     rate-limit marks, read over a ten-minute window.
+--   theme_submissions          themes sent for a Season and declined or never
+--                              picked, after 90 days (the privacy policy says so).
 --
 -- Guild messages are deliberately NOT in this list. They are the record of what
 -- children said to each other, they can be reported, and a job that quietly
@@ -47,6 +49,7 @@ declare
   v_codes   int;
   v_tries   int;
   v_crashes int;
+  v_themes  int;
 begin
   with gone as (
     delete from events
@@ -107,6 +110,16 @@ begin
     delete from error_report_sends where claimed_at < now() - interval '2 days';
   end if;
 
+  -- Themes sent to RankUp for a Season (sync.sql) that were declined, or never
+  -- picked: 90 days, then gone. A picked theme is official and stays.
+  if to_regclass('public.theme_submissions') is not null then
+    with gone as (
+      delete from theme_submissions
+       where status in ('new', 'declined') and created_at < now() - interval '90 days'
+      returning 1
+    ) select count(*) into v_themes from gone;
+  end if;
+
   -- The daily usage counts (health.sql): totals only, kept for 400 days, a
   -- year and a bit, so this month can be set beside the same month last year.
   if to_regclass('public.usage_daily') is not null then
@@ -118,7 +131,8 @@ begin
     'crashes_deleted', coalesce(v_crashes, 0),
     'events_deleted', v_events,
     'pairing_codes_deleted', v_codes,
-    'claim_attempts_deleted', v_tries
+    'claim_attempts_deleted', v_tries,
+    'theme_submissions_deleted', coalesce(v_themes, 0)
   );
 end $$;
 

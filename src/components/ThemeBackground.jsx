@@ -703,6 +703,155 @@ function Sky({ c, kind }) {
   return null
 }
 
+/* ---------------------------------------------------------------- */
+/*
+ * The Theme Genesis patterns: eight simple drawings a child picks from
+ * (src/data/themeGenesis.js, scene `pat-<id>`). Same rules as the scenes
+ * above: the theme's own colours, a still layer of shapes and a few that
+ * drift, no images. Kept plainer than the built-in scenes on purpose, so
+ * any palette a child picks still looks like a place rather than noise.
+ */
+
+/** A grid of one small shape, every other row shifted half a step. */
+function Tiled({ step, render }) {
+  const cells = []
+  for (let row = 0; row * step < 104; row += 1) {
+    for (let col = -1; col * step < 104; col += 1) {
+      cells.push(render((col + (row % 2 ? 0.5 : 0)) * step, row * step, row * 31 + col))
+    }
+  }
+  return <>{cells}</>
+}
+
+const STAR = 'M0 -1 L0.29 -0.31 L1 -0.31 L0.43 0.12 L0.62 0.81 L0 0.4 L-0.62 0.81 L-0.43 0.12 L-1 -0.31 L-0.29 -0.31 Z'
+const LEAF = 'M0 1 C-0.9 0.4 -0.9 -0.7 0 -1 C0.9 -0.7 0.9 0.4 0 1 Z'
+
+function PatStars({ c }) {
+  return (
+    <>
+      <rect width="100" height="100" fill={c.bg} />
+      <Tiled step={12} render={(x, y, k) => (
+        <circle key={k} cx={x} cy={y} r={k % 3 ? 0.35 : 0.6} fill={k % 4 ? c.ink : c.accent2} opacity={k % 3 ? 0.35 : 0.6} />
+      )} />
+      <Drifters seed={11} count={12} render={(p) => (
+        <path d={STAR} transform={`translate(${p.x} ${p.y}) scale(${0.8 + p.size})`} fill={p.i % 2 ? c.accent : c.accent2} opacity="0.55" />
+      )} />
+    </>
+  )
+}
+
+function PatWaves({ c }) {
+  return (
+    <>
+      <rect width="100" height="100" fill={c.bg} />
+      {Array.from({ length: 9 }, (_, i) => (
+        <path key={i} d={`M-10 ${8 + i * 11} q 7.5 -4 15 0 t 15 0 t 15 0 t 15 0 t 15 0 t 15 0 t 15 0 t 15 0`}
+              fill="none" stroke={i % 2 ? c.accent : c.accent2} strokeWidth="0.6" opacity={0.18 + (i % 3) * 0.08}>
+          <animateTransform attributeName="transform" type="translate" values={`0 0;${i % 2 ? 15 : -15} 0;0 0`}
+                            dur={`${14 + i}s`} repeatCount="indefinite" />
+        </path>
+      ))}
+      <Drifters seed={23} count={10} render={(p) => (
+        <circle cx={p.x} cy={p.y} r={0.5 + p.size * 0.5} fill="none" stroke={c.accent} strokeWidth="0.25" opacity="0.5" />
+      )} />
+    </>
+  )
+}
+
+function PatLeaves({ c }) {
+  return (
+    <>
+      <rect width="100" height="100" fill={c.bg} />
+      <Tiled step={16} render={(x, y, k) => (
+        <path key={k} d={LEAF} transform={`translate(${x} ${y}) rotate(${(k * 47) % 360}) scale(2.4)`}
+              fill={k % 3 ? c.accent : c.accent2} opacity="0.16" />
+      )} />
+      <Drifters seed={5} count={11} render={(p) => (
+        <path d={LEAF} transform={`translate(${p.x} ${p.y}) rotate(${p.rot}) scale(${1.4 + p.size})`} fill={c.accent} opacity="0.45" />
+      )} />
+    </>
+  )
+}
+
+function PatDots({ c }) {
+  return (
+    <>
+      <rect width="100" height="100" fill={c.bg} />
+      <Tiled step={9} render={(x, y, k) => (
+        <circle key={k} cx={x} cy={y} r={k % 5 ? 1.1 : 1.8} fill={k % 2 ? c.accent : c.accent2} opacity="0.2" />
+      )} />
+      <Drifters seed={17} count={10} render={(p) => (
+        <circle cx={p.x} cy={p.y} r={1 + p.size} fill={p.i % 2 ? c.accent : c.accent2} opacity="0.5" />
+      )} />
+    </>
+  )
+}
+
+function PatCircuits({ c }) {
+  return (
+    <>
+      <rect width="100" height="100" fill={c.bg} />
+      <g stroke={c.accent} strokeWidth="0.35" fill="none" opacity="0.32">
+        {Array.from({ length: 8 }, (_, i) => (
+          <path key={i} d={`M${(i * 13) % 100} 0 V${18 + (i * 9) % 30} H${(i * 13 + 18) % 100} V100`} />
+        ))}
+      </g>
+      <Tiled step={20} render={(x, y, k) => (
+        <rect key={k} x={x - 1} y={y - 1} width="2" height="2" fill={k % 2 ? c.accent2 : c.accent} opacity="0.45" />
+      )} />
+      <Drifters seed={29} count={8} render={(p) => (
+        <rect x={p.x} y={p.y} width="1.4" height="1.4" fill={c.accent2} opacity="0.7" />
+      )} />
+    </>
+  )
+}
+
+function PatConfetti({ c }) {
+  return (
+    <>
+      <rect width="100" height="100" fill={c.bg} />
+      <Drifters seed={41} count={26} render={(p) => (
+        <rect x={p.x} y={p.y} width={0.8 + p.size * 0.6} height={2 + p.size} rx="0.3"
+              transform={`rotate(${p.rot} ${p.x} ${p.y})`} fill={p.i % 3 === 0 ? c.accent2 : p.i % 3 === 1 ? c.accent : c.ink}
+              opacity="0.45" />
+      )} />
+    </>
+  )
+}
+
+function PatZigzag({ c }) {
+  return (
+    <>
+      <rect width="100" height="100" fill={c.bg} />
+      {Array.from({ length: 8 }, (_, i) => (
+        <path key={i} d={`M-5 ${10 + i * 12} ${Array.from({ length: 12 }, (_, j) => `L${j * 10} ${10 + i * 12 + (j % 2 ? -4 : 0)}`).join(' ')}`}
+              fill="none" stroke={i % 2 ? c.accent2 : c.accent} strokeWidth="0.7" opacity="0.2" strokeLinejoin="round" />
+      ))}
+      <Drifters seed={13} count={8} render={(p) => (
+        <path d="M-2 0 L0 -2 L2 0" transform={`translate(${p.x} ${p.y}) scale(${0.8 + p.size})`} fill="none"
+              stroke={c.accent2} strokeWidth="0.5" opacity="0.6" />
+      )} />
+    </>
+  )
+}
+
+function PatBubbles({ c }) {
+  return (
+    <>
+      <rect width="100" height="100" fill={c.bg} />
+      <Tiled step={18} render={(x, y, k) => (
+        <circle key={k} cx={x} cy={y} r={k % 3 ? 3 : 5} fill="none" stroke={c.accent} strokeWidth="0.3" opacity="0.18" />
+      )} />
+      <Drifters seed={37} count={14} render={(p) => (
+        <g>
+          <circle cx={p.x} cy={p.y} r={1.2 + p.size * 1.4} fill={c.accent} opacity="0.12" />
+          <circle cx={p.x} cy={p.y} r={1.2 + p.size * 1.4} fill="none" stroke={c.accent2} strokeWidth="0.25" opacity="0.6" />
+        </g>
+      )} />
+    </>
+  )
+}
+
 const SCENES = {
   tetrominoes: Tetrominoes,
   voxel: (p) => <Voxel {...p} variant="overworld" />,
@@ -723,6 +872,14 @@ const SCENES = {
   bricks: Bricks,
   triangles: Triangles,
   handheld: Handheld,
+  'pat-stars': PatStars,
+  'pat-waves': PatWaves,
+  'pat-leaves': PatLeaves,
+  'pat-dots': PatDots,
+  'pat-circuits': PatCircuits,
+  'pat-confetti': PatConfetti,
+  'pat-zigzag': PatZigzag,
+  'pat-bubbles': PatBubbles,
 }
 
 /**
@@ -755,7 +912,12 @@ const LAYERS = [
   { key: 'near', scale: 0.7, blur: 0, opacity: 0.38, speed: 0.6, y: 3 },
 ]
 
-export default function ThemeBackground({ theme, className = '', glitch = false }) {
+/*
+ * `contained` draws the scene inside its parent instead of behind the whole
+ * screen: Theme Genesis shows a theme's home screen in a box before a child
+ * wears it, and the operator's page shows each theme sent in the same way.
+ */
+export default function ThemeBackground({ theme, className = '', glitch = false, contained = false }) {
   const Scene = SCENES[theme?.scene] || Tetrominoes
   const c = theme?.colors
   const id = useId().replace(/[^a-zA-Z0-9]/g, '')
@@ -763,7 +925,7 @@ export default function ThemeBackground({ theme, className = '', glitch = false 
 
   return (
     <div
-      className={`fixed inset-0 -z-10 pointer-events-none ${glitch ? 'anim-glitch' : ''} ${className}`}
+      className={`${contained ? 'absolute inset-0' : 'fixed inset-0 -z-10'} pointer-events-none ${glitch ? 'anim-glitch' : ''} ${className}`}
       aria-hidden="true"
       style={{ background: c.bg }}
     >

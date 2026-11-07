@@ -188,6 +188,15 @@ export default function Avatar({ theme, level = 1, size = 120, companion = false
               preserveAspectRatio="xMidYMid meet"
               clipPath={`circle(24px at 24px 24px)`}
             />
+          ) : theme?.avatar?.emoji ? (
+            /*
+             * A theme made in Theme Genesis: its mascot, from the emoji set
+             * (src/data/themeGenesis.js), inside the same rings, which still
+             * count the forms. Text, never markup.
+             */
+            <text x="50" y="52" fontSize="30" textAnchor="middle" dominantBaseline="central" aria-hidden="true">
+              {theme.avatar.emoji}
+            </text>
           ) : (
             <>
               <g transform="translate(50 48) scale(1.28)">{motif(colour)}</g>

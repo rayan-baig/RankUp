@@ -10,6 +10,8 @@ import { questsDueToReturn, dayOf } from '../lib/recurrence.js'
 import { STICKER_MAP } from '../data/stickers.js'
 import { foldLevelUp, foldStreak } from '../lib/moments.js'
 import { applyPrune } from '../lib/prune.js'
+import { MAX_KID_THEMES, NAME_MAX, CREDIT_MAX, cleanDesign, themeProblem, customThemeId } from '../data/themeGenesis.js'
+import { plainName } from '../lib/kidWords.js'
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -611,6 +613,7 @@ function reduce(state, action) {
         redemptions: state.redemptions.filter((r) => r.kidId !== action.kidId),
         notes: state.notes.filter((n) => n.kidId !== action.kidId),
         overrides: state.overrides.filter((o) => o.kidId !== action.kidId),
+        kidThemes: (state.kidThemes || []).filter((t) => t.kidId !== action.kidId),
         session: {
           ...state.session,
           kidId: state.session.kidId === action.kidId ? (state.kids.find((k) => k.id !== action.kidId)?.id ?? null) : state.session.kidId,
@@ -645,6 +648,99 @@ function reduce(state, action) {
         { type: 'theme_changed', kidId: action.kidId, meta: { themeId: action.themeId } },
       )
     }
+
+    /*
+     * Theme Genesis: a child's own theme, made, changed or removed.
+     *
+     * A look and some names over a built-in theme's structure, never a rule
+     * (src/data/themeGenesis.js). Held to MAX_KID_THEMES per child and to
+     * the word list here, and again by the database, so a phone that skips
+     * these checks still cannot store more or worse.
+     */
+    case 'SAVE_KID_THEME': {
+      const t = action.theme || {}
+      const name = plainName(t.name, NAME_MAX)
+      const design = cleanDesign(t.design)
+      if (themeProblem(name, design)) return state
+      const existing = t.id && (state.kidThemes || []).find((x) => x.id === t.id)
+      if (existing) {
+        return {
+          ...state,
+          kidThemes: (state.kidThemes || []).map((x) => (x.id === t.id
+            ? { ...x, name, design, status: t.status === 'ready' || x.status === 'ready' ? 'ready' : 'draft' }
+            : x)),
+        }
+      }
+      if (!state.kids.some((k) => k.id === t.kidId)) return state
+      if ((state.kidThemes || []).filter((x) => x.kidId === t.kidId).length >= MAX_KID_THEMES) return state
+      return {
+        ...state,
+        kidThemes: [...(state.kidThemes || []), {
+          id: t.id || uid('theme'), kidId: t.kidId, name, design, status: t.status === 'ready' ? 'ready' : 'draft',
+          useAsk: false, sendAsk: false, sentAt: null, pickedSeason: null, createdAt: clock(),
+        }],
+      }
+    }
+
+    /** Renamed by a parent from Settings: the name alone, held to the same words. */
+    case 'RENAME_KID_THEME': {
+      const name = plainName(action.name, NAME_MAX)
+      const theme = (state.kidThemes || []).find((x) => x.id === action.id)
+      if (!theme || themeProblem(name, theme.design)) return state
+      return { ...state, kidThemes: (state.kidThemes || []).map((x) => (x.id === action.id ? { ...x, name } : x)) }
+    }
+
+    /*
+     * Removed, by the child or a parent. A child wearing it goes back to the
+     * built-in theme it was made from: the same levels and the same worlds at
+     * the same places, so nothing about their progress moves.
+     */
+    case 'DELETE_KID_THEME': {
+      const theme = (state.kidThemes || []).find((x) => x.id === action.id)
+      if (!theme) return state
+      let next = { ...state, kidThemes: (state.kidThemes || []).filter((x) => x.id !== action.id) }
+      const wearing = next.kids.filter((k) => k.themeId === customThemeId(theme.id))
+      for (const k of wearing) {
+        next = reduce(next, { type: 'SET_KID_THEME', kidId: k.id, themeId: cleanDesign(theme.design).base })
+      }
+      return next
+    }
+
+    /*
+     * A child asking a grown-up for something about their theme: to wear it
+     * (`use`, on their own phone, where the theme lock means a parent has to
+     * switch it on) or to send it to RankUp for a Season (`send`). A parent
+     * saying "not now" clears it the same way.
+     */
+    case 'ASK_KID_THEME': {
+      const key = action.ask === 'send' ? 'sendAsk' : 'useAsk'
+      const theme = (state.kidThemes || []).find((x) => x.id === action.id)
+      if (!theme) return state
+      if (key === 'sendAsk' && action.on && (theme.status !== 'ready' || theme.sentAt)) return state
+      return { ...state, kidThemes: (state.kidThemes || []).map((x) => (x.id === action.id ? { ...x, [key]: Boolean(action.on) } : x)) }
+    }
+
+    /*
+     * A parent says yes to sending a child's theme to RankUp. The server
+     * builds what is sent from the theme itself (its name, colours, pattern,
+     * mascot and world names) and the credit line, checks the words again and
+     * holds a child to one a month: submit_kid_theme in supabase/sync.sql.
+     */
+    case 'SEND_KID_THEME': {
+      const theme = (state.kidThemes || []).find((x) => x.id === action.id)
+      if (!theme || theme.sentAt || theme.status !== 'ready') return state
+      const credit = plainName(action.credit, CREDIT_MAX)
+      const next = { ...state, kidThemes: (state.kidThemes || []).map((x) => (x.id === action.id ? { ...x, sendAsk: false, sentAt: clock() } : x)) }
+      return queueRpc(next, 'submit_kid_theme', { p_theme_id: theme.id, p_credit: credit || null })
+    }
+
+    /** The Seasons that have started, as the server sent them (live_seasons). */
+    case 'SET_SEASONS':
+      return Array.isArray(action.seasons) ? { ...state, seasons: action.seasons, seasonsAt: clock() } : state
+
+    /** A one-time moment (a new Season, a theme picked) has been shown on this phone. */
+    case 'SEE_MOMENT':
+      return state.seen?.[action.key] ? state : { ...state, seen: { ...(state.seen || {}), [action.key]: clock() } }
 
     /*
      * A chapter of the theme's story has been watched on this device. Local
@@ -1187,6 +1283,17 @@ function reduce(state, action) {
           : reason === 'insufficient'
             ? `${name} couldn’t be bought: there were not enough coins left by the time it arrived. Nothing was spent.`
             : `${name} couldn’t be claimed, so the coins are back.`
+      } else if (fn === 'submit_kid_theme') {
+        const theme = (state.kidThemes || []).find((t) => t.id === args.p_theme_id)
+        next = { ...next, kidThemes: (next.kidThemes || []).map((t) => (t.id === args.p_theme_id ? { ...t, sentAt: null } : t)) }
+        const name = `"${theme?.name || 'That theme'}"`
+        message = reason === 'limit'
+          ? `${name} wasn’t sent: one theme a month can go to RankUp from each child. Try again next month.`
+          : reason === 'words'
+            ? `${name} wasn’t sent: a name in it, or the credit, has a word RankUp does not allow.`
+            : reason === 'bad_credit'
+              ? `${name} wasn’t sent: the credit can be a first name or a nickname, in letters only.`
+              : `${name} couldn’t be sent to RankUp just now.`
       } else if (fn === 'mark_redemption_given') {
         next = {
           ...next,

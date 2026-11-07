@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { art } from '../data/art.js'
-import { KID_THEMES, resolveKidTheme } from '../data/kidThemes.js'
+import { KID_THEMES, resolveKidTheme, extraThemes } from '../data/kidThemes.js'
 import Avatar from './Avatar.jsx'
 import { Card } from './ui.jsx'
 
@@ -11,9 +11,17 @@ import { Card } from './ui.jsx'
  * than by reading. The level slider lets you see how a theme evolves without
  * having to actually reach level 100 first.
  */
-export default function ThemePicker({ value, onChange, previewLevel = 1, showEvolutionPreview = true }) {
+export default function ThemePicker({ value, onChange, previewLevel = 1, showEvolutionPreview = true, kidId = null, onMake = null }) {
   const [level, setLevel] = useState(previewLevel)
   const selected = resolveKidTheme(value, level)
+  /*
+   * Beside the fifteen: this Season's official themes, for everybody, and
+   * the child's own finished themes from Theme Genesis, for them alone (a
+   * brother's are his). Neither is offered where there is no child yet.
+   */
+  const extra = kidId
+    ? extraThemes().filter((t) => t.season || (t.ownerKidId === kidId && t.status === 'ready'))
+    : []
 
   return (
     <div>
@@ -62,6 +70,38 @@ export default function ThemePicker({ value, onChange, previewLevel = 1, showEvo
       </Card>
 
       <div className="grid grid-cols-2 gap-2.5">
+        {extra.map((theme) => {
+          const isSelected = theme.id === value
+          return (
+            <button
+              key={theme.id}
+              type="button"
+              onClick={() => onChange(theme.id)}
+              aria-pressed={isSelected}
+              data-testid={theme.season ? 'season-theme' : 'own-theme'}
+              className="text-left p-2.5 relative overflow-hidden transition-transform active:scale-[0.97]"
+              style={{
+                background: theme.colors.surface,
+                border: `2px solid ${isSelected ? theme.colors.accent : theme.colors.line}`,
+                borderRadius: 'var(--radius)',
+                color: theme.colors.ink,
+              }}
+            >
+              <div className="h-16 mb-2 rounded-md relative overflow-hidden grid place-items-center" style={{ background: theme.colors.bg }}>
+                <span className="absolute inset-0 opacity-70" style={{ background: `radial-gradient(circle at 30% 40%, ${theme.colors.accent}55, transparent 60%), radial-gradient(circle at 75% 70%, ${theme.colors.accent2}55, transparent 55%)` }} />
+                <span className="relative text-4xl" aria-hidden="true">{theme.avatar.emoji}</span>
+              </div>
+              <div className="font-display font-bold text-[13px] leading-tight truncate">{theme.name}</div>
+              <div className="text-[10px] truncate" style={{ color: theme.colors.inkMuted }}>{theme.inspiredBy}</div>
+              <div className="text-[11px] mt-1 truncate" style={{ color: theme.colors.accent }}>
+                {theme.currency.icon} {theme.currency.name}
+              </div>
+              <span className="absolute top-1.5 right-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: theme.colors.accent2, color: theme.colors.bg }}>
+                {theme.season ? `SEASON ${theme.season}` : 'YOURS'}
+              </span>
+            </button>
+          )
+        })}
         {KID_THEMES.map((theme) => {
           const isSelected = theme.id === value
           return (
@@ -112,6 +152,17 @@ export default function ThemePicker({ value, onChange, previewLevel = 1, showEvo
             </button>
           )
         })}
+        {onMake && (
+          <button type="button" onClick={onMake} data-testid="make-own-theme"
+                  className="p-2.5 grid place-items-center text-center transition-transform active:scale-[0.97]"
+                  style={{ border: '2px dashed var(--accent)', borderRadius: 'var(--radius)', background: 'var(--surface)', minHeight: 120 }}>
+            <span>
+              <span className="block text-3xl" aria-hidden="true">✨</span>
+              <span className="block font-display font-bold text-[13px]">Make your own theme</span>
+              <span className="block text-[10px] text-muted">Theme Genesis</span>
+            </span>
+          </button>
+        )}
       </div>
     </div>
   )

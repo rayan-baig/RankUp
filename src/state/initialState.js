@@ -277,6 +277,15 @@ export function createInitialState() {
     notes: [],
     events: [],
     familyGoal: null,
+    /*
+     * Theme Genesis. A child's own themes travel with the family (kid_themes);
+     * the official Season themes are the same for every family and arrive by
+     * live_seasons (supabase/sync.sql). `seen` is this phone's alone: which
+     * "New Season!" and "picked for a Season" moments it has already shown.
+     */
+    kidThemes: [],
+    seasons: [],
+    seen: {},
     settings: {
       reminders: [
         { id: uid('rem'), label: 'Morning quests', time: '07:30', on: true },

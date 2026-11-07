@@ -1157,6 +1157,47 @@ export const KID_THEME_MAP = Object.fromEntries(KID_THEMES.map((t) => [t.id, t])
 
 export const DEFAULT_KID_THEME = 'matrixblocks'
 
+/*
+ * Themes that are data rather than code: a child's own (Theme Genesis, ids
+ * `custom-…`) and the official Season themes (`season-…`). Both are built by
+ * src/data/themeGenesis.js in the same shape as the fifteen above and handed
+ * here by the app whenever they change (AppContext), so every screen that
+ * resolves a theme by id finds them without knowing they exist.
+ */
+const EXTRA_THEMES = new Map()
+
+/** Replace the data themes this phone knows about. */
+export function setExtraThemes(themes) {
+  EXTRA_THEMES.clear()
+  for (const t of themes || []) if (t?.id) EXTRA_THEMES.set(t.id, t)
+}
+
+/** The data themes this phone knows about, Season ones first. */
+export function extraThemes() {
+  return [...EXTRA_THEMES.values()]
+}
+
+/** Any theme by id: a built-in one, a child's own, or a Season's. */
+export function themeById(themeId) {
+  return KID_THEME_MAP[themeId] || EXTRA_THEMES.get(themeId) || null
+}
+
+/*
+ * A theme id this phone cannot find any more (a child's own theme removed on
+ * another phone, before the change to their theme has arrived) falls back to
+ * the built-in theme it was made from, so the child sees the same worlds at
+ * the same levels rather than somewhere unrelated.
+ */
+const lastKnownBase = new Map()
+function findTheme(themeId) {
+  const found = themeById(themeId)
+  if (found) {
+    if (found.design?.base) lastKnownBase.set(themeId, found.design.base)
+    return found
+  }
+  return KID_THEME_MAP[lastKnownBase.get(themeId)] || KID_THEME_MAP[DEFAULT_KID_THEME]
+}
+
 /**
  * Resolve a theme for a given level, applying its level-gated worlds.
  */
@@ -1171,7 +1212,7 @@ const worldOpen = (e, level, progress) => level >= e.level && (!e.requires || Bo
  * kid to hand can leave it out; the world simply stays closed.
  */
 export function resolveKidTheme(themeId, level = 1, progress = null) {
-  const theme = KID_THEME_MAP[themeId] || KID_THEME_MAP[DEFAULT_KID_THEME]
+  const theme = findTheme(themeId)
   if (!theme.evolutions?.length) return { ...theme, evolution: null }
 
   const unlocked = theme.evolutions.filter((e) => worldOpen(e, level, progress))
@@ -1195,7 +1236,7 @@ export function resolveKidTheme(themeId, level = 1, progress = null) {
  * never its name or story: a world nobody has reached is a secret.
  */
 export function nextEvolution(themeId, level = 1, progress = null) {
-  const theme = KID_THEME_MAP[themeId]
+  const theme = themeById(themeId)
   if (!theme?.evolutions?.length) return null
   return theme.evolutions.find((e) => !worldOpen(e, level, progress)) || null
 }
@@ -1207,7 +1248,7 @@ export function nextEvolution(themeId, level = 1, progress = null) {
  * a screen can list all of it without giving anything away.
  */
 export function storyChapters(themeId, level = 1, progress = null) {
-  const theme = KID_THEME_MAP[themeId]
+  const theme = themeById(themeId)
   if (!theme?.storyStart) return []
   const first = { chapter: theme.storyStart.chapter, label: theme.storyStart.label, story: theme.story, level: 1 }
   const worlds = (theme.evolutions || [])

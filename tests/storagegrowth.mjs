@@ -72,7 +72,7 @@ function year({ prune, offlineFrom = Infinity, onDay = () => {} }) {
     clearOutbox()
     const stamp = (list) => list.map((x) => (x.rev != null ? x : { ...x, rev: rev++ }))
     s = { ...s, quests: stamp(s.quests), submissions: stamp(s.submissions), notes: stamp(s.notes) }
-    recordDelivered(s, Object.fromEntries(Object.entries(ENTITIES).map(([key, { mapper }]) => [key, s[key].map((x) => ({ ...mapper.toRow(x, s.family.id), rev: x.rev }))])))
+    recordDelivered(s, Object.fromEntries(Object.entries(ENTITIES).map(([key, { key: stateKey, mapper }]) => [key, (s[stateKey] || []).map((x) => ({ ...mapper.toRow(x, s.family.id), rev: x.rev }))])))
   }
   // What AppContext's save does.
   const save = () => {
@@ -217,6 +217,29 @@ console.log('\n=== Rows that are never let go of ===')
   ok('a row the server has never sent back is kept (this phone may hold the only copy)', !p.submissions.includes('s-local') && !p.quests.includes('q-local'))
   ok('a chore something waiting to be sent names is kept', !p.submissions.includes('s-named'))
   ok('a note not yet read is kept', !p.notes.includes('n-unread'))
+}
+
+console.log('\n=== Theme Genesis: five themes a child, at their longest, stay small ===')
+{
+  const { designFromVibe, CURRENCY_MAX, WORLD_MAX, NAME_MAX, MAX_KID_THEMES } = await import('../src/data/themeGenesis.js')
+  const { makeKid } = await import('../src/state/initialState.js')
+  store.clear(); clearOutbox(); clearShadow()
+  const s0 = createInitialState()
+  let s = { ...s0, onboarded: true, device: { ...s0.device, role: 'parent' }, family: { ...s0.family, id: 'fam-themes', name: 'Themes', pin: '1234' } }
+  s = { ...s, kids: Array.from({ length: 5 }, (_, i) => ({ ...makeKid({ name: `Kid ${i}` }), id: `kid-${i}` })) }
+  const before = JSON.stringify(s).length
+  const longest = (vibe) => ({ ...designFromVibe(vibe).design, cur: 'C'.repeat(CURRENCY_MAX), worlds: Array(4).fill('W'.repeat(WORLD_MAX)) })
+  for (const kid of s.kids) {
+    for (let i = 0; i < MAX_KID_THEMES + 2; i += 1) {
+      s = reducer(s, { type: 'SAVE_KID_THEME', theme: { kidId: kid.id, name: 'N'.repeat(NAME_MAX), design: longest(['space', 'ocean', 'candy'][i % 3]), status: 'ready' } })
+    }
+  }
+  ok(`no child keeps more than ${MAX_KID_THEMES}`, s.kids.every((k) => s.kidThemes.filter((t) => t.kidId === k.id).length === MAX_KID_THEMES))
+  const added = JSON.stringify(s).length - before
+  ok(`25 themes at their longest add ${kb(added)} to the saved state (under 16 KB)`, added < 16 * 1024, String(added))
+  queueChanges(s, { role: 'parent' })
+  const outbox = JSON.stringify(readOutbox()).length
+  ok(`and sending them all takes ${kb(outbox)} of outbox (under 24 KB)`, outbox < 24 * 1024, String(outbox))
 }
 
 console.log(`\nSizes (characters in localStorage): ${MARKS.map((d) => `day ${d} ${kb(sizes.kept[d])} → ${kb(sizes.pruned[d])}`).join(', ')}`)

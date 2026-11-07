@@ -39,6 +39,7 @@ const ROUTES = {
   'settle-schools': () => import('../../api/settle-schools.js'),
   stats: () => import('../../api/stats.js'),
   'operator-schools': () => import('../../api/operator-schools.js'),
+  'operator-themes': () => import('../../api/operator-themes.js'),
   'school-checkout': () => import('../../api/school-checkout.js'),
   'stripe-webhook': () => import('../../api/stripe-webhook.js'),
 }

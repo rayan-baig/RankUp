@@ -124,7 +124,11 @@ function stripServerOwned(table, row) {
  * through submit_quest, so the row is already there by the time this runs and
  * the upsert would arrive as an update, which only a parent may do.
  */
-const KID_WRITABLE = new Set(['notes'])
+const KID_WRITABLE = new Set(['notes',
+  // Their own themes (Theme Genesis). Row level security holds a child to
+  // their own rows, and a guard trigger to the look and the names: the
+  // columns the server writes (sent_at, picked_season) are not theirs.
+  'kid_themes'])
 
 /**
  * Tables no device ever writes directly, whatever role it is in.
@@ -292,6 +296,9 @@ export function pendingRows(ops, state = null) {
     else if (op.type === 'rpc' && op.fn === 'set_kid_look' && op.args?.p_kid_id) pending.add(`kids:${op.args.p_kid_id}`)
     // A goal this phone has just set must not be put back by an older copy.
     else if (op.type === 'rpc' && op.fn === 'set_family_goal') pending.add('family_goals')
+    // A parent sending a child's theme to RankUp: an older pull would show
+    // the request as still waiting, and invite a second tap.
+    else if (op.type === 'rpc' && op.fn === 'submit_kid_theme' && op.args?.p_theme_id) pending.add(`kid_themes:${op.args.p_theme_id}`)
     // A note added in Chore history: an older pull must not wipe it on screen.
     else if (op.type === 'rpc' && op.fn === 'set_history_note' && op.args?.p_submission_id) pending.add(`submissions:${op.args.p_submission_id}`)
     /*

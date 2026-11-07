@@ -151,6 +151,60 @@ for (const role of ['kid', 'parent']) {
   ok('nothing deleted', !sent.some((x) => x.startsWith('delete')))
 }
 
+/*
+ * The same, with themes the child made in Theme Genesis among them: flicking
+ * between their own themes and the built-in ones keeps every bit of progress,
+ * sends one theme change, and their themes travel as rows of their own.
+ * Removing the one they wear puts them on the theme it was made from.
+ */
+{
+  const { setExtraThemes, resolveKidTheme } = await import('../src/data/kidThemes.js')
+  const { themesFromState, designFromVibe, customThemeId } = await import('../src/data/themeGenesis.js')
+  for (const role of ['kid', 'parent']) {
+    console.log(`\n=== ${role === 'kid' ? "A child's own phone" : "A parent's phone"}: their own themes among the built-in ones ===`)
+    let s = family(role)
+    const before = progress(s)
+    const waiting = readOutbox().filter((o) => o.fn !== 'set_kid_look' && o.table !== 'kids')
+    const made = []
+    for (const vibe of ['ocean', 'robots']) {
+      const { name, design } = designFromVibe(vibe)
+      s = reducer(s, { type: 'SAVE_KID_THEME', theme: { kidId: AVA, name, design, status: 'ready' } })
+      made.push(s.kidThemes[s.kidThemes.length - 1].id)
+    }
+    setExtraThemes(themesFromState(s))
+    queueChanges(s, { role })
+    ok('two themes of their own, saved', s.kidThemes.length === 2)
+    const ids = [customThemeId(made[0]), START, customThemeId(made[1]), OTHERS[2]]
+    const times = []
+    for (let i = 0; i < 20; i++) {
+      const t0 = performance.now()
+      s = reducer(s, { type: 'SET_KID_THEME', kidId: AVA, themeId: ids[i % ids.length] })
+      queueChanges(s, { role })
+      times.push(performance.now() - t0)
+    }
+    s = reducer(s, { type: 'SET_KID_THEME', kidId: AVA, themeId: customThemeId(made[1]) })
+    queueChanges(s, { role })
+    ok(`each switch is quick: slowest ${Math.max(...times).toFixed(1)} ms`, Math.max(...times) < 50)
+    ok('progress is exactly as it was', progress(s) === before)
+    const worn = resolveKidTheme(s.kids[0].themeId, levelFromXp(s.kids[0].xp).level)
+    ok('their own theme is worn, at their level, with its own world names', worn.name === s.kidThemes[1].name
+      && worn.evolution?.label === s.kidThemes[1].design.worlds[levelFromXp(s.kids[0].xp).level >= 25 ? 1 : 0])
+    const ops = readOutbox()
+    const looks = ops.filter((o) => o.fn === 'set_kid_look' || (o.table === 'kids' && o.row?.theme_id !== undefined))
+    ok('twenty-one switches are one theme change, to their own theme', looks.length === 1
+      && (looks[0].args?.p_theme_id ?? looks[0].row?.theme_id) === customThemeId(made[1]), JSON.stringify(looks))
+    ok('their themes travel as rows of their own, the look and the names only',
+      ops.filter((o) => o.table === 'kid_themes').length === 2
+        && ops.filter((o) => o.table === 'kid_themes').every((o) => !['xp', 'coins', 'sent_at', 'picked_season'].some((c) => c in o.row)))
+    ok('every change that was waiting still is, in order',
+      JSON.stringify(ops.filter((o) => waiting.some((w) => w.id === o.id)).map((o) => o.id)) === JSON.stringify(waiting.map((w) => w.id)))
+    s = reducer(s, { type: 'DELETE_KID_THEME', id: made[1] })
+    ok('removing the theme they wear puts them on the one it was made from', s.kids[0].themeId === designFromVibe('robots').design.base)
+    ok('with progress exactly as it was', progress(s) === before)
+  }
+  setExtraThemes([])
+}
+
 console.log('\n=== In the browser: tap Save to the new look, back and forth ===')
 {
   const { launch, BASE, SHOT_DIR } = await import('./helpers.mjs')

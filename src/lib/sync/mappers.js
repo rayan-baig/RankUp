@@ -311,6 +311,39 @@ export const familyGoals = {
   }),
 }
 
+/**
+ * A child's own theme (Theme Genesis). The look and the names only: see
+ * src/data/themeGenesis.js. `sent_at` and `picked_season` are the server's
+ * (submit_kid_theme and the operator's pick write them), so they come down
+ * and never go up.
+ */
+export const kidThemes = {
+  fromRow: (row, existing = {}) => ({
+    ...existing,
+    id: row.id,
+    kidId: row.kid_id,
+    name: row.name,
+    design: row.design || {},
+    status: row.status || 'draft',
+    useAsk: Boolean(row.use_ask),
+    sendAsk: Boolean(row.send_ask),
+    sentAt: ms(row.sent_at),
+    pickedSeason: row.picked_season ?? null,
+    createdAt: ms(row.created_at) || existing.createdAt || Date.now(),
+    rev: row.rev,
+  }),
+  toRow: (t, familyId) => ({
+    id: t.id,
+    family_id: familyId,
+    kid_id: t.kidId,
+    name: t.name,
+    design: t.design,
+    status: t.status || 'draft',
+    use_ask: Boolean(t.useAsk),
+    send_ask: Boolean(t.sendAsk),
+  }),
+}
+
 /** Which app collection each snapshot key maps onto. */
 export const ENTITIES = {
   kids: { key: 'kids', mapper: kids, table: 'kids' },
@@ -320,4 +353,5 @@ export const ENTITIES = {
   redemptions: { key: 'redemptions', mapper: redemptions, table: 'redemptions' },
   notes: { key: 'notes', mapper: notes, table: 'notes' },
   overrides: { key: 'overrides', mapper: overrides, table: 'overrides' },
+  kid_themes: { key: 'kidThemes', mapper: kidThemes, table: 'kid_themes' },
 }

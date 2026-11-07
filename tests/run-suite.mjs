@@ -55,6 +55,7 @@ const SUITES = {
     { file: 'schoolhelp.mjs' },
     { file: 'installcard.mjs' },
     { file: 'oldbrowsers.mjs' },
+    { file: 'genesiswords.mjs' },
   ],
   // The app in a real browser, against the dev server on :5173 and the mock
   // API on :54321 (supabase/test/up.sh starts both).
@@ -70,6 +71,7 @@ const SUITES = {
     { file: 'notices.mjs', weight: 1 },
     { file: 'moments.mjs', weight: 20 },
     { file: 'themeswitch.mjs', weight: 15 },
+    { file: 'genesis.mjs', weight: 45 },
     { file: 'screens.mjs', weight: 40 },
     { file: 'lookaround.mjs', weight: 27 },
     { file: 'motion.mjs', weight: 14 },
@@ -109,6 +111,8 @@ const SUITES = {
     { file: 'coparents.mjs', weight: 75 },
     { file: 'guilds.mjs', weight: 69 },
     { file: 'consent.mjs', weight: 10 },
+    // Last: it makes a Season that has started, and removes it when done.
+    { file: 'genesissync.mjs', weight: 110 },
   ],
   // The rules, in Node, against the app's own code and a real Postgres.
   awards: [

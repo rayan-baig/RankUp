@@ -23,6 +23,12 @@ procedure — there is no migration tool and no version table. A column added la
 appears as an explicit `alter table ... add column if not exists` at the end of
 `schema.sql`, so an existing database catches up without being rebuilt.
 
+Theme Genesis (0.11.0) added to `sync.sql` the tables `kid_themes`,
+`theme_submissions`, `seasons` and `season_themes` and their functions, to
+`retention.sql` the 90-day clear-out of unpicked submissions, and to
+`consent.sql` the children's themes in "Download my data". No new file and no
+change to the order: re-running the three files is the upgrade.
+
 `supabase/test/run.sh` applies all seventeen files twice, over a database with rows in it,
 and `supabase/test/18-upgrade.sql` then checks that the data survived and that the later
 columns and constraints really arrived. So "safe to re-run" is a tested claim rather

@@ -12,6 +12,7 @@ import { transport } from '../../lib/sync/transport.js'
 import { Screen, Card, Button, Section, SectionTitle, Field, TextInput, TextArea, Toggle, Banner, Modal, Select, Chip } from '../../components/ui.jsx'
 import NotificationSettings from '../../components/NotificationSettings.jsx'
 import DataRights from '../../components/DataRights.jsx'
+import { KidThemesSection } from '../../components/KidThemesParent.jsx'
 import InviteCard from '../../components/InviteCard.jsx'
 import AdultsCard from '../../components/AdultsCard.jsx'
 import { navigate } from '../../lib/router.js'
@@ -50,6 +51,8 @@ export default function ParentSettings() {
 
       <AdultsCard />
       <InviteCard />
+
+      <KidThemesSection />
 
       <Section title="Dashboard theme" icon="🎨"
         summary={PARENT_THEMES.find((t) => t.id === state.family.parentThemeId)?.name || 'Choose a look'}>

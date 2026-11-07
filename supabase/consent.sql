@@ -298,7 +298,15 @@ begin
     -- builds from this export lists it per child; it was missing from both.
     'redemptions', coalesce((select jsonb_agg(to_jsonb(r) order by r.created_at) from redemptions r where r.family_id = v_family), '[]'::jsonb),
     'notes',       coalesce((select jsonb_agg(to_jsonb(n)) from notes n where n.family_id = v_family), '[]'::jsonb),
-    'activity',    coalesce((select jsonb_agg(to_jsonb(e)) from events e where e.family_id = v_family), '[]'::jsonb)
+    'activity',    coalesce((select jsonb_agg(to_jsonb(e)) from events e where e.family_id = v_family), '[]'::jsonb),
+    -- Themes the children made (Theme Genesis), and any a parent sent to
+    -- RankUp for a Season, as they were sent. Both live in sync.sql, which is
+    -- applied before this file.
+    'kid_themes',  coalesce((select jsonb_agg(to_jsonb(t) order by t.created_at) from kid_themes t where t.family_id = v_family), '[]'::jsonb),
+    'theme_submissions', coalesce((
+        select jsonb_agg(jsonb_build_object('kid_id', s.kid_id, 'theme', s.payload, 'credit', s.credit,
+                                            'status', s.status, 'sent_at', s.created_at) order by s.created_at)
+          from theme_submissions s where s.family_id = v_family), '[]'::jsonb)
   );
 end $$;
 

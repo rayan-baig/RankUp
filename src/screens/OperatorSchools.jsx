@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Screen, Card, Button, SectionTitle, Banner, Field, TextInput, Chip } from '../components/ui.jsx'
 import { districtLabel } from '../lib/schools.js'
 import { schoolChecks } from '../lib/schoolChecks.js'
+import OperatorThemes from './OperatorThemes.jsx'
 
 /**
  * The operator's page for checking schools are real, and RankUp's daily
@@ -128,6 +129,8 @@ export default function OperatorSchools() {
   const [usage, setUsage] = useState(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
+  // Which half of the page: the schools, or the themes sent for a Season.
+  const [tab, setTab] = useState('schools')
   // The checklist ticks, per school, for this tab only.
   const [ticked, setTicked] = useState({})
   const tick = (schoolId, checkId) => setTicked((t) => {
@@ -272,17 +275,25 @@ export default function OperatorSchools() {
       <header className="mb-3 flex items-start justify-between gap-2">
         <div>
           <p className="text-xs uppercase tracking-widest text-muted">RankUp operator</p>
-          <h1 className="font-display text-2xl font-extrabold">Check schools</h1>
+          <h1 className="font-display text-2xl font-extrabold">{tab === 'themes' ? 'Theme submissions' : 'Check schools'}</h1>
         </div>
         <button type="button" className="text-xs underline text-muted mt-1"
                 onClick={() => { try { sessionStorage.removeItem(KEY) } catch { /* fine */ } setKey(''); setSchools(null) }}>
           Sign out
         </button>
       </header>
-      {error && <Banner tone="warn" icon="⚠️" title="Not right now" className="mb-3">{error}</Banner>}
-      {!schools && !error && <Card><p className="text-sm text-muted">Loading…</p></Card>}
+      <div className="flex gap-2 mb-3" role="tablist">
+        {[['schools', 'Schools'], ['themes', 'Theme submissions']].map(([id, label]) => (
+          <button key={id} type="button" role="tab" aria-selected={tab === id} className="chip"
+                  style={tab === id ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : undefined}
+                  onClick={() => setTab(id)}>{label}</button>
+        ))}
+      </div>
+      {tab === 'themes' && <OperatorThemes operatorKey={key} />}
+      {tab === 'schools' && error && <Banner tone="warn" icon="⚠️" title="Not right now" className="mb-3">{error}</Banner>}
+      {tab === 'schools' && !schools && !error && <Card><p className="text-sm text-muted">Loading…</p></Card>}
 
-      {schools && (
+      {tab === 'schools' && schools && (
         <>
           <UsageCard usage={usage} />
           <Card flat className="mb-3">

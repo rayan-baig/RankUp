@@ -139,7 +139,9 @@ begin
                              'parental_consents','deletions','referrals',
                              'parent_invites','adult_invite_attempts','rpc_receipts',
                              'billing_cancellations', 'school_month_emails',
-                             'server_errors', 'error_report_kinds', 'error_report_sends', 'usage_daily');
+                             'server_errors', 'error_report_kinds', 'error_report_sends', 'usage_daily',
+                             -- Themes sent for a Season: the operator's page reads them, nobody else.
+                             'theme_submissions');
   perform ok('no table is left locked with no policy at all', coalesce(bare, '') = '',
              'bare: ' || coalesce(bare, ''));
 end $$;

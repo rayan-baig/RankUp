@@ -5,6 +5,17 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.11.0 — 2026-11-07
+
+Theme Genesis: children make themes of their own, and the best become a Season.
+
+- Theme Genesis, a small version of Genesis from the MTRX Horizyn site. From the You tab's theme picker ("Make your own theme"), or from Settings for a chosen child, a theme goes through four short steps with a checklist and a progress bar: Spark (a name and a starting vibe: space, ocean, jungle, candy, robots or something new), Design (ten kid-friendly palettes or their own three colours, kept readable whatever they pick; eight background patterns drawn in SVG; a mascot from 24 emoji), Build (the four worlds and the coins, named already so it is quick) and Launch (their home screen in the new theme, then "Use this theme"). Drafts are saved, edited later and deleted; five themes a child.
+- A child's theme is a look and some names over a built-in theme's structure: the same five forms and four worlds at the same levels. XP, coins, streaks, rewards and unlocks are worked out exactly as before. Switching between their own theme and a built-in one is as quick as any theme switch and keeps all progress; the theme lock still holds (the PIN on a shared phone; on a child's own phone, "Use this theme" asks and a parent switches it on from Review). Deleting the theme a child wears puts them on the one it was made from.
+- Seen only by the family. Themes sync between the family's phones like the rest (a parent sees every one; a child only their own), and nobody outside the family can read them. A parent renames or removes any of them in Settings → Kids' own themes. Names are plain text with a rude-word filter, on the phone and again in the database; nothing a child types goes to any outside or AI service.
+- Seasons. A child can ask to send a finished theme to RankUp; nothing goes until a parent says yes in Review, with an optional credit line (a first name or nickname, never filled in for them). What is sent is the theme alone. One a child a month. The operator page (`#/operator`) has a Theme submissions tab: each theme as a live preview, grouped by month, with Pick for next Season, Decline and Remove, and the Seasons themselves (number, name, start day). On a Season's first day every family's theme picker shows its themes, marked "Season N" with the credit, and a child's home shows "New Season!" once; the family whose theme was picked is told in the app. No deploy is needed. Declined and unpicked themes are deleted after 90 days by the retention job.
+- The privacy policy says all of this in its own two sections; the consent notice is unchanged.
+- SQL (sync.sql, retention.sql, consent.sql): run them again on the live database.
+
 ## 0.10.0 — 2026-11-03
 
 In line with the company's other apps: errors come to one inbox, usage is counted without counting anybody, and a staging copy.
