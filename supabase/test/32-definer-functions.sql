@@ -355,7 +355,9 @@ begin
     'usage_bump(text)', 'usage_daily_counts(integer)', 'usage_count_row()',
     -- Theme Genesis: the operator's inbox and Seasons, and the triggers.
     'operator_theme_inbox()', 'operator_create_season(integer,text,date)', 'operator_pick_theme(uuid,uuid)',
-    'operator_decline_theme(uuid)', 'operator_remove_theme(uuid)', 'kid_theme_gone()', 'season_theme_uncredit()']
+    'operator_decline_theme(uuid)', 'operator_remove_theme(uuid)', 'kid_theme_gone()', 'season_theme_uncredit()',
+    -- The brand check a theme sent for a Season passes (submit_kid_theme asks it).
+    'kid_brands_ok(text)']
   loop
     if to_regprocedure(f) is null then
       v_open := v_open || (f || ' (no longer exists — update this list)');

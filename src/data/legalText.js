@@ -149,7 +149,7 @@ export const PRIVACY_POLICY = {
     {
       heading: 'Themes your child makes',
       body: [
-        'In Theme Genesis your child can make up to five themes of their own: a name, colours, a background pattern, a mascot chosen from a set of emoji, and names for the theme\'s worlds and coins. No photographs, and nothing typed is sent to any other company or to any AI service.',
+        'In Theme Genesis your child can make up to five themes of their own: a name, colours, a background pattern, a mascot chosen from a set of emoji, and names for the theme\'s worlds and coins. No photographs, and nothing typed is sent to any other company or to any AI service. The "What\'s it inspired by?" box works on the phone alone: what your child types there only picks a starting theme from a list built into the app, and is never saved or sent anywhere.',
         'These themes stay in your family. Your children\'s phones and yours sync them through our database; nobody outside your family can see them. You can see, rename and remove every one in Settings → Kids\' own themes, and names with rude words are refused.',
       ],
     },
@@ -157,7 +157,7 @@ export const PRIVACY_POLICY = {
       heading: 'Sending a theme to RankUp for a Season',
       body: [
         'Your child can ask to send a finished theme to RankUp. Nothing is sent unless a parent approves it in Parent Mode.',
-        'What is sent is the theme itself: its name, colours, pattern, mascot and the names of its worlds and coins. If you wish, you add a credit line, a first name or a nickname; left blank it reads "by a RankUp family". Your child\'s name is never added for you. Each child can send one theme a month.',
+        'What is sent is the theme itself: its name, colours, pattern, mascot and the names of its worlds and coins. Because a Season theme can be shown to every family, it cannot use another company\'s game, league or brand name. If you wish, you add a credit line, a first name or a nickname; left blank it reads "by a RankUp family". Your child\'s name is never added for you. Each child can send one theme a month.',
         'Each month we look at what was sent and may pick themes for the next Season. A picked theme, with its credit line, is shown to every RankUp family in their theme picker from the day the Season starts, and your family is told in the app. Themes we do not pick, and ones we decline, are deleted 90 days after they were sent.',
         'If you delete your child or your account, everything you sent that was not picked is deleted with it. A theme already in a Season stays there for the families playing it, and its credit line is removed.',
       ],

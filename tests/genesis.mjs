@@ -7,6 +7,11 @@
  *
  *   - from the You tab's "Make your own theme" through Spark, Design, Build
  *     and Launch, the checklist and progress bar filling in as it goes;
+ *   - "What's it inspired by?": "gta" fills in City Nights and "f1" Racing
+ *     (a name, colours, pattern, mascot, worlds and coins, all changeable
+ *     after), a rude idea is refused, and nothing typed there is kept;
+ *   - a finished theme named after a game stays the family's own, but cannot
+ *     be sent in for a Season, and says why;
  *   - a rude name is refused, in a child's words, and nothing is saved;
  *   - a draft is saved, found again, changed and finished;
  *   - "Use this theme" asks for the PIN, as any theme change does, and then
@@ -46,6 +51,55 @@ await page.getByRole('button', { name: /Start a new theme/ }).click()
 await page.waitForTimeout(400)
 ok('four steps on the track: Spark, Design, Build, Launch',
   (await page.getByTestId('genesis-track').textContent()).replace(/\s+/g, ' ').match(/Spark.*Design.*Build.*Launch/) !== null)
+
+console.log('\n=== "What\'s it inspired by?" ===')
+ok('Spark has the box, with its placeholder', await page.getByTestId('genesis-idea').isVisible()
+  && (await page.getByTestId('genesis-idea').getAttribute('placeholder')) === 'e.g. racing, space, dinosaurs, a game you love'
+  && await page.getByText("What's it inspired by?").isVisible())
+await page.getByTestId('genesis-idea').fill('gta')
+await page.getByTestId('genesis-make').click()
+await page.waitForTimeout(300)
+ok('"gta" fills in City Nights, and says what it picked',
+  (await page.getByTestId('genesis-idea-line').textContent()).replace(/\u00a0/g, ' ').includes('City Nights vibes: a neon city, cars and skyscrapers, 🌃')
+    && (await page.getByTestId('genesis-name').inputValue()) === 'City Nights')
+ok('and the name ideas are City Nights ones', await page.getByRole('button', { name: 'Neon Skyline' }).isVisible())
+await page.screenshot({ path: `${SHOT_DIR}/genesis-0-inspired-gta.png` })
+await page.getByTestId('genesis-idea').fill('f1')
+await page.getByTestId('genesis-idea').press('Enter')
+await page.waitForTimeout(300)
+ok('"f1" (Enter works too) fills in Racing, and the suggested name follows',
+  (await page.getByTestId('genesis-idea-line').textContent()).replace(/\u00a0/g, ' ').includes('Racing vibes: checkered flags, red and black, 🏎️')
+    && (await page.getByTestId('genesis-name').inputValue()) === 'Speed Circuit')
+await page.screenshot({ path: `${SHOT_DIR}/genesis-0-inspired-f1.png` })
+await page.getByTestId('genesis-idea').fill('big ass cars')
+await page.getByTestId('genesis-make').click()
+await page.waitForTimeout(300)
+ok('a rude idea gets the gentle no, and changes nothing',
+  (await page.getByTestId('genesis-idea-problem').textContent()).includes('does not allow')
+    && (await page.getByTestId('genesis-name').inputValue()) === 'Speed Circuit')
+await page.getByTestId('genesis-idea').fill('f1')
+await page.getByTestId('genesis-make').click()
+await page.getByTestId('genesis-next').click()
+await page.waitForTimeout(400)
+ok('Design is filled in from it: its own colours first and picked, the checkers, the 🏎️',
+  (await page.getByTestId('palette-idea').getAttribute('aria-pressed')) === 'true'
+    && (await page.getByTestId('palette-idea').textContent()).includes('Racing')
+    && (await page.getByRole('button', { name: 'Mascot 🏎️' }).getAttribute('aria-pressed')) === 'true'
+    && (await page.getByTestId('genesis-design').locator('button[aria-pressed=true]', { hasText: 'Checkers' }).count()) === 1)
+await page.screenshot({ path: `${SHOT_DIR}/genesis-0-inspired-design.png` })
+await page.getByTestId('palette-lagoon').click()
+await page.getByRole('button', { name: 'Mascot 🐬' }).click()
+ok('and every bit of it can be changed', (await page.getByTestId('palette-lagoon').getAttribute('aria-pressed')) === 'true'
+  && (await page.getByRole('button', { name: 'Mascot 🐬' }).getAttribute('aria-pressed')) === 'true')
+await page.getByTestId('genesis-next').click()
+await page.waitForTimeout(300)
+ok('Build has the racing worlds and coins, ready to rename', (await page.getByTestId('genesis-world-0').inputValue()) === 'Pit Lane'
+  && (await page.getByTestId('genesis-currency').inputValue()) === 'Turbo Coins')
+await page.getByRole('button', { name: '← Design' }).click()
+await page.getByRole('button', { name: '← Spark' }).click()
+await page.waitForTimeout(300)
+ok('nothing typed in the box is kept anywhere', !JSON.stringify(await readState(page)).includes('big ass')
+  && !(await page.evaluate(() => Object.values(localStorage).some((v) => v.includes('big ass')))))
 
 await page.getByTestId('genesis-name').fill('')
 await page.getByTestId('genesis-next').click()
@@ -113,6 +167,28 @@ await page.getByRole('button', { name: 'Save draft' }).click()
 await page.waitForTimeout(400)
 s = await readState(page)
 ok('a finished theme is edited and stays finished', s.kidThemes[0].name === 'Reef Racers II' && s.kidThemes[0].status === 'ready')
+
+console.log('\n=== Another company\'s name: theirs to keep, not a Season\'s ===')
+await page.getByTestId('genesis-name').fill('Minecraft Reef')
+await page.getByRole('button', { name: 'Save draft' }).click()
+await page.waitForTimeout(400)
+ok('a theme named after a game is saved as their own', (await readState(page)).kidThemes[0].name === 'Minecraft Reef')
+await page.getByTestId('genesis-track').getByRole('button', { name: /Launch/ }).click()
+await page.waitForTimeout(700)
+ok('but it is not offered for a Season, and says why in a child\'s words',
+  (await page.getByTestId('genesis-send-blocked').textContent()) === "Season themes can't use other companies' names. Give it your own name to send it in."
+    && (await page.getByTestId('genesis-ask-send').count()) === 0)
+await page.getByTestId('genesis-send-blocked').scrollIntoViewIfNeeded()
+await page.screenshot({ path: `${SHOT_DIR}/genesis-season-brand.png` })
+await page.getByRole('button', { name: 'Rename it' }).click()
+await page.waitForTimeout(300)
+await page.getByTestId('genesis-name').fill('Reef Racers II')
+await page.getByRole('button', { name: 'Save draft' }).click()
+await page.waitForTimeout(300)
+await page.getByTestId('genesis-track').getByRole('button', { name: /Launch/ }).click()
+await page.waitForTimeout(700)
+ok('with its own name again, it can be sent', (await page.getByTestId('genesis-ask-send').count()) === 1
+  && (await page.getByTestId('genesis-send-blocked').count()) === 0)
 
 console.log('\n=== Five a child ===')
 await go('/kid/genesis')

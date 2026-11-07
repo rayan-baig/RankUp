@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useApp, useKid } from '../state/AppContext.jsx'
 import { navigate } from '../lib/router.js'
 import { plainName } from '../lib/kidWords.js'
-import { buildTheme, customThemeId, themeProblem, MAX_KID_THEMES, NAME_MAX, CREDIT_MAX } from '../data/themeGenesis.js'
+import { buildTheme, customThemeId, themeProblem, seasonProblem, MAX_KID_THEMES, NAME_MAX, CREDIT_MAX } from '../data/themeGenesis.js'
 import { ThemeSwatch } from './ThemePreview.jsx'
 import { Card, Button, Chip, TextInput, Modal, Banner, Section } from './ui.jsx'
 
@@ -30,6 +30,8 @@ export function ThemeRequests() {
       {asks.map((t) => {
         const kid = state.kids.find((k) => k.id === t.kidId)
         if (!kid) return null
+        // Another company's name in it: it can be theirs, but not a Season's.
+        const blocked = t.sendAsk && !t.sentAt ? seasonProblem(t.name, t.design) : null
         return (
           <Card key={t.id} className="mb-2">
             <div className="flex items-center gap-3 mb-2">
@@ -60,16 +62,24 @@ export function ThemeRequests() {
                   name, unless you type a credit. If it is picked, every RankUp family sees the theme and the credit.
                   One theme a month from each child.
                 </p>
-                <div className="mb-2">
-                  <TextInput value={credits[t.id] || ''} placeholder="Credit, optional: a first name or nickname"
-                             aria-label="Credit" data-testid="theme-credit"
-                             onChange={(e) => setCredits({ ...credits, [t.id]: e.target.value.slice(0, CREDIT_MAX) })} />
-                </div>
+                {blocked ? (
+                  <p className="text-sm mb-2" style={{ color: 'var(--warn)' }} data-testid="theme-send-blocked">
+                    {blocked} You can rename it in Settings → Kids&apos; own themes.
+                  </p>
+                ) : (
+                  <div className="mb-2">
+                    <TextInput value={credits[t.id] || ''} placeholder="Credit, optional: a first name or nickname"
+                               aria-label="Credit" data-testid="theme-credit"
+                               onChange={(e) => setCredits({ ...credits, [t.id]: e.target.value.slice(0, CREDIT_MAX) })} />
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <Button variant="ghost" className="flex-1 !min-h-0 py-2 text-sm"
                           onClick={() => dispatch({ type: 'ASK_KID_THEME', id: t.id, ask: 'send', on: false })}>Not now</Button>
-                  <Button className="flex-1 !min-h-0 py-2 text-sm" data-testid="theme-send"
-                          onClick={() => dispatch({ type: 'SEND_KID_THEME', id: t.id, credit: credits[t.id] || '' })}>Send to RankUp</Button>
+                  {!blocked && (
+                    <Button className="flex-1 !min-h-0 py-2 text-sm" data-testid="theme-send"
+                            onClick={() => dispatch({ type: 'SEND_KID_THEME', id: t.id, credit: credits[t.id] || '' })}>Send to RankUp</Button>
+                  )}
                 </div>
               </div>
             )}

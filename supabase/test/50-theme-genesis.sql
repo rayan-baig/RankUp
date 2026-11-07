@@ -12,7 +12,9 @@
 --   * nobody outside the family can read, change or remove one, and
 --     family_snapshot hands them to nobody else;
 --   * only a parent sends one to RankUp (submit_kid_theme), it carries the
---     theme alone, the words are checked again, one a child a month;
+--     theme alone, the words are checked again, no other company's game,
+--     league or brand is named in it (kid_brands_ok, the server's alone;
+--     a family's own theme may carry one), one a child a month;
 --   * the operator's functions are the server's only; a picked theme is in
 --     no family's picker until its Season starts, then in every family's,
 --     and the family it came from is told; a family leaving takes its credit;
@@ -68,6 +70,17 @@ begin
   perform ok('rude words do not, whole or hidden',
     not kid_words_ok('big ass') and not kid_words_ok('Sh1t World') and not kid_words_ok('f u c k')
     and not kid_words_ok('FUUUCK') and not kid_words_ok('$h!t') and not kid_words_ok('Nazis rule'));
+  perform ok('another company''s name is caught, as a whole word or phrase, however it is written',
+    not kid_brands_ok('F1 Fever') and not kid_brands_ok('Formula-1 Fun') and not kid_brands_ok('Mine Craft Land')
+    and not kid_brands_ok('POKÉMON Park') and not kid_brands_ok('Pokémon Park') and not kid_brands_ok('McDonald''s Diner')
+    and not kid_brands_ok('Rocket League Cup') and not kid_brands_ok('nba hoops') and not kid_brands_ok('GTA'));
+  perform ok('and ordinary words are not',
+    kid_brands_ok('Marvellous Mountains') and kid_brands_ok('Legolas Woods') and kid_brands_ok('Gorilla Grove')
+    and kid_brands_ok('Grand Prix') and kid_brands_ok('Speed Circuit') and kid_brands_ok('Marioland')
+    and kid_brands_ok('Formula Fun') and kid_brands_ok(null) and kid_brands_ok(''));
+  perform ok('the new mascots and patterns are ones a design may hold',
+    kid_theme_design_ok(t50_design('🏎️') || '{"pat": "checkers"}') and kid_theme_design_ok(t50_design('🚂') || '{"pat": "hearts"}')
+    and not kid_theme_design_ok(t50_design() || '{"pat": "plaid"}'));
 end $$;
 
 -- ---------- a child, their own themes ----------
@@ -240,6 +253,21 @@ begin
   v := submit_kid_theme('50a00000-0000-4000-8000-0000000000e1', 'Twat');
   perform ok('and no rude word', v->>'reason' = 'words', v::text);
 
+  -- Another company's name: fine for the family's own theme, not for a Season.
+  update kid_themes set name = 'Minecraft Quest' where id = '50a00000-0000-4000-8000-0000000000f1';
+  perform ok('a family''s own theme may be named after a game', exists (select 1 from kid_themes where id = '50a00000-0000-4000-8000-0000000000f1' and name = 'Minecraft Quest'));
+  v := submit_kid_theme('50a00000-0000-4000-8000-0000000000f1', null);
+  perform ok('but it is not sent for a Season', v->>'reason' = 'brand', v::text);
+  update kid_themes set name = 'Theme 1', design = jsonb_set(t50_design(), '{worlds,1}', '"F1 Track"') where id = '50a00000-0000-4000-8000-0000000000f1';
+  v := submit_kid_theme('50a00000-0000-4000-8000-0000000000f1', null);
+  perform ok('nor with one in a world''s name', v->>'reason' = 'brand', v::text);
+  update kid_themes set design = t50_design() || '{"cur": "Roblox Bucks"}' where id = '50a00000-0000-4000-8000-0000000000f1';
+  v := submit_kid_theme('50a00000-0000-4000-8000-0000000000f1', null);
+  perform ok('nor in the coins', v->>'reason' = 'brand', v::text);
+  update kid_themes set design = t50_design() where id = '50a00000-0000-4000-8000-0000000000f1';
+  perform ok('and nothing went: the theme is still the family''s, unsent',
+    exists (select 1 from kid_themes where id = '50a00000-0000-4000-8000-0000000000f1' and sent_at is null and not send_ask));
+
   v := submit_kid_theme('50a00000-0000-4000-8000-0000000000e1', 'Q');
   perform ok('a parent sends a finished theme, with a credit they chose', (v->>'ok')::boolean, v::text);
   v := submit_kid_theme('50a00000-0000-4000-8000-0000000000e1', null);
@@ -287,13 +315,14 @@ do $$
 declare f text; v_open text[] := '{}';
 begin
   foreach f in array array['operator_theme_inbox()', 'operator_create_season(integer,text,date)',
-                           'operator_pick_theme(uuid,uuid)', 'operator_decline_theme(uuid)', 'operator_remove_theme(uuid)']
+                           'operator_pick_theme(uuid,uuid)', 'operator_decline_theme(uuid)', 'operator_remove_theme(uuid)',
+                           'kid_brands_ok(text)']
   loop
     if has_function_privilege('anon', f, 'execute') or has_function_privilege('authenticated', f, 'execute') then
       v_open := v_open || f;
     end if;
   end loop;
-  perform ok('the operator''s functions cannot be called from a browser', cardinality(v_open) = 0, array_to_string(v_open, ', '));
+  perform ok('the operator''s functions, and the brand check, cannot be called from a browser', cardinality(v_open) = 0, array_to_string(v_open, ', '));
   perform ok('a parent sends with submit_kid_theme, and reads Seasons with live_seasons',
     has_function_privilege('authenticated', 'submit_kid_theme(uuid,text)', 'execute')
     and not has_function_privilege('anon', 'submit_kid_theme(uuid,text)', 'execute')

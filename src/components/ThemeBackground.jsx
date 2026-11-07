@@ -705,7 +705,7 @@ function Sky({ c, kind }) {
 
 /* ---------------------------------------------------------------- */
 /*
- * The Theme Genesis patterns: eight simple drawings a child picks from
+ * The Theme Genesis patterns: twelve simple drawings a child picks from
  * (src/data/themeGenesis.js, scene `pat-<id>`). Same rules as the scenes
  * above: the theme's own colours, a still layer of shapes and a few that
  * drift, no images. Kept plainer than the built-in scenes on purpose, so
@@ -852,6 +852,78 @@ function PatBubbles({ c }) {
   )
 }
 
+/** A chequered flag, laid over the whole background: racing, blocks, board games. */
+function PatCheckers({ c }) {
+  const cells = []
+  for (let row = 0; row < 10; row += 1) {
+    for (let col = 0; col < 10; col += 1) {
+      if ((row + col) % 2) cells.push(<rect key={row * 10 + col} x={col * 10} y={row * 10} width="10" height="10" fill={row % 3 ? c.accent : c.accent2} />)
+    }
+  }
+  return (
+    <>
+      <rect width="100" height="100" fill={c.bg} />
+      <g opacity="0.09">{cells}</g>
+      <Drifters seed={47} count={9} render={(p) => (
+        <rect x={p.x - 1} y={p.y - 1} width={1.6 + p.size} height={1.6 + p.size} fill={p.i % 2 ? c.accent : c.accent2} opacity="0.5" />
+      )} />
+    </>
+  )
+}
+
+/** Wide diagonal stripes, like a team shirt or a racing car. */
+function PatStripes({ c }) {
+  return (
+    <>
+      <rect width="100" height="100" fill={c.bg} />
+      <g transform="rotate(-30 50 50)">
+        {Array.from({ length: 12 }, (_, i) => (
+          <rect key={i} x="-40" y={-40 + i * 16} width="180" height="5" fill={i % 2 ? c.accent : c.accent2} opacity="0.14" />
+        ))}
+      </g>
+      <Drifters seed={53} count={8} render={(p) => (
+        <rect x={p.x} y={p.y} width={3 + p.size * 2} height="0.7" rx="0.35" fill={c.accent2} opacity="0.55"
+              transform={`rotate(-30 ${p.x} ${p.y})`} />
+      )} />
+    </>
+  )
+}
+
+const FLAKE = 'M0 -1 V1 M-0.87 -0.5 L0.87 0.5 M-0.87 0.5 L0.87 -0.5'
+
+/** Snowflakes, still and falling. */
+function PatSnow({ c }) {
+  return (
+    <>
+      <rect width="100" height="100" fill={c.bg} />
+      <Tiled step={14} render={(x, y, k) => (
+        <path key={k} d={FLAKE} transform={`translate(${x} ${y}) scale(${k % 3 ? 1.1 : 1.8})`} fill="none"
+              stroke={k % 4 ? c.accent : c.accent2} strokeWidth="0.25" strokeLinecap="round" opacity="0.3" />
+      )} />
+      <Drifters seed={59} count={14} render={(p) => (
+        <circle cx={p.x} cy={p.y} r={0.4 + p.size * 0.5} fill={p.i % 3 ? c.ink : c.accent} opacity="0.5" />
+      )} />
+    </>
+  )
+}
+
+const HEART = 'M0 0.9 C-1.4 -0.1 -0.9 -1.2 0 -0.5 C0.9 -1.2 1.4 -0.1 0 0.9 Z'
+
+/** Little hearts. */
+function PatHearts({ c }) {
+  return (
+    <>
+      <rect width="100" height="100" fill={c.bg} />
+      <Tiled step={13} render={(x, y, k) => (
+        <path key={k} d={HEART} transform={`translate(${x} ${y}) scale(${k % 3 ? 1.6 : 2.4})`} fill={k % 2 ? c.accent : c.accent2} opacity="0.16" />
+      )} />
+      <Drifters seed={61} count={10} render={(p) => (
+        <path d={HEART} transform={`translate(${p.x} ${p.y}) scale(${1 + p.size})`} fill={p.i % 2 ? c.accent : c.accent2} opacity="0.5" />
+      )} />
+    </>
+  )
+}
+
 const SCENES = {
   tetrominoes: Tetrominoes,
   voxel: (p) => <Voxel {...p} variant="overworld" />,
@@ -880,6 +952,10 @@ const SCENES = {
   'pat-confetti': PatConfetti,
   'pat-zigzag': PatZigzag,
   'pat-bubbles': PatBubbles,
+  'pat-checkers': PatCheckers,
+  'pat-stripes': PatStripes,
+  'pat-snow': PatSnow,
+  'pat-hearts': PatHearts,
 }
 
 /**

@@ -22,7 +22,7 @@
  */
 
 import { KID_THEME_MAP } from './kidThemes.js'
-import { wordsOk, plainName } from '../lib/kidWords.js'
+import { wordsOk, brandsOk, plainName } from '../lib/kidWords.js'
 
 /** How many themes one child may keep, drafts included. */
 export const MAX_KID_THEMES = 5
@@ -97,6 +97,10 @@ export const PATTERNS = [
   { id: 'confetti', name: 'Confetti' },
   { id: 'zigzag', name: 'Zigzag' },
   { id: 'bubbles', name: 'Bubbles' },
+  { id: 'checkers', name: 'Checkers' },
+  { id: 'stripes', name: 'Stripes' },
+  { id: 'snow', name: 'Snow' },
+  { id: 'hearts', name: 'Hearts' },
 ]
 export const PATTERN_IDS = PATTERNS.map((p) => p.id)
 
@@ -104,6 +108,9 @@ export const PATTERN_IDS = PATTERNS.map((p) => p.id)
 export const MASCOTS = [
   '🚀', '🐬', '🐒', '🍭', '🤖', '🦄', '🦖', '🐉', '🐱', '🐶', '🦊', '🐼',
   '🐸', '🐙', '🦈', '🦁', '🐧', '👾', '⚡', '🌈', '⭐', '🍩', '🎮', '🏰',
+  '🏎️', '⚽', '🏀', '⚾', '🏈', '🛹', '🌃', '🧱', '🦸', '🎸', '🦜', '🌋',
+  '⛄', '🐪', '🎨', '🧪', '👻', '🐮', '🛸', '🏆', '🧁', '🦋', '🐢', '🧚',
+  '🚂', '🐝', '🦉', '🐴', '🍕', '🚜', '🦀', '🐳',
 ]
 
 /* ---------- colour, worked out so text stays readable ---------- */
@@ -245,6 +252,23 @@ export function themeProblem(name, design) {
   if (bad >= 0) return `World ${bad + 1} has a word RankUp does not allow.`
   if (JSON.stringify(d).length > DESIGN_MAX) return 'Those names are too long. Make them a little shorter.'
   return null
+}
+
+/** What a child is told when a theme sent in for a Season carries another company's name. */
+export const SEASON_BRAND_MESSAGE = "Season themes can't use other companies' names. Give it your own name to send it in."
+
+/**
+ * What stops a theme being sent to RankUp for a Season, as one sentence, or
+ * null. Everything themeProblem asks, and no other company's or game's name
+ * in its name, worlds or coins (brandsOk): a Season theme can become an
+ * official RankUp theme in every family's picker. A family's own theme is
+ * never held to this. submit_kid_theme in supabase/sync.sql asks the same.
+ */
+export function seasonProblem(name, design) {
+  const why = themeProblem(name, design)
+  if (why) return why
+  const d = cleanDesign(design)
+  return [plainName(name, NAME_MAX), d.cur, ...d.worlds].every(brandsOk) ? null : SEASON_BRAND_MESSAGE
 }
 
 /** The id a theme is known by in kids.theme_id: one of the child's own. */

@@ -98,8 +98,14 @@ coins, rewards and unlocks are exactly the same. The currency formula above
 does not change; only its name and icon do. Wearing one is a theme change
 like any other, so the PIN lock applies.
 
+Spark can start from an idea ("What's it inspired by?"): a few words become a
+whole starting theme from a library of kid-friendly topics on the phone, with
+brand and game names only as aliases for a generic topic, so the theme never
+carries one. No AI and no network.
+
 A parent can send a finished theme to RankUp; picked themes become a Season's
-official themes for every family, on the same structure.
+official themes for every family, on the same structure. A Season theme
+cannot use another company's game, league or brand name.
 
 ### Block Craft evolutions
 

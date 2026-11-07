@@ -5,8 +5,9 @@ import { navigate } from '../../lib/router.js'
 import { plainName } from '../../lib/kidWords.js'
 import {
   VIBES, VIBE_MAP, PALETTES, PATTERNS, MASCOTS, MAX_KID_THEMES, NAME_MAX, WORLD_MAX, CURRENCY_MAX,
-  designFromVibe, cleanDesign, themeProblem, readablePalette, buildTheme, customThemeId,
+  designFromVibe, cleanDesign, themeProblem, seasonProblem, readablePalette, buildTheme, customThemeId,
 } from '../../data/themeGenesis.js'
+import { inspire, TOPIC_MAP, TOPICS, IDEA_MAX } from '../../data/inspirations.js'
 import { SCENES } from '../../components/ThemeBackground.jsx'
 import ThemePreview, { ThemeSwatch } from '../../components/ThemePreview.jsx'
 import { Screen, Card, Button, Field, TextInput, Chip, Banner, Modal, ProgressBar } from '../../components/ui.jsx'
@@ -17,7 +18,9 @@ import { Screen, Card, Button, Field, TextInput, Chip, Banner, Modal, ProgressBa
  * A small version of Genesis on the MTRX Horizyn site, where an idea goes
  * from Spark to Launch with a checklist. Here it is four short steps:
  *
- *   Spark   a name and a starting vibe
+ *   Spark   what it is inspired by (a few words: "racing", "space", a game
+ *           they love, turned into a whole starting theme on the phone by
+ *           src/data/inspirations.js), a name and a starting vibe
  *   Design  colours (a curated set, or their own, kept readable), a
  *           background pattern and a mascot
  *   Build   the names of the four worlds and of the coins, filled in already
@@ -182,6 +185,10 @@ export default function ThemeGenesis({ kidId, editId = null, area = 'kid' }) {
   const [pinError, setPinError] = useState('')
   const [removing, setRemoving] = useState(null)
   const [credit, setCredit] = useState('')
+  // "What's it inspired by?": the words typed, and what was made of them.
+  // Neither is saved or sent: only the theme they fill in is.
+  const [idea, setIdea] = useState('')
+  const [ideaSaid, setIdeaSaid] = useState({ line: '', problem: '' })
 
   if (!kid) return null
 
@@ -212,6 +219,8 @@ export default function ThemeGenesis({ kidId, editId = null, area = 'kid' }) {
             setDraft({ id: uid('theme'), ...designFromVibe('space', ''), saved: false })
             setSeen(new Set(['spark']))
             setStepRaw(0)
+            setIdea('')
+            setIdeaSaid({ line: '', problem: '' })
           }}
           onDelete={(t) => setRemoving(t)}
         />
@@ -233,13 +242,30 @@ export default function ThemeGenesis({ kidId, editId = null, area = 'kid' }) {
   const adjusted = readable.bg !== d.bg
   const setDesign = (patch) => setDraft((x) => ({ ...x, design: { ...x.design, ...patch }, saved: false }))
   const setName = (name) => setDraft((x) => ({ ...x, name: [...name].slice(0, NAME_MAX).join(''), saved: false }))
+  /** True when the name is empty or one we suggested, so a new suggestion can take its place. */
+  const suggestedName = (n) => !plainName(n, NAME_MAX) || VIBES.some((v) => v.names.includes(n)) || TOPICS.some((t) => t.names.includes(n))
   const pickVibe = (id) => {
     const fresh = designFromVibe(id)
-    setDraft((x) => {
-      const wasSuggested = !plainName(x.name, NAME_MAX) || Object.values(VIBE_MAP).some((v) => v.names.includes(x.name))
-      return { ...x, name: wasSuggested ? fresh.name : x.name, design: fresh.design, saved: false }
-    })
+    setDraft((x) => ({ ...x, name: suggestedName(x.name) ? fresh.name : x.name, design: fresh.design, idea: null, saved: false }))
+    setIdeaSaid({ line: '', problem: '' })
   }
+  /*
+   * "Make it": the idea becomes a whole starting theme (a name, the vibe,
+   * colours, a pattern, a mascot, the worlds and the coins), all of it
+   * changeable in the steps after. Worked out on the phone; nothing typed
+   * here leaves it, and a rude idea gets the usual gentle no.
+   */
+  const makeIt = () => {
+    const made = inspire(idea)
+    if (!made.ok) { setIdeaSaid({ line: '', problem: made.problem }); return }
+    setDraft((x) => ({ ...x, name: suggestedName(x.name) ? made.name : x.name, design: made.design, idea: made.topic.id, saved: false }))
+    setIdeaSaid({ line: made.line, problem: '' })
+    setProblem('')
+  }
+  const ideaTopic = draft.idea ? TOPIC_MAP[draft.idea] : null
+  const palettes = ideaTopic && ideaTopic.id !== 'new'
+    ? [{ id: 'idea', name: ideaTopic.label, bg: ideaTopic.bg, a: ideaTopic.a, a2: ideaTopic.a2 }, ...PALETTES]
+    : PALETTES
 
   /** Save what is there, as a draft or finished. False (with the reason shown) when it cannot be. */
   const save = (status) => {
@@ -291,15 +317,40 @@ export default function ThemeGenesis({ kidId, editId = null, area = 'kid' }) {
         <section data-testid="genesis-spark">
           <h2 className="font-display text-xl font-extrabold mb-1">Name it, and pick a vibe</h2>
           <Checklist items={list.spark} colour={s.colour} />
+          <div className="mb-4 p-3 rounded-2xl" data-testid="genesis-inspire"
+               style={{ border: `2px dashed ${s.colour}90`, background: 'var(--surface)' }}>
+            <label className="block">
+              <span className="label">What&apos;s it inspired by?</span>
+              <span className="flex gap-2">
+                <TextInput value={idea} onChange={(e) => setIdea(e.target.value.slice(0, IDEA_MAX))} maxLength={IDEA_MAX}
+                           placeholder="e.g. racing, space, dinosaurs, a game you love" data-testid="genesis-idea"
+                           enterKeyHint="go" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); makeIt() } }} />
+                <Button className="shrink-0 !px-4" onClick={makeIt} data-testid="genesis-make">Make it</Button>
+              </span>
+            </label>
+            {ideaSaid.line && (
+              <div className="flex items-center gap-2.5 mt-2.5">
+                <ThemeSwatch theme={preview} size={40} />
+                {/* The emoji kept on the line with the word before it. */}
+                <p className="text-sm font-semibold leading-snug" style={{ color: s.colour }} data-testid="genesis-idea-line">
+                  {ideaSaid.line.replace(/ (?=\S+$)/, '\u00a0')}
+                </p>
+              </div>
+            )}
+            {ideaSaid.problem && <p className="text-sm mt-2" style={{ color: 'var(--bad)' }} data-testid="genesis-idea-problem">{ideaSaid.problem}</p>}
+            <p className="text-[11px] text-muted mt-1.5">
+              {ideaSaid.line ? 'Change anything you like in the next steps.' : 'We fill in a starting theme for you to change. What you type stays on this phone.'}
+            </p>
+          </div>
           <Field label={`Theme name (${[...draft.name].length}/${NAME_MAX})`}>
             <TextInput value={draft.name} onChange={(e) => setName(e.target.value)} placeholder="Name your world" maxLength={NAME_MAX * 2} data-testid="genesis-name" />
           </Field>
           <div className="flex flex-wrap gap-1.5 mb-4">
-            {VIBE_MAP[d.vibe].names.map((n) => (
+            {(ideaTopic ? ideaTopic.names : VIBE_MAP[d.vibe].names).map((n) => (
               <button key={n} type="button" className="chip" onClick={() => setName(n)}>{n}</button>
             ))}
           </div>
-          <span className="label">Starting idea</span>
+          <span className="label">Or start from a vibe</span>
           <div className="grid grid-cols-3 gap-2">
             {VIBES.map((v) => (
               <button key={v.id} type="button" onClick={() => pickVibe(v.id)} aria-pressed={d.vibe === v.id}
@@ -319,7 +370,7 @@ export default function ThemeGenesis({ kidId, editId = null, area = 'kid' }) {
           <Checklist items={list.design} colour={s.colour} />
           <span className="label">Colours</span>
           <div className="grid grid-cols-2 gap-2 mb-2">
-            {PALETTES.map((p) => {
+            {palettes.map((p) => {
               const picked = d.bg === p.bg && d.a === p.a && d.a2 === p.a2
               return (
                 <button key={p.id} type="button" onClick={() => setDesign({ bg: p.bg, a: p.a, a2: p.a2 })} aria-pressed={picked}
@@ -328,7 +379,7 @@ export default function ThemeGenesis({ kidId, editId = null, area = 'kid' }) {
                   <span className="flex -space-x-1.5 shrink-0" aria-hidden="true">
                     {[p.bg, p.a, p.a2].map((c) => <span key={c} className="inline-block rounded-full" style={{ width: 18, height: 18, background: c, border: '2px solid var(--surface)' }} />)}
                   </span>
-                  <span className="text-[13px] font-semibold truncate">{p.name}</span>
+                  <span className="text-[13px] font-semibold truncate">{p.id === 'idea' ? `✨ ${p.name}` : p.name}</span>
                 </button>
               )
             })}
@@ -358,10 +409,10 @@ export default function ThemeGenesis({ kidId, editId = null, area = 'kid' }) {
             ))}
           </div>
           <span className="label">Mascot</span>
-          <div className="grid grid-cols-6 gap-1.5">
+          <div className="grid grid-cols-8 gap-1">
             {MASCOTS.map((m) => (
               <button key={m} type="button" onClick={() => setDesign({ mascot: m })} aria-pressed={d.mascot === m}
-                      className="text-2xl py-1.5" aria-label={`Mascot ${m}`}
+                      className="text-xl py-1" aria-label={`Mascot ${m}`}
                       style={{ border: `2px solid ${d.mascot === m ? s.colour : 'var(--line)'}`, borderRadius: 12, background: 'var(--surface)' }}>
                 {m}
               </button>
@@ -404,7 +455,8 @@ export default function ThemeGenesis({ kidId, editId = null, area = 'kid' }) {
             </Button>
           </div>
           {stored?.status === 'ready' && (
-            <SendToRankUp theme={stored} kid={kid} area={area} credit={credit} setCredit={setCredit} dispatch={dispatch} />
+            <SendToRankUp theme={stored} kid={kid} area={area} credit={credit} setCredit={setCredit} dispatch={dispatch}
+                          onRename={() => setStep(0)} />
           )}
         </section>
       )}
@@ -482,12 +534,23 @@ function RemoveModal({ theme, onClose, onConfirm }) {
  * leave the family. What goes is the theme alone: its name, colours, pattern,
  * mascot and world names.
  */
-function SendToRankUp({ theme, kid, area, credit, setCredit, dispatch }) {
+function SendToRankUp({ theme, kid, area, credit, setCredit, dispatch, onRename }) {
   if (theme.pickedSeason) {
     return <Banner tone="good" icon="🏆" title={`Picked for Season ${theme.pickedSeason}!`} className="mt-3">Every RankUp family can play it once the Season starts.</Banner>
   }
   if (theme.sentAt) {
     return <Banner tone="info" icon="📬" title="Sent to RankUp" className="mt-3">RankUp picks the best themes at the end of each month for the next Season.</Banner>
+  }
+  // A Season theme can end up in every family's picker, so it cannot carry
+  // another company's or game's name. Their own theme can (seasonProblem).
+  const blocked = seasonProblem(theme.name, theme.design)
+  if (blocked) {
+    return (
+      <Banner tone="warn" icon="✋" title="Send to RankUp for next Season" className="mt-3"
+              action={<button type="button" className="chip" onClick={onRename}>Rename it</button>}>
+        <span data-testid="genesis-send-blocked">{blocked}</span>
+      </Banner>
+    )
   }
   if (area === 'parent') {
     return (

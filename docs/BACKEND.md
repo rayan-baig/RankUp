@@ -28,6 +28,9 @@ Theme Genesis (0.11.0) added to `sync.sql` the tables `kid_themes`,
 `retention.sql` the 90-day clear-out of unpicked submissions, and to
 `consent.sql` the children's themes in "Download my data". No new file and no
 change to the order: re-running the three files is the upgrade.
+0.12.0 added `kid_brands_ok` (server only) and the brand check in
+`submit_kid_theme`, and the new patterns and mascots to `kid_theme_design_ok`,
+all in `sync.sql`: re-running it is the upgrade.
 
 `supabase/test/run.sh` applies all seventeen files twice, over a database with rows in it,
 and `supabase/test/18-upgrade.sql` then checks that the data survived and that the later

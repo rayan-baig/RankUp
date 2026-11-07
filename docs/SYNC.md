@@ -198,6 +198,13 @@ the names. The rest is the server's:
   outbox like any call. It builds what is sent from the theme row (the theme
   alone) and holds a child to one a month. The family hears that it was sent,
   and later that it was picked, through their own theme row.
+  It also refuses (`brand`) a theme whose name, worlds or coins name another
+  company's game, league or brand (`kid_brands_ok`, the server's alone; the
+  same list as `brandsOk` on the phone), because a Season theme can become an
+  official RankUp theme. A family's own theme is never held to that.
+- **"What's it inspired by?"** in Spark never reaches the server: the idea is
+  turned into a starting theme on the phone, from the library in
+  `src/data/inspirations.js`, and only the theme is saved.
 - **Seasons** are not family data: `live_seasons` gives every signed-in phone
   the Seasons that have started, asked when the app opens and once an hour,
   and kept on the phone for offline. A Season is invisible to everyone until

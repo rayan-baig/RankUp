@@ -1395,9 +1395,13 @@ begin
   end if;
   if coalesce(p_design->>'vibe', '') not in ('space', 'ocean', 'jungle', 'candy', 'robots', 'new')
      or coalesce(p_design->>'base', '') not in ('matrixblocks', 'aura', 'campfire', 'sugarrush', 'cybergrid', 'pegasus')
-     or coalesce(p_design->>'pat', '') not in ('stars', 'waves', 'leaves', 'dots', 'circuits', 'confetti', 'zigzag', 'bubbles')
+     or coalesce(p_design->>'pat', '') not in ('stars', 'waves', 'leaves', 'dots', 'circuits', 'confetti', 'zigzag', 'bubbles',
+                                               'checkers', 'stripes', 'snow', 'hearts')
      or coalesce(p_design->>'mascot', '') not in ('🚀', '🐬', '🐒', '🍭', '🤖', '🦄', '🦖', '🐉', '🐱', '🐶', '🦊', '🐼',
-                                                  '🐸', '🐙', '🦈', '🦁', '🐧', '👾', '⚡', '🌈', '⭐', '🍩', '🎮', '🏰')
+                                                  '🐸', '🐙', '🦈', '🦁', '🐧', '👾', '⚡', '🌈', '⭐', '🍩', '🎮', '🏰',
+                                                  '🏎️', '⚽', '🏀', '⚾', '🏈', '🛹', '🌃', '🧱', '🦸', '🎸', '🦜', '🌋',
+                                                  '⛄', '🐪', '🎨', '🧪', '👻', '🐮', '🛸', '🏆', '🧁', '🦋', '🐢', '🧚',
+                                                  '🚂', '🐝', '🦉', '🐴', '🍕', '🚜', '🦀', '🐳')
      or coalesce(p_design->>'bg', '') !~ '^#[0-9a-f]{6}$'
      or coalesce(p_design->>'a', '') !~ '^#[0-9a-f]{6}$'
      or coalesce(p_design->>'a2', '') !~ '^#[0-9a-f]{6}$'
@@ -1411,6 +1415,64 @@ begin
   end loop;
   return true;
 end $$;
+
+/**
+ * True when the text names no other company's game, league or brand.
+ * Mirrors brandsOk in src/lib/kidWords.js, with the same list
+ * (tests/genesiswords.mjs fails if they drift apart).
+ *
+ * Asked only when a theme is sent to RankUp for a Season (submit_kid_theme),
+ * because a Season theme can become an official RankUp theme in every
+ * family's picker. A family's own theme may be called what the rude-word
+ * filter allows, so the guard on kid_themes never asks this.
+ *
+ * Whole words and phrases only: the text is lower-cased, accents dropped,
+ * '&' read as "and", apostrophes removed and anything else made a space;
+ * then every run of one to four words, read run together, is looked up, so
+ * "Mine Craft" is caught and "Marvellous" is not. The server's alone: the
+ * browser roles cannot call it.
+ */
+create or replace function kid_brands_ok(p_text text) returns boolean
+language plpgsql immutable set search_path = public as $$
+declare
+  v_brands text[] := array['minecraft', 'fortnite', 'roblox', 'pokemon', 'pikachu', 'mario', 'super mario', 'mario kart', 'luigi',
+    'zelda', 'nintendo', 'playstation', 'xbox', 'gta', 'grand theft auto', 'call of duty', 'among us',
+    'fall guys', 'rocket league', 'fifa', 'ea fc', 'ea sports', 'madden', 'apex legends', 'overwatch',
+    'valorant', 'league of legends', 'clash royale', 'clash of clans', 'candy crush', 'angry birds', 'pac man',
+    'tetris', 'splatoon', 'animal crossing', 'brawl stars', 'subway surfers', 'geometry dash',
+    'five nights at freddys', 'fnaf', 'the sims', 'terraria', 'stumble guys', 'pubg', 'free fire',
+    'genshin impact', 'mortal kombat', 'street fighter', 'skylanders', 'stardew valley', 'sea of thieves',
+    'rainbow six', 'counter strike', 'red dead', 'poppy playtime', 'hello neighbor', 'donkey kong', 'smash bros',
+    'need for speed', 'forza', 'gran turismo', 'sega', 'f1', 'formula 1', 'formula one', 'nascar', 'indycar',
+    'nba', 'wnba', 'nfl', 'nhl', 'mlb', 'mls', 'wwe', 'ufc', 'premier league', 'champions league', 'la liga',
+    'uefa', 'olympics', 'wimbledon', 'super bowl', 'disney', 'pixar', 'marvel', 'avengers', 'dc comics',
+    'star wars', 'lego', 'legos', 'barbie', 'hot wheels', 'nerf', 'hello kitty', 'sanrio', 'nike', 'adidas',
+    'coca cola', 'pepsi', 'mcdonalds', 'youtube', 'tiktok', 'netflix', 'spongebob', 'paw patrol', 'peppa pig',
+    'bluey', 'harry potter', 'hogwarts', 'transformers', 'ferrari', 'lamborghini', 'red bull', 'mclaren',
+    'batman', 'spiderman', 'superman', 'shrek', 'my little pony', 'jurassic park', 'jurassic world', 'ninjago',
+    'scooby doo'];
+  v_joined text[];
+  v_norm text;
+  v_tokens text[];
+  v_n int;
+  v_i int;
+begin
+  if p_text is null or p_text = '' then return true; end if;
+  v_norm := translate(lower(p_text), 'àáâãäåèéêëìíîïòóôõöùúûüýÿñçÀÁÂÃÄÅÈÉÊËÌÍÎÏÒÓÔÕÖÙÚÛÜÝÑÇ',
+                      'aaaaaaeeeeiiiiooooouuuuyyncaaaaaaeeeeiiiiooooouuuuync');
+  v_norm := regexp_replace(replace(v_norm, '&', ' and '), '[''’]', '', 'g');
+  v_norm := trim(regexp_replace(v_norm, '[^a-z0-9]+', ' ', 'g'));
+  if v_norm = '' then return true; end if;
+  v_tokens := string_to_array(v_norm, ' ');
+  select array_agg(replace(b, ' ', '')) into v_joined from unnest(v_brands) b;
+  for v_n in 1..4 loop
+    for v_i in 1..(cardinality(v_tokens) - v_n + 1) loop
+      if array_to_string(v_tokens[v_i:v_i + v_n - 1], '') = any (v_joined) then return false; end if;
+    end loop;
+  end loop;
+  return true;
+end $$;
+revoke execute on function kid_brands_ok(text) from public, anon, authenticated;
 
 create table if not exists kid_themes (
   id            uuid primary key default gen_random_uuid(),
@@ -1583,8 +1645,10 @@ create trigger theme_submissions_uncredit before delete on theme_submissions
  * and the design's colours, pattern, mascot, vibe, base and the names of its
  * worlds and coins. Nothing about the child or the family goes into it. The
  * credit is the parent's to give, a first name or nickname in letters only,
- * or nothing ("by a RankUp family"). The words are checked again here, and
- * each child may send one theme a calendar month (UTC).
+ * or nothing ("by a RankUp family"). The words are checked again here, no
+ * name in it may be another company's game, league or brand (kid_brands_ok;
+ * the credit is a person's name, so it is not held to that), and each child
+ * may send one theme a calendar month (UTC).
  */
 create or replace function submit_kid_theme(p_theme_id uuid, p_credit text default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -1608,6 +1672,10 @@ begin
   end if;
   if not kid_theme_name_ok(v_theme.name, 24) or not kid_theme_design_ok(v_theme.design) or not kid_words_ok(v_credit) then
     return jsonb_build_object('ok', false, 'reason', 'words');
+  end if;
+  if not kid_brands_ok(v_theme.name) or not kid_brands_ok(v_theme.design->>'cur')
+     or exists (select 1 from jsonb_array_elements_text(v_theme.design->'worlds') w where not kid_brands_ok(w)) then
+    return jsonb_build_object('ok', false, 'reason', 'brand');
   end if;
   perform pg_advisory_xact_lock(hashtext('theme_submissions:' || v_theme.kid_id::text));
   if exists (select 1 from theme_submissions

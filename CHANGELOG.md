@@ -5,6 +5,17 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.12.0 — 2026-11-07
+
+Theme Genesis: "What's it inspired by?", and Season themes in their own names.
+
+- Spark has a new box, "What's it inspired by?" ("e.g. racing, space, dinosaurs, a game you love"). A child types an idea, taps "Make it", and the whole starting theme is filled in: a name (with two more to pick from), the vibe, colours of its own, a pattern, a mascot, the four worlds and the coins, with a short line saying what it picked ("Racing vibes: checkered flags, red and black, 🏎️"). Everything can still be changed in Design and Build; the idea's colours are the first palette in Design.
+- It works on the phone alone: a library of 57 kid-friendly topics built into the app (racing, football, space, dinosaurs, City Nights, Blocky World, pirates, castles, unicorns, robots and more). No AI and no network; what is typed is never saved or sent. Games, leagues and brands are only aliases that lead to a generic topic ("f1" and "nascar" give Racing, "minecraft" Blocky World, "rocket league" Car Soccer, "fifa" Football, "pokemon" Creature Collectors), so the theme never carries the brand. Games for older players lead to a gentle topic with nothing about crime, weapons or fighting ("gta" gives City Nights: a neon city, cars and skyscrapers). An idea it does not know finds the closest topic, or "Something new" ("Here's a starting point. Make it yours!"). A rude idea gets the same gentle no as a rude name.
+- Four new background patterns (Checkers, Stripes, Snow, Hearts) and 32 more mascots to go with the topics. A stored theme is the same small design as before; the library is in the app, not in the data.
+- A theme sent to RankUp for a Season can't use another company's game, league or brand name (F1, NASCAR, GTA, Minecraft, Fortnite, Roblox, Pokémon, Mario, Rocket League, FIFA, NBA, NFL, Disney, Marvel, Lego and others), because it could become an official RankUp theme in every family's picker. A family's own theme may still be called what they like. The phone says "Season themes can't use other companies' names. Give it your own name to send it in." and the database checks the same list again when a theme is sent; whole words only, so "Marvellous Mountains" is fine.
+- The privacy policy says the box stays on the phone, and that Season themes carry no brand names; the consent notice is unchanged.
+- SQL (sync.sql): run it again on the live database.
+
 ## 0.11.0 — 2026-11-07
 
 Theme Genesis: children make themes of their own, and the best become a Season.

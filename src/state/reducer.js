@@ -10,7 +10,7 @@ import { questsDueToReturn, dayOf } from '../lib/recurrence.js'
 import { STICKER_MAP } from '../data/stickers.js'
 import { foldLevelUp, foldStreak } from '../lib/moments.js'
 import { applyPrune } from '../lib/prune.js'
-import { MAX_KID_THEMES, NAME_MAX, CREDIT_MAX, cleanDesign, themeProblem, customThemeId } from '../data/themeGenesis.js'
+import { MAX_KID_THEMES, NAME_MAX, CREDIT_MAX, cleanDesign, themeProblem, seasonProblem, SEASON_BRAND_MESSAGE, customThemeId } from '../data/themeGenesis.js'
 import { plainName } from '../lib/kidWords.js'
 
 /* ------------------------------------------------------------------ */
@@ -716,7 +716,8 @@ function reduce(state, action) {
       const key = action.ask === 'send' ? 'sendAsk' : 'useAsk'
       const theme = (state.kidThemes || []).find((x) => x.id === action.id)
       if (!theme) return state
-      if (key === 'sendAsk' && action.on && (theme.status !== 'ready' || theme.sentAt)) return state
+      // Asking to send one with another company's name in it is not offered (seasonProblem).
+      if (key === 'sendAsk' && action.on && (theme.status !== 'ready' || theme.sentAt || seasonProblem(theme.name, theme.design))) return state
       return { ...state, kidThemes: (state.kidThemes || []).map((x) => (x.id === action.id ? { ...x, [key]: Boolean(action.on) } : x)) }
     }
 
@@ -729,6 +730,8 @@ function reduce(state, action) {
     case 'SEND_KID_THEME': {
       const theme = (state.kidThemes || []).find((x) => x.id === action.id)
       if (!theme || theme.sentAt || theme.status !== 'ready') return state
+      // No other company's or game's name in a Season theme; the server asks again (kid_brands_ok).
+      if (seasonProblem(theme.name, theme.design)) return state
       const credit = plainName(action.credit, CREDIT_MAX)
       const next = { ...state, kidThemes: (state.kidThemes || []).map((x) => (x.id === action.id ? { ...x, sendAsk: false, sentAt: clock() } : x)) }
       return queueRpc(next, 'submit_kid_theme', { p_theme_id: theme.id, p_credit: credit || null })
@@ -1291,6 +1294,8 @@ function reduce(state, action) {
           ? `${name} wasn’t sent: one theme a month can go to RankUp from each child. Try again next month.`
           : reason === 'words'
             ? `${name} wasn’t sent: a name in it, or the credit, has a word RankUp does not allow.`
+          : reason === 'brand'
+            ? `${name} wasn’t sent. ${SEASON_BRAND_MESSAGE}`
             : reason === 'bad_credit'
               ? `${name} wasn’t sent: the credit can be a first name or a nickname, in letters only.`
               : `${name} couldn’t be sent to RankUp just now.`
