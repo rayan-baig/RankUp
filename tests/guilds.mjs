@@ -182,7 +182,18 @@ if (waiting) {
   {
     const db = new pg.Client({ host: process.env.PGHOST || '/tmp', port: Number(process.env.PGPORT || 55432), user: process.env.PGUSER || 'postgres', database: process.env.PGDATABASE || 'rankup_test' })
     await db.connect()
-    const { rows } = await db.query("select count(*)::int as n from guild_messages where quick_id is null and created_at > now() - interval '10 minutes'")
+    // This run's two families only: other test files leave messages of their own.
+    const { rows } = await db.query(`select count(*)::int as n from guild_messages gm
+                                       join kids k on k.id = gm.kid_id
+                                       join parents p on p.family_id = k.family_id
+                                       join auth.users u on u.id = p.user_id
+                                      where gm.quick_id is null and u.email like $1`, [`%${stamp}@example.com`])
+    const { rows: [mine] } = await db.query(`select count(*)::int as n from guild_messages gm
+                                       join kids k on k.id = gm.kid_id
+                                       join parents p on p.family_id = k.family_id
+                                       join auth.users u on u.id = p.user_id
+                                      where gm.quick_id is not null and u.email like $1`, [`%${stamp}@example.com`])
+    mine.n > 0 ? pass('(the check below looks at this run\'s families, which did send messages)') : fail('this run\'s messages found', '0')
     await db.end()
     rows[0].n === 0 ? pass('nothing typed was stored, from either family') : fail('no typed messages stored', `${rows[0].n}`)
   }
