@@ -163,22 +163,33 @@ begin
   set local role app_user;
   perform become('94444444-4444-4444-4444-444444444444');
 
+  -- Quick chat is the only way: typing is refused, whatever is typed.
   res := post_guild_message(gen_random_uuid(), guild, '9d000000-0000-0000-0000-000000000002', 'finished my chores!');
-  perform ok('a member can post', (res->>'ok')::boolean);
-
+  perform ok('typing a message is refused: quick chat only', res->>'reason' = 'quick_chat_only', res::text);
   res := post_guild_message(gen_random_uuid(), guild, '9d000000-0000-0000-0000-000000000002', 'call me on 07700 900123');
-  perform ok('a phone number is refused', res->>'reason' = 'contact_details');
+  perform ok('a phone number never gets as far as being checked', res->>'reason' = 'quick_chat_only');
 
-  res := post_guild_message(gen_random_uuid(), guild, '9d000000-0000-0000-0000-000000000002', 'email bo@example.com');
-  perform ok('an email address is refused', res->>'reason' = 'contact_details');
+  res := post_quick_chat(gen_random_uuid(), guild, '9d000000-0000-0000-0000-000000000002', 'chore.room');
+  perform ok('a member can send a quick chat message', (res->>'ok')::boolean, res::text);
+  set local role postgres;
+  perform ok('what is stored is the id, and no words',
+    exists (select 1 from guild_messages where guild_id = guild and quick_id = 'chore.room' and body = ''));
+  set local role app_user;
 
-  res := post_guild_message(gen_random_uuid(), guild, '9d000000-0000-0000-0000-000000000002', 'look at https://example.com');
-  perform ok('a link is refused', res->>'reason' = 'link');
+  res := post_quick_chat(gen_random_uuid(), guild, '9d000000-0000-0000-0000-000000000002', 'call me on 07700 900123');
+  perform ok('anything not on the list is refused', res->>'reason' = 'unknown_message', res::text);
+  res := post_quick_chat(gen_random_uuid(), guild, '9d000000-0000-0000-0000-000000000002', 'Chore.Room');
+  perform ok('even a near miss of a real id', res->>'reason' = 'unknown_message');
+  res := post_quick_chat(gen_random_uuid(), guild, '9d000000-0000-0000-0000-000000000002', null);
+  perform ok('and nothing at all', res->>'reason' = 'unknown_message');
+
+  res := post_quick_chat(gen_random_uuid(), guild, '9d000000-0000-0000-0000-000000000002', 'cheer.nice');
+  perform ok('a second message straight after is too fast', res->>'reason' = 'too_fast', res::text);
 
   -- A stranger's kid is not a member and cannot post.
   perform become('95555555-5555-5555-5555-555555555555');
   begin
-    perform post_guild_message(gen_random_uuid(), guild, '9d000000-0000-0000-0000-000000000002', 'hello');
+    perform post_quick_chat(gen_random_uuid(), guild, '9d000000-0000-0000-0000-000000000002', 'hello.hi');
     raise exception 'FAIL an outsider posted as another family''s kid';
   exception when others then
     if sqlerrm like 'FAIL%' then raise; end if;

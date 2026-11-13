@@ -157,6 +157,13 @@ levels 1.5× faster than a Standard kid doing identical chores. That is the inte
 effect, and it is worth being aware that it makes cross-family guild leaderboards
 inherently unequal.
 
+So no leaderboard counts it. `award_for_submission` works out what a chore is
+worth before the boost as well as after, `approve_submission` stores it with the
+chore (`submissions.base_xp`), and every board, the guild roster's weekly XP and
+the guild goal on the public guild board rank on that. A child keeps their
+boosted XP and level everywhere else; the boost buys levels at home, never a
+place on a board. See [Leaderboards](#leaderboards).
+
 ---
 
 ## The System Override Protocol
@@ -184,8 +191,65 @@ Two rules built into the design:
 
 5 members on Standard, 10 on Elite. The goal bar counts only real family members —
 letting sample guild-mates fill it would make a fake number look like progress.
+Guilds between families are built and switched off by default
+(`VITE_GUILDS_ENABLED`). → [STATUS.md](STATUS.md)
 
-Real guilds between families are not built. → [STATUS.md](STATUS.md)
+### Quick chat
+
+Guild chat is tap-to-send, like the ready-made buttons in team games, and that
+is the only way to chat in a guild: there is no text box. 101 messages in seven
+tabs (Cheers, Teamwork, Chore talk, Reactions, Thanks & sorry, Hello & bye, Goal
+moments), a row of big emoji, and a "Yours" row of the last few sent and any the
+child starred (on their phone only). `src/data/quickChat.js` is the library.
+
+- What is sent and stored is the message's **id**; every phone shows the words
+  from its own copy of the library. The server accepts only ids on its list
+  (`quick_chat_ok` in `supabase/guilds.sql`, the same list). An id never changes
+  meaning; new messages get new ids, and a phone that does not know an id shows
+  a plain 💬.
+- At most one message every 3 seconds and 8 a minute per child, counted by the
+  server; the phone waits 3 seconds after each tap.
+- Report hides a message at once and shows it to the parents on both sides; a
+  child can mute a guild-mate on their own phone.
+- Messages typed before 0.13.0 are not shown to children (nobody can check
+  them again); parents still see any that were reported.
+
+## Leaderboards
+
+`src/data/leaderboards.js`, `supabase/leaderboards.sql`.
+
+| Board | Periods | Counts |
+|---|---|---|
+| Chores done | week, month, all time | Accepted chores, at most 8 a UTC day (the School League's cap) |
+| XP earned | week, month, all time | XP before the Elite boost, at most 200 a chore, from those same chores |
+| Highest level | all time | The level that XP reaches. Ranked by the XP; the phone works out the level by the app's one curve, so there is no second curve in the database |
+| Longest streak | all time | `kids.streak_best`, kept by the server beside the streak |
+| Current streak | right now | The streak, if still alive on the family's day |
+| Badges earned | all time | The badge shelf's rules, counted from the server's rows |
+| Arcade high scores | week, month, all time, per game | The arcade's clamped best score (0-100) |
+| Season themes | all time | Themes picked for a Season |
+| Rising stars | week | This week's board XP less last week's |
+| Top guilds | week | Members' average board XP, so size alone does not win |
+
+Scopes: worldwide, my country, my guild, my family (guilds: worldwide and
+country). Weeks start Monday 00:00 UTC, months on the 1st, so one race is the
+same race everywhere, and the board says "Resets Monday". A board is empty
+again at the boundary itself, not at the next refresh.
+
+**Adventure and Arena.** Every child starts in Adventure: the family and guild
+boards only, among people the family already approved, and on no public board.
+A parent switches a child into Arena; then they are on the worldwide and
+country boards as a nickname (two words from lists of 80 and two digits, picked
+or shuffled, never typed, changed at most once a week), a flag and numbers.
+Either a parent or the child goes back to Adventure, at once.
+
+**Fair.** A parent tapping Accept 200 times counts 8 chores. A chore set to
+9,999 XP counts 200. Elite counts as Standard. Guilds race on their average.
+
+**Cheap.** The scheduled job ranks everybody every ten minutes and stores the
+whole ranking; opening a board reads its top 50 and the child's own row by
+index. The family and guild boards rank a handful of stored numbers. 4,000
+children rank in about a second ([LOAD-TEST.md](LOAD-TEST.md)).
 
 
 ## The arcade

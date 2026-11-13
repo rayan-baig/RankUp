@@ -132,7 +132,7 @@ const noPhotoCheck = await post('/api/verify-photo', { imageDataUrl: 'x' }, PARE
 ok('there is no photo-check address any more', noPhotoCheck.status === 404, `status ${noPhotoCheck.status}`)
 
 console.log('\n=== The scheduled jobs are not open to the public ===')
-for (const job of ['run-retention', 'send-reminders', 'send-digests', 'send-trial-emails', 'settle-alliances', 'settle-schools']) {
+for (const job of ['run-retention', 'send-reminders', 'send-digests', 'send-trial-emails', 'settle-alliances', 'settle-schools', 'refresh-leaderboards']) {
   const open = await fetch(`${BASE}/api/${job}`, { method: 'POST' })
   ok(`${job} refuses a caller with no secret`, open.status === 401 || open.status === 403, `status ${open.status}`)
   const withSecret = await fetch(`${BASE}/api/${job}`, {
@@ -1100,6 +1100,68 @@ console.log('\n=== Theme Genesis: only the operator sees the themes sent for a S
     && (await db.query('select count(*)::int n from season_themes where season_id = $1', [season?.id])).rows[0].n === 0)
   await db.query('delete from seasons where number = $1', [number])
   await db.query('delete from kid_themes where kid_id = $1', [KID])
+}
+
+console.log('\n=== The leaderboards: the job ranks, and a child not in Arena is on no public board ===')
+{
+  // Two children with chores accepted: one a parent put in Arena, one left
+  // in Adventure (where every child starts). Through the real job and the
+  // database's API, as a phone would ask.
+  const LP = 'a0000000-0000-4000-8000-00000000b101'
+  const LF = 'a0000000-0000-4000-8000-00000000b10f'
+  const ARENA_DEVICE = 'a0000000-0000-4000-8000-00000000b1a1'
+  const QUIET_DEVICE = 'a0000000-0000-4000-8000-00000000b1a2'
+  const ARENA = 'a0000000-0000-4000-8000-00000000b1c1'
+  const QUIET = 'a0000000-0000-4000-8000-00000000b1c2'
+  await db.query(`insert into auth.users (id, email) values ($1, 'api-boards@example.com'), ($2, null), ($3, null) on conflict do nothing`,
+    [LP, ARENA_DEVICE, QUIET_DEVICE])
+  await db.query(`insert into families (id, name, tier) values ($1, 'API Boards family', 'standard') on conflict do nothing`, [LF])
+  await db.query(`insert into parents (user_id, family_id, name) values ($1, $2, 'API Boards parent') on conflict do nothing`, [LP, LF])
+  await db.query('select seed_consent($1, $2)', [LF, LP])
+  await db.query(`insert into kids (id, family_id, user_id, name) values ($1, $3, $4, 'Wilhelmina Arena'), ($2, $3, $5, 'Ottoline Quiet')
+                    on conflict do nothing`, [ARENA, QUIET, LF, ARENA_DEVICE, QUIET_DEVICE])
+  for (const kid of [ARENA, QUIET]) {
+    const q = await db.query(`insert into quests (family_id, kid_id, title, xp) values ($1, $2, 'API chore', 30) returning id`, [LF, kid])
+    await db.query(`insert into submissions (family_id, quest_id, kid_id, status, decided_at, awarded_xp, base_xp)
+                    select $1, $2, $3, 'approved', now() - make_interval(mins => g), 30, 30 from generate_series(1, 3) g`, [LF, q.rows[0].id, kid])
+  }
+  const rpc = (fn, args, token) => fetch(`${MOCK}/rest/v1/rpc/${fn}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(args),
+  }).then((r) => r.json())
+
+  const kidTriesArena = await rpc('set_leaderboard_mode', { p_kid_id: ARENA, p_mode: 'arena' }, ARENA_DEVICE)
+  ok('a child cannot put themselves in Arena', kidTriesArena.reason === 'parent_only', JSON.stringify(kidTriesArena))
+  ok('a parent can', (await rpc('set_leaderboard_mode', { p_kid_id: ARENA, p_mode: 'arena' }, LP)).mode === 'arena')
+  await rpc('set_leaderboard_country', { p_country: 'IE' }, LP)
+  const job = await fetch(`${BASE}/api/refresh-leaderboards`, { method: 'POST', headers: { Authorization: `Bearer ${CRON}` } })
+  const ran = await job.json()
+  ok('the job ranks the boards', job.status === 200 && ran.ok === true && ran.ranked > 0, JSON.stringify(ran))
+  ok('and records its run for /api/health', (await db.query("select ok_count from job_runs where job = 'refresh-leaderboards'")).rows[0]?.ok_count > 0)
+
+  const seen = await rpc('leaderboard_board', { p_kid_id: ARENA, p_board: 'chores', p_period: 'all', p_scope: 'world', p_game: '' }, ARENA_DEVICE)
+  const text = JSON.stringify(seen)
+  const quietNick = (await db.query('select nickname from leaderboard_profiles where kid_id = $1', [QUIET])).rows[0]?.nickname
+  ok('the Arena child sees the worldwide board, with their own place', seen.ok && seen.me?.rank >= 1, text.slice(0, 200))
+  ok('the Adventure child is nowhere on it, by name or by nickname',
+    !text.includes('Ottoline') && !text.includes('Quiet') && (!quietNick || !text.includes(quietNick)))
+  ok('nor anyone\'s real name', !text.includes('Wilhelmina'))
+  ok('in the stored ranking, not one row is the Adventure child\'s',
+    (await db.query('select count(*)::int n from leaderboard_ranks where kid_id = $1', [QUIET])).rows[0].n === 0)
+  const asked = await rpc('leaderboard_board', { p_kid_id: QUIET, p_board: 'chores', p_period: 'all', p_scope: 'world', p_game: '' }, QUIET_DEVICE)
+  ok('and the Adventure child is shown no public board', asked.reason === 'adventure', JSON.stringify(asked))
+  const stranger = await fetch(`${MOCK}/rest/v1/rpc/leaderboard_board`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: `Bearer ${OUTSIDER}` },
+    body: JSON.stringify({ p_kid_id: ARENA, p_board: 'chores', p_period: 'all', p_scope: 'world', p_game: '' }),
+  })
+  ok('another family cannot open a board as this child', !stranger.ok, `status ${stranger.status}`)
+  const job2 = await fetch(`${BASE}/api/refresh-leaderboards`, { method: 'POST' })
+  ok('the job refuses a caller with no secret', job2.status === 401 || job2.status === 403, `status ${job2.status}`)
+
+  ok('back to Adventure, by the child themselves', (await rpc('set_leaderboard_mode', { p_kid_id: ARENA, p_mode: 'adventure' }, ARENA_DEVICE)).mode === 'adventure')
+  ok('takes them off at once', (await db.query('select count(*)::int n from leaderboard_ranks where kid_id = $1', [ARENA])).rows[0].n === 0)
+  await db.query('delete from families where id = $1', [LF])
+  await db.query('delete from auth.users where id in ($1, $2, $3)', [LP, ARENA_DEVICE, QUIET_DEVICE])
 }
 
 console.log('\n=== A route that does not exist is a 404, not a stack trace ===')

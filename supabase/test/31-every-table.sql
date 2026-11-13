@@ -98,6 +98,16 @@ select usage_bump('help_views');
 insert into seasons (id, number, name, starts_on) values
   ('31a00000-0000-4000-8000-0000000005e1', 931, 'T31 Season', (now() at time zone 'utc')::date - 1);
 insert into season_themes (season_id, name, design) values ('31a00000-0000-4000-8000-0000000005e1', 'T31 Official', '{}');
+-- The leaderboards: family A's child in Arena, with numbers and a place on a
+-- board, the family's country, and the job's last run. None of it is B's.
+insert into leaderboard_profiles (kid_id, family_id, mode, nickname, arena_since) values
+  ('31a00000-0000-4000-8000-00000000000c', '31a00000-0000-4000-8000-00000000000f', 'arena', 'SwiftComet31', now());
+insert into leaderboard_families (family_id, country) values ('31a00000-0000-4000-8000-00000000000f', 'GB');
+insert into leaderboard_kid_stats (kid_id, family_id, week_key, month_key, chores_all) values
+  ('31a00000-0000-4000-8000-00000000000c', '31a00000-0000-4000-8000-00000000000f', '2026-W01', '2026-01', 3);
+insert into leaderboard_ranks (board, period, scope, period_key, kid_id, rank, score, shown) values
+  ('chores', 'all', 'world', 'all', '31a00000-0000-4000-8000-00000000000c', 1, 3, 3);
+insert into leaderboard_runs (id, computed_at) values (1, now()) on conflict (id) do nothing;
 -- A tombstone in `deletions`, the way a real delete leaves one.
 insert into quests (id, family_id, kid_id, title) values
   ('31a00000-0000-4000-8000-0000000000d1', '31a00000-0000-4000-8000-00000000000f', '31a00000-0000-4000-8000-00000000000c', 'T31 deleted');
@@ -350,3 +360,5 @@ end $$;
 
 drop function t31_tenancy(text, uuid, uuid[], uuid, uuid, text);
 delete from seasons where number = 931;
+delete from leaderboard_ranks where kid_id = '31a00000-0000-4000-8000-00000000000c';
+delete from leaderboard_profiles where kid_id = '31a00000-0000-4000-8000-00000000000c';

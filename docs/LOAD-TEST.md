@@ -105,6 +105,7 @@ The scheduled jobs, timed once each over the same data (`--jobs`):
 | `settle_school_month` | 3 ms | 4 ms |
 | `run_retention` | 2 ms | 2 ms |
 | `usage_counts` | 49 ms | 38 ms |
+| `refresh_leaderboards` (0.13.0; 2,500 children, 300,000 chores, half in Arena) | — | 1,037 ms |
 
 3. **The weekly digest read the whole time zone database once per family.**
    `family_week_digest` checked a family's zone by asking
@@ -154,6 +155,30 @@ What that means for 1,000 real families: their 3,833 phones, every one open
 and syncing at its fastest (every 8 seconds), would send about 480 requests a
 second. That is a fifth of what this machine served. The app slows to every
 20 seconds when nothing is happening and once a minute in the background.
+
+## The leaderboard job (0.13.0)
+
+Opening a leaderboard never ranks anybody. `refresh_leaderboards`
+(`supabase/leaderboards.sql`, called every ten minutes by
+`/api/refresh-leaderboards`) works out every child's numbers from the
+accepted chores, ranks every Arena child and all-Arena guild on every board,
+worldwide and by country, and stores the result in one transaction. Opening a
+board reads its top 50 by index and the child's own row; the family and guild
+boards rank a handful of stored numbers.
+
+`supabase/test/53-leaderboard-load.sql` runs on every push: 2,000 families,
+4,000 children, about 120,000 accepted chores and 40,000 arcade rounds, half
+the children in Arena in ten countries. On a laptop the job takes about
+**0.9 seconds** (46,700 ranked rows) and opening a worldwide board of 2,000
+about **2 ms**; the test fails at 20 seconds and 150 ms. On the load seed
+above (1,000 families, 300,000 chores), `--jobs` times it at about **1.0
+second** with every second child put in Arena.
+
+It reads every accepted chore every run, which is what keeps it simple and
+correct (a chore accepted late, a child deleted, a parent's cap). It grows
+with the chores kept: roughly a second per 100,000 to 300,000 on this machine. Past a few million, the
+place to start is a per-child, per-day table kept up to date when a chore is
+accepted, so a run reads days instead of chores.
 
 ## Supabase is not this machine
 

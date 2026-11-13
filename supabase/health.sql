@@ -1,7 +1,7 @@
 -- ---------------------------------------------------------------------------
 -- Knowing the thing is alive without watching it.
 --
--- Run after schema.sql, schools.sql, retention.sql and crashes.sql.
+-- Run after schema.sql, schools.sql, leaderboards.sql, retention.sql and crashes.sql.
 --
 -- Three jobs have to be scheduled outside this codebase, and the failure mode
 -- for all three is silence: reminders stop arriving, old rows stop being deleted,
@@ -75,6 +75,8 @@ begin
     into v_jobs
     from (values
             ('send-reminders',   interval '2 hours'),
+            -- Every ten minutes. An hour quiet means the boards are an hour old.
+            ('refresh-leaderboards', interval '1 hour'),
             -- Hourly. Quiet for a day means a trial-ending email may be missed.
             ('send-trial-emails', interval '6 hours'),
             ('run-retention',    interval '3 days'),

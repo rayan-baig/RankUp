@@ -25,10 +25,11 @@ const PARENT_ROUTES = [
   '/parent', '/parent/approvals', '/parent/assign', '/parent/kids', '/parent/blueprint',
   '/parent/override', '/parent/guilds', '/parent/alliance', '/parent/school', '/parent/plan',
   '/parent/settings', '/parent/pair', '/parent/help', '/parent/history', '/parent/money',
+  '/parent/leaderboards',
 ]
 const KID_ROUTES = [
   '/kid', '/kid/quests', '/kid/shop', '/kid/market', '/kid/arcade', '/kid/guild', '/kid/profile',
-  '/kid/school', '/kid/dragon',
+  '/kid/school', '/kid/dragon', '/kid/leaderboards',
 ]
 const OPEN_ROUTES = ['/switch', '/legal/privacy', '/legal/terms']
 

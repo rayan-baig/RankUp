@@ -58,10 +58,12 @@ without an outside scheduler.
 
 ### 6. Before switching guilds on
 
-Human moderation of guild chat beyond the contact-detail guard, reporting and
-the owner's parent removing a child. Who reads reports, how fast, and what
-happens to a child who is reported repeatedly. A lawyer's view on child-to-child
-contact across families (LAUNCH.md section 8).
+Guild chat is ready-made messages only since 0.13.0, so there is no typed
+text to moderate. What is left: who reads the reports (a ready-made message can
+still be used to pile on a child), how fast, and what happens to a child who is
+reported repeatedly; and a lawyer's view on children in different families
+being in one guild at all (LAUNCH.md section 8). The decision to switch guilds
+on is the owner's.
 
 ### 7. School League limits, if schools ask
 

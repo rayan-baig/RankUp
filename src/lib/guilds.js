@@ -21,8 +21,10 @@ export const GUILD_ERRORS = {
   not_a_member: 'You are not in that guild.',
   contact_details: "You can't share phone numbers or email addresses here.",
   link: "You can't share links here.",
-  too_long: 'That message is too long.',
-  empty: 'Type something first.',
+  quick_chat_only: 'Guild chat is tap-to-send only. Pick a message below.',
+  unknown_message: 'This phone has a message the server does not know. Update RankUp and try again.',
+  too_fast: 'Whoa, speedy! Wait a moment before the next one.',
+  slow_down: 'That is a lot of messages. Have a short break and chat again in a minute.',
   no_kid: 'That kid profile no longer exists.',
   no_request: 'That request is no longer waiting.',
   blocked: "A parent has blocked this child from that guild.",
@@ -48,8 +50,13 @@ const call = async (fn, args) => {
  *
  * They are the one feature that puts a child in contact with children in other
  * families, which makes them by far the heaviest thing here to be responsible
- * for. Launching without them is a smaller product and a much smaller
- * obligation; set VITE_GUILDS_ENABLED=true when you are ready to carry it.
+ * for. Since 0.13.0 guild chat is quick chat only: a child taps a ready-made
+ * message and only its id travels (postQuick, src/data/quickChat.js), with no
+ * text box and the server refusing typed text, so nobody can type to anybody.
+ * That makes them much safer than they were. Joining still needs a parent on
+ * each side, and someone still has to look at what children report. Launching
+ * without them is a smaller product and a smaller obligation; set
+ * VITE_GUILDS_ENABLED=true when you decide to carry it.
  */
 export function guildsSwitchedOn(value) {
   // Exactly 'true'. Not 'TRUE', not '1', not ' true': a setting that is
@@ -89,12 +96,17 @@ export const guilds = {
   messages: (guildId, kidId, limit = 50) =>
     call('guild_messages_for', { p_guild_id: guildId, p_kid_id: kidId, p_limit: limit }),
 
-  post: (guildId, kidId, body) =>
-    call('post_guild_message', {
+  /**
+   * Quick chat: the message's id from src/data/quickChat.js, never words.
+   * The only way a child chats in a guild; the server accepts only ids on
+   * the list, and limits how often.
+   */
+  postQuick: (guildId, kidId, quickId) =>
+    call('post_quick_chat', {
       p_message_id: uid('msg'),
       p_guild_id: guildId,
       p_kid_id: kidId,
-      p_body: body,
+      p_quick_id: quickId,
     }),
 
   report: (messageId, kidId) =>

@@ -251,6 +251,23 @@ export default function ParentSettings() {
           <span aria-hidden="true" className="text-muted">›</span>
         </button>
 
+        <button
+          type="button"
+          onClick={() => navigate('/parent/leaderboards')}
+          data-testid="open-parent-leaderboards"
+          className="w-full flex items-center gap-3 text-left mt-3 pt-3"
+          style={{ borderTop: '1px solid var(--line)' }}
+        >
+          <span className="text-2xl" aria-hidden="true">🏆</span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold text-sm">Leaderboards: Adventure or Arena</span>
+            <span className="block text-xs text-muted">
+              Every child starts in Adventure. Switch on Arena to put them on the worldwide boards, by nickname.
+            </span>
+          </span>
+          <span aria-hidden="true" className="text-muted">›</span>
+        </button>
+
         {guildsEnabled() && (
         <button
           type="button"

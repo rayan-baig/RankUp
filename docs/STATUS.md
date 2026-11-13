@@ -78,7 +78,9 @@ one phone, with no account (see "On one phone only" below).
 
 | Thing | Status | Notes |
 |---|---|---|
-| Guilds | ✅ built, **off by default** | Invite codes, rosters, chat with a contact-detail guard and reporting. **A child joins only once a parent on each side approves.** On only if `VITE_GUILDS_ENABLED=true` |
+| Guilds | ✅ built, **off by default** | Invite codes, rosters, a weekly goal, and chat that is **quick chat only**: a child taps one of 101 ready-made messages (seven tabs) or a big emoji, and only its id is sent and stored. There is no text box, and the server refuses typed text and any id not on the list, so no child can type to a child in another family. At most one message every 3 seconds and 8 a minute, held by the server. Report (hides it, both families' parents see it), mute on the child's own phone, and parents' remove and block stay. Messages typed before 0.13.0 are not shown to children. **A child joins only once a parent on each side approves.** On only if `VITE_GUILDS_ENABLED=true`: much safer than before, and still the owner's decision |
+| Leaderboards | ✅ needs a backend | Chores, XP, highest level, longest and current streak, badges, arcade high scores per game, Season themes, rising stars, and top guilds; by worldwide, country, guild and family, and this week (resets Monday), this month (the 1st), all time, at midnight UTC. Podium, rank arrows, the child's own row and place even far down. Ranked every 10 minutes by `/api/refresh-leaderboards` and read from what it stored ([GAME-DESIGN.md](GAME-DESIGN.md#leaderboards)). Without a backend, a family board worked out on the phone |
+| Adventure and Arena | ✅ | Every child starts in **Adventure**: on no public board and shown none; family and guild boards only. A **parent** switches a child into **Arena** (Settings → Leaderboards); a parent or the child switches back, and they are off every public board at once. In Arena strangers see a nickname built from word lists (80 × 80 × 100, once a week, never typed), a flag from the parent's list, and numbers; never a name, family, school or town. Deleting a child removes them from every board at once. Guild boards need guilds on |
 | Parent Alliance and the 20% Discount Tournament | ✅ with Stripe | Real families, scores counted on the server. `api/settle-alliances.js` gives the winner a real Stripe credit monthly; **you have to schedule it** |
 | The School League | ✅ built, charging once Stripe is connected | See below |
 
@@ -102,7 +104,7 @@ Known limits, decided rather than missed:
 - **Five students can be one family.** The minimum counts children, not
   households.
 - **The 8-a-day cap is by approval day.** A parent accepting a week's chores at
-  once counts at most 8 that day.
+  once counts at most 8 that day. The leaderboards use the same cap.
 
 ## Scale, phones and schools
 
@@ -160,7 +162,7 @@ between phones ([SYNC.md](SYNC.md)).
 | A broken change is caught before it ships | `.github/workflows/ci.yml`: lint, build, the SQL suite against a real Postgres (every refusal reason given, every file safe to run twice), the production build, the browser suites in three parallel shards, two-phone sync, the server functions under Cloudflare's runtime. About ten minutes |
 | One screen crashing does not take the app down | `src/components/ScreenBoundary.jsx` |
 | You hear about crashes on other people's phones | `supabase/crashes.sql`: the screen and the error, never a name |
-| A scheduled job that stops being called | `/api/health` with the `CRON_SECRET`: each of the six jobs `ok`, `stale` or `never_run` |
+| A scheduled job that stops being called | `/api/health` with the `CRON_SECRET`: each of the seven jobs `ok`, `stale` or `never_run` |
 | A deleted family's subscription still not cancelled | The same check: `billing_cancellations_overdue` |
 | One address to point a monitor at | `GET /api/health` → `{"ok":true,"version":"…"}`, or 503 |
 | What to do when one of them is red | [IF-SOMETHING-BREAKS.md](IF-SOMETHING-BREAKS.md) |

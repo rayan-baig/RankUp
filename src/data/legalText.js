@@ -32,6 +32,16 @@ export const LAST_UPDATED = 'November 2026'
  * choose"), and sending one to RankUp is a separate, explicit yes a parent
  * gives in Parent Mode for that one theme, which says there what is sent.
  *
+ * The policy and terms were updated for the leaderboards (0.13.0) without a
+ * new consent version, on the same reasoning: every child starts in
+ * Adventure, on no public board, and Arena (a nickname built from word lists,
+ * a flag and numbers on the worldwide and country boards) is a separate,
+ * explicit choice a parent makes for each child in Parent Mode, which says
+ * there exactly what strangers see. Guild chat became ready-made messages
+ * only at the same time, which collects less, not more; the notice's guild
+ * section still holds ("exchange short messages"). docs/LEGAL.md asks the
+ * lawyer whether Arena should have a notice of its own.
+ *
  * The policy and terms were updated for the School League without a new
  * consent version: joining a school is a
  * separate, explicit choice a parent makes on the School League screen, which
@@ -163,6 +173,25 @@ export const PRIVACY_POLICY = {
       ],
     },
     {
+      heading: 'Leaderboards: Adventure and Arena',
+      body: [
+        'Every child starts in Adventure. In Adventure your child sees leaderboards with their own family, and with their guild if they are in one, and is on no public leaderboard at all.',
+        'A parent can switch a child into Arena in Parent Mode. Only a parent can do this. In Arena your child appears on worldwide and country leaderboards that children in other families can see. What they see is a nickname, your country\'s flag and your child\'s numbers there: chores done, XP, level, streaks, badges, arcade scores and Season themes picked. Never your child\'s name, a photo, your family\'s name, their school or town, or anything anyone typed.',
+        'The nickname is built from two lists of words and a number, like SwiftComet42. Your child picks the pieces or shuffles them; nothing is typed. It can be changed once a week.',
+        'The country is the one you pick from a list. RankUp never asks for your location.',
+        'You, or your child, can switch back to Adventure at any time. They are taken off every public leaderboard at once. Deleting your child or your account removes them from every leaderboard at once.',
+        'Leaderboard numbers are worked out by our server from the chores you accepted, never from what a phone reports. They are counted fairly: at most eight chores a day, and XP without the Elite boost.',
+      ],
+    },
+    {
+      heading: 'Guilds, if you use them',
+      body: [
+        'A guild is a small team of children from different families. A child joins only once a parent on each side has agreed. Guild members see each other\'s first names, levels and weekly XP.',
+        'Guild chat is ready-made messages only, such as "Nice one!" or "Doing dishes now". Children tap a message; nobody can type, so no phone number, address or other detail can be shared through it. We store which message was sent, by whom and when.',
+        'Any child can report a message, which hides it at once and shows it to the parents on both sides. A child can also mute a guild-mate on their own phone. A parent can remove or block a child from a guild at any time.',
+      ],
+    },
+    {
       heading: 'The School League, if you join it',
       body: [
         'If your child\'s school takes part, you can add your child to it with a code the school gives you. Only a parent can do this; a school can never add a child.',
@@ -186,6 +215,7 @@ export const PRIVACY_POLICY = {
         'Nobody, except the services that make the app work: Supabase (hosting and database), Stripe (payments, only if you subscribe), a push notification service if you enable notifications, and an email service that sends your account emails (your email address only, never anything about your children).',
         'If you add your child to a school\'s league, that school sees what is described under "The School League" above, and nothing more.',
         'If you send one of your child\'s themes to RankUp and we pick it for a Season, every RankUp family sees that theme and its credit line, as described above, and nothing else about your family.',
+        'If you switch a child into Arena, other RankUp families see their nickname, your country\'s flag and their leaderboard numbers, as described under "Leaderboards" above, and nothing else.',
         'We do not sell data. We do not share it for advertising. We show children no advertising.',
       ],
     },
@@ -203,6 +233,7 @@ export const PRIVACY_POLICY = {
         'Download everything we hold: Settings → Download my data.',
         'Delete everything: Settings → Delete account.',
         'Turn off notifications or guilds independently. The app works without either.',
+        'Keep each child in Adventure, off public leaderboards, or switch them into Arena and back, in Settings → Leaderboards.',
         'Take your child out of a school\'s league, or stop their first name being shown to the school, from the School League screen.',
       ],
     },
@@ -253,7 +284,8 @@ export const TERMS = {
       heading: 'Fair use',
       body: [
         'Do not use RankUp to harass, harm or deceive anyone, and do not attempt to access another family\'s data.',
-        'Guild chat is for children. We may remove content and suspend accounts that put children at risk.',
+        'Guild chat is for children, and is ready-made messages only: nobody can type in it. We may remove content and suspend accounts that put children at risk.',
+        'Leaderboards are for fun. We may remove a child from them, or correct numbers that were not earned fairly.',
       ],
     },
     {

@@ -43,7 +43,8 @@ Penalties are per-child and large. This is not a "fix it later" area.
 | Feature | The question to ask |
 |---|---|
 | Photos | None. RankUp never takes, sends or keeps a photo. Say so in the privacy policy. |
-| Guild chat | Kid-to-kid messaging needs consent on **both** sides, plus moderation, reporting and blocking. Consider whether it is worth the risk at all. |
+| Guild chat | Kid-to-kid messaging needs consent on **both** sides, plus moderation, reporting and blocking. Since 0.13.0 it is ready-made messages only: a child taps one of a fixed list and nobody can type, which removes the free-text risk (contact details, grooming, bullying in a child's own words). Guilds still ship switched off. |
+| Leaderboards | Every child is in **Adventure** (on no public board) until a parent switches on **Arena** for them. In Arena, children in other families see a nickname built from word lists, a country flag the parent picked, and leaderboard numbers. That is a disclosure to strangers of a pseudonym and activity data. |
 | Guild rosters | A child's display name visible to children in other families is a disclosure. |
 | Accessibility notes | Notes a parent writes about a child's disability are **health-adjacent data** and are among the most sensitive fields in the app. They should never leave the parent's own account. |
 | Parent Alliance | Adults competing on a leaderboard using data derived from their children's behaviour. Think carefully about what is displayed. |
@@ -121,6 +122,42 @@ that asks existing parents. Ask the lawyer whether any change you plan is of
 that kind.
 
 ---
+
+## Leaderboards (Adventure and Arena): what was decided, and what to ask
+
+**No new consent version.** The leaderboards came in 0.13.0 under consent
+notice 2026-11, unchanged, following the precedent of the School League and of
+sending a theme for a Season: what is shown to people outside the family is
+off by default, and turned on by a separate, explicit choice a parent makes for
+one child, on a screen that says exactly what will be shown (Parent Mode →
+Settings → Leaderboards). Every existing and new child starts in Adventure, so
+nothing about any child became visible to anyone new by the update itself.
+Guild chat became ready-made messages only at the same time; that collects
+less, and the notice's guild section ("exchange short messages") still holds.
+
+What Arena shows strangers, and nothing else: a nickname made of two words from
+fixed lists and two digits (never typed; changed at most weekly; the lists are
+checked against the rude-word filter, all 640,000 combinations), a flag from a
+list the parent picks (RankUp asks for no location), and numbers worked out by
+the server. A parent or the child can switch back to Adventure at any time, and
+that removes them from every public board in the same request. Deleting a child
+or the account, or withdrawing consent, removes them from every board at once.
+"Download my data" includes each child's mode, nickname and the country. The
+privacy policy and terms say all of this (`src/data/legalText.js`).
+
+Ask specifically:
+
+- Is a parent's Arena switch enough consent for a child's pseudonym and
+  activity numbers on a public leaderboard under COPPA and the UK Children's
+  Code, or should the consent notice be reissued to describe it? A new version
+  is shown only to new parents; asking every existing parent again needs
+  building (see "Consent notice versions" above).
+- The Children's Code asks for high-privacy defaults and no nudges towards
+  weaker settings. Adventure is the default and the child is never prompted to
+  ask for Arena beyond one line on the leaderboard screen; confirm that is
+  enough.
+- Is a two-digit-number nickname plus a country "personal information" where
+  you launch (it is not linkable to the child by anything RankUp shows)?
 
 ## The School League: questions to add for the lawyer
 

@@ -247,11 +247,12 @@ begin
 
   -- Report.
   perform become(t35_kid_user(202));
-  perform post_guild_message(v_msg, v_guild, t35_kid(202), 'T35 something unkind');
+  perform ok('a member sends quick chat', (post_quick_chat(v_msg, v_guild, t35_kid(202), 'react.haha')->>'ok')::boolean);
   perform become(t35_kid_user(201));
+  perform ok('the other child sees it', position(v_msg::text in guild_messages_for(v_guild, t35_kid(201))::text) > 0);
   perform ok('a child can report a message', (report_guild_message(v_msg, t35_kid(201))->>'ok')::boolean);
   perform ok('and it is gone from the chat at once',
-    position('T35 something unkind' in guild_messages_for(v_guild, t35_kid(201))::text) = 0);
+    position(v_msg::text in guild_messages_for(v_guild, t35_kid(201))::text) = 0);
   perform become(t35_parent(201));
   r := (select m from jsonb_array_elements(reported_guild_messages()) m where (m->>'id')::uuid = v_msg);
   perform ok('the guild owner''s parent sees it, with what they need to act on it',

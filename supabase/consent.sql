@@ -270,6 +270,7 @@ language plpgsql security definer set search_path = public as $$
 declare
   v_family uuid;
   v_school jsonb;
+  v_boards jsonb;
 begin
   -- A parent, not a supporter: a grandparent who can look in has no right to
   -- download the whole household's records.
@@ -281,9 +282,15 @@ begin
   if to_regprocedure('public.export_family_school_data(uuid)') is not null then
     execute 'select public.export_family_school_data($1)' into v_school using v_family;
   end if;
+  -- The leaderboards (Adventure or Arena, the nickname, the country), from
+  -- leaderboards.sql, also applied after this file.
+  if to_regprocedure('public.export_family_leaderboard_data(uuid)') is not null then
+    execute 'select public.export_family_leaderboard_data($1)' into v_boards using v_family;
+  end if;
 
   return jsonb_build_object(
     'school_league', coalesce(v_school, '[]'::jsonb),
+    'leaderboards', coalesce(v_boards, '{}'::jsonb),
     'exported_at', now(),
     'family',      (select to_jsonb(f) from families f where f.id = v_family),
     'parents',     coalesce((select jsonb_agg(to_jsonb(p)) from parents p where p.family_id = v_family), '[]'::jsonb),

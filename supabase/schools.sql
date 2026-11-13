@@ -221,6 +221,17 @@ revoke execute on function school_code(int) from public, anon, authenticated;
 create or replace function school_min_students()
 returns int language sql immutable as $$ select 5 $$;
 
+/**
+ * Accepted chores a child can score in one day (UTC), at most. The School
+ * League counts no more than this, and so do the leaderboards
+ * (supabase/leaderboards.sql), so a parent tapping Accept two hundred times
+ * in an afternoon puts nobody top of anything. SCHOOL_DAILY_CHORES in
+ * src/lib/schools.js is the same number; tests/schoolhelp.mjs checks.
+ */
+create or replace function school_daily_chores()
+returns int language sql immutable as $$ select 8 $$;
+revoke execute on function school_daily_chores() from public, anon, authenticated;
+
 /** Paid up, or still in its trial. Anything else sits the league out. */
 create or replace function school_is_live(p_school uuid)
 returns boolean language sql stable security definer set search_path = public as $$
@@ -235,7 +246,8 @@ $$;
 -- ---------------------------------------------------------------------------
 
 /**
- * Each student's points for a month: approved quests, at most eight a day,
+ * Each student's points for a month: approved quests, at most eight a day
+ * (school_daily_chores),
  * counted from the day they joined this school. Joining date matters: without
  * it a family could move a child between schools mid-month and bring the
  * month's points with them.
@@ -246,7 +258,7 @@ language sql stable security definer set search_path = public as $$
   select m.kid_id,
          coalesce((
            select sum(d.n) from (
-             select least(count(*), 8) as n
+             select least(count(*), school_daily_chores()) as n
                from submissions s
               where s.kid_id = m.kid_id
                 and s.status = 'approved'

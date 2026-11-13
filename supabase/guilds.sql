@@ -17,9 +17,14 @@
 --      returns a display name, a level and a weekly XP total. It does not
 --      return another family's kids table rows, so a guild cannot become a way
 --      to read someone else's child's profile, accessibility notes or photos.
---   3. EVERY MESSAGE IS ATTRIBUTABLE AND REPORTABLE, and obvious contact
---      details are refused outright — a phone number or an address leaving a
---      child's guild chat is the specific harm worth engineering against.
+--   3. NOBODY TYPES TO ANOTHER FAMILY'S CHILD. Guild chat is quick chat
+--      only (0.13.0): a child taps one of a fixed list of messages, and what
+--      is sent and stored is its id, never text (post_quick_chat). Only ids
+--      on the list are accepted, so nothing typed — a phone number, an
+--      address, a school, an unkind sentence — can leave a child's phone
+--      through a guild. Free text is refused (post_guild_message), and the
+--      free-text messages from before are no longer shown to children.
+--      Every message is still attributable and reportable, and rate limited.
 -- ---------------------------------------------------------------------------
 
 -- The read policies in schema.sql query guild_members from inside a policy ON
@@ -52,6 +57,13 @@ alter table guild_members add column if not exists request_told_at timestamptz;
 
 alter table guild_messages add column if not exists reported_by uuid references kids(id) on delete set null;
 alter table guild_messages add column if not exists reported_at timestamptz;
+
+-- Quick chat: the message's id from src/data/quickChat.js. A quick message
+-- has an empty body; a message from before quick chat has no quick_id.
+alter table guild_messages add column if not exists quick_id text;
+alter table guild_messages alter column body set default '';
+-- "How many has this child sent in the last minute?", on every send.
+create index if not exists guild_messages_kid_idx on guild_messages (kid_id, created_at);
 
 create index if not exists guild_members_kid_idx on guild_members (kid_id, status);
 create index if not exists guild_messages_guild_idx on guild_messages (guild_id, created_at);
@@ -350,7 +362,9 @@ begin
         'xp', k.xp,
         'is_you', k.id = p_kid_id,
         'weekly_xp', coalesce((
-          select sum((e.meta->>'xp')::int) from events e
+          -- Before the Elite boost, so a plan does not buy the top of the
+          -- roster (supabase/leaderboards.sql); older events have only xp.
+          select sum(coalesce((e.meta->>'base_xp')::int, (e.meta->>'xp')::int)) from events e
            where e.kid_id = k.id and e.type = 'quest_approved'
              and e.day > current_date - 7), 0)
       ) order by k.name)
@@ -360,34 +374,87 @@ begin
 end $$;
 
 /**
- * Posting a message.
+ * The quick chat messages a child may send: every id in src/data/quickChat.js
+ * (tests/quickchat.mjs checks the two lists are the same). An id keeps its
+ * meaning for good; new messages get new ids.
+ */
+create or replace function quick_chat_ok(p_id text)
+returns boolean language sql immutable as $$
+  select coalesce(p_id = any (array[
+    'cheer.nice', 'cheer.fire', 'cheer.legend', 'cheer.great', 'cheer.star', 'cheer.wow',
+    'cheer.goingon', 'cheer.proud', 'cheer.machine', 'cheer.unstop', 'cheer.boss', 'cheer.speedy',
+    'cheer.sparkle', 'cheer.streak', 'cheer.levelup', 'cheer.mvp', 'team.finish', 'team.take',
+    'team.almost', 'team.together', 'team.onit', 'team.push', 'team.plan', 'team.help',
+    'team.count', 'team.ready', 'team.pace', 'team.weekend', 'team.beat', 'team.two',
+    'team.quick', 'chore.room', 'chore.dishes', 'chore.laundry', 'chore.bins', 'chore.bed',
+    'chore.pet', 'chore.homework', 'chore.table', 'chore.hoover', 'chore.plants', 'chore.toys',
+    'chore.shoes', 'chore.sent', 'chore.accepted', 'chore.boss', 'chore.timer', 'chore.next',
+    'chore.hard', 'react.wow', 'react.noway', 'react.haha', 'react.oops', 'react.yes',
+    'react.cool', 'react.omg', 'react.yay', 'react.hmm', 'react.ok', 'react.sure',
+    'react.nope', 'react.fun', 'react.close', 'react.lol', 'thanks.thanks', 'thanks.lots',
+    'thanks.help', 'thanks.team', 'thanks.welcome', 'thanks.np', 'thanks.sorry', 'thanks.myfault',
+    'thanks.later', 'thanks.busy', 'thanks.allgood', 'thanks.forgot', 'hello.morning', 'hello.hi',
+    'hello.back', 'hello.afternoon', 'hello.evening', 'hello.night', 'hello.tomorrow', 'hello.later',
+    'hello.bye', 'hello.dinner', 'hello.soon', 'hello.weekend', 'hello.sleep', 'goal.hit',
+    'goal.record', 'goal.half', 'goal.close', 'goal.again', 'goal.best', 'goal.champs',
+    'goal.started', 'goal.board', 'goal.climb', 'goal.top', 'goal.gg', 'emoji.fire',
+    'emoji.clap', 'emoji.party', 'emoji.star', 'emoji.heart', 'emoji.laugh', 'emoji.wow',
+    'emoji.muscle', 'emoji.trophy', 'emoji.thumbs', 'emoji.rocket', 'emoji.wave'
+  ]::text[]), false)
+$$;
+
+/**
+ * Typing a message: no longer possible.
  *
- * Contact details are refused rather than filtered, so a child gets a clear
- * "you can't share that here" instead of quietly mangled text. This is a blunt
- * check and it will not catch everything — it is a guard rail, not moderation.
+ * Guild chat is quick chat only, so no child types to a child in another
+ * family. Kept, and refusing, so an older phone that still offers a text box
+ * gets a plain answer ("quick_chat_only") rather than an error.
  */
 create or replace function post_guild_message(p_message_id uuid, p_guild_id uuid, p_kid_id uuid, p_body text)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_clean text := trim(p_body);
 begin
   if not may_act_for_kid(p_kid_id) then raise exception 'not allowed'; end if;
   if not is_guild_member(p_guild_id, p_kid_id) then
     return jsonb_build_object('ok', false, 'reason', 'not_a_member');
   end if;
-  if length(v_clean) = 0 then return jsonb_build_object('ok', false, 'reason', 'empty'); end if;
-  if length(v_clean) > 300 then return jsonb_build_object('ok', false, 'reason', 'too_long'); end if;
+  return jsonb_build_object('ok', false, 'reason', 'quick_chat_only');
+end $$;
 
-  -- Seven or more digits in a row, or an email address, is a contact detail.
-  if v_clean ~ '[0-9][0-9 ()+-]{6,}' or v_clean ~ '[[:alnum:]._%+-]+@[[:alnum:].-]+\.[a-z]{2,}' then
-    return jsonb_build_object('ok', false, 'reason', 'contact_details');
+/**
+ * Sending a quick chat message: its id, never its words.
+ *
+ * Only an id on the list is accepted. At most one every three seconds and
+ * eight a minute per child, counted here, so a guild's chat cannot be
+ * flooded. Sent again with the same message id (a phone that never heard the
+ * answer), it is the same message, not a second one.
+ */
+create or replace function post_quick_chat(p_message_id uuid, p_guild_id uuid, p_kid_id uuid, p_quick_id text)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if not may_act_for_kid(p_kid_id) then raise exception 'not allowed'; end if;
+  if not is_guild_member(p_guild_id, p_kid_id) then
+    return jsonb_build_object('ok', false, 'reason', 'not_a_member');
   end if;
-  if v_clean ~* '(https?://|www\.)' then
-    return jsonb_build_object('ok', false, 'reason', 'link');
+  if not quick_chat_ok(p_quick_id) then
+    return jsonb_build_object('ok', false, 'reason', 'unknown_message');
+  end if;
+  if exists (select 1 from guild_messages where id = p_message_id and kid_id = p_kid_id) then
+    return jsonb_build_object('ok', true);
   end if;
 
-  insert into guild_messages (id, guild_id, kid_id, body)
-  values (p_message_id, p_guild_id, p_kid_id, v_clean)
+  -- One send at a time per child, so two taps at once are counted in turn.
+  perform pg_advisory_xact_lock(hashtext('quick_chat:' || p_kid_id::text));
+  if exists (select 1 from guild_messages where kid_id = p_kid_id and created_at > now() - interval '3 seconds') then
+    return jsonb_build_object('ok', false, 'reason', 'too_fast');
+  end if;
+  if (select count(*) from guild_messages where kid_id = p_kid_id and created_at > now() - interval '1 minute') >= 8 then
+    return jsonb_build_object('ok', false, 'reason', 'slow_down');
+  end if;
+
+  insert into guild_messages (id, guild_id, kid_id, body, quick_id)
+  values (p_message_id, p_guild_id, p_kid_id, '', p_quick_id)
   on conflict (id) do nothing;
   return jsonb_build_object('ok', true);
 end $$;
@@ -410,7 +477,12 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 
-/** Recent chat. Reported messages are withheld from everyone but a parent. */
+/**
+ * Recent chat: quick messages only, as ids each phone shows in words.
+ * Reported messages are withheld from everyone but a parent, and so are the
+ * free-text messages from before quick chat: nobody can check them again,
+ * and showing them would keep typed words between families on screen.
+ */
 create or replace function guild_messages_for(p_guild_id uuid, p_kid_id uuid, p_limit int default 50)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
@@ -425,10 +497,10 @@ begin
     from (
       select jsonb_build_object(
         'id', gm.id, 'kid_id', gm.kid_id, 'author', k.name,
-        'body', gm.body, 'at', gm.created_at, 'mine', gm.kid_id = p_kid_id
+        'quick_id', gm.quick_id, 'at', gm.created_at, 'mine', gm.kid_id = p_kid_id
       ) as m
       from guild_messages gm join kids k on k.id = gm.kid_id
-      where gm.guild_id = p_guild_id and gm.flagged = false
+      where gm.guild_id = p_guild_id and gm.flagged = false and gm.quick_id is not null
       order by gm.created_at desc
       limit least(greatest(p_limit, 1), 100)
     ) recent), '[]'::jsonb));
@@ -471,7 +543,7 @@ begin
 
   return coalesce((
     select jsonb_agg(jsonb_build_object(
-      'id', gm.id, 'guild_name', g.name, 'author', k.name, 'body', gm.body,
+      'id', gm.id, 'guild_name', g.name, 'author', k.name, 'body', gm.body, 'quick_id', gm.quick_id,
       'at', gm.created_at, 'reported_at', gm.reported_at,
       -- What a parent needs to act on it: whose guild, and which child.
       'guild_id', gm.guild_id, 'kid_id', gm.kid_id,
@@ -572,6 +644,8 @@ grant execute on function leave_guild(uuid, uuid) to anon, authenticated;
 grant execute on function block_guild_member(uuid, uuid) to authenticated;
 grant execute on function guild_roster(uuid, uuid) to anon, authenticated;
 grant execute on function post_guild_message(uuid, uuid, uuid, text) to anon, authenticated;
+grant execute on function post_quick_chat(uuid, uuid, uuid, text) to anon, authenticated;
+revoke execute on function quick_chat_ok(text) from public, anon, authenticated;
 grant execute on function report_guild_message(uuid, uuid) to anon, authenticated;
 grant execute on function guild_messages_for(uuid, uuid, int) to anon, authenticated;
 grant execute on function pending_guild_requests() to authenticated;

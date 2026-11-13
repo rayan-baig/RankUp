@@ -15,6 +15,7 @@ import BadgeShelf from '../../components/BadgeShelf.jsx'
 import { activityFeed } from '../../lib/activity.js'
 import { MAX_KID_THEMES } from '../../data/themeGenesis.js'
 import { choreCounts } from '../../lib/prune.js'
+import LeaderboardCard from '../../components/LeaderboardCard.jsx'
 
 export default function KidProfile() {
   const { state, dispatch } = useApp()
@@ -135,6 +136,8 @@ export default function KidProfile() {
           ))}
         </div>
       </Card>
+
+      <LeaderboardCard kid={kid} demo={Boolean(state.demo)} />
 
       {/* Above the avatar forms on purpose: this is the part with a next step
           in it, and the part a child will come back to look at. */}

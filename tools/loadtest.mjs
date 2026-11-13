@@ -470,6 +470,14 @@ const JOBS = [
   ['settle_alliances (last month)', `select length(settle_alliances(date_trunc('month', now() - interval '1 month')::date)::text)`],
   ['settle_school_month (last month)', `select length(settle_school_month(date_trunc('month', now() - interval '1 month')::date)::text)`],
   ['run_retention', 'select run_retention()'],
+  // Every second child in Arena (inside the rolled-back transaction), then
+  // the leaderboard job ranks them all on every board.
+  ['refresh_leaderboards (half the children in Arena)',
+    `insert into leaderboard_profiles (kid_id, family_id, mode, nickname, arena_since)
+       select id, family_id, case when row_number() over (order by id) % 2 = 0 then 'arena' else 'adventure' end,
+              leaderboard_random_nickname(), now() from kids on conflict (kid_id) do nothing;
+     insert into leaderboard_families (family_id, country) select id, 'GB' from families on conflict (family_id) do nothing;
+     select refresh_leaderboards()`],
   ['usage_counts', 'select usage_counts()'],
 ]
 

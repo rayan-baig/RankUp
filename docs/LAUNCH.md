@@ -164,6 +164,7 @@ family.
 - [ ] `supabase/charity.sql`
 - [ ] `supabase/alliances.sql`
 - [ ] `supabase/schools.sql`
+- [ ] `supabase/leaderboards.sql`
 - [ ] `supabase/reminders.sql`
 - [ ] `supabase/digests.sql`
 - [ ] `supabase/referrals.sql`
@@ -228,11 +229,12 @@ Set `CRON_SECRET` (section 4) to a long random string. Each job is one HTTP
 request with the header `Authorization: Bearer <CRON_SECRET>`. They accept GET
 or POST, because schedulers differ on which they send.
 
-Six jobs:
+Seven jobs:
 
 | Job | How often | What breaks without it |
 |---|---|---|
 | `/api/send-reminders` | every 15 minutes | Daily reminders never arrive |
+| `/api/refresh-leaderboards` | every 10 minutes | The leaderboards stop moving: a child in Arena never appears on them, and every board shows the last run's places (weekly and monthly boards still empty at their reset) |
 | `/api/send-digests` | hourly | The weekly digest never goes out |
 | `/api/send-trial-emails` | hourly | No email three days before a free trial ends, or on the day, and no error report to `ERRORS_EMAIL`. Needs `EMAIL_API_KEY` and `EMAIL_FROM` ([EMAILS.md](EMAILS.md)) |
 | `/api/run-retention` | daily | Old activity piles up, and a deleted family's Stripe cancellation that failed is never retried |
@@ -248,7 +250,7 @@ the header itself once `CRON_SECRET` is set in the project. Nothing else to do.
 
 **On Cloudflare Pages there is no scheduler.** Pages Functions cannot be run on a
 timer, so these will never fire by themselves. Either point any outside scheduler
-(a cron service, GitHub Actions on a schedule) at the six addresses with the
+(a cron service, GitHub Actions on a schedule) at the seven addresses with the
 header, or deploy a small separate Worker with Cron Triggers that calls them. A
 starting point for that Worker (not part of this repository, and not tested
 here):
@@ -256,9 +258,10 @@ here):
 ```js
 // A separate Worker. Its wrangler.toml needs:
 //   [triggers]
-//   crons = ["*/15 * * * *", "5 * * * *", "35 * * * *", "20 3 * * *", "40 4 2 * *"]
+//   crons = ["*/10 * * * *", "*/15 * * * *", "5 * * * *", "35 * * * *", "20 3 * * *", "40 4 2 * *"]
 // and two settings: SITE (https://rankup.<your domain>) and CRON_SECRET (the same value).
 const JOBS = {
+  '*/10 * * * *': ['refresh-leaderboards'],
   '*/15 * * * *': ['send-reminders'],
   '5 * * * *': ['send-digests'],
   '35 * * * *': ['send-trial-emails'],
@@ -412,7 +415,7 @@ every phone downloads. A secret in a `VITE_` name is a published secret.
 | `VITE_STRIPE_ENABLED` | `true` to switch billing on | No |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe's secret key and the webhook's signing secret | **Yes** |
 | `STRIPE_PRICE_*` | The price ids from section 3 | No |
-| `CRON_SECRET` | One long random string (`openssl rand -hex 32`) that protects all six scheduled jobs and the detailed health check | **Yes** |
+| `CRON_SECRET` | One long random string (`openssl rand -hex 32`) that protects all seven scheduled jobs and the detailed health check | **Yes** |
 | `EMAIL_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | The email provider's API key, who RankUp's own emails are from (`RankUp <no-reply@rankup.<your domain>>`), and an optional support address for replies. RankUp's own emails use them: the trial reminders, a school's month, the error report ([EMAILS.md](EMAILS.md)). Without the first two, `/api/send-trial-emails` sends nothing and the health check says so. Leave `EMAIL_API_BASE` unset: it is for the tests | Key: **yes** |
 | `ERRORS_EMAIL` | Optional. One inbox for the error report: new crashes on phones and errors in the server functions, from the hourly email job, each error at most once an hour and at most 20 reports a day, with no name, email or family id in it ([EMAILS.md](EMAILS.md#rankups-own-the-error-report)) | No |
 | `SUPPORT_EMAIL` | Optional. The support address the app shows under Settings → Help & about and on both help pages, built in when the app is built; the emails use it too when `EMAIL_REPLY_TO` is unset. Without it, the contact email in `src/data/legalText.js` once filled in (section 5) | No |
@@ -502,7 +505,18 @@ The app is built so there is little to be responsible for:
   taps Accept. There is no photograph of a child or a home on any RankUp server.
 - **Guilds are off by default.** Child-to-child contact across families is the
   heaviest obligation in the product and nobody subscribes for it. Leave
-  `VITE_GUILDS_ENABLED` unset for launch.
+  `VITE_GUILDS_ENABLED` unset for launch. If you do switch them on, guild chat
+  is tap-to-send only (0.13.0): children pick from a fixed list of messages and
+  nobody can type to anybody, which makes them much safer than they were. The
+  decision is still yours.
+- **Leaderboards start private.** Every child is in **Adventure**: on no public
+  board. A child is on the worldwide and country boards only once a parent
+  switches on **Arena** for them, in Parent Mode → Settings → Leaderboards,
+  after reading what it shows. There, strangers see a nickname built from word
+  lists, a flag and numbers, nothing more; a parent or the child can switch back
+  to Adventure at any time, and that takes effect at once. Nothing to switch on
+  for launch, but schedule `/api/refresh-leaderboards` (section 2b), and tell
+  the lawyer about Arena (section 8).
 
 That leaves a first name, chore history and XP. Still children's data, still
 covered by COPPA, but a far smaller thing to defend.
@@ -523,8 +537,11 @@ Free things worth doing first, either way:
 - [ ] One paid consultation with a solicitor or attorney who knows children's
       apps. Take [LEGAL.md](LEGAL.md), `src/data/legalText.js` and this list.
 - [ ] Ask specifically: is the consent method enough where you are; guild chat
-      between children in different families; is age verification needed
-      beyond a parent's word.
+      between children in different families (now ready-made messages only);
+      is age verification needed beyond a parent's word; and whether a parent's
+      Arena switch is enough consent for a child's nickname and numbers on
+      public leaderboards, or the consent notice should be reissued for it
+      (docs/LEGAL.md).
 - [ ] Register with the ICO if you are in the UK.
 - [ ] Have them check the privacy policy and terms: an honest draft written
       from what the code does, not a lawyer's document.
@@ -561,7 +578,7 @@ Say so honestly when you launch.
 | **Notifications on a child's phone** | Only a parent's phone has the switch, so "Accepted!" and "Back on your list" reach no phone yet; the child sees them on opening RankUp. See [NOTIFICATIONS.md](NOTIFICATIONS.md). |
 | **A real phone receiving a push** | Proven against a stand-in push service, not yet a real one. Section 6. |
 | **Forgot password** | No screen; you send a reset link from the Supabase dashboard (section 2a). |
-| **Guilds** | Built and tested, switched off. Turn on with `VITE_GUILDS_ENABLED=true` once you are ready for child-to-child contact and the moderation it needs. |
+| **Guilds** | Built and tested, switched off. Chat is tap-to-send only, with no typing. Turn on with `VITE_GUILDS_ENABLED=true` once you are ready for children in different families to be in one guild, and to look at what they report. |
 
 The full list, in order: [ROADMAP.md](ROADMAP.md).
 

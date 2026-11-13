@@ -888,6 +888,7 @@ declare
   v_coins  int;
   v_streak numeric;
   v_bonus  int;
+  v_base_xp int;
 begin
   select * into v_sub from submissions where id = p_submission_id;
   if not found then return null; end if;
@@ -928,6 +929,10 @@ begin
     v_xp := v_xp + round(v_xp * v_streak);
   end if;
 
+  -- What it is worth without the Elite boost: the leaderboards rank on this
+  -- (supabase/leaderboards.sql), so a plan cannot buy a place on them.
+  v_base_xp := v_xp;
+
   if v_tier = 'elite' then
     v_xp := v_xp + round(v_xp * 0.5::numeric);
   end if;
@@ -945,11 +950,12 @@ begin
     end;
     if v_bonus > 0 then
       v_xp    := v_xp + v_bonus;
+      v_base_xp := v_base_xp + v_bonus;
       v_coins := v_coins + greatest(1, round(v_bonus / 5.0));
     end if;
   end if;
 
-  return jsonb_build_object('xp', v_xp, 'coins', v_coins);
+  return jsonb_build_object('xp', v_xp, 'coins', v_coins, 'base_xp', v_base_xp);
 end $$;
 
 revoke execute on function award_for_submission(uuid, text) from public, anon, authenticated;
@@ -1078,7 +1084,8 @@ begin
                      ('proud','spotless','fast','effort','kind','above','funny','thanks')
                    then p_sticker else null end,
          awarded_xp = v_xp,
-         awarded_coins = v_coins
+         awarded_coins = v_coins,
+         base_xp = coalesce((v_award->>'base_xp')::int, v_xp)
    where id = p_submission_id;
 
   update quests set status = 'approved', completed_at = now() where id = v_sub.quest_id;
@@ -1121,7 +1128,8 @@ begin
 
   insert into events (family_id, kid_id, type, meta)
   values (v_sub.family_id, v_sub.kid_id, 'quest_approved',
-          jsonb_build_object('questId', v_sub.quest_id, 'xp', v_xp, 'coins', v_coins));
+          jsonb_build_object('questId', v_sub.quest_id, 'xp', v_xp, 'coins', v_coins,
+                             'base_xp', coalesce((v_award->>'base_xp')::int, v_xp)));
 
   -- The chore's cash value, if it has one. Same tap as the XP, so the two can
   -- never disagree about whether it was approved. Cannot fail an approval;
@@ -1538,6 +1546,14 @@ alter table submissions drop constraint if exists submissions_history_note_size;
 alter table submissions add constraint submissions_history_note_size check (length(history_note) <= 300);
 
 /*
+ * The leaderboards (supabase/leaderboards.sql, 0.13.0). What an accepted chore
+ * was worth before the Elite boost, written by approve_submission, so no
+ * leaderboard can be bought; and the longest streak a child has had.
+ */
+alter table submissions add column if not exists base_xp int;
+alter table kids add column if not exists streak_best int not null default 0;
+
+/*
  * A submission's verdict, and when it was given, belong to the functions that
  * give it: approve_submission and reject_submission, which stamp the time
  * themselves. The update policy above lets a parent's browser write any column
@@ -1564,6 +1580,7 @@ begin
     new.decided_at    := old.decided_at;
     new.awarded_xp    := old.awarded_xp;
     new.awarded_coins := old.awarded_coins;
+    new.base_xp       := old.base_xp;
     -- What the child sent.
     new.note             := old.note;
     new.elapsed_ms       := old.elapsed_ms;
@@ -1600,7 +1617,9 @@ begin
     new.streak_count := 0; new.streak_last_day := null; new.streak_freezes := 1;
     new.play_tokens := 0; new.game_day := null; new.game_coins_today := 0;
     new.best_scores := '{}'::jsonb; new.skins := '[]'::jsonb; new.last_login_bonus := null;
+    new.streak_best := 0;
   else
+    new.streak_best := old.streak_best;
     new.xp := old.xp; new.coins := old.coins;
     new.streak_count := old.streak_count; new.streak_last_day := old.streak_last_day;
     new.streak_freezes := old.streak_freezes;
@@ -1614,6 +1633,23 @@ end $$;
 drop trigger if exists kids_guard_balances on kids;
 create trigger kids_guard_balances before insert or update on kids
   for each row execute function guard_kid_balances();
+
+/*
+ * The longest streak a child has had, for the "Longest streak" leaderboard.
+ * Kept here, beside the streak, because nothing else remembers a streak once
+ * it resets. Runs after kids_guard_balances (triggers fire by name), so a
+ * browser's copy of either number has already been put back.
+ */
+create or replace function keep_streak_best() returns trigger
+language plpgsql as $$
+begin
+  new.streak_best := greatest(coalesce(new.streak_best, 0), coalesce(new.streak_count, 0));
+  return new;
+end $$;
+
+drop trigger if exists kids_streak_best on kids;
+create trigger kids_streak_best before insert or update on kids
+  for each row execute function keep_streak_best();
 
 /** A child may mark a parent's note read, and change nothing else about it. */
 create or replace function guard_note_edits() returns trigger

@@ -30,6 +30,7 @@ const ROUTES = {
   'create-checkout': () => import('../../api/create-checkout.js'),
   'delete-account': () => import('../../api/delete-account.js'),
   health: () => import('../../api/health.js'),
+  'refresh-leaderboards': () => import('../../api/refresh-leaderboards.js'),
   'run-retention': () => import('../../api/run-retention.js'),
   'send-push': () => import('../../api/send-push.js'),
   'send-digests': () => import('../../api/send-digests.js'),

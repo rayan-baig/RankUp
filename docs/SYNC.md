@@ -214,6 +214,17 @@ the names. The rest is the server's:
 phone, a child's phone and another family) and `tests/themeswitch.mjs` check
 these.
 
+### Leaderboards and guild chat do not travel through sync
+
+Neither is in the outbox or the 8-second pull. A child's mode (Adventure or
+Arena), nickname and country, the boards, and guild chat are asked of the
+server when the screen opens (`src/lib/leaderboards.js`, `src/lib/guilds.js`),
+because they span families and every number on them is the server's: a
+phone never sends a score. The boards are ranked every ten minutes by
+`/api/refresh-leaderboards`; switching back to Adventure, changing a
+nickname or deleting a child takes effect on the boards at once. With no
+backend the phone shows its own family board, worked out on the phone.
+
 ### Two parents editing one chore: the edit history
 
 Each phone sends only the fields it changed, so two parents changing different

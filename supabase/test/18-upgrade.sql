@@ -141,7 +141,11 @@ begin
                              'billing_cancellations', 'school_month_emails',
                              'server_errors', 'error_report_kinds', 'error_report_sends', 'usage_daily',
                              -- Themes sent for a Season: the operator's page reads them, nobody else.
-                             'theme_submissions');
+                             'theme_submissions',
+                             -- The leaderboards: read through leaderboard_board and
+                             -- written by refresh_leaderboards (leaderboards.sql).
+                             'leaderboard_profiles', 'leaderboard_families', 'leaderboard_kid_stats',
+                             'leaderboard_ranks', 'leaderboard_runs');
   perform ok('no table is left locked with no policy at all', coalesce(bare, '') = '',
              'bare: ' || coalesce(bare, ''));
 end $$;

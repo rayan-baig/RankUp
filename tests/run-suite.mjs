@@ -56,6 +56,8 @@ const SUITES = {
     { file: 'installcard.mjs' },
     { file: 'oldbrowsers.mjs' },
     { file: 'genesiswords.mjs' },
+    { file: 'leaderboardwords.mjs' },
+    { file: 'quickchat.mjs' },
   ],
   // The app in a real browser, against the dev server on :5173 and the mock
   // API on :54321 (supabase/test/up.sh starts both).
@@ -72,6 +74,7 @@ const SUITES = {
     { file: 'moments.mjs', weight: 20 },
     { file: 'themeswitch.mjs', weight: 15 },
     { file: 'genesis.mjs', weight: 45 },
+    { file: 'leaderboards.mjs', weight: 40 },
     { file: 'screens.mjs', weight: 40 },
     { file: 'lookaround.mjs', weight: 27 },
     { file: 'motion.mjs', weight: 14 },

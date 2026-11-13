@@ -1,10 +1,24 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useApp, useKid, useElite } from '../../state/AppContext.jsx'
 import { guilds, guildError } from '../../lib/guilds.js'
 import { levelFromXp, formatXp } from '../../lib/xp.js'
 import { relativeTime } from '../../lib/dates.js'
 import { Screen, Card, Button, SectionTitle, ProgressBar, Banner, TextInput, Chip, EmptyState } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
+import QuickChat from '../../components/QuickChat.jsx'
+import { quickChatText, isQuickEmoji } from '../../data/quickChat.js'
+
+/*
+ * Children muted on this phone: their messages are not shown here. Per child,
+ * on this phone only; a parent still sees anything reported.
+ */
+const muteKey = (kidId) => `rankup:guild-muted:${kidId}`
+function readMuted(kidId) {
+  try { const v = JSON.parse(localStorage.getItem(muteKey(kidId)) || '[]'); return Array.isArray(v) ? v : [] } catch { return [] }
+}
+function writeMuted(kidId, list) {
+  try { localStorage.setItem(muteKey(kidId), JSON.stringify(list)) } catch { /* private window */ }
+}
 
 /**
  * The guild, for real.
@@ -13,6 +27,11 @@ import { navigate } from '../../lib/router.js'
  * a request rather than an action: it does not take effect until a parent on
  * each side has agreed. Until then this screen says so plainly rather than
  * showing a roster that is not yet real.
+ *
+ * Chat is quick chat only: a child taps a ready-made message and its id is
+ * sent, never words (src/data/quickChat.js, post_quick_chat). There is no
+ * text box anywhere in a child's guild, so no child types to a child in
+ * another family. Report and Mute stay on every message.
  */
 export default function KidGuild() {
   const { dispatch } = useApp()
@@ -20,7 +39,8 @@ export default function KidGuild() {
   const elite = useElite()
   const [state, setState] = useState({ loading: true })
   const [code, setCode] = useState('')
-  const [message, setMessage] = useState('')
+  const [muted, setMuted] = useState(() => (kid ? readMuted(kid.id) : []))
+  const chatBox = useRef(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -50,6 +70,12 @@ export default function KidGuild() {
       messages: chat.messages || [],
     })
   }, [kid])
+
+  // The newest message in view, as in any chat.
+  const newest = state.messages?.[state.messages.length - 1]?.id
+  useEffect(() => {
+    if (chatBox.current) chatBox.current.scrollTop = chatBox.current.scrollHeight
+  }, [newest])
 
   useEffect(() => {
     load()
@@ -162,6 +188,7 @@ export default function KidGuild() {
   }
 
   /* ---------- a real guild ---------- */
+  const visible = (state.messages || []).filter((m) => !muted.includes(m.kid_id))
   const weeklyXp = (state.members || []).reduce((sum, m) => sum + (m.weekly_xp || 0), 0)
   const goal = state.guild.weekly_goal_xp || 1500
   const capacity = state.guild.capacity || 5
@@ -239,45 +266,56 @@ export default function KidGuild() {
 
       <SectionTitle>Guild chat</SectionTitle>
       <Card className="mb-3">
-        <Banner tone="info" icon="🛡️" title="Everyone can see this">
-          No phone numbers, addresses or links. Tap Report on anything that feels wrong and a
-          grown-up will see it.
+        <Banner tone="info" icon="🛡️" title="Tap-to-send chat">
+          Pick a message to cheer your team on. Nobody can type here, so nobody can ask where you
+          live. Tap Report on anything that feels wrong and a grown-up will see it.
         </Banner>
 
-        <div className="max-h-60 overflow-y-auto my-3 space-y-2">
-          {(state.messages || []).length === 0 && <p className="text-sm text-muted">No messages yet.</p>}
-          {(state.messages || []).map((m) => (
-            <div key={m.id} className="card-flat p-2.5">
+        <div ref={chatBox} className="max-h-60 overflow-y-auto my-3 space-y-2" data-testid="guild-messages">
+          {visible.length === 0 && <p className="text-sm text-muted">No messages yet. Say hello!</p>}
+          {visible.map((m) => (
+            <div key={m.id} className="card-flat p-2.5" data-quick-id={m.quick_id}
+                 style={m.mine ? { borderColor: 'color-mix(in srgb, var(--accent) 50%, var(--line))' } : undefined}>
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>
                   {m.mine ? 'You' : m.author}
                 </span>
                 <span className="text-[10px] text-muted">{relativeTime(Date.parse(m.at))}</span>
               </div>
-              <p className="text-sm">{m.body}</p>
+              <p className={isQuickEmoji(m.quick_id) ? 'text-3xl leading-tight' : 'text-sm font-semibold'}>
+                {quickChatText(m.quick_id)}
+              </p>
               {!m.mine && (
-                <button type="button" className="text-[10px] underline text-muted mt-1 disabled:opacity-50"
-                        disabled={busy} onClick={() => act(() => guilds.report(m.id, kid.id))}>
-                  Report
-                </button>
+                <div className="flex gap-3 mt-1">
+                  <button type="button" className="text-[10px] underline text-muted disabled:opacity-50"
+                          disabled={busy} onClick={() => act(() => guilds.report(m.id, kid.id))}>
+                    Report
+                  </button>
+                  <button type="button" className="text-[10px] underline text-muted"
+                          onClick={() => { const next = [...new Set([...muted, m.kid_id])]; setMuted(next); writeMuted(kid.id, next) }}>
+                    Mute {m.author}
+                  </button>
+                </div>
               )}
             </div>
           ))}
         </div>
+        {muted.length > 0 && (
+          <button type="button" className="text-[11px] underline text-muted mb-2"
+                  onClick={() => { setMuted([]); writeMuted(kid.id, []) }}>
+            {muted.length === 1 ? '1 guild-mate muted on this phone' : `${muted.length} guild-mates muted on this phone`} · Unmute
+          </button>
+        )}
 
         {error && <p className="text-sm mb-2" style={{ color: 'var(--bad)' }} role="alert">{error}</p>}
-        <div className="flex gap-2">
-          <TextInput value={message} onChange={(e) => { setMessage(e.target.value); setError('') }}
-                     placeholder="Say something…" maxLength={300}
-                     onKeyDown={(e) => { if (e.key === 'Enter' && message.trim()) {
-                       act(() => guilds.post(state.guild.id, kid.id, message.trim())).then((r) => r.ok && setMessage(''))
-                     } }} />
-          <Button className="px-4" disabled={!message.trim() || busy}
-                  onClick={() => act(() => guilds.post(state.guild.id, kid.id, message.trim()))
-                    .then((r) => r.ok && setMessage(''))}>
-            Send
-          </Button>
-        </div>
+        <QuickChat kidId={kid.id} disabled={busy}
+          onSend={async (quickId) => {
+            setError('')
+            const result = await guilds.postQuick(state.guild.id, kid.id, quickId)
+            if (!result.ok) { setError(guildError(result.reason)); return false }
+            await load()
+            return true
+          }} />
       </Card>
 
       <Button variant="ghost" className="w-full" disabled={busy}

@@ -4,6 +4,7 @@ import { guilds, guildError } from '../../lib/guilds.js'
 import { relativeTime } from '../../lib/dates.js'
 import { Screen, Card, Button, SectionTitle, Banner, TextInput, Select, Field, Chip, EmptyState } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
+import { quickChatText } from '../../data/quickChat.js'
 
 /**
  * The parent's side of guilds.
@@ -171,7 +172,10 @@ export default function ParentGuilds() {
               <div className="text-xs text-muted mb-1">
                 {m.author} in {m.guild_name} · reported {relativeTime(Date.parse(m.reported_at))}
               </div>
-              <p className="text-sm">“{m.body}”</p>
+              {/* A quick chat message is an id, shown in the words every phone has;
+                  one typed before quick chat is shown as it was typed. */}
+              <p className="text-sm">“{m.quick_id ? quickChatText(m.quick_id) : m.body}”</p>
+              {!m.quick_id && <p className="text-[11px] text-muted">Typed before guild chat became tap-to-send.</p>}
               {m.we_own_the_guild && !m.is_our_kid && (
                 m.author_blocked ? (
                   <p className="text-xs text-muted mt-2">{m.author} is blocked from {m.guild_name}.</p>

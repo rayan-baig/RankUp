@@ -237,6 +237,7 @@ Block Craft at 125 becomes **The Nether Portal**; at 250, **The End**; at 399,
 │  stripe-webhook · send-push · send-reminders                │
 │  send-digests · settle-alliances · run-retention · health   │
 │  school-checkout · settle-schools · operator-schools        │
+│  refresh-leaderboards · operator-themes · stats · …         │
 └────────────────────────────────────────────────────────────┘
 ```
 

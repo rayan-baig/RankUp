@@ -17,6 +17,8 @@ import { PickedNotice } from '../../components/KidThemesParent.jsx'
 import { useKidSchool } from './useKidSchool.js'
 import { familyGoalProgress } from '../../state/reducer.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
+import ModeBadge, { useLeaderboardMe } from '../../components/ModeBadge.jsx'
+import ArenaMoment from '../../components/ArenaMoment.jsx'
 
 export default function KidHome() {
   const { state, dispatch } = useApp()
@@ -25,6 +27,7 @@ export default function KidHome() {
   const elite = useElite()
   const [levelPop, setLevelPop] = useState(false)
   const school = useKidSchool(kid)
+  const [me] = useLeaderboardMe(kid, Boolean(state.demo))
 
   if (!kid) return null
 
@@ -86,6 +89,7 @@ export default function KidHome() {
 
       <SyncBadge />
       <SeasonMoment />
+      <ArenaMoment kidId={kid.id} me={me} />
       <PickedNotice who="kid" />
 
       {/* The header card: who you are and how far along you are. */}
@@ -132,6 +136,7 @@ export default function KidHome() {
         </div>
 
         <div className="flex flex-wrap gap-1.5 mt-3">
+            <ModeBadge mode={me?.mode || 'adventure'} onClick={() => navigate('/kid/leaderboards')} />
             <Chip tone="var(--accent)">Form {tier} / {tiersFor(theme).length}</Chip>
             {nextTier && <Chip>Next form at level {nextTier}</Chip>}
             {/* When, never what: a world nobody has reached is a secret. */}
@@ -244,6 +249,23 @@ export default function KidHome() {
           <span className="text-xs text-muted">Watch again ▶</span>
         </button>
       )}
+
+      <button
+        type="button"
+        onClick={() => navigate('/kid/leaderboards')}
+        data-testid="open-leaderboards"
+        className="card w-full mb-3 p-3 flex items-center gap-3 text-left transition-transform active:scale-[0.98]"
+        style={{ borderColor: me?.mode === 'arena' ? '#f05a28' : 'color-mix(in srgb, var(--accent) 45%, var(--line))' }}
+      >
+        <span className="text-2xl shrink-0" aria-hidden="true">🏆</span>
+        <span className="flex-1 min-w-0">
+          <span className="block font-semibold text-sm">Leaderboards</span>
+          <span className="block text-xs text-muted truncate">
+            {me?.mode === 'arena' ? `Racing the world as ${me.nickname}` : 'Chores, XP, streaks, arcade scores and more'}
+          </span>
+        </span>
+        <span aria-hidden="true" className="text-muted">›</span>
+      </button>
 
       {school && (
         <button

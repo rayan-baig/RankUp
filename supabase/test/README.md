@@ -94,6 +94,26 @@ count holds a day, a name and a number, nothing that could point at a
 family; the last 30 days come back whole, to the server only; anybody can
 count a help page view and do nothing else; kept 400 days.
 
+`51-leaderboards.sql` — every child starts in Adventure and only a parent
+switches on Arena; a child who is not in Arena is in no stored ranking and in
+nothing any caller is sent, however much they did; boards rank by period and
+scope on a fixed clock and empty at Monday 00:00 and the 1st (UTC), with ties
+sharing a place; 200 chores in a day count 8 and a 9,999 XP chore counts 200;
+the Elite boost buys nothing; nicknames only from the word lists (every pair
+through the rude-word filter), once a week; the country only from its list;
+a guild is on a public board only by a made-up team name and only while all
+its children are in Arena; back to Adventure, deleting a child and
+withdrawing consent each take a child off at once.
+
+`52-quick-chat.sql` — guild chat: only ids on the list are accepted, stored
+with no words; a lost answer sent again is one message; one every three
+seconds and eight a minute; messages typed before quick chat are not shown
+to children.
+
+`53-leaderboard-load.sql` — 2,000 families and 4,000 children: the job ranks
+them in well under its limit (about a second on a laptop), no Adventure child
+is ranked, and opening a worldwide board reads one stored page.
+
 `refusals.mjs` (`npm run test:refusals`) — reads every
 `jsonb_build_object('ok', false, 'reason', ...)` out of the SQL files, applies
 them to a scratch database with each one marked so it raises a notice naming

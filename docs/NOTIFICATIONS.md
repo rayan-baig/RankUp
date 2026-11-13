@@ -278,6 +278,16 @@ revoking from only one side leaves them callable with the anon key
 
 ---
 
+## Leaderboards and quick chat send nothing
+
+The leaderboards (0.13.0) and guild quick chat send no notification of any
+kind: no "you moved up", no "someone overtook you", no push for a guild
+message. A child sees them when they open RankUp. That is deliberate: a
+nudge to come back and check a ranking is exactly the kind of engagement
+mechanic the UK Children's Code asks a service to justify. "Enter the
+Arena", when a parent switches Arena on, is a moment on the child's own
+screen the next time they open the app, not a notification.
+
 ## What does not happen yet
 
 - **A child's phone never gets a push.** Only Parent Settings has the

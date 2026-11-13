@@ -204,10 +204,8 @@ begin
     submit_quest(gen_random_uuid(), '38f00000-0000-4000-8000-000000000002', '38c00000-0000-4000-8000-000000000001'), 'not_open');
   perform pg_temp.refused('"I did it!" again while one is still waiting: already_pending',
     submit_quest(gen_random_uuid(), '38f00000-0000-4000-8000-000000000003', '38c00000-0000-4000-8000-000000000001'), 'already_pending');
-  perform pg_temp.refused('a blank guild message: empty',
-    post_guild_message(gen_random_uuid(), '38d00000-0000-4000-8000-000000000001', '38c00000-0000-4000-8000-000000000001', '   '), 'empty');
-  perform pg_temp.refused('a guild message over 300 characters: too_long',
-    post_guild_message(gen_random_uuid(), '38d00000-0000-4000-8000-000000000001', '38c00000-0000-4000-8000-000000000001', repeat('a', 301)), 'too_long');
+  perform pg_temp.refused('a typed guild message: quick_chat_only',
+    post_guild_message(gen_random_uuid(), '38d00000-0000-4000-8000-000000000001', '38c00000-0000-4000-8000-000000000001', 'hello'), 'quick_chat_only');
 end $$;
 
 -- ---------- a guild with no seat left ----------

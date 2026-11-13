@@ -46,6 +46,7 @@ const KidProfile = lazyLoad(() => import('./screens/kid/KidProfile.jsx'))
 const KidStory = lazyLoad(() => import('./screens/kid/KidStory.jsx'))
 const KidDragon = lazyLoad(() => import('./screens/kid/KidDragon.jsx'))
 const KidSchool = lazyLoad(() => import('./screens/kid/KidSchool.jsx'))
+const KidLeaderboards = lazyLoad(() => import('./screens/kid/KidLeaderboards.jsx'))
 const ThemeGenesis = lazyLoad(() => import('./screens/kid/ThemeGenesis.jsx'))
 const ParentApprovals = lazyLoad(() => import('./screens/parent/ParentApprovals.jsx'))
 const ParentAssign = lazyLoad(() => import('./screens/parent/ParentAssign.jsx'))
@@ -59,6 +60,7 @@ const OperatorSchools = lazyLoad(() => import('./screens/OperatorSchools.jsx'))
 const SchoolHelp = lazyLoad(() => import('./screens/SchoolHelp.jsx'))
 const LegalDoc = lazyLoad(() => import('./screens/LegalDoc.jsx'))
 const ParentGuilds = lazyLoad(() => import('./screens/parent/ParentGuilds.jsx'))
+const ParentLeaderboards = lazyLoad(() => import('./screens/parent/ParentLeaderboards.jsx'))
 const ParentPairKid = lazyLoad(() => import('./screens/parent/ParentPairKid.jsx'))
 const ParentPlan = lazyLoad(() => import('./screens/parent/ParentPlan.jsx'))
 const ParentSettings = lazyLoad(() => import('./screens/parent/ParentSettings.jsx'))
@@ -403,6 +405,7 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route.startsWith('/kid/story/')) return <KidStory chapter={route.replace('/kid/story/', '')} />
   if (route === '/kid/dragon') return <KidDragon />
   if (route === '/kid/school') return <KidSchool />
+  if (route === '/kid/leaderboards') return <KidLeaderboards />
   if (route === '/kid/genesis') return <ThemeGenesis key={fullPath} kidId={activeKid?.id} editId={queryParam(fullPath, 'edit')} area="kid" />
 
   if (route === '/parent') return <ParentDashboard />
@@ -414,6 +417,7 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route === '/parent/alliance') return <ParentAlliance />
   if (route === '/parent/school') return <ParentSchool />
   if (route === '/parent/guilds') return guildsEnabled() ? <ParentGuilds /> : <ParentDashboard />
+  if (route === '/parent/leaderboards') return <ParentLeaderboards />
   if (route === '/parent/pair') return <ParentPairKid />
   if (route === '/parent/plan') return <ParentPlan />
   if (route === '/parent/settings') return <ParentSettings />

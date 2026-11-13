@@ -14,8 +14,8 @@ this order, or `psql -f` it.
 
 ```
 schema.sql  sync.sql  coparents.sql  allowance.sql  guilds.sql  notifications.sql
-consent.sql  billing.sql  charity.sql  alliances.sql  schools.sql  reminders.sql
-digests.sql  referrals.sql  retention.sql  crashes.sql  health.sql
+consent.sql  billing.sql  charity.sql  alliances.sql  schools.sql  leaderboards.sql
+reminders.sql  digests.sql  referrals.sql  retention.sql  crashes.sql  health.sql
 ```
 
 Every one of them is safe to run again over a live database, and that IS the upgrade
@@ -31,8 +31,16 @@ change to the order: re-running the three files is the upgrade.
 0.12.0 added `kid_brands_ok` (server only) and the brand check in
 `submit_kid_theme`, and the new patterns and mascots to `kid_theme_design_ok`,
 all in `sync.sql`: re-running it is the upgrade.
+0.13.0 added a file, `leaderboards.sql`, run after `schools.sql` (the
+leaderboards, Adventure and Arena, and the job `refresh_leaderboards`), and
+changed `schema.sql` (`submissions.base_xp`, `kids.streak_best`, what
+`award_for_submission` and `approve_submission` store), `guilds.sql` (quick
+chat: `quick_chat_ok`, `post_quick_chat`, free text refused), `schools.sql`
+(`school_daily_chores`), `consent.sql` (the leaderboards in "Download my
+data") and `health.sql` (the new job). Re-run every file in the order above,
+then schedule `/api/refresh-leaderboards` (docs/LAUNCH.md).
 
-`supabase/test/run.sh` applies all seventeen files twice, over a database with rows in it,
+`supabase/test/run.sh` applies all eighteen files twice, over a database with rows in it,
 and `supabase/test/18-upgrade.sql` then checks that the data survived and that the later
 columns and constraints really arrived. So "safe to re-run" is a tested claim rather
 than an intention.

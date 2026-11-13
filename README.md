@@ -134,5 +134,5 @@ domain) is listed in [LAUNCH.md, section 1a](docs/LAUNCH.md#1a-the-address-ranku
 | [docs/IF-SOMETHING-BREAKS.md](docs/IF-SOMETHING-BREAKS.md) | What each health signal means, and the first thing to do |
 | [docs/BACKUPS.md](docs/BACKUPS.md) | Backups, and how to practise a restore |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | What is left, in order |
-| [docs/GAME-DESIGN.md](docs/GAME-DESIGN.md) | XP curve, themes, tiers, guilds |
+| [docs/GAME-DESIGN.md](docs/GAME-DESIGN.md) | XP curve, themes, tiers, guilds and quick chat, leaderboards (Adventure and Arena) |
 | [tests/README.md](tests/README.md) | What each test suite covers and how to run it |

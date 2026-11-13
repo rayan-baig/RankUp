@@ -71,8 +71,19 @@ on both. It needs the local backend running — see
 
 **`guilds.mjs`** runs two unrelated families side by side and proves the rule
 that makes guilds safe to ship: a child does not join until a parent on each
-side has agreed. One parent approving alone is not enough. It also checks the
-contact-detail guard and that a normal message crosses families.
+side has agreed. One parent approving alone is not enough. It also checks
+that chat is tap-to-send only (no text box, nothing typed stored) and that a
+quick message crosses families in words.
+
+**`leaderboards.mjs`** is Adventure and Arena in the app: a new child is in
+Adventure with no public board offered; a parent reads what Arena shows,
+picks the country and switches it on; the child sees "Enter the Arena" once,
+then the worldwide board's podium, their own place, the country board and
+the highest-level board, with no real name anywhere; the nickname builder
+has no text box and works once a week; back to Adventure from the child's
+own phone takes them off at once. `leaderboardwords.mjs` and `quickchat.mjs`
+(static) hold the word lists, countries, boards and quick chat library to
+the database's copies and the rude-word filter.
 
 **`rewardraces.mjs`** runs the app's own reducer as two phones against a real
 Postgres, over two connections at once: the same reward bought on both while
