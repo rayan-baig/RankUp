@@ -114,6 +114,15 @@ to children.
 them in well under its limit (about a second on a laptop), no Adventure child
 is ranked, and opening a worldwide board reads one stored page.
 
+`54-referral-rewards.sql` — bring a friend: the inviting family's free month is
+earned on the invited family's first paid invoice only (not a $0 one), once,
+never for the same family, parent email or Stripe customer, at most 12 a year;
+a Starter family's month is banked until it subscribes; a refund or dispute of
+that first payment within 14 days withdraws an unused month (and one arriving
+before its invoice blocks it); a parent sees counts only, a child nothing; the
+download holds no other family; every function that gives or takes a month
+is the server's alone.
+
 `refusals.mjs` (`npm run test:refusals`) — reads every
 `jsonb_build_object('ok', false, 'reason', ...)` out of the SQL files, applies
 them to a scratch database with each one marked so it raises a notice naming

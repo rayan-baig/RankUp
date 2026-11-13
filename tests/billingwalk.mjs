@@ -19,6 +19,14 @@
  *     whether a second child can be added (Starter is one child)
  * and, for a school, whether it is in the league for its students.
  *
+ * Then "bring a friend": a family invites another, which pays, and the
+ * inviting family gets one free month as credit on its Stripe account,
+ * exactly once however often Stripe sends the invoice; nothing for a trial,
+ * a $0 invoice or a failed one; nothing for the same household or past the
+ * cap; a refund within 14 days taking an unused month back; a dispute that
+ * arrives before its invoice; and a Starter family's month banked until it
+ * subscribes.
+ *
  * Needs the Cloudflare stack up:  supabase/test/up.sh --cf
  */
 import http from 'node:http'
@@ -37,6 +45,7 @@ const { reducer, effectiveTier } = await import('../src/state/reducer.js')
 const { createInitialState, TIERS } = await import('../src/state/initialState.js')
 const { billingNotice, dashboardBillingNotice, planDate } = await import('../src/lib/billing.js')
 const { schoolBillingNotice } = await import('../src/lib/schools.js')
+const { inviteSummary, rewardNotice } = await import('../src/lib/referrals.js')
 
 const BASE = process.env.API_BASE || 'http://localhost:8788'
 const MOCK = process.env.MOCK_URL || 'http://localhost:54321'
@@ -59,13 +68,40 @@ await db.connect()
 
 const calls = []
 const subs = new Map()
+// Customer balance: every credit and debit made, and what each idempotency
+// key was answered with, as Stripe keeps them. A key sent again gets the
+// first answer and moves no money.
+const balanceTxns = []
+const answered = new Map()
+const charges = new Map()
+const invoicePayments = new Map()
+const balanceOf = (customer) => balanceTxns.filter((t) => t.customer === customer).reduce((n, t) => n + t.amount, 0)
 const stripeStandIn = http.createServer((req, res) => {
   let raw = ''
   req.on('data', (c) => { raw += c })
   req.on('end', () => {
     const url = new URL(req.url, 'http://stripe.test')
-    calls.push({ method: req.method, path: url.pathname, params: new URLSearchParams(raw) })
+    calls.push({ method: req.method, path: url.pathname, params: new URLSearchParams(raw), key: req.headers['idempotency-key'] })
     const send = (code, body) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)) }
+    const balance = url.pathname.match(/^\/v1\/customers\/([^/]+)\/balance_transactions$/)
+    if (balance && req.method === 'POST') {
+      const key = req.headers['idempotency-key']
+      if (key && answered.has(key)) return send(200, answered.get(key))
+      const p = new URLSearchParams(raw)
+      const txn = { id: `cbtxn_walk_${balanceTxns.length + 1}`, object: 'customer_balance_transaction', customer: balance[1],
+        amount: Number(p.get('amount')), currency: p.get('currency'), description: p.get('description'),
+        metadata: Object.fromEntries([...p].filter(([k]) => k.startsWith('metadata['))) }
+      balanceTxns.push(txn)
+      if (key) answered.set(key, txn)
+      return send(200, txn)
+    }
+    const customer = url.pathname.match(/^\/v1\/customers\/([^/]+)$/)
+    if (customer && req.method === 'GET') return send(200, { id: customer[1], object: 'customer', balance: balanceOf(customer[1]) })
+    const charge = url.pathname.match(/^\/v1\/charges\/([^/]+)$/)
+    if (charge && charges.has(charge[1])) return send(200, charges.get(charge[1]))
+    if (url.pathname === '/v1/invoice_payments' && req.method === 'GET') {
+      return send(200, { object: 'list', data: invoicePayments.get(url.searchParams.get('invoice')) || [], has_more: false })
+    }
     if (url.pathname === '/v1/checkout/sessions') return send(200, { id: `cs_walk_${calls.length}`, object: 'checkout.session', url: `https://checkout.stripe.test/${calls.length}` })
     if (url.pathname === '/v1/billing_portal/sessions') return send(200, { id: 'bps_walk', object: 'billing_portal.session', url: 'https://billing.stripe.test/walk' })
     if (url.pathname === '/v1/subscriptions' && req.method === 'GET') {
@@ -368,6 +404,270 @@ console.log('\n=== 6. Subscribe again, for a year ===')
   await webhook(event('year_resumed', 'customer.subscription.updated', subs.get(YEARLY)))
   f = await family()
   ok('changing their mind takes the notice away', f.plan === null && f.row.tier === 'elite', JSON.stringify(f.plan))
+}
+
+/* ------------------------------------------------------------------ */
+/* Bring a friend: a free month when the family you invited pays       */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Families, each with a parent; the referrer also has a child's phone. Ids
+ * are fixed and removed first, so the walk can run again on the same
+ * database. Customers and subscriptions carry this run's suffix.
+ */
+const R = (n) => `b19a0000-0000-4000-8000-${String(n).padStart(12, '0')}`
+const RU = (n) => `b19b0000-0000-4000-8000-${String(n).padStart(12, '0')}`
+const REF = { n: 1, email: 'walk-ref-inviter@example.com' }        // pays for Elite monthly
+const FRIEND = { n: 2, email: 'walk-ref-friend@example.com' }      // invited by REF; trial, then Standard
+const TWIN = { n: 3, email: 'walk-ref-inviter+twin@example.com' }  // REF's own parent, a second family
+const SAMECARD = { n: 4, email: 'walk-ref-samecard@example.com' }  // invited by REF; pays with REF's customer
+const REF2 = { n: 5, email: 'walk-ref-yearly@example.com' }        // pays for Elite yearly
+const FRIEND2 = { n: 6, email: 'walk-ref-friend-two@example.com' } // invited by REF2; refunded within 14 days
+const FRIEND3 = { n: 7, email: 'walk-ref-friend-three@example.com' } // invited by REF2; disputed before its invoice
+const STARTER = { n: 8, email: 'walk-ref-starter@example.com' }    // on Starter
+const FRIEND4 = { n: 9, email: 'walk-ref-friend-four@example.com' } // invited by STARTER
+const CAPPED = { n: 10, email: 'walk-ref-capped@example.com' }     // invited by REF after its twelfth month
+const REF_KID_PHONE = 'b19c0000-0000-4000-8000-000000000001'
+const ALL_REF = [REF, FRIEND, TWIN, SAMECARD, REF2, FRIEND2, FRIEND3, STARTER, FRIEND4, CAPPED]
+// Earlier free months for REF this year, for the cap: families 20-30.
+const EARLIER = Array.from({ length: 11 }, (_, i) => 20 + i)
+
+await db.query('delete from families where id = any($1::uuid[])', [[...ALL_REF.map((f) => R(f.n)), ...EARLIER.map(R)]])
+await db.query('delete from auth.users where id = any($1::uuid[])', [[...ALL_REF.map((f) => RU(f.n)), ...EARLIER.map(RU), REF_KID_PHONE]])
+for (const f of ALL_REF) {
+  f.id = R(f.n)
+  f.user = RU(f.n)
+  f.customer = `cus_walk_ref${f.n}_${RUN}`
+  f.sub = `sub_walk_ref${f.n}_${RUN}`
+  await db.query('insert into auth.users (id, email) values ($1, $2)', [f.user, f.email])
+  await db.query(`insert into families (id, name, tier) values ($1, $2, 'starter')`, [f.id, `Walk Referral Household ${f.n}`])
+  await db.query(`insert into parents (user_id, family_id, name, role) values ($1, $2, $3, 'parent')`, [f.user, f.id, `Walk Referral Parent ${f.n}`])
+}
+await db.query('select seed_consent($1, $2)', [REF.id, REF.user])
+await db.query('insert into auth.users (id) values ($1)', [REF_KID_PHONE])
+await db.query(`insert into kids (family_id, user_id, name) values ($1, $2, 'Walk Referral Kid')`, [REF.id, REF_KID_PHONE])
+
+const PRICES = {
+  elite_month: { id: 'price_test_elite_month', unit_amount: 1599, currency: 'usd', recurring: { interval: 'month', interval_count: 1 } },
+  elite_year: { id: 'price_test_elite_year', unit_amount: 15990, currency: 'usd', recurring: { interval: 'year', interval_count: 1 } },
+  standard_month: { id: 'price_test_standard_only', unit_amount: 999, currency: 'usd', recurring: { interval: 'month', interval_count: 1 } },
+}
+const refSub = (f, status, price, { customer = f.customer, extra = {} } = {}) => ({
+  id: f.sub, object: 'subscription', status, customer, currency: 'usd',
+  metadata: { family_id: f.id, tier: price.id.includes('elite') ? 'elite' : 'standard', cycle: price.recurring.interval },
+  items: { data: [{ id: `si_${f.sub}`, current_period_end: clock + 30 * DAY, price }] },
+  ...extra,
+})
+const refInvoice = (f, id, amount, { customer = f.customer, extra = {} } = {}) => ({
+  id: `in_ref_${id}_${RUN}`, object: 'invoice', customer, amount_paid: amount, currency: 'usd', status: 'paid',
+  parent: { subscription_details: { subscription: f.sub, metadata: { family_id: f.id } } },
+  ...extra,
+})
+/** A family starts a plan: the checkout and the subscription, as Stripe sends them. */
+async function subscribe(f, status, price, opts = {}) {
+  subs.set(f.sub, refSub(f, status, price, opts))
+  const a = await webhook(event(`ref_checkout_${f.n}`, 'checkout.session.completed', {
+    id: `cs_walk_ref${f.n}_${RUN}`, object: 'checkout.session', mode: 'subscription', payment_status: status === 'trialing' ? 'no_payment_required' : 'paid',
+    customer: opts.customer || f.customer, subscription: f.sub, client_reference_id: f.id, metadata: { family_id: f.id } }))
+  const created = event(`ref_created_${f.n}`, 'customer.subscription.created', subs.get(f.sub))
+  const b = await webhook(created)
+  return { answers: [a, b], created }
+}
+const creditsTo = (customer) => balanceTxns.filter((t) => t.customer === customer && t.amount < 0)
+const reward = async (f) => (await db.query('select * from referrals where invited_family_id = $1', [f.id])).rows[0]
+const claim = async (f, code) => rpcAs('claim_referral', f.user, { p_code: code })
+
+console.log('\n=== Bring a friend 1. The inviting family pays; a friend joins with its code ===')
+let refCode
+{
+  const paying = await subscribe(REF, 'active', PRICES.elite_month)
+  await webhook(event('ref1_paid', 'invoice.paid', refInvoice(REF, 'ref1_first', 1599)))
+  ok('the inviting family is on Elite, paid monthly', paying.answers.every((a) => a.status === 200)
+    && (await db.query('select tier from families where id = $1', [REF.id])).rows[0].tier === 'elite')
+  const mine = await rpcAs('my_referrals', REF.user)
+  refCode = mine.code
+  ok('its parent has a code, and nobody has joined yet', /^[A-Z2-9]{6}$/.test(refCode || '') && mine.claimed === 0
+    && inviteSummary(mine).joined === null && rewardNotice(mine) === null, JSON.stringify(mine))
+  const joined = await claim(FRIEND, refCode)
+  ok('a friend\'s family joins with it', joined.ok === true, JSON.stringify(joined))
+  const twin = await claim(TWIN, refCode)
+  ok('the same parent\'s second family (the same email with a +tag) cannot use it',
+    twin.ok === false && twin.reason === 'same_household', JSON.stringify(twin))
+  ok('a family with the same card account joins (it is caught when it pays)', (await claim(SAMECARD, refCode)).ok === true)
+}
+
+console.log('\n=== Bring a friend 2. A trial, a $0 invoice and a failed payment earn nothing ===')
+{
+  // Days left on the in-app trial carry onto the card: Stripe's trial, with a $0 first invoice.
+  await subscribe(FRIEND, 'trialing', PRICES.standard_month)
+  const zero = refInvoice(FRIEND, 'trial', 0, { extra: { billing_reason: 'subscription_create' } })
+  const z1 = await webhook(event('friend_trial_paid', 'invoice.paid', zero))
+  const z2 = await webhook(event('friend_trial_succeeded', 'invoice.payment_succeeded', zero))
+  ok('the trial\'s $0 invoice is answered and earns nothing', z1.status === 200 && z2.status === 200
+    && creditsTo(REF.customer).length === 0 && !(await reward(FRIEND)).paid_invoice, JSON.stringify([z1, z2]))
+  // The trial ends and the card is declined.
+  const failed = await webhook(event('friend_failed', 'invoice.payment_failed',
+    refInvoice(FRIEND, 'declined', 0, { extra: { status: 'open', amount_due: 999 } })))
+  subs.set(FRIEND.sub, refSub(FRIEND, 'past_due', PRICES.standard_month))
+  await webhook(event('friend_past_due', 'customer.subscription.updated', subs.get(FRIEND.sub)))
+  ok('a failed payment earns nothing', failed.status === 200 && creditsTo(REF.customer).length === 0
+    && !(await reward(FRIEND)).reward_state, JSON.stringify(failed))
+}
+
+console.log('\n=== Bring a friend 3. The friend\'s first invoice is paid: one free month, once ===')
+{
+  // The card is updated and Stripe takes the payment. On this API version the
+  // invoice names no payment; it is listed under invoice_payments.
+  const first = refInvoice(FRIEND, 'first', 999)
+  invoicePayments.set(first.id, [{ id: `inpay_${RUN}`, object: 'invoice_payment', invoice: first.id, status: 'paid',
+    payment: { type: 'payment_intent', payment_intent: `pi_ref_friend_${RUN}` } }])
+  subs.set(FRIEND.sub, refSub(FRIEND, 'active', PRICES.standard_month))
+  const paidEvent = event('friend_paid', 'invoice.paid', first)
+  // Stripe does not deliver in order: the payment before the subscription says active.
+  const a = await webhook(paidEvent)
+  const b = await webhook(event('friend_succeeded', 'invoice.payment_succeeded', first))
+  await webhook(event('friend_active', 'customer.subscription.updated', subs.get(FRIEND.sub)))
+  const replay = await webhook(paidEvent)
+  const credits = creditsTo(REF.customer)
+  ok('the inviting family gets one credit, however often Stripe sends it', a.status === 200 && b.status === 200
+    && replay.status === 200 && credits.length === 1, JSON.stringify(credits))
+  ok('worth one month of the plan it pays for (Elite, monthly: 15.99), not the friend\'s plan',
+    credits[0]?.amount === -1599 && credits[0]?.currency === 'usd', JSON.stringify(credits[0]))
+  ok('and it says nothing about the friend\'s family to Stripe', !JSON.stringify(credits[0]).includes(FRIEND.id)
+    && Object.keys(credits[0]?.metadata || {}).length === 0, JSON.stringify(credits[0]))
+  ok('the credit was asked for once, with an idempotency key naming the referral',
+    calls.filter((c) => c.path === `/v1/customers/${REF.customer}/balance_transactions`).length === 1
+    && calls.find((c) => c.path === `/v1/customers/${REF.customer}/balance_transactions`)?.key === `referral-reward:${FRIEND.id}`)
+  const r = await reward(FRIEND)
+  ok('the database has it applied, with the invoice and the payment it was paid with', r.reward_state === 'applied'
+    && r.paid_invoice === first.id && r.paid_refs.includes(`pi_ref_friend_${RUN}`) && r.reward_amount === 1599
+    && r.reward_tier === 'elite' && r.reward_cycle === 'month', JSON.stringify(r))
+  ok('Stripe\'s answer says a free month was given', a.body.referral === 'owed', JSON.stringify(a.body))
+
+  // A month later the friend renews.
+  await webhook(event('friend_renewed', 'invoice.paid', refInvoice(FRIEND, 'renewal', 999)))
+  ok('the friend\'s next invoice gives nothing more: one reward per family', creditsTo(REF.customer).length === 1)
+}
+
+console.log('\n=== Bring a friend 4. What the inviting parent sees, and the child does not ===')
+{
+  const mine = await rpcAs('my_referrals', REF.user)
+  const summary = inviteSummary(mine)
+  ok('the card counts the families who joined and pay', mine.claimed === 2 && mine.paying === 1
+    && summary.joined === '2 families joined with your code, 1 pays for a plan.', JSON.stringify(mine))
+  ok('and the free month earned', mine.earned === 1 && summary.rewards.some((x) => x.id === 'earned' && /1 free month earned/.test(x.text)),
+    JSON.stringify(summary))
+  const text = JSON.stringify(mine)
+  ok('never another family\'s name, id or email', [FRIEND, SAMECARD, TWIN].every((f) => !text.includes(f.id)
+    && !text.includes(f.email) && !text.includes(`Household ${f.n}`) && !text.includes(f.customer)), text)
+  const notice = rewardNotice(mine)
+  ok('"You earned a free month" is waiting, once', mine.unseen === 1 && notice?.title === 'You earned a free month!'
+    && /next bill/.test(notice.body), JSON.stringify(notice))
+  await rpcAs('see_referral_rewards', REF.user)
+  ok('and once seen, it is gone for the family', rewardNotice(await rpcAs('my_referrals', REF.user)) === null)
+  const kid = await rpcAs('my_referrals', REF_KID_PHONE)
+  ok('the child\'s phone is told nothing about it', kid.ok === false && kid.code === undefined && kid.claimed === undefined, JSON.stringify(kid))
+  const kidSnapshot = JSON.stringify(await rpcAs('family_snapshot', REF_KID_PHONE, { p_since: 0 }))
+  ok('nor does anything about it reach the child\'s phone in its sync', !/referrals|referred|paid_invoice|reward_state|free month|cbtxn/i.test(kidSnapshot))
+}
+
+console.log('\n=== Bring a friend 5. The same card account, and the cap ===')
+{
+  // SAMECARD pays through the inviting family's own Stripe customer.
+  await subscribe(SAMECARD, 'active', PRICES.standard_month, { customer: REF.customer })
+  const before = creditsTo(REF.customer).length
+  await webhook(event('samecard_paid', 'invoice.paid', refInvoice(SAMECARD, 'samecard', 999, { customer: REF.customer })))
+  const r = await reward(SAMECARD)
+  ok('a family paying with the inviter\'s own Stripe customer earns nothing', creditsTo(REF.customer).length === before
+    && r.reward_state === 'blocked' && r.reward_note === 'same_customer', JSON.stringify(r))
+
+  // Eleven more free months for REF this year: with FRIEND's, twelve.
+  for (const n of EARLIER) {
+    await db.query('insert into auth.users (id, email) values ($1, $2)', [RU(n), `walk-ref-earlier-${n}@example.com`])
+    await db.query(`insert into families (id, name) values ($1, $2)`, [R(n), `Walk Referral Earlier ${n}`])
+    await db.query(`insert into referrals (invited_family_id, referrer_family_id, paid_invoice, paid_at, reward_state, reward_at, reward_seen_at)
+                    values ($1, $2, $3, now(), 'applied', now() - interval '30 days', now())`, [R(n), REF.id, `in_ref_earlier_${n}_${RUN}`])
+  }
+  ok('a thirteenth friend can still join', (await claim(CAPPED, refCode)).ok === true)
+  await subscribe(CAPPED, 'active', PRICES.standard_month)
+  await webhook(event('capped_paid', 'invoice.paid', refInvoice(CAPPED, 'capped', 999)))
+  const c = await reward(CAPPED)
+  ok('but twelve free months in a year is the most: the thirteenth earns nothing',
+    creditsTo(REF.customer).length === before && c.reward_state === 'blocked' && c.reward_note === 'cap', JSON.stringify(c))
+  const mine = await rpcAs('my_referrals', REF.user)
+  ok('and the card says so', inviteSummary(mine).rewards.some((x) => x.id === 'cap'), JSON.stringify(inviteSummary(mine)))
+}
+
+console.log('\n=== Bring a friend 6. A refund within 14 days takes an unused month back ===')
+{
+  await subscribe(REF2, 'active', PRICES.elite_year)
+  await webhook(event('ref2_paid', 'invoice.paid', refInvoice(REF2, 'ref2_year', 15990)))
+  const code = (await rpcAs('my_referrals', REF2.user)).code
+  ok('two friends join the yearly family', (await claim(FRIEND2, code)).ok === true && (await claim(FRIEND3, code)).ok === true)
+
+  await subscribe(FRIEND2, 'active', PRICES.standard_month)
+  // The older API shape: the invoice names its charge and payment.
+  const charge = `ch_ref_friend2_${RUN}`
+  const pi = `pi_ref_friend2_${RUN}`
+  await webhook(event('friend2_paid', 'invoice.paid', refInvoice(FRIEND2, 'friend2', 999, { extra: { charge, payment_intent: pi } })))
+  const credits = creditsTo(REF2.customer)
+  ok('a yearly payer\'s free month is a twelfth of its yearly price (159.90 / 12)', credits.length === 1
+    && credits[0].amount === -1333, JSON.stringify(credits))
+  ok('the credit is still on the account, unused', balanceOf(REF2.customer) === -1333)
+
+  const refunded = { id: charge, object: 'charge', customer: FRIEND2.customer, payment_intent: pi, amount: 999,
+    amount_refunded: 999, refunded: true, currency: 'usd', created: clock - 30 }
+  const back = await webhook(event('friend2_refund', 'charge.refunded', refunded))
+  const again = await webhook(event('friend2_refund_again', 'charge.refunded', refunded))
+  const r = await reward(FRIEND2)
+  ok('refunded in full a few days later: the unused month is taken back', back.status === 200 && back.body.referral === 'withdrawn'
+    && r.reward_state === 'withdrawn' && r.reward_note === 'refund_within_14_days' && balanceOf(REF2.customer) === 0, JSON.stringify([back.body, r]))
+  ok('once, though the refund came twice', again.status === 200
+    && balanceTxns.filter((t) => t.customer === REF2.customer && t.amount > 0).length === 1)
+  ok('and the friend\'s own plan stops, as for any refund', (await db.query('select subscription_status from families where id = $1',
+    [FRIEND2.id])).rows[0].subscription_status === 'refunded')
+}
+
+console.log('\n=== Bring a friend 7. A payment disputed before its invoice arrives ===')
+{
+  await subscribe(FRIEND3, 'active', PRICES.standard_month)
+  const charge = `ch_ref_friend3_${RUN}`
+  charges.set(charge, { id: charge, object: 'charge', customer: FRIEND3.customer, payment_intent: `pi_ref_friend3_${RUN}`,
+    amount: 999, created: clock })
+  const before = creditsTo(REF2.customer).length
+  // Stripe does not deliver in order: the dispute names only the charge.
+  const disputed = await webhook(event('friend3_dispute', 'charge.dispute.created', {
+    id: `dp_ref_${RUN}`, object: 'dispute', charge, amount: 999, created: clock }))
+  await webhook(event('friend3_paid', 'invoice.paid', refInvoice(FRIEND3, 'friend3', 999, { extra: { charge } })))
+  const r = await reward(FRIEND3)
+  ok('the disputed payment earns nothing when its invoice turns up', disputed.status === 200
+    && creditsTo(REF2.customer).length === before && r.reward_state === 'blocked' && r.reward_note === 'payment_reversed',
+  JSON.stringify([disputed.body, r]))
+}
+
+console.log('\n=== Bring a friend 8. A family on Starter: its month is banked until it subscribes ===')
+{
+  const code = (await rpcAs('my_referrals', STARTER.user)).code
+  ok('a friend joins the Starter family', (await claim(FRIEND4, code)).ok === true)
+  await subscribe(FRIEND4, 'active', PRICES.standard_month)
+  await webhook(event('friend4_paid', 'invoice.paid', refInvoice(FRIEND4, 'friend4', 999)))
+  let mine = await rpcAs('my_referrals', STARTER.user)
+  ok('the month is banked: nothing to take it off yet, so nothing is sent to Stripe',
+    (await reward(FRIEND4)).reward_state === 'banked' && !calls.some((c) => c.path === `/v1/customers/${STARTER.customer}/balance_transactions`)
+    && (await db.query('select effective_tier($1) as t', [STARTER.id])).rows[0].t === 'starter', JSON.stringify(mine))
+  ok('the card says it is banked, and when it is used', inviteSummary(mine).rewards.some((x) => x.id === 'banked'
+    && /comes off your first bill when you choose a plan/.test(x.text)), JSON.stringify(inviteSummary(mine)))
+  ok('and the notice says so too', /banked/.test(rewardNotice(mine)?.body || ''), JSON.stringify(rewardNotice(mine)))
+
+  // The Starter family subscribes to Standard, monthly.
+  const { created } = await subscribe(STARTER, 'active', PRICES.standard_month)
+  await webhook(created)
+  await webhook(event('starter_paid', 'invoice.paid', refInvoice(STARTER, 'starter_first', 999)))
+  const credits = creditsTo(STARTER.customer)
+  ok('the moment it subscribes, the banked month is credited: one month of the plan it chose',
+    credits.length === 1 && credits[0].amount === -999, JSON.stringify(credits))
+  mine = await rpcAs('my_referrals', STARTER.user)
+  ok('and the card now has it as earned', mine.banked === 0 && mine.earned === 1, JSON.stringify(mine))
 }
 
 /* ------------------------------------------------------------------ */

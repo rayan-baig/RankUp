@@ -84,6 +84,9 @@ Subscribe it to:
 - `invoice.payment_failed` (received and deliberately ignored: the
   subscription's own status change is what moves the plan)
 - `charge.refunded` (a refund: see "Refunds and failed payments" below)
+- `charge.dispute.created` (a chargeback: only takes back a referral's free
+  month, see "Bring a friend" below; the plan follows the subscription's
+  own events)
 
 Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
 
@@ -169,6 +172,92 @@ on its own is `supabase/test/41-billing-walk.sql`.
 When Stripe itself is down, checkout and the billing portal answer
 `stripe_unavailable` within about twenty seconds, and the app says Stripe is
 not answering and that nothing about the plan has changed.
+---
+
+## Bring a friend: a free month
+
+When a family invites a friend's family (its code, in Settings → "Invite a
+family, get a free month") and that family **starts paying**, the inviting
+family gets **one free month of its plan**. The family who joins gets 30 days
+of Standard when its first chore is accepted, as before. The inviting family
+used to get 30 days too for that chore; that is replaced by the free month,
+so one friend is paid for once.
+
+**When it is earned.** On the invited family's first invoice that took money,
+monthly or yearly (`invoice.paid` / `invoice.payment_succeeded` with
+`amount_paid > 0`). A trial's $0 invoice, a failed payment
+(`invoice.payment_failed` never earns anything) and a payment already refunded
+in full or disputed when its invoice arrives do not count. The webhook asks
+`earn_referral_reward` (`supabase/referrals.sql`), which keeps the invoice on
+the referral, so it is decided **once**: Stripe's two events for one payment,
+its retries and the invited family's later invoices all answer `duplicate`.
+
+**How it is given: a customer balance credit.** One month at the price of the
+plan the inviting family pays for, read from its own Stripe subscription (a
+yearly plan gets a twelfth of its yearly price, so $159.90 a year gives
+$13.33), in its currency, as a negative balance transaction on its customer
+(`api/_shared/referralReward.js`). Stripe takes it off the next invoice by
+itself. This is how the Alliance and School League prizes are already paid:
+
+- not a coupon, which takes a percentage off the next invoice, and for a yearly
+  plan would be a free year
+- not a pause or a longer trial on the subscription: subscriptions are made by
+  Checkout and changed only in Stripe's portal, and a credit touches neither
+- the credit carries the idempotency key `referral-reward:<invited family>`,
+  so a replay, a timeout retry or two deliveries at once give one credit. If
+  Stripe fails, the webhook answers 500 and Stripe's retry gives it.
+- nothing about the invited family goes to Stripe: the description is the same
+  words for everyone ("A free month: a family you invited started paying") and
+  there is no metadata
+
+**A family on Starter (or still on its in-app trial)** pays nothing, so there is
+nothing to take a month off. Its month is **banked**: the card says "1 free
+month banked. It comes off your first bill when you choose a plan.", and the
+moment the webhook records its first subscription (`active` or `trialing`), the
+banked month is credited at the price of the plan it chose. It is not turned
+into free Standard time: that is what the joining family gets, and twelve
+Standard months a year would be a free plan for never paying.
+
+**Limits**, all in the database:
+
+| Rule | How |
+|---|---|
+| No self-referral | Not the same family; not a family with a parent whose email is the same (case, spaces and a `+tag` ignored); not a family paying with the inviter's Stripe customer. Checked when the code is claimed (`same_household`) and again when the reward is decided (`blocked`, `same_email` / `same_customer`) |
+| One reward per invited family | The reward lives on the `referrals` row, whose key is the invited family |
+| At most 12 a year | `referral_reward_cap()`: free months earned in the last 365 days. The thirteenth is `blocked`, `cap`, and the card says the family has had the most there is |
+| Refunded within 14 days | `referral_refund_days()`. A full refund (`charge.refunded`) or a dispute (`charge.dispute.created`) of the invited family's first payment within 14 days of it withdraws the month if it is unused: a banked or not-yet-credited month at once; a credited one only if the inviting family's Stripe balance still holds at least that much credit (it is then reversed with a positive balance transaction, key `referral-withdraw:<invited family>`). Already used on an invoice, or refunded later than 14 days: it stays, and `reward_note` says what happened (`refund_within_14_days_credit_used`, `refund_after_14_days`) |
+
+The first payment is recognised by its charge or payment intent (read from the
+invoice, or from Stripe's invoice payments on API versions where the invoice no
+longer names them). A refund or dispute that arrives **before** its invoice is
+remembered, and that invoice then earns nothing. A Flash Ticket pack refund is
+never mistaken for it.
+
+**What families see.** The card in Settings, and a shorter copy on the plan
+screen: the code, how many families joined with it and how many pay, and the
+free months (earned, on the way, banked, taken back). Counts only:
+`my_referrals()` returns no other family's name, id, email or dates, and
+answers a child's phone and a supporter with nothing. "You earned a free
+month" shows once on the parent's dashboard; OK on one phone is seen for the
+family (`see_referral_rewards()`). No email, and nothing on a child's screen.
+"Download my data" includes the family's referrals: whether it joined with a
+code, how many joined with its own, and each free month it earned, never which
+families they were.
+
+**Tests.** `supabase/test/54-referral-rewards.sql` (every rule, the counts, the
+revokes), `tests/billingwalk.mjs` "Bring a friend" (the real webhook under
+workerd against a stand-in Stripe: a trial, a $0 and a failed invoice earn
+nothing; the first paid invoice credits the inviter once, through replays and
+out-of-order events; the same customer and the cap; a refund within 14 days
+reversing the credit; a dispute before its invoice; a Starter family's month
+banked and credited when it subscribes), and `tests/referrals.mjs` (the card,
+the notice once, and no child's screen mentioning it).
+
+Run `supabase/referrals.sql` again on the live database (after `billing.sql`,
+in the documented order), and `consent.sql` (the download), and add
+`charge.dispute.created` to the webhook's events.
+
+---
 
 ## Cancelling and card changes
 

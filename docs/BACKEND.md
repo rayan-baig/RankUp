@@ -28,6 +28,12 @@ Theme Genesis (0.11.0) added to `sync.sql` the tables `kid_themes`,
 `retention.sql` the 90-day clear-out of unpicked submissions, and to
 `consent.sql` the children's themes in "Download my data". No new file and no
 change to the order: re-running the three files is the upgrade.
+
+Bring a friend (0.14.0) added to `referrals.sql` the free month's columns on
+`referrals` and the functions the Stripe webhook calls to decide, bank, credit
+and withdraw it, and to `consent.sql` the referrals in "Download my data". No
+new file and no change to the order (`referrals.sql` already runs after
+`billing.sql`, whose Stripe columns it reads).
 0.12.0 added `kid_brands_ok` (server only) and the brand check in
 `submit_kid_theme`, and the new patterns and mascots to `kid_theme_design_ok`,
 all in `sync.sql`: re-running it is the upgrade.

@@ -146,6 +146,7 @@ export const PRIVACY_POLICY = {
         'Your email address, so you can sign in and we can reach you about your account.',
         'Your name, as you enter it.',
         'Payment details if you subscribe. These are handled entirely by Stripe — we never see or store your card number.',
+        'If your family joins with another family\'s invite code, or a family joins with yours, we record which family invited which, and use it only to give the reward it earns; neither family is shown the other\'s name or email.',
       ],
     },
     {

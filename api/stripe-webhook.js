@@ -24,6 +24,7 @@ import { makeStripe, verifyWebhook } from './_shared/stripe.js'
 import { schoolIdOf, schoolPriceId, schoolCycle } from './_shared/schoolBilling.js'
 import { cancelPendingBilling } from './_shared/cancelBilling.js'
 import { reportError } from './_shared/job.js'
+import { applyReferralRewards, referralInvoicePaid, referralPaymentReversed } from './_shared/referralReward.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -210,6 +211,7 @@ function refundedInFull(charge) {
 }
 
 const LIVE_STATUSES = ['active', 'trialing', 'past_due', 'unpaid', 'incomplete', 'paused']
+const idOf = (value) => (typeof value === 'string' ? value : value?.id) || null
 const customerOf = (object) => (typeof object?.customer === 'string' ? object.customer : object?.customer?.id) || null
 
 /**
@@ -386,6 +388,11 @@ export default async function handler(req, res) {
         // latest is ignored by the database.
         p_event_created: eventTime(event),
       })
+      // A family whose plan is live may have a free month waiting: one banked
+      // while it was on Starter comes due the moment it subscribes.
+      if (['active', 'trialing', 'past_due'].includes(status)) {
+        await applyReferralRewards({ stripe, serviceRpc, familyId, priceTiers: PRICE_TIERS })
+      }
       return res.status(200).json({ received: true })
     }
 
@@ -416,7 +423,20 @@ export default async function handler(req, res) {
           p_currency: String(object.currency || 'gbp').toUpperCase(),
         })
       }
-      return res.status(200).json({ received: true })
+      /*
+       * Bring a friend: the first invoice an invited family pays earns the
+       * family who invited it one free month (supabase/referrals.sql decides,
+       * once; api/_shared/referralReward.js credits it). Only an invoice that
+       * took money: a trial's $0 invoice is not paying, and a failed one never
+       * arrives as invoice.paid.
+       */
+      let referral = null
+      if (familyId && !gone && paid > 0) {
+        referral = await referralInvoicePaid({ stripe, serviceRpc, familyId, invoice: object, event, priceTiers: PRICE_TIERS })
+        // And this family's own months, if it was waiting to pay for them.
+        await applyReferralRewards({ stripe, serviceRpc, familyId, priceTiers: PRICE_TIERS })
+      }
+      return res.status(200).json({ received: true, ...(referral ? { referral } : {}) })
     }
 
     /*
@@ -444,7 +464,46 @@ export default async function handler(req, res) {
         // after this month's was paid leaves the current period standing.
         p_charge_created: object.created ? new Date(object.created * 1000).toISOString() : null,
       })
-      return res.status(200).json({ received: true, refund: result?.kind || result?.tier || result?.ignored || null })
+      // A plan payment handed back in full: if it was an invited family's
+      // first, within 14 days, the free month it earned is withdrawn (unused).
+      // Asked on a replay too: it acts once, and a first try that failed
+      // half way is finished by the retry.
+      let referral = null
+      if (full && result?.kind !== 'tickets') {
+        referral = await referralPaymentReversed({
+          stripe, serviceRpc, familyId, event, kind: 'refund', chargeCreated: object.created,
+          refs: [object.id, idOf(object.payment_intent), idOf(object.invoice)],
+        })
+      }
+      return res.status(200).json({ received: true, refund: result?.kind || result?.tier || result?.ignored || null, ...(referral ? { referral } : {}) })
+    }
+
+    /*
+     * A payment disputed (a chargeback). The plan is left to the subscription
+     * events, as for a failed payment; only a free month earned by that
+     * payment is withdrawn, under the same rules as a refund. A dispute names
+     * the charge, not the customer, so the charge is asked for.
+     */
+    if (event.type === 'charge.dispute.created') {
+      const chargeId = idOf(object.charge)
+      let charge = typeof object.charge === 'object' && object.charge ? object.charge : null
+      if (!charge && chargeId) {
+        // A charge Stripe does not know is nothing to act on; Stripe not
+        // answering is a 500, so the dispute is sent again.
+        try { charge = await stripe.charges.retrieve(chargeId) } catch (err) {
+          if (Number(err?.statusCode) !== 404) throw err
+          charge = null
+        }
+      }
+      const familyId = charge ? await familyIdFor(charge, stripe) : null
+      const gone = familyId ? await goneFamily(stripe, familyId, charge) : { ignored: 'no_family' }
+      if (gone) return res.status(200).json({ received: true, ignored: gone.ignored })
+      const referral = await referralPaymentReversed({
+        stripe, serviceRpc, familyId, event, kind: 'dispute', chargeCreated: charge?.created,
+        refs: [chargeId, idOf(object.payment_intent), idOf(charge?.payment_intent),
+          idOf(charge?.invoice)],
+      })
+      return res.status(200).json({ received: true, ...(referral ? { referral } : {}) })
     }
 
     /*

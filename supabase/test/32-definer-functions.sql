@@ -357,7 +357,14 @@ begin
     'operator_theme_inbox()', 'operator_create_season(integer,text,date)', 'operator_pick_theme(uuid,uuid)',
     'operator_decline_theme(uuid)', 'operator_remove_theme(uuid)', 'kid_theme_gone()', 'season_theme_uncredit()',
     -- The brand check a theme sent for a Season passes (submit_kid_theme asks it).
-    'kid_brands_ok(text)']
+    'kid_brands_ok(text)',
+    -- Referrals: the new family's trial, and the inviting family's free month
+    -- (given, banked, credited and taken back by the Stripe webhook alone).
+    'qualify_referral(uuid)', 'referral_code_for(uuid)', 'referral_same_household(uuid,uuid,text)',
+    'earn_referral_reward(uuid,text,integer,text[],text,timestamptz)', 'referral_rewards_owed(uuid)',
+    'mark_referral_reward_applied(uuid,text,integer,text,text,text)',
+    'referral_payment_reversed(uuid,text[],text,timestamptz,timestamptz)',
+    'finish_referral_withdrawal(uuid,boolean,text,text)', 'export_family_referral_data(uuid)']
   loop
     if to_regprocedure(f) is null then
       v_open := v_open || (f || ' (no longer exists — update this list)');

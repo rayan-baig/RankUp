@@ -5,6 +5,19 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.14.0 — 2026-11-13
+
+Invite a family, get a free month.
+
+- When a family invites a friend's family and that family starts paying, the inviting family gets one free month of its plan. It is earned on the invited family's first paid invoice, monthly or yearly; a trial's $0 invoice, a failed payment and a payment refunded or disputed before its invoice is counted earn nothing. The family who joins still gets 30 days of Standard when its first chore is accepted; the inviting family no longer gets 30 days for that chore, since the free month replaces it.
+- The month is a credit on the inviting family's Stripe account worth one month of the plan it pays for (a yearly plan: a twelfth of the yearly price), taken off its next bill by Stripe. Given once, however often Stripe sends or retries the invoice, with an idempotency key; nothing about the other family is sent to Stripe.
+- A family on Starter (or still on its free trial) has its month banked. The card says so, and the month is credited the moment the family subscribes, at the price of the plan it picks.
+- Limits, held by the database: never for the same family, the same parent email (a "+tag" is the same email) or the same Stripe customer; one reward per invited family; at most 12 a year. If the invited family's first payment is refunded in full or disputed within 14 days, an unused free month is taken back (a credited one only if the account still holds it); otherwise it stays and what happened is recorded.
+- Settings has an "Invite a family, get a free month" card, and the plan screen a shorter copy: the code, how many families joined and how many pay, and the free months earned, on the way, banked or taken back. Counts only, never another family's name or email. "You earned a free month" shows once on the parent's dashboard (seen on one phone is seen for the family). No email, and children never see any of it.
+- The privacy policy says in one sentence that a referral records which family invited which, for the reward only. "Download my data" includes the family's referrals and free months, never which families they were. The consent notice is unchanged.
+- The webhook also takes `charge.dispute.created`; add it to the webhook's events in Stripe.
+- SQL: referrals.sql (new columns on `referrals`, and the functions that decide, bank, credit and withdraw the month) and consent.sql (the download). Run every file again on the live database, in the documented order.
+
 ## 0.13.0 — 2026-11-13
 
 Leaderboards, in Adventure and Arena, and guild chat that is tap-to-send only.

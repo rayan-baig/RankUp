@@ -4,6 +4,7 @@ import { effectiveTier, onTrial, trialDaysLeft } from '../../state/reducer.js'
 import { TIERS, TIER_LADDER, PLAN_COMPARISON, ELITE_KID_PERKS, ELITE_PARENT_PERKS } from '../../state/initialState.js'
 import { billingLive, startCheckout, openBillingPortal, fetchBillingStatus, billingError, billingNotice } from '../../lib/billing.js'
 import { Screen, Card, Button, SectionTitle, Banner, Chip, Modal } from '../../components/ui.jsx'
+import InviteCard from '../../components/InviteCard.jsx'
 import { guildsEnabled } from '../../lib/guilds.js'
 import { usd, toCents, priceTag, priceWords, annualSaving, yearlyNote, yearlyOffered, planLines, upgradeReason } from '../../lib/plans.js'
 
@@ -228,6 +229,13 @@ export default function ParentPlan() {
             </Card>
           )
         })}
+      </div>
+
+      {/* Bring a friend: a free month of whichever plan this family pays for,
+          or banked until it chooses one. Only with a backend; never shown
+          in the look-around. */}
+      <div className="mt-4">
+        <InviteCard compact />
       </div>
 
       <SectionTitle>Side by side</SectionTitle>

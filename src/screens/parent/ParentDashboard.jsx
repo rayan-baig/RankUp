@@ -20,6 +20,7 @@ import CharityWeek from '../../components/CharityWeek.jsx'
 import InstallPrompt from '../../components/InstallPrompt.jsx'
 import { dashboardBillingNotice } from '../../lib/billing.js'
 import { PickedNotice } from '../../components/KidThemesParent.jsx'
+import { ReferralRewardNotice } from '../../components/InviteCard.jsx'
 import HowItWorks from '../../components/HowItWorks.jsx'
 import FirstWeek from '../../components/FirstWeek.jsx'
 import DemoTour from '../../components/DemoTour.jsx'
@@ -73,6 +74,7 @@ export default function ParentDashboard() {
       )}
       <CharityWeek />
       <PickedNotice who="parent" />
+      <ReferralRewardNotice />
       <header className="mb-3 flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="text-xs uppercase tracking-widest text-muted">Parent dashboard</p>

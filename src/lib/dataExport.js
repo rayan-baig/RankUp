@@ -58,7 +58,17 @@ export function normaliseExport(payload) {
     kidId: server ? r.kid_id : r.kidId, name: r.name, cost: r.cost, status: r.status,
     asked: server ? r.created_at : r.at, given: server ? r.given_at : r.givenAt,
   }))
+  // Referrals (server only): counts about other families, never who.
+  const refs = p.referrals && typeof p.referrals === 'object' ? p.referrals : null
+  const invites = refs ? {
+    joinedWithCode: Boolean(refs.joined_with_a_code),
+    joined: Number(refs.families_joined_with_your_code) || 0,
+    freeMonths: list(refs.free_months).map((m) => ({
+      decided: m.decided_at, state: m.state, amount: m.amount, currency: m.currency, plan: m.plan,
+    })),
+  } : null
   return {
+    invites,
     familyName: p.family?.name || '',
     exportedAt: p.exported_at || new Date().toISOString(),
     deviceOnly: !server,
@@ -77,6 +87,10 @@ const STATUS = {
   assigned: 'To do', requested: 'Asked for', given: 'Given',
 }
 const status = (s) => STATUS[s] || s || ''
+const INVITE_STATE = {
+  applied: 'On your account', owed: 'On its way', banked: 'Banked until you choose a plan',
+  withdrawn: 'Taken back (their first payment was refunded)', blocked: 'Not given',
+}
 
 /** The readable file: one self-contained HTML page. */
 export function familySummaryHtml(payload) {
@@ -125,6 +139,9 @@ ${table(['Adult', 'Can'], d.parents.map((x) => [x.name, x.role === 'supporter' ?
 <h2>Rewards you set</h2>
 ${table(['Reward', 'Cost'], d.rewards.map((r) => [r.name, r.cost]), 'No rewards set.')}
 ${perKid || '<p class="none">No children on the account.</p>'}
+${d.invites ? `<h2>Invites</h2>
+<p>${escapeHtml(`${d.invites.joinedWithCode ? 'Your family joined with another family\'s invite code. ' : ''}${d.invites.joined} ${d.invites.joined === 1 ? 'family' : 'families'} joined with your code.`)}</p>
+${table(['Decided', 'Free month', 'Worth'], d.invites.freeMonths.map((m) => [when(m.decided), INVITE_STATE[m.state] || m.state || '', m.amount ? `${(m.amount / 100).toFixed(2)} ${String(m.currency || '').toUpperCase()}` : '']), 'No free months earned.')}` : ''}
 ${orphans.length ? `<h2>Earlier history</h2>${table(['Sent', 'Chore', 'Result'], orphans.map((s) => [when(s.sent), questTitle(s.questId), status(s.status)]), '')}` : ''}
 <p class="small">RankUp keeps no photos. ${escapeHtml(PRODUCT_OF)}</p>
 </body>

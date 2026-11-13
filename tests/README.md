@@ -75,6 +75,15 @@ side has agreed. One parent approving alone is not enough. It also checks
 that chat is tap-to-send only (no text box, nothing typed stored) and that a
 quick message crosses families in words.
 
+**`referrals.mjs`** is "Invite a family, get a free month" in the app: the
+card in Settings with the family's code; once families have joined and one
+pays, the card counts them and the free month, with no other family's name or
+email anywhere; "You earned a free month" once on the dashboard, gone after OK
+and a reload; the plan screen's copy; a Starter family's month shown as
+banked; and no child's screen mentioning any of it. The Stripe side is the
+"Bring a friend" part of `billingwalk.mjs`, the rules
+`supabase/test/54-referral-rewards.sql`.
+
 **`leaderboards.mjs`** is Adventure and Arena in the app: a new child is in
 Adventure with no public board offered; a parent reads what Arena shows,
 picks the country and switches it on; the child sees "Enter the Arena" once,

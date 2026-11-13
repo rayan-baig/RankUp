@@ -385,6 +385,8 @@ cancellation still waiting for Stripe is never deleted.
         subscription's own status change is what moves the plan)
       - `charge.refunded` — without it a refunded plan or ticket pack is never
         taken back
+      - `charge.dispute.created` — a disputed first payment takes back the
+        free month it earned the family who invited (bring a friend)
 
       [PAYMENTS.md](PAYMENTS.md) says what each one does to a family.
 - [ ] Stripe → Settings → Billing → **Customer portal**: turn it on. Cancelling

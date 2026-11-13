@@ -87,6 +87,7 @@ const SUITES = {
     { file: 'firstten.mjs', weight: 45 },
     { file: 'notifications.mjs', weight: 19 },
     { file: 'plans.mjs', weight: 25 },
+    { file: 'referrals.mjs', weight: 20 },
     { file: 'arcade.mjs', weight: 86 },
     { file: 'arcade2.mjs', weight: 68 },
     { file: 'arcade3.mjs', weight: 132 },

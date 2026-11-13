@@ -106,6 +106,21 @@ async function withUser(userId, fn, { service = false } = {}) {
   }
 }
 
+/** The arguments of a database function that are arrays (text[] and the like), by name. */
+const arrayArgCache = new Map()
+async function arrayArgsOf(fn) {
+  if (arrayArgCache.has(fn)) return arrayArgCache.get(fn)
+  const { rows } = await pool.query(
+    `select u.name from pg_proc p
+       cross join lateral unnest(p.proargnames[1:coalesce(array_length(p.proargtypes::oid[], 1), 0)],
+                                 p.proargtypes::oid[]) as u(name, type)
+       join pg_type t on t.oid = u.type
+      where p.proname = $1 and t.typcategory = 'A'`, [fn])
+  const names = new Set(rows.map((r) => r.name))
+  arrayArgCache.set(fn, names)
+  return names
+}
+
 const readBody = (req) =>
   new Promise((resolve) => {
     const chunks = []
@@ -135,8 +150,13 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req)
       const names = Object.keys(body)
       const args = names.map((n, i) => `${n} => $${i + 1}`).join(', ')
+      // PostgREST turns a JSON array into a Postgres array for a text[] (or
+      // any array) argument, and into JSON for a jsonb one. So does this: an
+      // array goes as an array only where the function says it takes one.
+      const arrays = await arrayArgsOf(fn)
       const values = names.map((n) => {
         const v = body[n]
+        if (Array.isArray(v) && arrays.has(n)) return v
         return v !== null && typeof v === 'object' ? JSON.stringify(v) : v
       })
 
