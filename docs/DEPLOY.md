@@ -66,34 +66,34 @@ listing in the App Store.
 
 ---
 
-## Custom domain: `rankup.<your domain>`
+## Custom domain: `rankup.mtrxhorizyn.com`
 
-RankUp is a product of MTRX Horizyn. The company has the one domain (not chosen
-yet; `<your domain>` below), and RankUp lives on a **subdomain** of it,
-`rankup.<your domain>`, never on the bare domain or under a path. A subdomain is
+RankUp is a product of MTRX Horizyn. The company has the one domain,
+`mtrxhorizyn.com`, and RankUp lives on a **subdomain** of it,
+`rankup.mtrxhorizyn.com`, never on the bare domain or under a path. A subdomain is
 an origin of its own, so RankUp's storage, sign-in and service worker are its
 own, and nothing on the company's other sites can read them.
 
-1. **DNS.** Where `<your domain>`'s DNS is managed, add a `CNAME` named `rankup`
+1. **DNS.** Where `mtrxhorizyn.com`'s DNS is managed, add a `CNAME` named `rankup`
    pointing at the host: `<your project>.pages.dev` on Cloudflare Pages, or the
    target Vercel shows (`cname.vercel-dns.com` at the time of writing). Just
    this one name; no wildcard.
 2. **The host's custom-domain step.** Cloudflare: Workers & Pages → the project →
-   Custom domains → Set up a custom domain → `rankup.<your domain>` (with the
+   Custom domains → Set up a custom domain → `rankup.mtrxhorizyn.com` (with the
    domain's DNS on Cloudflare it adds the CNAME for you). Vercel: Project →
-   Settings → Domains → add `rankup.<your domain>`. Netlify: Domain management →
+   Settings → Domains → add `rankup.mtrxhorizyn.com`. Netlify: Domain management →
    Add a domain.
 3. **HTTPS.** Each host issues and renews the certificate itself once the CNAME
    resolves, usually within minutes. Wait for it to show as active, then open
-   `https://rankup.<your domain>`.
-4. **`PUBLIC_SITE_URL=https://rankup.<your domain>`** in the host's settings, for
+   `https://rankup.mtrxhorizyn.com`.
+4. **`PUBLIC_SITE_URL=https://rankup.mtrxhorizyn.com`** in the host's settings, for
    payments.
 
 A preview needs nothing more. For a real launch, the rest of what hangs off the
 address (Supabase's Site URL and redirect URLs, the Stripe webhook, the MTRX
 Horizyn console's `RANKUP_URL` and `RANKUP_STATS_URL`, and email sent from
-`no-reply@rankup.<your domain>`) is in
-[LAUNCH.md, section 1a](LAUNCH.md#1a-the-address-rankupyour-domain-half-an-hour-most-of-it-waiting).
+`no-reply@rankup.mtrxhorizyn.com`) is in
+[LAUNCH.md, section 1a](LAUNCH.md#1a-the-address-rankupmtrxhorizyncom-half-an-hour-most-of-it-waiting).
 
 ---
 

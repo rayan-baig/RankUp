@@ -5,6 +5,14 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.15.1 — 2026-11-14
+
+The real address: https://rankup.mtrxhorizyn.com.
+
+- LAUNCH.md, DEPLOY.md, STAGING.md, the email, payment, notification and if-something-breaks guides, the README and `.env.example` name `rankup.mtrxhorizyn.com` (and `mtrxhorizyn.com` for the company's DNS records) instead of a placeholder. `PUBLIC_SITE_URL=https://rankup.mtrxhorizyn.com` is the value to set on Cloudflare Pages; `help@rankup.mtrxhorizyn.com` is the suggested `SUPPORT_EMAIL` and `EMAIL_REPLY_TO`, and `RankUp <no-reply@rankup.mtrxhorizyn.com>` the suggested `EMAIL_FROM`.
+- Code comments and the `_headers` comment say the same. Nothing in the app changed: every address still comes from its setting, and the privacy policy and terms are as they were.
+- No SQL changes.
+
 ## 0.15.0 — 2026-11-14
 
 New plan prices.

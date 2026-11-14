@@ -35,63 +35,63 @@ goes live, set up the second copy in [STAGING.md](STAGING.md).
 - [ ] **Stripe** — [stripe.com](https://stripe.com). It needs business details
       and a bank account, so start early: checking them can take days.
 
-## 1a. The address: `rankup.<your domain>` (half an hour, most of it waiting)
+## 1a. The address: `rankup.mtrxhorizyn.com` (half an hour, most of it waiting)
 
 RankUp is a product of **MTRX Horizyn**. The company has the one domain, and
-RankUp lives on a subdomain of it: `rankup.<your domain>` (`<your domain>` is
-whatever the company's domain turns out to be). The company's console and its
+RankUp lives on a subdomain of it: `rankup.mtrxhorizyn.com` (the company's
+domain is `mtrxhorizyn.com`). The company's console and its
 other products sit beside it as siblings.
 
-A **subdomain, not a path** (`<your domain>/rankup`). A browser keeps cookies,
+A **subdomain, not a path** (`mtrxhorizyn.com/rankup`). A browser keeps cookies,
 `localStorage`, IndexedDB and the service worker per origin, and a subdomain is
 an origin of its own: nothing on a sibling can read a RankUp phone's family
 data, its session or its offline copy. Under a path, every app on the domain
 would share all of it. RankUp keeps it that way from its side: it sets no
-cookie (so none with `Domain=<your domain>`), its functions send no CORS
+cookie (so none with `Domain=mtrxhorizyn.com`), its functions send no CORS
 header, its Content-Security-Policy names no other site of the company, its
 service worker answers only its own origin, and a payment always comes back to
 `PUBLIC_SITE_URL`, whatever a request claims. `tests/isolation.mjs` and
 `tests/api.mjs` check each of these.
 
 - [ ] **Point the subdomain at the host.** At the DNS provider for
-      `<your domain>`, add one record:
+      `mtrxhorizyn.com`, add one record:
 
       | Type | Name | Target |
       |---|---|---|
       | `CNAME` | `rankup` | Cloudflare Pages: `<your project>.pages.dev`. Vercel: the target Vercel shows you, `cname.vercel-dns.com` at the time of writing |
 
-      Only this one name. No wildcard (`*.<your domain>`), and nothing at the
+      Only this one name. No wildcard (`*.mtrxhorizyn.com`), and nothing at the
       bare domain for RankUp: those belong to the company.
 - [ ] **Tell the host the name.** Cloudflare: Workers & Pages → the project →
-      **Custom domains** → **Set up a custom domain** → `rankup.<your domain>`.
+      **Custom domains** → **Set up a custom domain** → `rankup.mtrxhorizyn.com`.
       If the domain's DNS is on Cloudflare it adds the CNAME itself; if not, it
       shows the record to add. Vercel: Project → Settings → **Domains** → add
-      `rankup.<your domain>`.
+      `rankup.mtrxhorizyn.com`.
 - [ ] **HTTPS.** Both hosts issue and renew the certificate themselves once
       the CNAME resolves. Wait until the domain shows as **Active** (Cloudflare)
       or **Valid Configuration** (Vercel), then open
-      `https://rankup.<your domain>`. Phones only install the app, and only
+      `https://rankup.mtrxhorizyn.com`. Phones only install the app, and only
       allow notifications, over https.
-- [ ] **`PUBLIC_SITE_URL=https://rankup.<your domain>`** on the host (section
+- [ ] **`PUBLIC_SITE_URL=https://rankup.mtrxhorizyn.com`** on the host (section
       4), no trailing slash. Every way back from Stripe is built from it.
 - [ ] **Supabase → Authentication → URL Configuration.** Site URL:
-      `https://rankup.<your domain>`. Redirect URLs: `https://rankup.<your domain>/**`
-      only. Not `https://*.<your domain>/**`: a sign-up confirmation or a
+      `https://rankup.mtrxhorizyn.com`. Redirect URLs: `https://rankup.mtrxhorizyn.com/**`
+      only. Not `https://*.mtrxhorizyn.com/**`: a sign-up confirmation or a
       password reset link must never be able to land on a sibling. (A local
       address such as `http://localhost:5173/**` belongs on a test project,
       not the live one.)
 - [ ] **Stripe.** Nothing to type for the way back: checkout returns to
-      `https://rankup.<your domain>/#/parent/plan?checkout=success` (or
+      `https://rankup.mtrxhorizyn.com/#/parent/plan?checkout=success` (or
       `=cancelled`), Flash Tickets to `/#/parent/settings?tickets=…`, a
       school to `/#/school?checkout=…`, all built from `PUBLIC_SITE_URL`. What
       you do set, in section 3: the webhook endpoint
-      `https://rankup.<your domain>/api/stripe-webhook`, and the customer
-      portal's default return link `https://rankup.<your domain>/#/parent/plan`.
+      `https://rankup.mtrxhorizyn.com/api/stripe-webhook`, and the customer
+      portal's default return link `https://rankup.mtrxhorizyn.com/#/parent/plan`.
       Under Settings → **Business → Public details**, the business name is
       **MTRX Horizyn**: it is what checkout pages and card statements show.
 - [ ] **The MTRX Horizyn console.** In the console's settings:
-      `RANKUP_URL=https://rankup.<your domain>` (its **Open app** button) and
-      `RANKUP_STATS_URL=https://rankup.<your domain>/api/stats`, with the
+      `RANKUP_URL=https://rankup.mtrxhorizyn.com` (its **Open app** button) and
+      `RANKUP_STATS_URL=https://rankup.mtrxhorizyn.com/api/stats`, with the
       console's `MTRX_STATS_KEY` the same value as RankUp's `STATS_KEY`. The
       console asks from its server, not from a browser, so RankUp needs no
       CORS for it and has none.
@@ -109,42 +109,43 @@ and only to your own team), so a live project needs its own:
 
 - [ ] An email-sending provider, with the company's domain verified **once**.
       Each product sends from its own address on its own subdomain; RankUp's
-      is **`no-reply@rankup.<your domain>`**, sender name **RankUp**.
+      is **`no-reply@rankup.mtrxhorizyn.com`**, sender name **RankUp**.
 - [ ] Supabase → Authentication → **Emails → SMTP Settings**: the provider's
       SMTP host, port, user and password; sender email
-      `no-reply@rankup.<your domain>`; sender name `RankUp`.
+      `no-reply@rankup.mtrxhorizyn.com`; sender name `RankUp`.
 - [ ] Supabase → Authentication → **Emails → Templates**: paste the words in
       [EMAILS.md](EMAILS.md) (Confirm sign up, Reset password). Each ends with
       the line `RankUp is a product of MTRX Horizyn.`, the same words as the
       privacy policy and terms. The company's name only: no person's name or
       address goes in an email.
 - [ ] The same provider's **API key** for RankUp's own email: `EMAIL_API_KEY`,
-      with `EMAIL_FROM=RankUp <no-reply@rankup.<your domain>>` and, if you
-      like, `EMAIL_REPLY_TO` the company's support address (section 4).
+      with `EMAIL_FROM=RankUp <no-reply@rankup.mtrxhorizyn.com>` and, if you
+      like, `EMAIL_REPLY_TO` the company's support address,
+      `help@rankup.mtrxhorizyn.com` (section 4).
 - [ ] Stripe → Settings → **Customer emails** and **Billing → Subscriptions
       and emails**: the ones to switch on, and the words, are in
       [EMAILS.md](EMAILS.md).
 - [ ] **SPF, DKIM and DMARC, set once on the parent domain**, not per product:
       - **DKIM**: the record(s) the provider gives you, at
-        `<selector>._domainkey.<your domain>`. Mail it signs for
-        `<your domain>` passes DMARC for `rankup.<your domain>` too, because
+        `<selector>._domainkey.mtrxhorizyn.com`. Mail it signs for
+        `mtrxhorizyn.com` passes DMARC for `rankup.mtrxhorizyn.com` too, because
         DMARC's default (relaxed) alignment accepts any subdomain of the
         signing domain.
-      - **SPF**: one TXT record at `<your domain>`,
+      - **SPF**: one TXT record at `mtrxhorizyn.com`,
         `v=spf1 include:<the provider's> ~all` (or the `include:` added to the
         one already there: a name may have only one SPF record). SPF is
         checked against the bounce address, which the provider sets; if it
         asks for a custom bounce domain under
-        `rankup.<your domain>`, add that one record it names.
-      - **DMARC**: one TXT record at `_dmarc.<your domain>`, starting with
+        `rankup.mtrxhorizyn.com`, add that one record it names.
+      - **DMARC**: one TXT record at `_dmarc.mtrxhorizyn.com`, starting with
         `v=DMARC1; p=none; rua=mailto:<a company address for reports>` and
         moving to `p=quarantine` once the reports show only your own mail.
-        Subdomains, `rankup.<your domain>` included, follow it unless an
+        Subdomains, `rankup.mtrxhorizyn.com` included, follow it unless an
         `sp=` tag says otherwise, so no product needs a DMARC record of its
         own.
 - [ ] Send yourself a reset link (Users → Send password recovery) and check,
       in the received message's headers, `spf=pass`, `dkim=pass` and
-      `dmarc=pass`, and that the link opens on `https://rankup.<your domain>`.
+      `dmarc=pass`, and that the link opens on `https://rankup.mtrxhorizyn.com`.
 
 ## 2. Set up the database (about fifteen minutes)
 
@@ -259,7 +260,7 @@ here):
 // A separate Worker. Its wrangler.toml needs:
 //   [triggers]
 //   crons = ["*/10 * * * *", "*/15 * * * *", "5 * * * *", "35 * * * *", "20 3 * * *", "40 4 2 * *"]
-// and two settings: SITE (https://rankup.<your domain>) and CRON_SECRET (the same value).
+// and two settings: SITE (https://rankup.mtrxhorizyn.com) and CRON_SECRET (the same value).
 const JOBS = {
   '*/10 * * * *': ['refresh-leaderboards'],
   '*/15 * * * *': ['send-reminders'],
@@ -305,8 +306,8 @@ Every job records each run, and `/api/health` reports how long each has been
 quiet. Silence is how these fail: no error, just reminders that stop arriving.
 
 ```
-GET https://rankup.<your domain>/api/health                                        -> {"ok":true,"version":"…"}, or 503
-GET https://rankup.<your domain>/api/health  (Authorization: Bearer CRON_SECRET)   -> the detail, 503 if anything is wrong
+GET https://rankup.mtrxhorizyn.com/api/health                                        -> {"ok":true,"version":"…"}, or 503
+GET https://rankup.mtrxhorizyn.com/api/health  (Authorization: Bearer CRON_SECRET)   -> the detail, 503 if anything is wrong
 ```
 
 Point a free uptime monitor at the first. It is public on purpose and says
@@ -388,7 +389,7 @@ cancellation still waiting for Stripe is never deleted.
       message that was meant to upgrade them. How many tickets a pack gives,
       and what each skin costs, are fixed on the server: a buyer cannot pay for
       the small pack and be given the large one.
-- [ ] Stripe → Developers → Webhooks → add `https://rankup.<your domain>/api/stripe-webhook`,
+- [ ] Stripe → Developers → Webhooks → add `https://rankup.mtrxhorizyn.com/api/stripe-webhook`,
       and copy its signing secret. Send it **these events**:
       - `checkout.session.completed`
       - `checkout.session.async_payment_succeeded`
@@ -405,7 +406,7 @@ cancellation still waiting for Stripe is never deleted.
       [PAYMENTS.md](PAYMENTS.md) says what each one does to a family.
 - [ ] Stripe → Settings → Billing → **Customer portal**: turn it on. Cancelling
       and changing cards happen there. Its default return link:
-      `https://rankup.<your domain>/#/parent/plan`.
+      `https://rankup.mtrxhorizyn.com/#/parent/plan`.
 - [ ] Stripe → Settings → Business → **Public details**: the business name
       **MTRX Horizyn**, the company's support email, and a statement
       descriptor that says RankUp (for example `MTRX RANKUP`), so a parent
@@ -425,16 +426,16 @@ every phone downloads. A secret in a `VITE_` name is a published secret.
 |---|---|---|
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | The project's address and public key, for the app. The server functions read the anon key too, when they ask the database something as the signed-in parent, so it must be set on the host, not only in a local file. | No |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | The same address, and the key that bypasses every database rule | **Yes** |
-| `PUBLIC_SITE_URL` | `https://rankup.<your domain>` (section 1a), no trailing slash. Stripe sends people back here; without it checkout and the billing portal refuse to start. The build reads it too: a pasted link's preview picture, `sitemap.xml` and the sitemap line in `robots.txt` need the whole address, and are left out without it. | No |
+| `PUBLIC_SITE_URL` | `https://rankup.mtrxhorizyn.com` (section 1a), no trailing slash. Stripe sends people back here; without it checkout and the billing portal refuse to start. The build reads it too: a pasted link's preview picture, `sitemap.xml` and the sitemap line in `robots.txt` need the whole address, and are left out without it. | No |
 | `VITE_VAPID_PUBLIC_KEY` and `VAPID_PUBLIC_KEY` | The public push key, twice (the app and the server both need it) | No |
-| `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | The private push key, and `mailto:` a company address, e.g. `mailto:no-reply@rankup.<your domain>` | Private key: **yes** |
+| `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | The private push key, and `mailto:` a company address, e.g. `mailto:no-reply@rankup.mtrxhorizyn.com` | Private key: **yes** |
 | `VITE_STRIPE_ENABLED` | `true` to switch billing on | No |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe's secret key and the webhook's signing secret | **Yes** |
 | `STRIPE_PRICE_*` | The price ids from section 3 | No |
 | `CRON_SECRET` | One long random string (`openssl rand -hex 32`) that protects all seven scheduled jobs and the detailed health check | **Yes** |
-| `EMAIL_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | The email provider's API key, who RankUp's own emails are from (`RankUp <no-reply@rankup.<your domain>>`), and an optional support address for replies. RankUp's own emails use them: the trial reminders, a school's month, the error report ([EMAILS.md](EMAILS.md)). Without the first two, `/api/send-trial-emails` sends nothing and the health check says so. Leave `EMAIL_API_BASE` unset: it is for the tests | Key: **yes** |
+| `EMAIL_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | The email provider's API key, who RankUp's own emails are from (`RankUp <no-reply@rankup.mtrxhorizyn.com>`), and an optional support address for replies (`help@rankup.mtrxhorizyn.com`). RankUp's own emails use them: the trial reminders, a school's month, the error report ([EMAILS.md](EMAILS.md)). Without the first two, `/api/send-trial-emails` sends nothing and the health check says so. Leave `EMAIL_API_BASE` unset: it is for the tests | Key: **yes** |
 | `ERRORS_EMAIL` | Optional. One inbox for the error report: new crashes on phones and errors in the server functions, from the hourly email job, each error at most once an hour and at most 20 reports a day, with no name, email or family id in it ([EMAILS.md](EMAILS.md#rankups-own-the-error-report)) | No |
-| `SUPPORT_EMAIL` | Optional. The support address the app shows under Settings → Help & about and on both help pages, built in when the app is built; the emails use it too when `EMAIL_REPLY_TO` is unset. Without it, the contact email in `src/data/legalText.js` once filled in (section 5) | No |
+| `SUPPORT_EMAIL` | Optional. The support address the app shows under Settings → Help & about and on both help pages (`help@rankup.mtrxhorizyn.com`), built in when the app is built; the emails use it too when `EMAIL_REPLY_TO` is unset. Without it, the contact email in `src/data/legalText.js` once filled in (section 5) | No |
 | `OPERATOR_SECRET` | A different long random string: your key to `/#/operator`, where you check each school is real | **Yes** |
 | `STATS_KEY` | Optional. Lets your own console read two counts (families, active families) and the daily usage totals for the last 30 days from `/api/stats`. Unset, that address does not exist. | **Yes** |
 | `VITE_GUILDS_ENABLED` | Leave unset for launch (section 7) | No |
@@ -463,7 +464,7 @@ the phone.
 - [ ] `src/data/legalText.js` → `OPERATOR`. The name is already **MTRX
       Horizyn**: the privacy policy and terms say "RankUp is a product of MTRX
       Horizyn", and "we" means the company. Fill in the company's contact
-      email (an address on `<your domain>`) and its registered postal
+      email (such as `help@rankup.mtrxhorizyn.com`) and its registered postal
       address. The company's, never a person's: this repository and the app
       are public. The app shows a warning banner until both are filled in.
       Once the email is there, both help pages end with "Still stuck? Write
@@ -477,7 +478,7 @@ the phone.
 ## 6. Deploy and check it on real phones
 
 - [ ] Run the SQL files (section 2), then push to GitHub; the host builds it.
-- [ ] Open `https://rankup.<your domain>` on a **real phone**, not a desktop
+- [ ] Open `https://rankup.mtrxhorizyn.com` on a **real phone**, not a desktop
       browser, and add it to the home screen (Share → Add to Home Screen).
 - [ ] Walk the whole loop: sign up → consent → add a child → assign a chore →
       link a second phone with its code → tap "I did it!" on it → Accept → check
@@ -496,7 +497,7 @@ the phone.
 - [ ] Check `GET /api/health` with the secret: every job `ok` once each has had
       a chance to run, `billing_cancellations_overdue` 0.
 - [ ] Read both help pages on the phone: parents' (Settings → Help & about →
-      Help) and schools' (`https://rankup.<your domain>/#/school/help`, also
+      Help) and schools' (`https://rankup.mtrxhorizyn.com/#/school/help`, also
       linked from the School League's page). Every price and number on them
       is read from the code; check they are what you mean to charge.
 - [ ] Sign a test school up at `/#/school` (one form: your account and the
@@ -508,7 +509,7 @@ the phone.
       page views): counts only, with no family in them.
 - [ ] With a test family three days from the end of its free trial, check
       the trial email arrives (and again on the last day), from
-      `no-reply@rankup.<your domain>`. In the database:
+      `no-reply@rankup.mtrxhorizyn.com`. In the database:
       `update families set trial_ends_at = now() + interval '3 days' where name = '<test family>'`,
       then wait for the hourly job.
 

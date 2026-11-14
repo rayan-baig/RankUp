@@ -7,10 +7,10 @@
  * open redirect wearing our branding.
  *
  * PUBLIC_SITE_URL is the authority when it is set, and on a live site it is
- * (https://rankup.<your domain>; docs/LAUNCH.md). Without it, the browser's
+ * (https://rankup.mtrxhorizyn.com; docs/LAUNCH.md). Without it, the browser's
  * Origin header is accepted only when it names this very host, the one the
  * request was sent to. Any other site is refused, and that includes a sibling
- * on the same parent domain: RankUp lives at rankup.<your domain> beside the
+ * on the same parent domain: RankUp lives at rankup.mtrxhorizyn.com beside the
  * company's other sites, and none of them is RankUp. An earlier version took
  * any https Origin when the setting was missing.
  *

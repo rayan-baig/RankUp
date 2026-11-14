@@ -23,7 +23,7 @@ Every email RankUp writes is short, says what the app says in the same words,
 has a plain-text part, says how to get help, and ends with
 `RankUp is a product of MTRX Horizyn.` It never names a child (an email can be
 forwarded) and never a person behind the company. The sender is
-`RankUp <no-reply@rankup.<your domain>>`, set up once with the provider as
+`RankUp <no-reply@rankup.mtrxhorizyn.com>`, set up once with the provider as
 [LAUNCH.md](LAUNCH.md#email-from-the-shared-domain) describes (SPF, DKIM and
 DMARC on the parent domain).
 
@@ -63,7 +63,7 @@ DMARC on the parent domain).
   >
   > To keep Elite Pass, open RankUp and go to Settings, then Your plan.
   >
-  > [See your plan] → `https://rankup.<your domain>/#/parent/plan`
+  > [See your plan] → `https://rankup.mtrxhorizyn.com/#/parent/plan`
   >
   > Need help? Open RankUp, then Settings, Help & about, Help. Or write to
   > `<EMAIL_REPLY_TO>`; a person reads it.
@@ -126,10 +126,10 @@ DMARC on the parent domain).
   >
   > Your plan renews on 14 November 2026.
   >
-  > Open the school page: https://rankup.&lt;your domain&gt;/#/school
+  > Open the school page: https://rankup.mtrxhorizyn.com/#/school
   >
-  > Need help? The school help page is https://rankup.&lt;your domain&gt;/#/school/help.
-  > Or write to help@…; a person reads it.
+  > Need help? The school help page is https://rankup.mtrxhorizyn.com/#/school/help.
+  > Or write to help@rankup.mtrxhorizyn.com; a person reads it.
   >
   > RankUp is a product of MTRX Horizyn.
   > You get this because you run Hill School's School League account. One

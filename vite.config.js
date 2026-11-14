@@ -178,7 +178,7 @@ const APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.met
  * trailing slash — or '' when it is unset or not a real http(s) address.
  *
  * A link preview's picture and a sitemap's addresses must be whole addresses
- * (https://rankup.<your domain>/og-image.png): a relative one is ignored by
+ * (https://rankup.mtrxhorizyn.com/og-image.png): a relative one is ignored by
  * most of the apps a link gets pasted into, or worse, read against their own
  * domain. So with no address to build from, they are left out rather than
  * shipped half-made.

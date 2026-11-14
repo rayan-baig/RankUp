@@ -1,4 +1,4 @@
-# Staging: a second copy at `staging.rankup.<your domain>`
+# Staging: a second copy at `staging.rankup.mtrxhorizyn.com`
 
 A copy of RankUp that nobody's family uses, where a change is tried on real
 phones, against a real Supabase, a real (test-mode) Stripe and a real email
@@ -21,8 +21,8 @@ staging → live (the last section).
       them, in the new project's SQL editor. Then the check there: both
       answers `false`.
 - [ ] **Authentication → URL Configuration.** Site URL
-      `https://staging.rankup.<your domain>`; redirect URLs
-      `https://staging.rankup.<your domain>/**` only. Never live's address
+      `https://staging.rankup.mtrxhorizyn.com`; redirect URLs
+      `https://staging.rankup.mtrxhorizyn.com/**` only. Never live's address
       here, and never staging's on the live project.
 - [ ] **Authentication → Emails.** The same templates as live
       ([EMAILS.md](EMAILS.md)), sent through the email sandbox (section 4).
@@ -45,15 +45,15 @@ can never be read by a live build, or the other way round.
       this one builds `staging`. Turn off preview deployments for other
       branches here (Settings → Builds → Branch control), so a work branch
       never runs with staging's keys.
-- [ ] **Custom domain** `staging.rankup.<your domain>`: the project →
+- [ ] **Custom domain** `staging.rankup.mtrxhorizyn.com`: the project →
       Custom domains → Set up a custom domain. Pages issues the certificate
       for that exact name. (A plain proxied DNS record would not be enough:
       a zone's free certificate covers one level of subdomain,
-      `*.<your domain>`, and this name is two levels deep.)
+      `*.mtrxhorizyn.com`, and this name is two levels deep.)
 - [ ] **Its own settings** (section 5), set as the project's Production
       variables.
 - [ ] Optional: keep strangers out with Cloudflare Access on
-      `staging.rankup.<your domain>`, with a **Bypass** rule for `/api/*`,
+      `staging.rankup.mtrxhorizyn.com`, with a **Bypass** rule for `/api/*`,
       which the scheduler and Stripe's test webhook must still reach.
 
 If you would rather not have a second project, a preview deployment of the
@@ -76,11 +76,11 @@ own jobs with staging's `CRON_SECRET`.
 - [ ] Create the same plans, ticket packs and school prices as LAUNCH.md
       section 3, at the same amounts, in test mode. Their price ids differ
       from live's: staging gets the test ones.
-- [ ] A **test-mode webhook** to `https://staging.rankup.<your domain>/api/stripe-webhook`,
+- [ ] A **test-mode webhook** to `https://staging.rankup.mtrxhorizyn.com/api/stripe-webhook`,
       with the same events as live; its signing secret is staging's
       `STRIPE_WEBHOOK_SECRET`.
 - [ ] The customer portal's return link, in test mode:
-      `https://staging.rankup.<your domain>/#/parent/plan`.
+      `https://staging.rankup.mtrxhorizyn.com/#/parent/plan`.
 - [ ] Pay with `4242 4242 4242 4242`; a failing card and a test clock as in
       LAUNCH.md section 6.
 
@@ -91,7 +91,7 @@ own jobs with staging's `CRON_SECRET`.
       addresses (`delivered@resend.dev`, `bounced@resend.dev`) or to your own
       inbox. A staging account must never be made with a real family's
       address.
-- [ ] `EMAIL_FROM=RankUp staging <no-reply@rankup.<your domain>>`, so a
+- [ ] `EMAIL_FROM=RankUp staging <no-reply@rankup.mtrxhorizyn.com>`, so a
       staging email is never mistaken for a live one.
 - [ ] `ERRORS_EMAIL` unset, or a different inbox from live's: the error
       report says "RankUp" either way.
@@ -105,7 +105,7 @@ for staging; nothing is pasted from live.
 | Setting | On staging |
 |---|---|
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | The staging Supabase project's |
-| `PUBLIC_SITE_URL` | `https://staging.rankup.<your domain>` |
+| `PUBLIC_SITE_URL` | `https://staging.rankup.mtrxhorizyn.com` |
 | `CRON_SECRET` | **A new one** (`openssl rand -hex 32`). Live's opens live's jobs and live's detailed health check; it is never typed anywhere else |
 | `OPERATOR_SECRET` | **A new one.** Live's decides which schools see children's names |
 | `STATS_KEY` | Leave unset, so the MTRX Horizyn console never counts staging's test families as real ones |
@@ -129,7 +129,7 @@ live.
 
 Staging needs its jobs running too, or a change that breaks one is not seen
 until live: the six in LAUNCH.md section 2b, at the same times, each called
-with **staging's** `CRON_SECRET` at `https://staging.rankup.<your domain>/api/…`.
+with **staging's** `CRON_SECRET` at `https://staging.rankup.mtrxhorizyn.com/api/…`.
 On Cloudflare that is a second scheduler Worker (or a second set of entries in
 your outside scheduler) with `SITE` and `CRON_SECRET` set to staging's. Never
 point one scheduler at both, with one secret.
@@ -160,7 +160,7 @@ Staging and live build two branches of the same repository, `staging` and
    git push origin <commit>:staging
    ```
 
-   Cloudflare builds it. `GET https://staging.rankup.<your domain>/api/health`
+   Cloudflare builds it. `GET https://staging.rankup.mtrxhorizyn.com/api/health`
    answers the version in that commit's `package.json`.
 2. **Run the SQL files on staging** (section 7), if `supabase/` changed.
 3. **Try it on staging** on real phones: LAUNCH.md section 6's walk for
@@ -179,7 +179,7 @@ Staging and live build two branches of the same repository, `staging` and
 
    If `main` has anything the commit does not, the first command stops it:
    bring that onto `staging` and start again from step 1.
-6. **Check live**: `GET https://rankup.<your domain>/api/health` answers the
+6. **Check live**: `GET https://rankup.mtrxhorizyn.com/api/health` answers the
    same version; with live's `CRON_SECRET`, every job `ok` within the hour.
    If something is wrong, Cloudflare's Deployments → the previous deployment
    → Rollback puts the last build back at once. The database needs no

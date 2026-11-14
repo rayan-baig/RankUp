@@ -2,7 +2,7 @@
 
 Chores turned into a game, so parents stop nagging and kids stop dreading them.
 
-RankUp is a product of **MTRX Horizyn**. It lives at `rankup.<your domain>`, a
+RankUp is a product of **MTRX Horizyn**. It lives at `rankup.mtrxhorizyn.com`, a
 subdomain of the company's domain, so it is a site of its own beside the
 company's others.
 
@@ -106,15 +106,15 @@ top: accounts, the address, database, settings, scheduled jobs, legal. Cloudflar
 Pages is the recommended host there. [docs/DEPLOY.md](docs/DEPLOY.md) covers a quick
 preview deploy only.
 
-**The address** is `https://rankup.<your domain>`: a `CNAME` named `rankup` at the
+**The address** is `https://rankup.mtrxhorizyn.com`: a `CNAME` named `rankup` at the
 company domain's DNS, pointed at the host, then the host's custom-domain step, which
 also issues the https certificate. A subdomain rather than a path, so RankUp's
 storage, sign-in and service worker are its own; RankUp sets no cookie and trusts no
 sibling site (`tests/isolation.mjs`). Everything that names the address
 (`PUBLIC_SITE_URL`, Supabase's Site URL and redirect URLs, the Stripe webhook, the
 MTRX Horizyn console's `RANKUP_URL` and `RANKUP_STATS_URL`, and email sent from
-`no-reply@rankup.<your domain>` with SPF, DKIM and DMARC set once on the parent
-domain) is listed in [LAUNCH.md, section 1a](docs/LAUNCH.md#1a-the-address-rankupyour-domain-half-an-hour-most-of-it-waiting).
+`no-reply@rankup.mtrxhorizyn.com` with SPF, DKIM and DMARC set once on the parent
+domain) is listed in [LAUNCH.md, section 1a](docs/LAUNCH.md#1a-the-address-rankupmtrxhorizyncom-half-an-hour-most-of-it-waiting).
 
 ---
 

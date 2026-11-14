@@ -128,7 +128,7 @@ SUPABASE_SERVICE_ROLE_KEY=...
 Stripe dashboard → Developers → Webhooks → add an endpoint:
 
 ```
-https://rankup.<your domain>/api/stripe-webhook
+https://rankup.mtrxhorizyn.com/api/stripe-webhook
 ```
 
 Subscribe it to:
@@ -440,7 +440,7 @@ until you do, families will see a leaderboard and never see a discount.
 Set `CRON_SECRET` to a long random string, then call it once a month:
 
 ```
-POST https://rankup.<your domain>/api/settle-alliances
+POST https://rankup.mtrxhorizyn.com/api/settle-alliances
 Authorization: Bearer <CRON_SECRET>
 ```
 
@@ -510,7 +510,7 @@ it in Stripe too.
   job (it is in `vercel.json`, a day after the month ends):
 
   ```
-  POST https://rankup.<your domain>/api/settle-schools
+  POST https://rankup.mtrxhorizyn.com/api/settle-schools
   Authorization: Bearer <CRON_SECRET>
   ```
 
@@ -519,7 +519,7 @@ it in Stripe too.
   Stripe account if it pays (so a yearly plan gets a month off, not a year),
   thirty more trial days if it is still on its trial. A free month that could not be
   given stays owed and is tried again next run. It never gives one twice.
-- **Checking schools are real**: open `https://rankup.<your domain>/#/operator` and type
+- **Checking schools are real**: open `https://rankup.mtrxhorizyn.com/#/operator` and type
   your `OPERATOR_SECRET`. New schools are listed first, with who signed each up
   and their email; verify, un-verify, suspend or lift a suspension there.
   Until a school is verified it is in no league and sees no child's name.
