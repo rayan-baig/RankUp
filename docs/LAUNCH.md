@@ -337,6 +337,13 @@ changes no other row in any table):
 | Pairing guess counts (the rate limit) | 2 days (the same setting) |
 | Retry receipts (what stops a resent purchase charging twice) | 30 days |
 | A deleted family's Stripe cancellation record, once Stripe confirmed it | 30 days (7 if there was nothing to cancel) |
+| A gift's recipient name and email and the buyer's message | 30 days after it was paid for |
+| A gift buyer's email | When the code runs out, 2 years after it was paid for |
+| A gift checkout nobody paid for, with what was typed into it | 14 days |
+| Gift codes typed that did not work, and gifts started per address (the rate limits) | 2 days |
+
+A gift's order itself is kept (the plan, when it was paid, used or refunded,
+and its code's hash): it is the record of the sale.
 
 It also cancels, at Stripe, any deleted family's subscription that could not
 be cancelled at the moment of deletion, so it needs `STRIPE_SECRET_KEY` too. A
@@ -356,6 +363,13 @@ cancellation still waiting for Stripe is never deleted.
         `STRIPE_PRICE_ELITE_YEAR`.
       - Three **one-off** Flash Ticket prices ($2.99 for 2, $5.99 for 5,
         $11.99 for 12) → `STRIPE_PRICE_FLASH_2`, `_FLASH_5`, `_FLASH_12`.
+      - Gifts ("a year of RankUp", the Give page): a product such as
+        **RankUp gift** with two **one-time** prices, $49.99 for Standard and
+        $79.99 for Elite Pass (the yearly amounts) →
+        `STRIPE_PRICE_GIFT_STANDARD_YEAR`, `STRIPE_PRICE_GIFT_ELITE_YEAR`.
+        One-time, not recurring: a gift is paid once and never renews. Also
+        set `GIFT_CODE_SECRET` (section 4). See
+        [PAYMENTS.md](PAYMENTS.md#gift-subscriptions-a-year-of-rankup).
       - The School League: eight prices, a month and a year (ten months'
         money) for each size: up to 300 students $29 / $290, up to 800
         $59 / $590, up to 1,500 $99 / $990, more $149 / $1,490 → the
@@ -391,15 +405,16 @@ cancellation still waiting for Stripe is never deleted.
       the small pack and be given the large one.
 - [ ] Stripe → Developers → Webhooks → add `https://rankup.mtrxhorizyn.com/api/stripe-webhook`,
       and copy its signing secret. Send it **these events**:
-      - `checkout.session.completed`
-      - `checkout.session.async_payment_succeeded`
+      - `checkout.session.completed` (also where a paid gift becomes its code)
+      - `checkout.session.async_payment_succeeded` (a gift paid by a bank
+        payment that clears later)
       - `customer.subscription.created`, `customer.subscription.updated`,
         `customer.subscription.deleted`
       - `invoice.paid` and `invoice.payment_succeeded`
       - `invoice.payment_failed` (received and deliberately ignored: the
         subscription's own status change is what moves the plan)
       - `charge.refunded` — without it a refunded plan or ticket pack is never
-        taken back
+        taken back, and a refunded gift's unused code is never voided
       - `charge.dispute.created` — a disputed first payment takes back the
         free month it earned the family who invited (bring a friend)
 
@@ -432,6 +447,7 @@ every phone downloads. A secret in a `VITE_` name is a published secret.
 | `VITE_STRIPE_ENABLED` | `true` to switch billing on | No |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe's secret key and the webhook's signing secret | **Yes** |
 | `STRIPE_PRICE_*` | The price ids from section 3 | No |
+| `GIFT_CODE_SECRET` | One more long random string (`openssl rand -hex 32`), set once: gift codes are worked out from the paid checkout with it, so only the server can make one ([PAYMENTS.md](PAYMENTS.md#gift-subscriptions-a-year-of-rankup)). Without it a paid gift's webhook answers 500 until it is set, and Stripe keeps retrying. Changing it later does not break codes already sold | **Yes** |
 | `CRON_SECRET` | One long random string (`openssl rand -hex 32`) that protects all seven scheduled jobs and the detailed health check | **Yes** |
 | `EMAIL_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | The email provider's API key, who RankUp's own emails are from (`RankUp <no-reply@rankup.mtrxhorizyn.com>`), and an optional support address for replies (`help@rankup.mtrxhorizyn.com`). RankUp's own emails use them: the trial reminders, a school's month, the error report ([EMAILS.md](EMAILS.md)). Without the first two, `/api/send-trial-emails` sends nothing and the health check says so. Leave `EMAIL_API_BASE` unset: it is for the tests | Key: **yes** |
 | `ERRORS_EMAIL` | Optional. One inbox for the error report: new crashes on phones and errors in the server functions, from the hourly email job, each error at most once an hour and at most 20 reports a day, with no name, email or family id in it ([EMAILS.md](EMAILS.md#rankups-own-the-error-report)) | No |

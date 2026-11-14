@@ -72,7 +72,9 @@ export function forgetRows(dropped) {
 const SERVER_OWNED = {
   // A family's tier is decided by Stripe's webhook. The database refuses a
   // direct write anyway, but pushing it would fill the outbox with rejections.
-  families: ['tier', 'subscription_status', 'stripe_customer_id', 'stripe_subscription_id'],
+  families: ['tier', 'subscription_status', 'stripe_customer_id', 'stripe_subscription_id',
+             // A gift plan is written by redeem_gift_code alone.
+             'gift_tier', 'gift_starts_at', 'gift_until'],
   kids: ['xp', 'coins', 'streak_count', 'streak_last_day', 'streak_freezes',
          // Arcade tokens and the day's winnings are balances too: play_minigame
          // and approve_submission are the only things allowed to move them.

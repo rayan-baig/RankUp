@@ -499,7 +499,12 @@ begin
     'has_customer', v_family.stripe_customer_id is not null,
     -- Checkout carries what is left of the in-app trial onto the card.
     'trial_ends_at', v_family.trial_ends_at,
-    'has_subscription', v_family.stripe_subscription_id is not null
+    'has_subscription', v_family.stripe_subscription_id is not null,
+    -- A gift plan (redeem_gift_code): checkout starts a paid plan's first
+    -- charge on the day it ends, so a gift year is never paid for twice.
+    'gift_tier', v_family.gift_tier,
+    'gift_starts_at', v_family.gift_starts_at,
+    'gift_until', v_family.gift_until
   );
 end $$;
 
@@ -630,3 +635,468 @@ end $$;
 revoke execute on function pending_billing_cancellations(uuid, text, int) from public, anon, authenticated;
 revoke execute on function finish_billing_cancellation(bigint, boolean, text) from public, anon, authenticated;
 revoke execute on function billing_family_gone(uuid, text, text, boolean) from public, anon, authenticated;
+
+-- ===========================================================================
+-- Gifts: "a year of RankUp", bought by somebody with no account for a family.
+--
+-- docs/PAYMENTS.md, "Gift subscriptions", has the whole story. In short:
+--
+--   1. The buyer fills in the Give page. /api/gift-checkout keeps what they
+--      typed (start_gift_order) and sends them to Stripe Checkout, a one-time
+--      payment at the yearly price. No code exists yet.
+--   2. Stripe's webhook says the checkout is paid. Only then is a code made
+--      (fulfil_gift_order), and the database is handed its hash, never the
+--      code itself. The webhook emails the buyer the code, and the recipient
+--      too if the buyer asked.
+--   3. A parent types the code in Parent Mode (/api/redeem-gift, which calls
+--      redeem_gift_code). The family gets that plan for 12 months from that
+--      day, as families.gift_tier / gift_until, which effective_tier honours
+--      beside the paid plan and the trial.
+--
+-- Every function here is the server's: revoked from public, anon and
+-- authenticated, and every table has row level security on with no policy,
+-- so a browser can neither read a code's hash nor anybody's email.
+-- ===========================================================================
+
+/*
+ * One row per gift, from the moment the buyer is sent to Stripe.
+ *
+ * Until Stripe confirms payment a row has no code (the check below), so a
+ * code that was never sold cannot exist. An unpaid row is deleted by
+ * retention after 14 days, which outlasts a bank payment that clears late.
+ */
+create table if not exists gift_orders (
+  id              uuid primary key default gen_random_uuid(),
+  plan            text not null check (plan in ('standard', 'elite')),
+  -- 'email': the webhook emails the recipient. 'self': the buyer gives it.
+  delivery        text not null check (delivery in ('email', 'self')),
+  created_at      timestamptz not null default now(),
+  stripe_session  text unique,
+  payment_intent  text,
+  amount_minor    int,
+  currency        text,
+  paid_at         timestamptz,
+  -- sha256 of the code as typed without dashes or spaces, in hex. The code
+  -- itself is never stored: it is worked out by the webhook, emailed, and
+  -- gone.
+  code_hash       text unique,
+  -- Two years after purchase.
+  expires_at      timestamptz,
+  receipt_sent_at timestamptz,
+  gift_sent_at    timestamptz,
+  redeemed_at     timestamptz,
+  redeemed_by     uuid references families(id) on delete set null,
+  -- A refund in full of a code nobody had used yet.
+  voided_at       timestamptz,
+  -- What a refund decided, in words: refunded_unused, refunded_after_use,
+  -- refunded_before_code.
+  refund_note     text,
+  constraint gift_code_only_when_paid check (code_hash is null or (paid_at is not null and expires_at is not null))
+);
+create index if not exists gift_orders_payment_intent_idx on gift_orders (payment_intent);
+create index if not exists gift_orders_unpaid_idx on gift_orders (created_at) where paid_at is null;
+alter table gift_orders enable row level security;
+
+/*
+ * The buyer's email, for the receipt and for support, kept until the code
+ * runs out (keep_until, set when it is paid for). Apart from the order so
+ * retention can delete it on its own day.
+ */
+create table if not exists gift_buyers (
+  order_id   uuid primary key references gift_orders(id) on delete cascade,
+  email      text not null,
+  created_at timestamptz not null default now(),
+  keep_until timestamptz
+);
+alter table gift_buyers enable row level security;
+
+/*
+ * Who it is for and what the buyer said, used only to send the gift and
+ * deleted 30 days after it was paid for (keep_until). The buyer's own name
+ * here is what the gift email says it is from.
+ */
+create table if not exists gift_recipients (
+  order_id   uuid primary key references gift_orders(id) on delete cascade,
+  from_name  text,
+  to_name    text,
+  to_email   text,
+  message    text,
+  created_at timestamptz not null default now(),
+  keep_until timestamptz
+);
+alter table gift_recipients enable row level security;
+
+/*
+ * Every code typed that did not work, by family and by where it came from,
+ * for the limits in redeem_gift_code. `ip_key` is a keyed hash of the
+ * address made by the server function (api/redeem-gift.js), never the
+ * address. Kept two days.
+ */
+create table if not exists gift_redeem_attempts (
+  id        bigserial primary key,
+  family_id uuid references families(id) on delete cascade,
+  ip_key    text,
+  ok        boolean not null default false,
+  tried_at  timestamptz not null default now()
+);
+create index if not exists gift_redeem_attempts_family_idx on gift_redeem_attempts (family_id, tried_at);
+create index if not exists gift_redeem_attempts_ip_idx on gift_redeem_attempts (ip_key, tried_at);
+alter table gift_redeem_attempts enable row level security;
+
+/*
+ * Every gift checkout started, by where it came from (a keyed hash of the
+ * address, made by api/gift-checkout.js, never the address), for the
+ * per-address limit in start_gift_order. Kept two days.
+ */
+create table if not exists gift_checkout_attempts (
+  id        bigserial primary key,
+  ip_key    text not null,
+  tried_at  timestamptz not null default now()
+);
+create index if not exists gift_checkout_attempts_ip_idx on gift_checkout_attempts (ip_key, tried_at);
+alter table gift_checkout_attempts enable row level security;
+
+/** Typed text kept plain: trimmed, one space between words, no control characters or markup. */
+create or replace function gift_plain(p_text text, p_max int) returns text
+language sql immutable set search_path = public as $$
+  select nullif(left(btrim(regexp_replace(regexp_replace(coalesce(p_text, ''), '[[:cntrl:]<>]', ' ', 'g'), '\s+', ' ', 'g')), p_max), '');
+$$;
+
+/** A real-looking email address, at most 254 characters. */
+create or replace function gift_email_ok(p_email text) returns boolean
+language sql immutable set search_path = public as $$
+  select p_email is not null and length(p_email) <= 254 and p_email ~ '^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$';
+$$;
+
+/**
+ * Keep what the buyer typed, before they are sent to Stripe.
+ *
+ * Checked here as well as on the page and in the server function: the plan
+ * and how it is given, the buyer's email, the recipient's email when the
+ * gift is to be emailed, names of at most 60 characters and a message of at
+ * most 200, none with a rude word (kid_words_ok, the list Theme Genesis
+ * uses), a link or an email address in it. No code is made here.
+ *
+ * Because the page needs no account: at most 10 started an hour from one
+ * address (`too_many_gifts`), so nobody can use up the rest, and 2,000 an
+ * hour across everybody (`busy`), enough for a holiday rush and not enough
+ * to fill the table.
+ */
+drop function if exists start_gift_order(text, text, text, text, text, text, text);
+create or replace function start_gift_order(
+  p_plan text,
+  p_delivery text,
+  p_buyer_email text,
+  p_from_name text default null,
+  p_to_name text default null,
+  p_to_email text default null,
+  p_message text default null,
+  p_ip_key text default null
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_id uuid;
+  v_buyer text := lower(btrim(coalesce(p_buyer_email, '')));
+  v_to text := nullif(lower(btrim(coalesce(p_to_email, ''))), '');
+  v_text text;
+begin
+  if p_plan is null or p_plan not in ('standard', 'elite') then
+    return jsonb_build_object('ok', false, 'reason', 'bad_plan');
+  end if;
+  if p_delivery is null or p_delivery not in ('email', 'self') then
+    return jsonb_build_object('ok', false, 'reason', 'bad_delivery');
+  end if;
+  if not gift_email_ok(v_buyer) then
+    return jsonb_build_object('ok', false, 'reason', 'bad_email');
+  end if;
+  if p_delivery = 'email' and v_to is null then
+    return jsonb_build_object('ok', false, 'reason', 'no_recipient_email');
+  end if;
+  if v_to is not null and not gift_email_ok(v_to) then
+    return jsonb_build_object('ok', false, 'reason', 'bad_recipient_email');
+  end if;
+  if length(btrim(coalesce(p_from_name, ''))) > 60 or length(btrim(coalesce(p_to_name, ''))) > 60 then
+    return jsonb_build_object('ok', false, 'reason', 'name_too_long');
+  end if;
+  if length(btrim(coalesce(p_message, ''))) > 200 then
+    return jsonb_build_object('ok', false, 'reason', 'message_too_long');
+  end if;
+  foreach v_text in array array[coalesce(p_from_name, ''), coalesce(p_to_name, ''), coalesce(p_message, '')] loop
+    if not kid_words_ok(v_text) then
+      return jsonb_build_object('ok', false, 'reason', 'rude_words');
+    end if;
+    if v_text ~* '(https?:|www\.|://|[^\s@]+@[^\s@]+\.[a-z]{2,}|\m[a-z0-9-]+\.(com|net|org|io|co|uk|ru|xyz|info|biz|app|link)\M)' then
+      return jsonb_build_object('ok', false, 'reason', 'no_links');
+    end if;
+  end loop;
+  if p_ip_key is not null and (select count(*) from gift_checkout_attempts
+       where ip_key = p_ip_key and tried_at > now() - interval '1 hour') >= 10 then
+    return jsonb_build_object('ok', false, 'reason', 'too_many_gifts');
+  end if;
+  if (select count(*) from gift_orders where created_at > now() - interval '1 hour') >= 2000 then
+    return jsonb_build_object('ok', false, 'reason', 'busy');
+  end if;
+  if p_ip_key is not null then
+    insert into gift_checkout_attempts (ip_key) values (p_ip_key);
+  end if;
+
+  insert into gift_orders (plan, delivery) values (p_plan, p_delivery) returning id into v_id;
+  insert into gift_buyers (order_id, email) values (v_id, v_buyer);
+  insert into gift_recipients (order_id, from_name, to_name, to_email, message)
+  values (v_id, gift_plain(p_from_name, 60), gift_plain(p_to_name, 60), v_to, gift_plain(p_message, 200));
+  return jsonb_build_object('ok', true, 'order_id', v_id, 'plan', p_plan);
+end $$;
+
+/** What the webhook needs to send the emails, for one order. */
+create or replace function gift_order_details(p_order_id uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'order_id', o.id, 'plan', o.plan, 'delivery', o.delivery, 'paid_at', o.paid_at,
+    'expires_at', o.expires_at, 'amount_minor', o.amount_minor, 'currency', o.currency,
+    'receipt_sent', o.receipt_sent_at is not null, 'gift_sent', o.gift_sent_at is not null,
+    'redeemed', o.redeemed_at is not null, 'voided', o.voided_at is not null,
+    'buyer_email', b.email, 'from_name', r.from_name, 'to_name', r.to_name,
+    'to_email', r.to_email, 'message', r.message)
+  from gift_orders o
+  left join gift_buyers b on b.order_id = o.id
+  left join gift_recipients r on r.order_id = o.id
+  where o.id = p_order_id;
+$$;
+
+/**
+ * Stripe says the gift is paid for: make it a code. Called only by the
+ * webhook, and only for a checkout whose payment_status is 'paid'.
+ *
+ * The webhook works the code out from the checkout session (a keyed hash, so
+ * the same session always gives the same code) and passes only its hash, so
+ * the database never holds a code anybody could read back. Idempotent on the
+ * session: Stripe's two events for one payment (completed, and
+ * async_payment_succeeded for a bank payment), its retries and a replay all
+ * find the code already made and answer `duplicate`, with `code_matches`
+ * saying whether the hash they worked out is the one stored (so the webhook
+ * may send the code again if an email did not go). The money is recorded in
+ * billing_events once, against no family, beside every other payment.
+ */
+create or replace function fulfil_gift_order(
+  p_order_id uuid,
+  p_session_id text,
+  p_payment_intent text,
+  p_code_hash text,
+  p_amount_minor int default null,
+  p_currency text default null
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_order gift_orders;
+begin
+  if p_session_id is null or p_code_hash is null or p_code_hash !~ '^[0-9a-f]{64}$' then
+    return jsonb_build_object('ok', false, 'reason', 'bad_request');
+  end if;
+  select * into v_order from gift_orders where id = p_order_id for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no_order');
+  end if;
+  if v_order.stripe_session is not null and v_order.stripe_session <> p_session_id then
+    return jsonb_build_object('ok', false, 'reason', 'other_session');
+  end if;
+  if v_order.code_hash is not null then
+    return gift_order_details(p_order_id)
+      || jsonb_build_object('ok', true, 'duplicate', true, 'code_matches', v_order.code_hash = p_code_hash);
+  end if;
+  -- Refunded before Stripe's "paid" reached us: there is nothing to give.
+  if v_order.voided_at is not null then
+    return jsonb_build_object('ok', false, 'reason', 'voided');
+  end if;
+
+  update gift_orders
+     set stripe_session = p_session_id,
+         payment_intent = coalesce(p_payment_intent, payment_intent),
+         amount_minor = p_amount_minor,
+         currency = upper(nullif(p_currency, '')),
+         paid_at = now(),
+         code_hash = p_code_hash,
+         expires_at = now() + interval '2 years'
+   where id = p_order_id;
+  update gift_buyers set keep_until = now() + interval '2 years' where order_id = p_order_id;
+  update gift_recipients set keep_until = now() + interval '30 days' where order_id = p_order_id;
+
+  begin
+    insert into billing_events (family_id, stripe_event, type, payload, amount_pence, currency)
+    values (null, 'gift:' || p_session_id, 'gift', jsonb_build_object('plan', v_order.plan),
+            p_amount_minor, upper(nullif(p_currency, '')));
+  exception when unique_violation then
+    null;
+  end;
+
+  return gift_order_details(p_order_id) || jsonb_build_object('ok', true, 'code_matches', true);
+end $$;
+
+/** An email went: the receipt, or the gift to the recipient. Never sent twice after this. */
+create or replace function mark_gift_sent(p_order_id uuid, p_which text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if p_which = 'receipt' then
+    update gift_orders set receipt_sent_at = coalesce(receipt_sent_at, now()) where id = p_order_id;
+  elsif p_which = 'gift' then
+    update gift_orders set gift_sent_at = coalesce(gift_sent_at, now()) where id = p_order_id;
+  else
+    return jsonb_build_object('ok', false, 'reason', 'bad_which');
+  end if;
+  return jsonb_build_object('ok', found);
+end $$;
+
+/**
+ * A parent types a gift code. Called only by /api/redeem-gift, which has
+ * already checked the caller is a parent (not a supporter, not a child) of
+ * `p_family_id`, and passes a keyed hash of where the request came from.
+ *
+ * Limits, so a code cannot be found by trying: 5 codes that did not work in
+ * an hour for one family, and 20 from one address (across every family),
+ * then `too_many_tries` until the hour has passed. A code is 12 characters
+ * from 31, about 59 bits, so even without the limits guessing is hopeless;
+ * with them it is not worth starting.
+ *
+ * The rules:
+ *   - single use: a code that has been redeemed is `used`, for everyone;
+ *   - two years from purchase: then `expired`;
+ *   - refunded in full before it was used: `refunded`;
+ *   - one gift per family at a time: another gift adds 12 months to the end
+ *     of the one running (stacked), at the better of the two plans;
+ *   - a family whose paid plan is set to renew is told to turn renewal off
+ *     first (`subscription_renews`) and the code is not spent: the gift then
+ *     starts the day the paid plan ends, so no day is paid for twice. A paid
+ *     plan already cancelled and running to its end: the gift starts at that
+ *     end, automatically.
+ */
+create or replace function redeem_gift_code(p_family_id uuid, p_code text, p_ip_key text default null)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_family families;
+  v_order  gift_orders;
+  v_code   text := regexp_replace(upper(coalesce(p_code, '')), '[^A-Z0-9]', '', 'g');
+  v_start  timestamptz;
+  v_until  timestamptz;
+  v_tier   text;
+  v_stacked boolean := false;
+  v_fail   text;
+begin
+  select * into v_family from families where id = p_family_id for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no_family');
+  end if;
+
+  if (select count(*) from gift_redeem_attempts
+       where family_id = p_family_id and not ok and tried_at > now() - interval '1 hour') >= 5
+     or (p_ip_key is not null and (select count(*) from gift_redeem_attempts
+       where ip_key = p_ip_key and not ok and tried_at > now() - interval '1 hour') >= 20) then
+    return jsonb_build_object('ok', false, 'reason', 'too_many_tries');
+  end if;
+
+  if length(v_code) = 12 then
+    select * into v_order from gift_orders
+     where code_hash = encode(sha256(convert_to(v_code, 'UTF8')), 'hex')
+     for update;
+  end if;
+
+  v_fail := case
+    when v_order.id is null then 'bad_code'
+    when v_order.voided_at is not null then 'refunded'
+    when v_order.redeemed_at is not null then 'used'
+    when v_order.expires_at <= now() then 'expired'
+    else null end;
+  if v_fail is not null then
+    insert into gift_redeem_attempts (family_id, ip_key, ok) values (p_family_id, p_ip_key, false);
+    return jsonb_build_object('ok', false, 'reason', v_fail);
+  end if;
+
+  -- A paid plan that will charge the card again. Not a wrong guess, so not
+  -- counted against the limit, and the code is left unspent.
+  if v_family.stripe_subscription_id is not null
+     and v_family.subscription_status in ('active', 'trialing', 'past_due', 'refunded', 'incomplete', 'paused')
+     and (v_family.subscription_ends_at is null or v_family.subscription_ends_at <= now()) then
+    return jsonb_build_object('ok', false, 'reason', 'subscription_renews');
+  end if;
+
+  if v_family.gift_until is not null and v_family.gift_until > now() then
+    -- Stacked: twelve more months on the end of the gift already there.
+    v_stacked := true;
+    v_start := coalesce(v_family.gift_starts_at, now());
+    v_until := v_family.gift_until + interval '12 months';
+    v_tier := case when v_family.gift_tier = 'elite' or v_order.plan = 'elite' then 'elite' else 'standard' end;
+  else
+    -- A paid plan cancelled and still running: the gift begins where it ends.
+    v_start := case
+      when v_family.subscription_status in ('active', 'trialing') and v_family.subscription_ends_at > now()
+        then v_family.subscription_ends_at
+      else now() end;
+    v_until := v_start + interval '12 months';
+    v_tier := v_order.plan;
+  end if;
+
+  update families
+     set gift_tier = v_tier, gift_starts_at = v_start, gift_until = v_until
+   where id = p_family_id;
+  update gift_orders set redeemed_at = now(), redeemed_by = p_family_id where id = v_order.id;
+  insert into gift_redeem_attempts (family_id, ip_key, ok) values (p_family_id, p_ip_key, true);
+
+  return jsonb_build_object('ok', true, 'plan', v_order.plan, 'tier', v_tier,
+                            'starts_at', v_start, 'until', v_until, 'stacked', v_stacked);
+end $$;
+
+/**
+ * A payment handed back. Asked by the webhook on every charge.refunded
+ * before anything else; `gift: false` means it was not a gift's payment and
+ * the family and school rules carry on.
+ *
+ * A refund in full of a code nobody has used makes it void: typing it then
+ * says `refunded`. A code already used stays used (the family keeps its
+ * year; the money went back by the operator's own choice in Stripe), and
+ * that decision is written on the order. A partial refund changes nothing.
+ * Acts once per charge, however often Stripe sends it.
+ */
+create or replace function apply_gift_refund(p_payment_intent text, p_charge_id text, p_full boolean default false)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_order gift_orders;
+  v_note  text;
+begin
+  if p_payment_intent is null then
+    return jsonb_build_object('ok', true, 'gift', false);
+  end if;
+  select * into v_order from gift_orders where payment_intent = p_payment_intent for update;
+  if not found then
+    return jsonb_build_object('ok', true, 'gift', false);
+  end if;
+  if not coalesce(p_full, false) then
+    return jsonb_build_object('ok', true, 'gift', true, 'ignored', 'partial_refund');
+  end if;
+
+  begin
+    insert into billing_events (family_id, stripe_event, type, payload)
+    values (null, 'gift_refund:' || coalesce(p_charge_id, p_payment_intent), 'gift_refunded',
+            jsonb_build_object('order', v_order.id));
+  exception when unique_violation then
+    return jsonb_build_object('ok', true, 'gift', true, 'duplicate', true);
+  end;
+
+  v_note := case
+    when v_order.redeemed_at is not null then 'refunded_after_use'
+    when v_order.code_hash is null then 'refunded_before_code'
+    else 'refunded_unused' end;
+  update gift_orders
+     set refund_note = v_note,
+         voided_at = case when v_note = 'refunded_after_use' then voided_at else coalesce(voided_at, now()) end
+   where id = v_order.id;
+  return jsonb_build_object('ok', true, 'gift', true, 'outcome', v_note);
+end $$;
+
+revoke execute on function gift_plain(text, int) from public, anon, authenticated;
+revoke execute on function gift_email_ok(text) from public, anon, authenticated;
+revoke execute on function start_gift_order(text, text, text, text, text, text, text, text) from public, anon, authenticated;
+revoke execute on function gift_order_details(uuid) from public, anon, authenticated;
+revoke execute on function fulfil_gift_order(uuid, text, text, text, int, text) from public, anon, authenticated;
+revoke execute on function mark_gift_sent(uuid, text) from public, anon, authenticated;
+revoke execute on function redeem_gift_code(uuid, text, text) from public, anon, authenticated;
+revoke execute on function apply_gift_refund(text, text, boolean) from public, anon, authenticated;

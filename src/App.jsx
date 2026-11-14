@@ -68,6 +68,9 @@ const ParentHelp = lazyLoad(() => import('./screens/parent/ParentHelp.jsx'))
 const ParentHistory = lazyLoad(() => import('./screens/parent/ParentHistory.jsx'))
 const ParentMoney = lazyLoad(() => import('./screens/parent/ParentMoney.jsx'))
 const NotFound = lazyLoad(() => import('./screens/NotFound.jsx'))
+const GiveRankUp = lazyLoad(() => import('./screens/GiveRankUp.jsx'))
+const GiftCard = lazyLoad(() => import('./screens/GiftCard.jsx'))
+const ParentRedeem = lazyLoad(() => import('./screens/parent/ParentRedeem.jsx'))
 
 const KID_NAV = [
   { to: '/kid', icon: '🏠', label: 'Home', exact: true },
@@ -125,6 +128,9 @@ export default function App() {
 
   const isParentArea = route.startsWith('/parent')
   const isKidArea = route.startsWith('/kid')
+  // Give RankUp and the printable gift card: public, like the privacy policy,
+  // but never where a child is holding the phone.
+  const isGiftPage = route === '/gift' || route === '/gift/card'
 
   const activeKid = state.kids.find((k) => k.id === state.session.kidId) || state.kids[0] || null
   const kidTheme = useMemo(
@@ -167,6 +173,18 @@ export default function App() {
   // Route guards.
   useEffect(() => {
     if (route.startsWith('/legal/') || route === '/school' || route === '/school/help' || route === '/operator') return
+    /*
+     * The gift pages. Anybody can open them on a phone that is not set up
+     * (a grandparent buying one). On a phone that is set up, only in Parent
+     * Mode: children never see buying or redeeming, so a child's own phone
+     * goes home, and a shared phone that is not unlocked asks for the PIN.
+     */
+    if (isGiftPage) {
+      if (!state.onboarded) return
+      if (state.device?.role === 'kid') navigate('/kid')
+      else if (!state.session.parentUnlocked) navigate('/switch')
+      return
+    }
     if (!state.onboarded && route !== '/welcome') {
       navigate('/welcome')
       return
@@ -194,7 +212,7 @@ export default function App() {
     if (state.onboarded && isParentArea && !state.session.parentUnlocked) {
       navigate(lockedLink(path))
     }
-  }, [state.onboarded, state.session.parentUnlocked, state.device?.role, route, isParentArea])
+  }, [state.onboarded, state.session.parentUnlocked, state.device?.role, route, isParentArea, isGiftPage])
 
   // The privacy policy and terms are readable without an account — a parent
   // deciding whether to sign up should not have to sign up to read them.
@@ -211,6 +229,21 @@ export default function App() {
       </>
     )
   }
+
+  if (isGiftPage && (!state.onboarded || (state.device?.role !== 'kid' && state.session.parentUnlocked))) {
+    const query = path.split('?').slice(1).join('?')
+    return (
+      <>
+        <ParentBackground theme={parentTheme} />
+        <ScreenBoundary key={route} route={route}>
+          <Suspense fallback={<Loading />}>
+            {route === '/gift/card' ? <GiftCard query={query} /> : <GiveRankUp query={query} />}
+          </Suspense>
+        </ScreenBoundary>
+      </>
+    )
+  }
+  if (isGiftPage) return null
 
   // The School League's door for teachers and principals. No family needed:
   // a principal should never be walked through setting up a household.
@@ -420,6 +453,7 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route === '/parent/leaderboards') return <ParentLeaderboards />
   if (route === '/parent/pair') return <ParentPairKid />
   if (route === '/parent/plan') return <ParentPlan />
+  if (route === '/parent/redeem') return <ParentRedeem />
   if (route === '/parent/settings') return <ParentSettings />
   if (route === '/parent/help') return <ParentHelp />
   if (route === '/parent/history') return <ParentHistory initialKidId={queryParam(fullPath, 'kid')} />

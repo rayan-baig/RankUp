@@ -123,6 +123,15 @@ before its invoice blocks it); a parent sees counts only, a child nothing; the
 download holds no other family; every function that gives or takes a month
 is the server's alone.
 
+`55-gifts.sql` — gift subscriptions: what a buyer types is checked and no
+code exists until Stripe's "paid", which makes one code, once, keeping only
+its hash; a code works once, for two years, not after a refund in full (a
+used one stays used, the decision recorded); 5 wrong codes an hour per family
+and 20 per address; redeeming gives 12 months and effective_tier honours it;
+a second gift stacks; a family whose paid plan renews is told to turn renewal
+off first, and one whose plan is ending gets the gift from that end; nothing
+of it is reachable from a browser.
+
 `refusals.mjs` (`npm run test:refusals`) — reads every
 `jsonb_build_object('ok', false, 'reason', ...)` out of the SQL files, applies
 them to a scratch database with each one marked so it raises a notice naming

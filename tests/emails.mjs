@@ -2,8 +2,9 @@
  * Every email RankUp's own code sends, rendered and read the way a mail
  * program would show it.
  *
- * Three kinds are written here (api/_shared/email.js): the free trial's
- * reminders, a school's month, and the error report. Supabase's and Stripe's
+ * Five kinds are written here (api/_shared/email.js): the free trial's
+ * reminders, a school's month, the error report, and a gift's two emails
+ * (the buyer's receipt with the code, and the gift to the person it is for). Supabase's and Stripe's
  * emails are written in their dashboards (docs/EMAILS.md), not by this code.
  * Each kind is rendered in every variant it has, and each one must have:
  *
@@ -19,7 +20,7 @@
  * Reads code only; needs nothing running.
  */
 import { readFileSync } from 'node:fs'
-import { trialEmail, schoolMonthEmail, errorReportEmail } from '../api/_shared/email.js'
+import { trialEmail, schoolMonthEmail, errorReportEmail, giftReceiptEmail, giftEmail } from '../api/_shared/email.js'
 import { TIERS } from '../src/state/initialState.js'
 import { PRODUCT_OF } from '../src/data/legalText.js'
 
@@ -31,6 +32,7 @@ const ok = (label, cond, detail = '') => {
 
 const SITE = 'https://rankup.example.test'
 const HELP = 'help@example.test'
+const GIFT_BUYER = 'gift-buyer@example.com'
 
 // ---------- every variant of every kind ----------
 const emails = []
@@ -72,6 +74,31 @@ for (const site of [SITE, '']) {
       lapsed: { ...base, status: 'lapsed', renews_at: null, paid: [] },
     }
     for (const [k, m] of Object.entries(schools)) add(`school month, ${k}, ${where}`, schoolMonthEmail(m, { site, replyTo }))
+
+    // A gift, as fulfil_gift_order hands it to the webhook, every way it can
+    // be filled in: each plan, emailed or given by hand, with and without
+    // names and a message (which may hold quotes, ampersands and angle
+    // brackets as typed), with and without the amount and the date.
+    for (const plan of ['standard', 'elite']) {
+      for (const delivery of ['email', 'self']) {
+        for (const full of [true, false]) {
+          const order = {
+            order_id: 'ord', plan, delivery, code: 'ABCD-EFGH-JKMN', site, replyTo,
+            buyer_email: GIFT_BUYER,
+            expires_at: full ? '2028-11-14T10:00:00Z' : null,
+            amount_minor: full ? Math.round(TIERS[plan].yearPrice * 100) : null,
+            currency: full ? 'USD' : null,
+            from_name: full ? 'Grandma "Jo" & Pops' : null,
+            to_name: full ? 'The <Rivera> family' : null,
+            to_email: delivery === 'email' ? 'riveras@example.com' : null,
+            message: full ? 'Happy holidays! Love you all & see you soon <3' : null,
+          }
+          const name = `${plan}, ${delivery === 'email' ? 'emailed' : 'given by hand'}, ${full ? 'everything filled in' : 'nothing optional'}, ${where}`
+          add(`gift receipt, ${name}`, giftReceiptEmail(order))
+          if (delivery === 'email') add(`gift to the recipient, ${name}`, giftEmail(order))
+        }
+      }
+    }
   }
 
   const errorKinds = [
@@ -87,8 +114,8 @@ for (const site of [SITE, '']) {
 console.log('\n=== Every email RankUp sends itself is rendered here ===')
 const source = readFileSync(new URL('../api/_shared/email.js', import.meta.url), 'utf8')
 const builders = [...source.matchAll(/^export function (\w+Email)\(/gm)].map((m) => m[1])
-const rendered = ['trialEmail', 'schoolMonthEmail', 'errorReportEmail']
-ok(`the builders in api/_shared/email.js are the three rendered here (${builders.join(', ')})`,
+const rendered = ['trialEmail', 'schoolMonthEmail', 'errorReportEmail', 'giftReceiptEmail', 'giftEmail']
+ok(`the builders in api/_shared/email.js are the five rendered here (${builders.join(', ')})`,
   builders.length === rendered.length && builders.every((b) => rendered.includes(b)),
   `a new one needs its variants added to tests/emails.mjs: ${builders.filter((b) => !rendered.includes(b)).join(', ')}`)
 ok(`${emails.length} emails rendered`, emails.length > 100)
@@ -156,6 +183,32 @@ console.log('\n=== The error report names no family ===')
   const both = `${leaky.text}\n${leaky.html}`
   ok('even a message the database somehow left an email, id, token or quoted value in comes out scrubbed',
     !/@example\.com|4f1c9a00|eyJabc|Quoted value/.test(both), leaky.text)
+}
+
+console.log('\n=== A gift ===')
+{
+  const gifts = emails.filter((e) => e.name.startsWith('gift'))
+  const toThem = gifts.filter((e) => e.name.startsWith('gift to the recipient'))
+  const receipts = gifts.filter((e) => e.name.startsWith('gift receipt'))
+  ok(`${gifts.length} gift emails rendered, both kinds`, toThem.length >= 8 && receipts.length >= 16)
+  ok('the email to the recipient never contains the buyer\'s email address, in either part or the subject',
+    toThem.every((e) => ![e.subject, e.text, e.html].join('\n').includes(GIFT_BUYER)
+      && !/gift-buyer|%40example|buyer@/i.test([e.subject, e.text, e.html].join('\n'))),
+    toThem.find((e) => [e.subject, e.text, e.html].join('\n').includes(GIFT_BUYER))?.name || '')
+  ok('its subject says who it is from: "<name> gave your family a year of RankUp"',
+    toThem.every((e) => /^(Grandma "Jo" & Pops|Someone) gave your family a year of RankUp$/.test(e.subject)),
+    toThem.map((e) => e.subject).join(' | '))
+  ok('it carries the code, the message when there is one, and how to redeem it',
+    toThem.every((e) => e.text.includes('ABCD-EFGH-JKMN') && /Redeem a gift/.test(e.text)
+      && (!e.name.includes('everything filled in') || e.text.includes('Happy holidays! Love you all & see you soon <3'))))
+  ok('in the HTML part, what the buyer typed is escaped, never markup',
+    toThem.every((e) => !e.html.includes('<Rivera>') && !e.html.includes('<3') && (!e.name.includes('everything') || e.html.includes('&lt;3'))))
+  ok('the receipt carries the code, the plan, how to redeem it and, with a site, the printable card',
+    receipts.every((e) => e.text.includes('ABCD-EFGH-JKMN') && /Redeem a gift/.test(e.text)
+      && (e.name.includes(', without a site') || /#\/gift\/card\?code=ABCD-EFGH-JKMN/.test(e.text))))
+  ok('and says nothing renews', receipts.every((e) => /Nothing renews and nothing more is charged/.test(e.text)))
+  ok('the plan named is the plan bought',
+    gifts.every((e) => e.subject.includes('RankUp') && e.text.includes(e.name.includes('standard') ? TIERS.standard.name : TIERS.elite.name)))
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL CHECKS PASSED')

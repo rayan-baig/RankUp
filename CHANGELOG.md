@@ -5,6 +5,20 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.16.0 — 2026-11-14
+
+Gift subscriptions: "a year of RankUp", for grandparents, aunts and uncles.
+
+- **Give RankUp** (`#/gift`), linked from the front door, the plan screen and Settings. The buyer needs no account: they choose Standard or Elite Pass for 1 year, give their email for the receipt, optionally the name and email of the person it is for, their own name and a short message (200 characters, plain text, the rude-word list, no links), and "Email it to them now" or "I'll give it myself". One payment through Stripe Checkout at the yearly price ($49.99 or $79.99, from the plan list). Nothing renews.
+- **The code is made only after Stripe confirms the payment**, by the webhook: 12 characters (`XXXX-XXXX-XXXX`, no 0/O/1/I/L), worked out from the paid checkout with a server secret, so the same payment always gives the same code and a replay or retry never makes a second. Only its hash is stored. Single use, for 2 years from purchase. An unpaid checkout never has a code.
+- **Delivery**: the buyer gets a receipt with the code and a printable gift card (`#/gift/card`, everything on it kept after the `#`); if they chose it, the recipient gets "<name> gave your family a year of RankUp" with the message and how to redeem. Both through the existing email sender, with a plain-text part and the MTRX Horizyn footer. The recipient's email never contains the buyer's email address.
+- **Redeeming**, in Parent Mode: Settings or the plan screen, "Redeem a gift". The family gets that plan free for 12 months from that day, as a gift beside its paid plan (`families.gift_tier`, `gift_starts_at`, `gift_until`), which the one plan check (`effective_tier`, and the app's `effectiveTier`) honours with the paid plan and the trial. One gift at a time; another adds 12 months to the end, at the better plan. Settings says "Gift plan: Elite Pass until <date>"; the parent's dashboard reminds them 30 days before it ends, in the app only.
+- **A family that already pays is never charged twice**: a plan that renews must have renewal turned off first (the code is not spent until then), and the gift starts the day the paid plan ends. A plan chosen during a gift is first charged the day the gift ends.
+- **Limits**: 5 codes that did not work an hour per family and 20 per address (stored as a keyed hash), then wait an hour; 10 gifts started an hour per address on the Give page. Children never see buying, redeeming or the gift; the gift pages open only in Parent Mode on a phone that is set up. A refund in full voids an unused code; a used code stays used and the decision is recorded.
+- **Privacy**: the policy says in one sentence that the buyer's email is kept for the receipt and support until the code runs out (2 years), and the recipient's name and email and the message are used only to send the gift and deleted 30 days after purchase. The daily retention job deletes them, and an unpaid checkout after 14 days. The consent notice is unchanged.
+- **Stripe, before deploying:** make a product such as "RankUp gift" with two one-time prices, $49.99 and $79.99; set `STRIPE_PRICE_GIFT_STANDARD_YEAR`, `STRIPE_PRICE_GIFT_ELITE_YEAR` and a new secret `GIFT_CODE_SECRET`, with email set up. No new webhook event: `checkout.session.completed`, `checkout.session.async_payment_succeeded` and `charge.refunded` carry gifts. docs/PAYMENTS.md, "Gift subscriptions".
+- SQL: schema.sql (the three gift columns, `effective_tier`), billing.sql (the gift tables and functions, `billing_status`) and retention.sql. Run every file again on the live database, in the documented order; no new file.
+
 ## 0.15.1 — 2026-11-14
 
 The real address: https://rankup.mtrxhorizyn.com.

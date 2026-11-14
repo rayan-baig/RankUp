@@ -4,7 +4,7 @@ Every suite is listed, file by file, in **`tests/run-suite.mjs`**, which runs it
 
 | Suite | Command | Needs | What it covers |
 |---|---|---|---|
-| static | `npm run test:static` | nothing | Every setting the code reads is in `.env.example`; the Cloudflare route table matches `api/`; the scheduled jobs in `vercel.json`, `/api/health` and the jobs agree; the SQL files are in one order everywhere (`config.mjs`, `wiring.mjs`); RankUp shares nothing with the sites beside it on its parent domain: no cookie, no CORS, no wildcard in the policy, a service worker and a way back from Stripe that never lead to a sibling (`isolation.mjs`); the version has a CHANGELOG entry and is built in, never typed (`release.mjs`); every icon exists, the link preview's picture is a whole address or left out, robots.txt and the sitemap show only the front door (`sharecard.mjs`); every arcade game and sport has a short how-to line (`howtoplay.mjs`); the parent help page covers what parents ask, with the plan list's prices (`help.mjs`); the readable copy of a family's data escapes everything typed and reads both export shapes (`dataexport.mjs`); no price or trial length is typed by hand anywhere in `src/` (`prices.mjs`); what the plan screen says each plan gives is what the app enforces, and the yearly saving is the real difference (`planwords.mjs`); every notification's words fit a lock screen with the longest values, never shame, say what happened, and every link in a notice, the weekly digest, an email or Stripe's way back is a real screen that survives the Parent Mode PIN (`noticewords.mjs`); every email RankUp's own code sends (the trial reminders, a school's month, the error report), in every variant, has a plain-text part, no blank left unfilled, the MTRX Horizyn footer once, nothing wider than 600px, and the same words and links in both parts (`emails.mjs`) |
+| static | `npm run test:static` | nothing | Every setting the code reads is in `.env.example`; the Cloudflare route table matches `api/`; the scheduled jobs in `vercel.json`, `/api/health` and the jobs agree; the SQL files are in one order everywhere (`config.mjs`, `wiring.mjs`); RankUp shares nothing with the sites beside it on its parent domain: no cookie, no CORS, no wildcard in the policy, a service worker and a way back from Stripe that never lead to a sibling (`isolation.mjs`); the version has a CHANGELOG entry and is built in, never typed (`release.mjs`); every icon exists, the link preview's picture is a whole address or left out, robots.txt and the sitemap show only the front door (`sharecard.mjs`); every arcade game and sport has a short how-to line (`howtoplay.mjs`); the parent help page covers what parents ask, with the plan list's prices (`help.mjs`); the readable copy of a family's data escapes everything typed and reads both export shapes (`dataexport.mjs`); no price or trial length is typed by hand anywhere in `src/` (`prices.mjs`); what the plan screen says each plan gives is what the app enforces, and the yearly saving is the real difference (`planwords.mjs`); every notification's words fit a lock screen with the longest values, never shame, say what happened, and every link in a notice, the weekly digest, an email or Stripe's way back is a real screen that survives the Parent Mode PIN (`noticewords.mjs`); every email RankUp's own code sends (the trial reminders, a school's month, the error report, a gift's receipt and the gift itself), in every variant, has a plain-text part, no blank left unfilled, the MTRX Horizyn footer once, nothing wider than 600px, and the same words and links in both parts (`emails.mjs`) |
 | smoke | `npm run test:smoke` | the dev server and the stand-in API | The app in a real browser, screen by screen |
 | sync | `npm run test:sync` | the same | Two and three phones against a real Postgres |
 | awards | `npm run test:awards` | Postgres | The rules, in Node, against the app's own code and the database |
@@ -83,6 +83,17 @@ and a reload; the plan screen's copy; a Starter family's month shown as
 banked; and no child's screen mentioning any of it. The Stripe side is the
 "Bring a friend" part of `billingwalk.mjs`, the rules
 `supabase/test/54-referral-rewards.sql`.
+
+**`gifts.mjs`** is "a year of RankUp" as a gift, in the app: the front
+door's link to the Give page, which needs no account, shows the plan list's
+yearly prices and refuses a rude word, a link or a missing email before
+anything is sent; the printable gift card from its link; "Redeem a gift" in
+Settings and on the plan screen, a wrong code refused in words and a real one
+giving the plan, then "Gift plan: Elite Pass until <date>" in Settings; the
+dashboard's reminder 30 days before the end; and no child's screen showing a
+gift, with the gift pages unreachable out of Parent Mode. Buying, paying, the
+emails and refunds are the "Gift" part of `billingwalk.mjs`, the rules
+`supabase/test/55-gifts.sql`.
 
 **`leaderboards.mjs`** is Adventure and Arena in the app: a new child is in
 Adventure with no public board offered; a parent reads what Arena shows,

@@ -90,22 +90,29 @@ export function overdriveActive(state) {
 }
 
 /**
- * What this family is entitled to right now: the better of what they pay for
- * and an unexpired trial.
+ * What this family is entitled to right now: the best of what they pay for,
+ * an unexpired trial and a running gift plan.
  *
  * MIRRORS effective_tier() in supabase/schema.sql, which is the authority —
  * every gate in the database asks that one, and tests/trials.mjs runs the two
- * against each other so a trial can never be real on screen and refused by the
- * server, or the reverse.
+ * against each other so a trial or a gift can never be real on screen and
+ * refused by the server, or the reverse.
  */
 const TIER_RANK = { starter: 0, standard: 1, elite: 2 }
 
 export function effectiveTier(family) {
-  const paid = TIERS[family?.tier] ? family.tier : 'starter'
+  const now = clock()
+  let best = TIERS[family?.tier] ? family.tier : 'starter'
   const trial = family?.trialTier
   const until = family?.trialEndsAt
-  if (!trial || !until || until <= clock()) return paid
-  return (TIER_RANK[trial] ?? 0) > (TIER_RANK[paid] ?? 0) ? trial : paid
+  if (trial && until && until > now && (TIER_RANK[trial] ?? 0) > (TIER_RANK[best] ?? 0)) best = trial
+  // A gift redeemed while a paid plan runs to its end starts when that ends.
+  const gift = family?.giftTier
+  const giftUntil = family?.giftUntil
+  const giftStarts = family?.giftStartsAt ?? null
+  if (gift && giftUntil && giftUntil > now && (giftStarts == null || giftStarts <= now)
+      && (TIER_RANK[gift] ?? 0) > (TIER_RANK[best] ?? 0)) best = gift
+  return best
 }
 
 /** Days left on a running trial, or null when there is not one. */
@@ -116,10 +123,23 @@ export function trialDaysLeft(family) {
   return Math.max(1, Math.ceil(ms / 86400000))
 }
 
-/** True while a trial is the reason they have what they have. */
+/**
+ * True while a gift plan is the reason they have what they have: it is
+ * running, better than what they pay for, and at least as good as a trial
+ * (a gift outlasts a trial, so it is the one a parent is told about).
+ */
+export function onGift(state) {
+  const f = state?.family
+  const paid = TIERS[f?.tier] ? f.tier : 'starter'
+  const running = effectiveTier({ tier: 'starter', giftTier: f?.giftTier, giftStartsAt: f?.giftStartsAt, giftUntil: f?.giftUntil })
+  return running !== 'starter' && TIER_RANK[running] > TIER_RANK[paid] && running === effectiveTier(f)
+}
+
+/** True while a trial is the reason they have what they have (and not a gift, which is said on its own). */
 export function onTrial(state) {
   return trialDaysLeft(state.family) !== null
     && effectiveTier(state.family) !== (state.family.tier || 'starter')
+    && !onGift(state)
 }
 
 export function planOf(state) {
@@ -136,6 +156,7 @@ export function planOf(state) {
  */
 export function planSummary(state) {
   const paid = TIERS[state?.family?.tier] || TIERS.starter
+  if (onGift(state)) return `${paid.name} · gift of ${planOf(state).name}`
   if (!onTrial(state)) return paid.name
   return `${paid.name} · trying ${planOf(state).name}`
 }
@@ -358,6 +379,11 @@ function reduce(state, action) {
             // has to leave whatever they actually pay for sitting untouched.
             trialTier: family.trial_tier || null,
             trialEndsAt: family.trial_ends_at ? Date.parse(family.trial_ends_at) : null,
+            // A gift plan (redeem_gift_code), beside the paid tier for the
+            // same reason: when it ends, what they pay for is still there.
+            giftTier: family.gift_tier || null,
+            giftStartsAt: family.gift_starts_at ? Date.parse(family.gift_starts_at) : null,
+            giftUntil: family.gift_until ? Date.parse(family.gift_until) : null,
             flashTickets: family.flash_tickets ?? next.family.flashTickets ?? 0,
             // Why a paid plan stopped, if it has: the dashboard says so
             // rather than simply showing fewer features. See billingNotice.

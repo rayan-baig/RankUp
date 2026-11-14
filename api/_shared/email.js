@@ -3,10 +3,12 @@
  *
  * Most of RankUp's email is not sent from here: sign-up confirmations and
  * password resets are Supabase's, and receipts and payment problems are
- * Stripe's. Both are set up in those dashboards (docs/EMAILS.md). Three kinds
+ * Stripe's. Both are set up in those dashboards (docs/EMAILS.md). Five kinds
  * are sent from this code: the free trial's two reminders
- * (api/send-trial-emails.js), a school's month (api/settle-schools.js), and
- * the error report to whoever runs RankUp (api/_shared/errorReport.js).
+ * (api/send-trial-emails.js), a school's month (api/settle-schools.js), the
+ * error report to whoever runs RankUp (api/_shared/errorReport.js), and a
+ * gift's two emails, the buyer's receipt with the code and the gift to the
+ * person it is for (api/_shared/gifts.js, from the Stripe webhook).
  *
  * Sent through the email provider's HTTP API, because a Cloudflare Worker
  * cannot speak SMTP. Written for Resend's API (POST /emails): one call, a
@@ -22,6 +24,7 @@
 import { TIERS } from '../../src/state/initialState.js'
 import { PRODUCT_OF } from '../../src/data/legalText.js'
 import { scrubErrorText } from './job.js'
+import { GIFT_MONTHS, GIFT_RECIPIENT_DAYS, giftCardLink } from '../../src/lib/giftRules.js'
 
 const escapeMap = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => escapeMap[c])
@@ -276,4 +279,71 @@ export function errorReportEmail(report, { site } = {}) {
   ]
   const text = [...paragraphs, help, '--', ...foot].join('\n\n')
   return { subject, text, html: toHtml(paragraphs, null, help, foot) }
+}
+
+const giftPlanName = (plan) => (TIERS[plan] || TIERS.elite).name
+const redeemHow = 'To redeem it, a parent opens RankUp (or sets it up, free), goes into Parent Mode, then Settings, Redeem a gift, and types the code.'
+
+/**
+ * The buyer's receipt, from the Stripe webhook once the gift is paid for
+ * (api/_shared/gifts.js). The code, the plan, how it is redeemed, the date
+ * it must be used by, and the printable card. Stripe sends its own receipt
+ * for the payment as well. `o` is what fulfil_gift_order returns, with the
+ * code, the site and the support address.
+ */
+export function giftReceiptEmail(o) {
+  const plan = giftPlanName(o.plan)
+  const by = o.expires_at ? dayName(o.expires_at) : ''
+  const subject = `Your RankUp gift: a year of ${plan}`
+  const to = o.to_name ? o.to_name : 'them'
+  const paragraphs = [
+    'Hello,',
+    `Thank you for giving a year of RankUp. Here is the gift code for ${plan}, for 1 year:`,
+    `Gift code: ${o.code}`,
+    o.delivery === 'email' && o.to_email
+      ? `We have emailed the gift to ${to} at ${o.to_email}, with the code and how to use it.`
+      : 'You said you would give it yourself: print the gift card, or pass the code on however you like.',
+    `${redeemHow} Their family then has ${plan} free for ${GIFT_MONTHS} months from that day.`,
+    `${by ? `The code can be used until ${by}, once.` : 'The code can be used once.'} If the family already pays for RankUp, the gift year starts when their paid plan ends, so they never pay twice.`,
+    `${o.amount_minor ? `You paid ${money(o.amount_minor, o.currency || 'USD')}, once.` : 'You paid once.'} Nothing renews and nothing more is charged. Stripe sends its own receipt for the payment.`,
+  ]
+  const url = giftCardLink(o.site, { code: o.code, plan: o.plan, toName: o.to_name, fromName: o.from_name, message: o.message, by: o.expires_at })
+  const link = url ? { url, label: 'Print the gift card' } : null
+  const help = helpLine(o.replyTo)
+  const foot = [
+    PRODUCT_OF,
+    'You get this because you bought a RankUp gift. We keep your email for this receipt and for help with the gift until the code runs out.',
+  ]
+  const text = [...paragraphs, ...(link ? [`${link.label}: ${link.url}`] : []), help, '--', ...foot].join('\n\n')
+  return { subject, text, html: toHtml(paragraphs, link, help, foot) }
+}
+
+/**
+ * The gift, to the person it is for, when the buyer asked us to email it.
+ * Who it is from by the name the buyer gave (never their email address,
+ * which this does not even read), their message if they wrote one, the code
+ * and how to redeem it.
+ */
+export function giftEmail(o) {
+  const plan = giftPlanName(o.plan)
+  const from = String(o.from_name || '').trim() || 'Someone'
+  const by = o.expires_at ? dayName(o.expires_at) : ''
+  const base = String(o.site || '').replace(/\/+$/, '')
+  const subject = `${from} gave your family a year of RankUp`
+  const paragraphs = [
+    o.to_name ? `Hello ${o.to_name},` : 'Hello,',
+    `${from} gave your family a year of RankUp ${plan}: your kids' chores become quests, and they earn XP and level up when you accept them.`,
+    ...(o.message ? [`${from} wrote: “${o.message}”`] : []),
+    `Your gift code: ${o.code}`,
+    `${redeemHow} Your family then has ${plan} free for ${GIFT_MONTHS} months from that day. No card is needed and nothing is charged.`,
+    `${by ? `Use it by ${by}. ` : ''}If you already pay for RankUp, your gift year starts when your paid plan ends.`,
+  ]
+  const link = base ? { url: `${base}/`, label: 'Open RankUp' } : null
+  const help = helpLine(o.replyTo)
+  const foot = [
+    PRODUCT_OF,
+    `You get this because somebody bought you a RankUp gift and asked us to email it. Your name and email are used only to send it, and deleted within ${GIFT_RECIPIENT_DAYS} days.`,
+  ]
+  const text = [...paragraphs, ...(link ? [`${link.label}: ${link.url}`] : []), help, '--', ...foot].join('\n\n')
+  return { subject, text, html: toHtml(paragraphs, link, help, foot) }
 }

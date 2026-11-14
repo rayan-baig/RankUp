@@ -15,6 +15,13 @@
 --   pairing_claim_attempts     rate-limit marks, read over a ten-minute window.
 --   theme_submissions          themes sent for a Season and declined or never
 --                              picked, after 90 days (the privacy policy says so).
+--   gift_* (billing.sql)       a gift's recipient, their email and the message
+--                              30 days after it was paid for; the buyer's
+--                              email once the code has run out (two years);
+--                              a gift never paid for after 14 days; codes
+--                              typed that did not work, and the per-address
+--                              count of gifts started, after 2 days. The
+--                              privacy policy says each.
 --
 -- Guild messages are deliberately NOT in this list. They are the record of what
 -- children said to each other, they can be reported, and a job that quietly
@@ -50,6 +57,7 @@ declare
   v_tries   int;
   v_crashes int;
   v_themes  int;
+  v_gifts   int;
 begin
   with gone as (
     delete from events
@@ -120,6 +128,21 @@ begin
     ) select count(*) into v_themes from gone;
   end if;
 
+  -- Gifts (billing.sql). The order itself stays: it is the record that a
+  -- code was sold, used or refunded. What is personal goes on its day: the
+  -- recipient's name and email and the message once the gift has had 30 days
+  -- to be sent, the buyer's email once the code can no longer be used, and a
+  -- checkout nobody paid for (with what was typed into it) after 14 days.
+  if to_regclass('public.gift_orders') is not null then
+    with gone as (
+      delete from gift_orders where paid_at is null and created_at < now() - interval '14 days' returning 1
+    ) select count(*) into v_gifts from gone;
+    delete from gift_recipients where keep_until < now();
+    delete from gift_buyers where keep_until < now();
+    delete from gift_redeem_attempts where tried_at < now() - interval '2 days';
+    delete from gift_checkout_attempts where tried_at < now() - interval '2 days';
+  end if;
+
   -- The daily usage counts (health.sql): totals only, kept for 400 days, a
   -- year and a bit, so this month can be set beside the same month last year.
   if to_regclass('public.usage_daily') is not null then
@@ -132,7 +155,8 @@ begin
     'events_deleted', v_events,
     'pairing_codes_deleted', v_codes,
     'claim_attempts_deleted', v_tries,
-    'theme_submissions_deleted', coalesce(v_themes, 0)
+    'theme_submissions_deleted', coalesce(v_themes, 0),
+    'unpaid_gifts_deleted', coalesce(v_gifts, 0)
   );
 end $$;
 

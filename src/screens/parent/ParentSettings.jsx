@@ -14,6 +14,7 @@ import NotificationSettings from '../../components/NotificationSettings.jsx'
 import DataRights from '../../components/DataRights.jsx'
 import { KidThemesSection } from '../../components/KidThemesParent.jsx'
 import InviteCard from '../../components/InviteCard.jsx'
+import GiftPlanCard from '../../components/GiftPlanCard.jsx'
 import AdultsCard from '../../components/AdultsCard.jsx'
 import { navigate } from '../../lib/router.js'
 import { APP_VERSION } from '../../lib/version.js'
@@ -51,6 +52,7 @@ export default function ParentSettings() {
 
       <AdultsCard />
       <InviteCard />
+      <GiftPlanCard />
 
       <KidThemesSection />
 

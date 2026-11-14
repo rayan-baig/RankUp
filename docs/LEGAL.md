@@ -180,3 +180,29 @@ chose to join it. The in-app privacy policy and terms describe it (see
 - **Who may sign a school up.** The terms say the person must work there and be
   allowed to. You check each school by hand before it joins a league; decide
   what evidence you accept.
+
+## Gifts: what is collected from people who are not families
+
+"A year of RankUp" can be bought by somebody with no account, for another
+family (docs/PAYMENTS.md, "Gift subscriptions"). It collects personal data
+from two adults who never agreed to the family terms:
+
+- **The buyer:** their email, for the receipt and for help with the gift,
+  kept until the code runs out (two years); their name if they give one, and
+  their message, kept with the recipient's details below. Stripe holds the
+  payment as for any other.
+- **The recipient:** the name and email the buyer typed, used only to send
+  the gift and deleted 30 days after purchase. The form asks for a grown-up's
+  name or the family's, never a child's; nothing about a child is collected.
+
+The privacy policy says both in one sentence (`src/data/legalText.js`, "How
+long we keep it"), and the Give page says it beside the button. The consent
+notice is unchanged: no child's data is involved until the family redeems the
+code, as an ordinary family. Ask the lawyer:
+
+- Is a one-off email to somebody else's address, sent because a buyer asked,
+  fine under the email marketing rules where you sell (it is transactional:
+  one email, no list, nothing more is ever sent to them)?
+- Does a gift need its own short terms (what a refund means once a code is used, the two-year
+  life of a code, what happens if RankUp closes), or do the main terms cover a
+  buyer who never signs up?

@@ -870,6 +870,61 @@ console.log('\n=== A failed renewal drops the plan, and the parent is told why =
     cancels(from, stranger).length === 0 && stripeSubs.get(stranger).status === 'active')
 }
 
+console.log('\n=== Gifts: buying needs no account; redeeming needs a parent ===')
+{
+  // The whole of a gift, paid, emailed, redeemed and refunded, is walked in
+  // tests/billingwalk.mjs. Here: the two endpoints' doors.
+  stripeMode = 'ok'
+  // Gifts started from this machine count against its hourly ten; a clean hour.
+  await db.query('delete from gift_checkout_attempts')
+  const gift = (body, headers = {}) => fetch(`${BASE}/api/gift-checkout`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Origin: BASE, ...headers }, body: JSON.stringify(body),
+  })
+  ok('the gift checkout takes POST only', (await fetch(`${BASE}/api/gift-checkout`)).status === 405)
+  const bad = await gift({ plan: 'elite', delivery: 'email', buyerEmail: 'nope', toEmail: '' })
+  const badBody = await bad.json().catch(() => ({}))
+  ok('a form that is not filled in properly is refused before Stripe is asked, naming the fields',
+    bad.status === 400 && badBody.error === 'invalid' && badBody.fields.includes('buyerEmail') && badBody.fields.includes('toEmail'),
+    `${bad.status} ${JSON.stringify(badBody)}`)
+  const rude = await gift({ plan: 'elite', delivery: 'self', buyerEmail: `api-gift-${RUN}@example.com`, message: 'a shit present' })
+  ok('a rude word in the message is refused', rude.status === 400, `status ${rude.status}`)
+  const before = stripeCalls.length
+  const started = await gift({ plan: 'standard', delivery: 'self', buyerEmail: `api-gift-${RUN}@example.com`, fromName: 'Aunt Api', message: 'Enjoy!' })
+  const startedBody = await started.json().catch(() => ({}))
+  const call = lastCall('/v1/checkout/sessions')
+  ok('with no sign-in at all, the buyer is sent to Stripe', started.status === 200 && /checkout\.stripe\.test/.test(startedBody.url || ''),
+    `${started.status} ${JSON.stringify(startedBody)}`)
+  ok('for one payment at the gift\'s own one-time price, not a subscription', stripeCalls.length === before + 1
+    && call?.params.get('mode') === 'payment' && call?.params.get('line_items[0][price]') === 'price_test_gift_standard_year'
+    && call?.params.get('customer_email') === `api-gift-${RUN}@example.com` && !call?.params.get('subscription_data[metadata][tier]'),
+    call ? [...call.params].join('&') : 'no call')
+  const orderId = call?.params.get('metadata[gift_order]')
+  ok('marked as a gift, carrying the order and nothing about who it is for',
+    call?.params.get('metadata[kind]') === 'gift' && call?.params.get('client_reference_id') === orderId
+    && !call?.params.get('metadata[family_id]') && ![...call.params.values()].some((v) => /Aunt Api|Enjoy/.test(v)))
+  ok('coming back to the Give page, on this site', call?.params.get('success_url') === `${BASE}/#/gift?paid=1`
+    && call?.params.get('cancel_url') === `${BASE}/#/gift?cancelled=1`)
+  const order = (await db.query('select o.code_hash, o.paid_at, b.email from gift_orders o join gift_buyers b on b.order_id = o.id where o.id = $1', [orderId])).rows[0]
+  ok('the order is kept, and has no code until Stripe says it is paid', order && order.code_hash === null && order.paid_at === null
+    && order.email === `api-gift-${RUN}@example.com`, JSON.stringify(order))
+  stripeMode = 'error500'
+  const down = await gift({ plan: 'elite', delivery: 'self', buyerEmail: `api-gift-${RUN}@example.com` })
+  ok('Stripe down says so plainly', down.status === 503 && (await down.json()).error === 'stripe_unavailable')
+  stripeMode = 'ok'
+
+  ok('redeeming takes a sign-in', (await post('/api/redeem-gift', { code: 'ABCD-EFGH-JKMN' })).status === 401)
+  ok('and a code', (await post('/api/redeem-gift', {}, PARENT)).status === 400)
+  const wrong = await post('/api/redeem-gift', { code: 'ZZZZ-ZZZZ-ZZZZ' }, PARENT)
+  ok('a code nobody sold is refused, by name', wrong.status === 400 && (await wrong.json()).error === 'bad_code', `status ${wrong.status}`)
+  const kidPhone = (await db.query("select user_id from kids where user_id is not null limit 1")).rows[0]?.user_id
+  if (kidPhone) {
+    const asChild = await post('/api/redeem-gift', { code: 'ZZZZ-ZZZZ-ZZZZ' }, kidPhone)
+    ok('a child\'s phone cannot redeem a gift: only a parent', asChild.status === 403, `status ${asChild.status}`)
+  }
+  await db.query('delete from gift_redeem_attempts where family_id = $1', [FAMILY])
+  await db.query('delete from gift_orders where id = $1', [orderId])
+}
+
 stripeStandIn.close()
 
 console.log('\n=== The free trial\'s reminder emails ===')

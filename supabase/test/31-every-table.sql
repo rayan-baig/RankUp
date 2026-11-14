@@ -92,6 +92,15 @@ insert into server_errors (where_at, message) values ('t31', 'T31');
 insert into error_report_kinds (fingerprint) values ('t31');
 insert into error_report_sends (kinds) values ('[]');
 select usage_bump('help_views');
+-- A gift sold, with its buyer, recipient and a code tried by family A. A
+-- browser reads none of it, whoever it belongs to.
+insert into gift_orders (id, plan, delivery, paid_at, stripe_session, code_hash, expires_at, redeemed_by) values
+  ('31a00000-0000-4000-8000-0000000009f1', 'elite', 'email', now(), 'cs_t31', encode(sha256('t31'::bytea), 'hex'),
+   now() + interval '2 years', '31a00000-0000-4000-8000-00000000000f');
+insert into gift_buyers (order_id, email) values ('31a00000-0000-4000-8000-0000000009f1', 't31-buyer@example.com');
+insert into gift_recipients (order_id, to_name, to_email) values ('31a00000-0000-4000-8000-0000000009f1', 'T31', 't31-to@example.com');
+insert into gift_redeem_attempts (family_id, ip_key) values ('31a00000-0000-4000-8000-00000000000f', 't31');
+insert into gift_checkout_attempts (ip_key) values ('t31');
 -- A Season that has started, with a theme in it: official, the same for every
 -- family. Removed again at the end of this file, so the app's tests that run
 -- on this database afterwards do not open on a "New Season!" moment.

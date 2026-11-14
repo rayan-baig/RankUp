@@ -16,6 +16,7 @@
 import { TIERS } from '../state/initialState.js'
 import { priceWords } from '../lib/plans.js'
 import { SCHOOL_PRICES, SCHOOL_TRIAL_DAYS, SCHOOL_CHAMPION_TRIAL_DAYS, SCHOOL_YEAR_MONTHS, dollars } from '../lib/schools.js'
+import { GIFT_CODE_YEARS, GIFT_RECIPIENT_DAYS } from '../lib/giftRules.js'
 
 export const CONSENT_VERSION = '2026-11'
 export const LAST_UPDATED = 'November 2026'
@@ -207,6 +208,7 @@ export const PRIVACY_POLICY = {
       body: [
         'Everything: until you delete your account, which removes it immediately and permanently.',
         'A theme sent to RankUp for a Season that we decline or do not pick: 90 days from when it was sent.',
+        `If you buy a RankUp gift, we keep your email for the receipt and for help with the gift until its code runs out, ${GIFT_CODE_YEARS} years after you buy it, and we use the name and email of the person it is for, and your message, only to send the gift, deleting them ${GIFT_RECIPIENT_DAYS} days after you buy it.`,
         'If you pay for a plan, deleting your account also cancels the subscription at once, so nothing more is charged. Stripe keeps its record of the payments you made (invoices and receipts), because payment records have to be kept for tax and are needed if a refund is due. We keep only Stripe\'s reference to your billing, and only until the cancellation is confirmed and 30 days have passed.',
       ],
     },

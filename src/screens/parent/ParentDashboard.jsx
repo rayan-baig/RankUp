@@ -19,6 +19,7 @@ import { activityFeed } from '../../lib/activity.js'
 import CharityWeek from '../../components/CharityWeek.jsx'
 import InstallPrompt from '../../components/InstallPrompt.jsx'
 import { dashboardBillingNotice } from '../../lib/billing.js'
+import { giftNotice } from '../../lib/giftRules.js'
 import { PickedNotice } from '../../components/KidThemesParent.jsx'
 import { ReferralRewardNotice } from '../../components/InviteCard.jsx'
 import HowItWorks from '../../components/HowItWorks.jsx'
@@ -53,6 +54,8 @@ export default function ParentDashboard() {
   // A paid plan that stopped because of a payment, said where a parent looks
   // every day. A plan they cancelled themselves is not news, so not here.
   const stopped = dashboardBillingNotice(state.family, { demo: state.demo })
+  // A gift plan with 30 days or fewer left, and nothing paid lined up after it.
+  const giftEnding = giftNotice(state.family, { demo: state.demo })
 
   // On a phone the family shares: out of Parent Mode, locked behind them.
   const handOver = () => {
@@ -71,6 +74,14 @@ export default function ParentDashboard() {
           {stopped.body}{' '}
           <button type="button" className="underline font-semibold" onClick={() => navigate('/parent/plan')}>See your plan</button>
         </Banner>
+      )}
+      {giftEnding && (
+        <div data-testid="gift-ending-notice">
+          <Banner tone={giftEnding.tone} icon={giftEnding.icon} title={giftEnding.title}>
+            {giftEnding.body}{' '}
+            <button type="button" className="underline font-semibold" onClick={() => navigate('/parent/plan')}>See plans</button>
+          </Banner>
+        </div>
       )}
       <CharityWeek />
       <PickedNotice who="parent" />

@@ -53,6 +53,18 @@ gives its own saving in dollars. All of it is worked out from `TIERS` by
 Starter is free and has no Stripe price. `tests/plans.mjs` reads this table
 and fails if a price on the plan screen is not in it.
 
+And, for gifts (a year bought for another family, below), a product such as
+**RankUp gift** with two **one-time** prices, not recurring:
+
+| Product | Price | Note the price id |
+|---|---|---|
+| RankUp gift | $49.99 once (a year of Standard) | `price_...` → `STRIPE_PRICE_GIFT_STANDARD_YEAR` |
+| RankUp gift | $79.99 once (a year of Elite Pass) | `price_...` → `STRIPE_PRICE_GIFT_ELITE_YEAR` |
+
+They must be the yearly amounts in `TIERS`, exactly like the four above: the
+Give page shows `TIERS`, and Stripe charges the price. A price change follows
+"Changing a price" below for these two as well.
+
 ### Changing a price
 
 The prices a parent reads (plan screen, banners, front door, help page, terms)
@@ -120,6 +132,9 @@ STRIPE_PRICE_STANDARD=price_...
 STRIPE_PRICE_STANDARD_YEAR=price_...
 STRIPE_PRICE_ELITE=price_...
 STRIPE_PRICE_ELITE_YEAR=price_...
+STRIPE_PRICE_GIFT_STANDARD_YEAR=price_...   # one-time
+STRIPE_PRICE_GIFT_ELITE_YEAR=price_...      # one-time
+GIFT_CODE_SECRET=...                        # openssl rand -hex 32, set once
 SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
@@ -133,15 +148,17 @@ https://rankup.mtrxhorizyn.com/api/stripe-webhook
 
 Subscribe it to:
 
-- `checkout.session.completed`
-- `checkout.session.async_payment_succeeded` (bank payments that clear later)
+- `checkout.session.completed` (a paid gift becomes its code here)
+- `checkout.session.async_payment_succeeded` (bank payments that clear later,
+  a gift's included)
 - `customer.subscription.created`
 - `customer.subscription.updated`
 - `customer.subscription.deleted`
 - `invoice.paid` and `invoice.payment_succeeded` (record each renewal's money)
 - `invoice.payment_failed` (received and deliberately ignored: the
   subscription's own status change is what moves the plan)
-- `charge.refunded` (a refund: see "Refunds and failed payments" below)
+- `charge.refunded` (a refund: see "Refunds and failed payments" below; a
+  gift's refund voids its code if unused)
 - `charge.dispute.created` (a chargeback: only takes back a referral's free
   month, see "Bring a friend" below; the plan follows the subscription's
   own events)
@@ -314,6 +331,179 @@ the notice once, and no child's screen mentioning it).
 Run `supabase/referrals.sql` again on the live database (after `billing.sql`,
 in the documented order), and `consent.sql` (the download), and add
 `charge.dispute.created` to the webhook's events.
+
+---
+
+## Gift subscriptions: "a year of RankUp"
+
+For the holidays: a grandparent, an aunt or an uncle buys a year of Standard
+or Elite Pass for a family. **The buyer needs no RankUp account.** The family
+redeems a code in Parent Mode and has that plan free for 12 months.
+
+No new webhook event is needed: a gift arrives on `checkout.session.completed`
+(or `checkout.session.async_payment_succeeded`) and is refunded on
+`charge.refunded`, which the webhook already takes.
+
+### Buying
+
+The Give page, `#/gift`, is linked from the front door, the plan screen and
+Settings (on a phone that is set up, only in Parent Mode; never on a child's
+phone). The buyer chooses Standard or Elite Pass for 1 year, gives their own
+email for the receipt, optionally the recipient's name and email, their own
+name and a message of at most 200 characters (plain text, the Theme Genesis
+rude-word list, no links or email addresses), and either **"Email it to them
+now"** or **"I'll give it myself"** (a printable card).
+
+`/api/gift-checkout` checks the form again, keeps it (`start_gift_order`,
+`supabase/billing.sql`, which checks it a third time and, since the page
+needs no account, allows at most 10 gifts started an hour from one address
+and 2,000 across everybody), and opens Stripe Checkout in **payment** mode:
+one payment, at the yearly price.
+
+**Why one-time Stripe prices of their own** (`STRIPE_PRICE_GIFT_*_YEAR`)
+rather than the yearly subscription prices or an amount worked out in code:
+
+- Checkout's one-off payments take only one-time prices; the yearly prices
+  are recurring and Stripe refuses them there.
+- An amount written in the code (`price_data`) would break the rule this file
+  starts from: the code names a price, Stripe holds the money, and the two
+  agree because the ids are kept matching by hand.
+- Separate prices keep gifts apart in Stripe's reports, and the receipt names
+  "RankUp gift: Elite Pass, 1 year".
+
+Nothing about who the gift is for is sent to Stripe: the session carries only
+`kind: gift`, the order id and the plan, and the buyer's email (Stripe asks
+for it). The recipient's details stay in RankUp's database and are deleted on
+schedule (below).
+
+### The code
+
+**Made only after Stripe confirms payment, by the webhook, never before.** An
+order that is never paid has no code (the database refuses a code on an
+unpaid order), so a code that never sold cannot exist; the order is deleted
+after 14 days. A checkout completed but not yet paid (a bank payment clearing)
+waits for `async_payment_succeeded`.
+
+- **Easy to type:** 12 characters, `XXXX-XXXX-XXXX`, from 31 capital letters
+  and digits without the ones that read as each other (0 and O, 1, I and L).
+  Case, spaces and dashes do not matter when it is typed.
+- **Unguessable:** worked out from the paid checkout session with HMAC-SHA256
+  under `GIFT_CODE_SECRET` (`api/_shared/gifts.js`), about 59 bits. Without
+  the secret nobody can make one; with the limits below nobody can find one.
+- **Stored hashed:** the database is handed only `sha256` of the code and
+  never holds the code (`fulfil_gift_order`). The code is in the two emails
+  and nowhere else.
+- **Idempotent:** the same session always gives the same code, and the order
+  is keyed on the session, so Stripe's two events for one payment, its
+  retries and a replay all answer `duplicate` and send nothing twice. If an
+  email fails the webhook answers 500, Stripe retries, and the retry sends the
+  same code. Each email has an idempotency key and is marked sent.
+- **Single use**, for **2 years** from purchase. The money is recorded once in
+  `billing_events` (`gift:<session>`), against no family.
+
+### Delivery
+
+Both emails go through the existing sender (`sendEmail`), with a plain-text
+part and the MTRX Horizyn footer; the words are in [EMAILS.md](EMAILS.md).
+
+- **The buyer**, always: a receipt with the code, the plan, how to redeem it,
+  the date it must be used by, and a link to the printable gift card
+  (`#/gift/card?...`). Everything on the card travels after the `#`, which a
+  browser never sends to a server. Stripe sends its own payment receipt too.
+- **The recipient**, only for "Email it to them now": "<name> gave your family
+  a year of RankUp", the message, the code and how to redeem it. It never
+  contains the buyer's email address (`tests/emails.mjs` and
+  `tests/billingwalk.mjs` check).
+
+### Redeeming
+
+A parent opens Parent Mode → Settings (or the plan screen) → **Redeem a
+gift** (`#/parent/redeem`) and types the code. `/api/redeem-gift` checks the
+caller is a parent of the family (not a supporter, not a child's phone) and
+calls `redeem_gift_code`, which only the server may call.
+
+- **How plans are stored:** a gift does not touch `tier` (Stripe's column).
+  It sets `families.gift_tier`, `gift_starts_at` and `gift_until`, and
+  `effective_tier()` (the one plan check every gate asks) takes the best of
+  the paid tier, an unexpired trial and a running gift. The app's
+  `effectiveTier` mirrors it (`tests/trials.mjs` runs both). When a gift ends
+  the family falls back to what it pays for, or Starter; nothing a child
+  earned is touched.
+- **12 months from redemption.**
+- **One gift per family at a time; more stack.** Another code adds 12 months
+  to the end, at the better of the two plans for the whole time.
+- **Settings** says "Gift plan: Elite Pass until <date>". The parent's
+  dashboard reminds them **30 days before it ends**, in the app only: no
+  email, and nothing on a child's screen. A family that has already lined up
+  a paid plan of at least the same size is not reminded.
+
+### A family that already pays
+
+The rule: **gift time never runs while the family is paying for the same
+days, so nobody is charged twice.**
+
+- **A paid plan that will renew:** the code is refused with
+  `subscription_renews` and **not spent**. The parent is told to turn renewal
+  off in "Manage billing" first. Their paid plan then runs to the end of what
+  they paid for.
+- **A paid plan already cancelled and running to its end:** the gift starts
+  the day it ends (`gift_starts_at`) and runs 12 months from then. Until then
+  the family keeps the plan it paid for.
+- **Choosing a plan during a gift:** checkout carries the gift's end as the
+  subscription's `trial_end`, so the card is first charged the day the gift
+  ends, never before. Stripe waits at most two years, so with more than two
+  years of stacked gift ahead checkout answers `gift_too_long` instead of
+  charging early.
+- If a parent turns renewal back on in the portal after redeeming, Stripe
+  charges as usual at renewal; the plan screen says to leave it off.
+
+This was chosen over pausing or extending the Stripe subscription from
+RankUp's side: subscriptions are made by Checkout and changed only in
+Stripe's portal, as everywhere else in this file.
+
+### Limits
+
+| Rule | How |
+|---|---|
+| Brute force | 5 codes that did not work in an hour per family, 20 per address (a keyed hash of it, never the address), then `too_many_tries` for the hour. A right code does not count |
+| The Give page, which needs no account | 10 gifts started an hour per address (`too_many_gifts`), 2,000 across everybody (`busy`) |
+| Children | Never see buying or redeeming: the gift pages open only in Parent Mode on a phone that is set up, never on a child's phone, and the endpoint answers only a parent's token |
+| Refunds | A refund **in full** (`charge.refunded`) of an unused code voids it (`refunded` when typed). A code already used **stays used**: the family keeps its year, and `refund_note = refunded_after_use` records the decision. A refund that arrives before Stripe's "paid" means no code is ever made. A partial refund changes nothing. Once per charge |
+
+### What is kept, and for how long
+
+| What | Kept |
+|---|---|
+| The buyer's email | For the receipt and help with the gift, until the code runs out (2 years) |
+| The recipient's name and email, the buyer's name and message | Only to send the gift: 30 days after it was paid for |
+| A checkout nobody paid for, with what was typed | 14 days |
+| Codes typed that did not work, and the count of gifts started from each address (a keyed hash) | 2 days |
+| The order (plan, paid, used, refunded, the code's hash) | Kept: the record of the sale |
+
+All deleted by the daily `/api/run-retention` (`run_retention`). The privacy
+policy says so in one sentence.
+
+### Tests
+
+`supabase/test/55-gifts.sql` (every rule, the limits, stacking, the paying
+family, refunds, nothing reachable from a browser), `34-scheduled-jobs.sql`
+(retention deletes exactly the gift rows above), `tests/billingwalk.mjs`
+"Gift" (the real gift checkout, webhook and redeem endpoint against the
+stand-in Stripe and email provider), `tests/emails.mjs` (both emails, every
+variant), `tests/trials.mjs` (the app and the database agree) and
+`tests/gifts.mjs` (the Give page, the card, redeeming, Settings, the
+reminder, and no child's screen).
+
+### To switch it on
+
+1. In Stripe, make the two one-time prices above.
+2. Set `STRIPE_PRICE_GIFT_STANDARD_YEAR`, `STRIPE_PRICE_GIFT_ELITE_YEAR` and
+   `GIFT_CODE_SECRET`, with email set up (`EMAIL_API_KEY`, `EMAIL_FROM`): the
+   code reaches people only by email.
+3. Run every SQL file again, in the documented order (`schema.sql` and
+   `billing.sql` changed; `retention.sql` too). No new file.
+4. Buy a gift in test mode with card 4242 4242 4242 4242, check both emails,
+   redeem the code on a test family, and refund it in Stripe.
 
 ---
 

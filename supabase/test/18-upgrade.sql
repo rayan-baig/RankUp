@@ -145,7 +145,11 @@ begin
                              -- The leaderboards: read through leaderboard_board and
                              -- written by refresh_leaderboards (leaderboards.sql).
                              'leaderboard_profiles', 'leaderboard_families', 'leaderboard_kid_stats',
-                             'leaderboard_ranks', 'leaderboard_runs');
+                             'leaderboard_ranks', 'leaderboard_runs',
+                             -- Gifts: the webhook, the gift checkout and the redeem
+                             -- endpoint reach them, with the service key (billing.sql).
+                             'gift_orders', 'gift_buyers', 'gift_recipients', 'gift_redeem_attempts',
+                             'gift_checkout_attempts');
   perform ok('no table is left locked with no policy at all', coalesce(bare, '') = '',
              'bare: ' || coalesce(bare, ''));
 end $$;

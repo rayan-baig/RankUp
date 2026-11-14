@@ -467,30 +467,51 @@ begin
   );
 end $$;
 
+/*
+ * A gift plan: a year of Standard or Elite Pass that somebody else bought for
+ * this family and a parent redeemed with its code (billing.sql,
+ * redeem_gift_code). Kept beside `tier` for the same reason as the trial:
+ * `tier` is Stripe's, written by the webhook alone, and a gift ending has to
+ * leave whatever the family pays for sitting there untouched.
+ *
+ * gift_starts_at is later than now only when the gift was redeemed while a
+ * paid plan was still running to the end it was cancelled at: the gift year
+ * starts the day the paid one stops, so no day is paid for twice. Written by
+ * redeem_gift_code and nothing else; the column grants (lock_billing_columns)
+ * leave a browser no way to touch them.
+ */
+alter table families add column if not exists gift_tier text check (gift_tier in ('standard','elite'));
+alter table families add column if not exists gift_starts_at timestamptz;
+alter table families add column if not exists gift_until timestamptz;
+
 /**
  * What this family is actually entitled to, right now.
  *
- * The better of what they pay for and an unexpired trial. Every gate in this
- * schema asks this rather than reading `tier` directly, so a trial is real
- * everywhere — the AI photo check, a second child, guilds, alliances — rather
- * than being a flag some screens remember to honour and others do not.
+ * The best of what they pay for, an unexpired trial and a running gift plan.
+ * Every gate in this schema asks this rather than reading `tier` directly, so
+ * a trial or a gift is real everywhere (a second child, guilds, alliances,
+ * the XP boost) rather than being a flag some screens remember to honour and
+ * others do not.
  *
- * Immutable in the ordering sense: starter < standard < elite, and a trial can
- * only ever raise. A family on Elite who is handed a Standard trial by a
- * referral keeps Elite.
+ * Immutable in the ordering sense: starter < standard < elite, and a trial or
+ * a gift can only ever raise. A family on Elite who is handed a Standard trial
+ * by a referral keeps Elite. Mirrored by effectiveTier in src/state/reducer.js
+ * (tests/trials.mjs runs the two against each other).
  */
 create or replace function effective_tier(p_family_id uuid)
 returns text language sql stable security definer set search_path = public as $$
-  select case
-    when f.trial_tier is null or f.trial_ends_at is null or f.trial_ends_at <= now()
-      then f.tier
-    -- Rank both and keep the higher. Comparing the words themselves would put
-    -- 'elite' below 'standard' alphabetically and quietly demote people.
-    when (case f.trial_tier when 'elite' then 2 when 'standard' then 1 else 0 end)
-       > (case f.tier       when 'elite' then 2 when 'standard' then 1 else 0 end)
-      then f.trial_tier
-    else f.tier
-  end
+  -- Rank each and keep the highest. Comparing the words themselves would put
+  -- 'elite' below 'standard' alphabetically and quietly demote people.
+  select case greatest(
+           case f.tier when 'elite' then 2 when 'standard' then 1 else 0 end,
+           case when f.trial_tier is not null and f.trial_ends_at > now()
+                then case f.trial_tier when 'elite' then 2 when 'standard' then 1 else 0 end
+                else 0 end,
+           case when f.gift_tier is not null and f.gift_until > now()
+                     and coalesce(f.gift_starts_at, '-infinity'::timestamptz) <= now()
+                then case f.gift_tier when 'elite' then 2 when 'standard' then 1 else 0 end
+                else 0 end)
+         when 2 then 'elite' when 1 then 'standard' else 'starter' end
   from families f where f.id = p_family_id;
 $$;
 

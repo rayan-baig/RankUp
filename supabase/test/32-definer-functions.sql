@@ -364,7 +364,12 @@ begin
     'earn_referral_reward(uuid,text,integer,text[],text,timestamptz)', 'referral_rewards_owed(uuid)',
     'mark_referral_reward_applied(uuid,text,integer,text,text,text)',
     'referral_payment_reversed(uuid,text[],text,timestamptz,timestamptz)',
-    'finish_referral_withdrawal(uuid,boolean,text,text)', 'export_family_referral_data(uuid)']
+    'finish_referral_withdrawal(uuid,boolean,text,text)', 'export_family_referral_data(uuid)',
+    -- Gifts: an order kept before Stripe, its code made after, redeemed
+    -- behind the server's limits, voided by a refund.
+    'start_gift_order(text,text,text,text,text,text,text,text)', 'fulfil_gift_order(uuid,text,text,text,integer,text)',
+    'gift_order_details(uuid)', 'mark_gift_sent(uuid,text)', 'redeem_gift_code(uuid,text,text)',
+    'apply_gift_refund(text,text,boolean)']
   loop
     if to_regprocedure(f) is null then
       v_open := v_open || (f || ' (no longer exists — update this list)');

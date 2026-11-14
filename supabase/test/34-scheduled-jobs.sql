@@ -97,6 +97,31 @@ insert into billing_cancellations (family_key, stripe_customer_id, stripe_subscr
   ('t34-done-lately',   'cus_t34b', 'sub_t34b', now() - interval '40 days', now() - interval '29 days'),
   ('t34-nothing-to-do', null, null, now() - interval '8 days', now() - interval '8 days'),
   ('t34-still-waiting', 'cus_t34c', 'sub_t34c', now() - interval '400 days', null);
+-- Gifts (billing.sql): a checkout never paid for, 15 days and 13 days old;
+-- a paid one whose recipient details and buyer email are past their day,
+-- and one still inside both; codes typed 3 days and 1 day ago.
+insert into gift_orders (id, plan, delivery, created_at) values
+  ('34a00000-0000-4000-8000-0000000009a1', 'elite', 'email', now() - interval '15 days'),
+  ('34a00000-0000-4000-8000-0000000009a2', 'elite', 'email', now() - interval '13 days');
+insert into gift_orders (id, plan, delivery, created_at, paid_at, stripe_session, code_hash, expires_at) values
+  ('34a00000-0000-4000-8000-0000000009a3', 'standard', 'email', now() - interval '800 days', now() - interval '800 days',
+   'cs_t34_old', encode(sha256('t34-old'::bytea), 'hex'), now() - interval '70 days'),
+  ('34a00000-0000-4000-8000-0000000009a4', 'standard', 'self', now() - interval '20 days', now() - interval '20 days',
+   'cs_t34_new', encode(sha256('t34-new'::bytea), 'hex'), now() + interval '710 days');
+insert into gift_buyers (order_id, email, created_at, keep_until) values
+  ('34a00000-0000-4000-8000-0000000009a1', 'buyer-unpaid-old@example.com', now() - interval '15 days', null),
+  ('34a00000-0000-4000-8000-0000000009a2', 'buyer-unpaid-new@example.com', now() - interval '13 days', null),
+  ('34a00000-0000-4000-8000-0000000009a3', 'buyer-old@example.com', now() - interval '800 days', now() - interval '70 days'),
+  ('34a00000-0000-4000-8000-0000000009a4', 'buyer-new@example.com', now() - interval '20 days', now() + interval '710 days');
+insert into gift_recipients (order_id, to_name, to_email, message, created_at, keep_until) values
+  ('34a00000-0000-4000-8000-0000000009a1', 'Old', 'to-unpaid-old@example.com', 'Hi', now() - interval '15 days', null),
+  ('34a00000-0000-4000-8000-0000000009a2', 'New', 'to-unpaid-new@example.com', 'Hi', now() - interval '13 days', null),
+  ('34a00000-0000-4000-8000-0000000009a3', 'Old', 'to-old@example.com', 'Hi', now() - interval '800 days', now() - interval '770 days'),
+  ('34a00000-0000-4000-8000-0000000009a4', 'New', 'to-new@example.com', 'Hi', now() - interval '20 days', now() + interval '10 days');
+insert into gift_redeem_attempts (family_id, ip_key, tried_at) values
+  ('34a00000-0000-4000-8000-00000000000f', 't34', now() - interval '3 days'),
+  ('34a00000-0000-4000-8000-00000000000f', 't34', now() - interval '1 day');
+insert into gift_checkout_attempts (ip_key, tried_at) values ('t34', now() - interval '3 days'), ('t34', now() - interval '1 day');
 
 /*
  * Every table, fingerprinted without the rows the job may delete. Generated
@@ -136,6 +161,11 @@ declare
     'error_report_kinds',     'coalesce(x.last_reported_at, x.first_seen_at) < now() - interval ''90 days''',
     'error_report_sends',     'x.claimed_at < now() - interval ''2 days''',
     'usage_daily',            'x.day < (now() at time zone ''utc'')::date - 400',
+    'gift_orders',            'x.paid_at is null and x.created_at < now() - interval ''14 days''',
+    'gift_buyers',            'x.keep_until < now() or exists (select 1 from gift_orders o where o.id = x.order_id and o.paid_at is null and o.created_at < now() - interval ''14 days'')',
+    'gift_recipients',        'x.keep_until < now() or exists (select 1 from gift_orders o where o.id = x.order_id and o.paid_at is null and o.created_at < now() - interval ''14 days'')',
+    'gift_redeem_attempts',   'x.tried_at < now() - interval ''2 days''',
+    'gift_checkout_attempts', 'x.tried_at < now() - interval ''2 days''',
     'billing_cancellations',  'x.done_at is not null and (x.done_at < now() - interval ''30 days'' or (x.stripe_customer_id is null and x.stripe_subscription_id is null and x.queued_at < now() - interval ''7 days''))');
   k text;
   v_before jsonb;
@@ -172,6 +202,17 @@ begin
 
   perform ok('a submission four hundred days old is kept: it is the family''s record',
     exists (select 1 from submissions where id = '34a00000-0000-4000-8000-0000000000d1'));
+  perform ok('a gift''s order stays once it was paid for, even when its details have gone: it is the record of the sale',
+    exists (select 1 from gift_orders where id = '34a00000-0000-4000-8000-0000000009a3'));
+  perform ok('the buyer''s email and the recipient''s details go on their day, and stay until then',
+    not exists (select 1 from gift_buyers where order_id = '34a00000-0000-4000-8000-0000000009a3')
+    and not exists (select 1 from gift_recipients where order_id = '34a00000-0000-4000-8000-0000000009a3')
+    and exists (select 1 from gift_buyers where order_id = '34a00000-0000-4000-8000-0000000009a4')
+    and exists (select 1 from gift_recipients where order_id = '34a00000-0000-4000-8000-0000000009a4'));
+  perform ok('a gift never paid for goes after 14 days, with what was typed into it',
+    not exists (select 1 from gift_orders where id = '34a00000-0000-4000-8000-0000000009a1')
+    and not exists (select 1 from gift_buyers where order_id = '34a00000-0000-4000-8000-0000000009a1')
+    and exists (select 1 from gift_orders where id = '34a00000-0000-4000-8000-0000000009a2'));
   perform ok('a Stripe cancellation still waiting is kept however old it is',
     exists (select 1 from billing_cancellations where family_key = 't34-still-waiting'));
 end $$;

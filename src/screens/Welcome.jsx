@@ -134,6 +134,12 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null })
           </span>
           <span aria-hidden="true" className="text-muted">›</span>
         </button>
+
+        {/* For grandparents, aunts and uncles: a year of RankUp for a family,
+            bought with no account (#/gift). */}
+        <a href="#/gift" className="block text-center text-xs underline text-muted mt-2.5" data-testid="give-link">
+          🎁 Give a year of RankUp as a gift
+        </a>
       </div>
     </div>
   )

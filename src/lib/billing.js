@@ -130,6 +130,56 @@ export async function openBillingPortal() {
   return result
 }
 
+const GIFT_CHECKOUT_URL = import.meta.env?.VITE_GIFT_CHECKOUT_URL || '/api/gift-checkout'
+const REDEEM_GIFT_URL = import.meta.env?.VITE_REDEEM_GIFT_URL || '/api/redeem-gift'
+
+/**
+ * Can a gift be bought here? Only Stripe has to be on: the buyer needs no
+ * account, so no sync service is involved until the family redeems it.
+ */
+export function giftsLive() {
+  return STRIPE_ENABLED
+}
+
+/**
+ * Send the buyer of a gift to Stripe. No sign-in: the gift's own checkout
+ * (api/gift-checkout.js) takes the form as it is, checks it again, and
+ * answers with Stripe's page. `form` is checkGiftForm's `clean`.
+ */
+export async function startGiftCheckout(form) {
+  try {
+    const res = await fetch(GIFT_CHECKOUT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, reason: data.error || `http_${res.status}`, fields: data.fields || [] }
+    if (data.url) window.location.href = data.url
+    return { ok: true, ...data }
+  } catch (err) {
+    return { ok: false, reason: /fetch|network/i.test(String(err?.message)) ? 'stripe_unavailable' : 'checkout_failed' }
+  }
+}
+
+/** A parent redeems a gift code, in Parent Mode. The server checks who and how often. */
+export async function redeemGift(code) {
+  const token = await freshAccessToken()
+  if (!token) return { ok: false, reason: 'signed_out' }
+  try {
+    const res = await fetch(REDEEM_GIFT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ code }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, reason: data.error || `http_${res.status}` }
+    return { ok: true, ...data }
+  } catch (err) {
+    return { ok: false, reason: err.message }
+  }
+}
+
 /** What the server says this family currently has. */
 export async function fetchBillingStatus() {
   if (!transport.isConfigured()) return null
@@ -152,6 +202,7 @@ export const BILLING_ERRORS = {
   suspended: 'This school is suspended. Contact us to sort it out.',
   already_subscribed: 'You already have a plan. Change it from “Manage billing, cancel, or update card”, where Stripe swaps it over without charging you twice.',
   refunded_plan_renews: 'Your refunded plan is still set to renew. Cancel it from “Manage billing, cancel, or update card” first, so you are never charged for two plans.',
+  gift_too_long: 'Your gift plans run for more than two years from now, longer than Stripe can wait to take a first payment. Choose a plan once less than two years of gift are left.',
   already_paying: 'Your school is already paying. Use “Card, invoices and cancelling” to change the plan.',
 }
 
@@ -186,6 +237,13 @@ export function billingNotice(status) {
   const kept = 'Nothing your kids have earned has been touched.'
   const until = status?.ends_at ? new Date(status.ends_at) : null
   const plan = PLAN_NAMES[status?.paid_tier] || 'paid'
+  // A gift plan running now, or waiting for the paid plan to end.
+  const giftUntil = status?.gift_until ? new Date(status.gift_until) : null
+  const gift = status?.gift_tier && giftUntil && giftUntil.getTime() > Date.now() ? (PLAN_NAMES[status.gift_tier] || 'gift') : null
+  if (gift && state === 'canceled') {
+    // Not "you are on Starter now": the gift is what they are on.
+    return null
+  }
   switch (state) {
     case 'past_due':
       return {
@@ -229,7 +287,9 @@ export function billingNotice(status) {
       if (until && until.getTime() > Date.now()) {
         return {
           tone: 'info', icon: '📅', title: 'Your plan is ending',
-          body: `You cancelled, so your ${PLAN_NAMES[status?.tier] || plan} plan stops on ${planDate(until)}. Nothing changes until then. Changed your mind? Use “Manage billing”.`,
+          body: gift
+            ? `You cancelled, so your ${PLAN_NAMES[status?.tier] || plan} plan stops on ${planDate(until)}. Then your gift of ${gift} runs until ${planDate(giftUntil)}. Leave renewal off, or you will pay for time the gift covers.`
+            : `You cancelled, so your ${PLAN_NAMES[status?.tier] || plan} plan stops on ${planDate(until)}. Nothing changes until then. Changed your mind? Use “Manage billing”.`,
         }
       }
       return null

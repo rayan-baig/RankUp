@@ -5,6 +5,8 @@ import { TIERS, TIER_LADDER, PLAN_COMPARISON, ELITE_KID_PERKS, ELITE_PARENT_PERK
 import { billingLive, startCheckout, openBillingPortal, fetchBillingStatus, billingError, billingNotice } from '../../lib/billing.js'
 import { Screen, Card, Button, SectionTitle, Banner, Chip, Modal } from '../../components/ui.jsx'
 import InviteCard from '../../components/InviteCard.jsx'
+import GiftPlanCard from '../../components/GiftPlanCard.jsx'
+import { giftState, giftDate } from '../../lib/giftRules.js'
 import { guildsEnabled } from '../../lib/guilds.js'
 import { usd, toCents, priceTag, priceWords, annualSaving, yearlyNote, yearlyOffered, planLines, upgradeReason } from '../../lib/plans.js'
 
@@ -32,6 +34,8 @@ export default function ParentPlan() {
   const [error, setError] = useState('')
   const [status, setStatus] = useState(null)
   const live = billingLive()
+  // A gift plan, running or waiting for the paid one to end.
+  const gift = giftState(state.family)
 
   useEffect(() => {
     // Nothing is asked of the server during the look-around. There is no
@@ -81,6 +85,9 @@ export default function ParentPlan() {
         {trialDays
           ? `You are trying ${TIERS[trialTier].name} free for ${trialDays} more ${trialDays === 1 ? 'day' : 'days'}. After that you are on ${TIERS[current].name} unless you choose a plan.`
           : `You are on ${TIERS[current].name}.`}
+        {gift && (gift.pending
+          ? ` Your gift of ${gift.name} starts on ${giftDate(gift.startsAt)} and runs until ${giftDate(gift.until)}.`
+          : ` Your gift of ${gift.name} runs until ${giftDate(gift.until)}. A plan you choose now is first charged that day, never before.`)}
       </p>
 
       {live ? (
@@ -230,6 +237,11 @@ export default function ParentPlan() {
             </Card>
           )
         })}
+      </div>
+
+      {/* A gift plan, redeeming a code, and giving one. Parent Mode only. */}
+      <div className="mt-4">
+        <GiftPlanCard compact />
       </div>
 
       {/* Bring a friend: a free month of whichever plan this family pays for,

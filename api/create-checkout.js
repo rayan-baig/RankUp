@@ -126,6 +126,21 @@ function trialEndFor(billing, now = Date.now()) {
   return Math.floor(end / 1000)
 }
 
+/**
+ * A gift plan the family has (redeem_gift_code), as a Stripe trial end: a
+ * plan chosen while a gift runs, or before one that is waiting to start,
+ * charges nothing until the gift ends, so the gift year is never paid for
+ * twice. Null with no gift. Stripe allows a trial at most two years away;
+ * a gift stacked beyond that is refused (gift_too_long) rather than charged
+ * early.
+ */
+function giftEndFor(billing, now = Date.now()) {
+  const until = new Date(billing.gift_until || 0).getTime()
+  if (!billing.gift_tier || !Number.isFinite(until) || until <= now + 2 * 86400000) return null
+  return Math.floor(until / 1000)
+}
+const STRIPE_LONGEST_TRIAL = 730 * 86400
+
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' })
@@ -190,7 +205,12 @@ export default async function handler(req, res) {
   }
   const stripe = makeStripe(STRIPE_SECRET)
   const customer = billing.has_customer ? await existingCustomer(familyId) : null
-  const trialEnd = oneOff ? undefined : trialEndFor(billing)
+  const giftEnd = oneOff ? null : giftEndFor(billing)
+  if (giftEnd && giftEnd - Math.floor(Date.now() / 1000) > STRIPE_LONGEST_TRIAL) {
+    return res.status(409).json({ error: 'gift_too_long' })
+  }
+  // The later of what is left of the in-app trial and the gift.
+  const trialEnd = oneOff ? undefined : (Math.max(trialEndFor(billing) || 0, giftEnd || 0) || undefined)
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -205,7 +225,8 @@ export default async function handler(req, res) {
       ...(oneOff ? {} : {
         subscription_data: {
           metadata: { family_id: familyId, tier, cycle },
-          // What is left of the in-app trial, if anything. See trialEndFor.
+          // What is left of the in-app trial, or of a gift plan, if
+          // anything. See trialEndFor and giftEndFor.
           ...(trialEnd ? { trial_end: trialEnd } : {}),
         },
       }),

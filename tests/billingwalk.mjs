@@ -19,6 +19,15 @@
  *     whether a second child can be added (Starter is one child)
  * and, for a school, whether it is in the league for its students.
  *
+ * Then a gift: a year of RankUp bought with no account through the real gift
+ * checkout, the code made only when the signed webhook says it is paid
+ * (once, through replays, a bank payment clearing late and the email provider
+ * down), both emails, redeemed by a family that pays (told to turn renewal
+ * off first, then the gift starts when its year ends) and by one on Starter
+ * (12 months; the database, the child's phone, the XP and a second child all
+ * honour it), stacked, a plan chosen during it charged only when it ends,
+ * the reminder 30 days before, five wrong codes, and refunds.
+ *
  * Then "bring a friend": a family invites another, which pays, and the
  * inviting family gets one free month as credit on its Stripe account,
  * exactly once however often Stripe sends the invoice; nothing for a trial,
@@ -414,6 +423,302 @@ console.log('\n=== 6. Subscribe again, for a year ===')
   f = await family()
   ok('changing their mind takes the notice away', f.plan === null && f.row.tier === 'elite', JSON.stringify(f.plan))
 }
+
+/* ------------------------------------------------------------------ */
+/* Gifts: a year of RankUp, bought for a family by somebody else       */
+/* ------------------------------------------------------------------ */
+
+/*
+ * A stand-in for the email provider (EMAIL_API_BASE in serve-functions.sh),
+ * which the gift's receipt and gift email go through. It records each email,
+ * answers a repeated idempotency key with the first answer as the real one
+ * does, and can be told to fail.
+ */
+const mails = []
+let mailMode = 'ok'
+const mailKeys = new Set()
+const mailStandIn = http.createServer((req, res) => {
+  let raw = ''
+  req.on('data', (c) => { raw += c })
+  req.on('end', () => {
+    if (mailMode === 'down') { res.writeHead(500); res.end('{"message":"down"}'); return }
+    const key = req.headers['idempotency-key']
+    if (!(key && mailKeys.has(key))) {
+      if (key) mailKeys.add(key)
+      try { mails.push({ key, ...JSON.parse(raw || '{}') }) } catch { mails.push({ key }) }
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ id: `email_walk_${mails.length}` }))
+  })
+})
+await new Promise((resolve) => mailStandIn.listen(Number(process.env.EMAIL_STANDIN_PORT || 12112), resolve))
+
+const { giftNotice, giftLine } = await import('../src/lib/giftRules.js')
+const { createHash } = await import('node:crypto')
+const codeHash = (code) => createHash('sha256').update(code.replace(/[^A-Z0-9]/g, '')).digest('hex')
+const codeIn = (mail) => (String(mail?.text || '').match(/(?:Gift code|Your gift code): ([A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})/) || [])[1]
+const giftPost = (body) => fetch(`${BASE}/api/gift-checkout`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+})
+const order = async (id) => (await db.query(`select o.*, b.email as buyer, r.to_email from gift_orders o
+  left join gift_buyers b on b.order_id = o.id left join gift_recipients r on r.order_id = o.id where o.id = $1`, [id])).rows[0]
+/** Buy a gift through the real endpoint; returns its order id. */
+async function buyGift(form) {
+  const r = await giftPost(form)
+  const call = lastCall('/v1/checkout/sessions')
+  return { status: r.status, call, orderId: call?.params.get('metadata[gift_order]') }
+}
+/** Stripe's checkout session for a gift, as its events carry it. */
+const giftSession = (orderId, n, over = {}) => ({
+  id: `cs_walk_gift${n}_${RUN}`, object: 'checkout.session', mode: 'payment', payment_status: 'paid', customer: null,
+  client_reference_id: orderId, amount_total: ELITE_YEAR, currency: 'usd', payment_intent: `pi_walk_gift${n}_${RUN}`,
+  metadata: { kind: 'gift', gift_order: orderId, plan: 'elite' }, ...over,
+})
+
+// A family on Starter that will be given gifts, with a child's phone.
+const GIFT_PARENT = 'b16a0000-0000-4000-8000-00000000a001'
+const GIFT_KID_PHONE = 'b16a0000-0000-4000-8000-00000000c001'
+const GIFT_FAMILY = 'b16a0000-0000-4000-8000-00000000f001'
+const GIFT_KID = 'b16a0000-0000-4000-8000-00000000d001'
+const GIFT_CHORE = 'b16a0000-0000-4000-8000-00000000e101'
+await db.query('delete from families where id = $1', [GIFT_FAMILY])
+await db.query(`insert into auth.users (id, email) values ($1, 'walk-gift-parent@example.com'), ($2, null) on conflict do nothing`, [GIFT_PARENT, GIFT_KID_PHONE])
+await db.query(`insert into families (id, name, tier) values ($1, 'Walk Gift Family', 'starter')`, [GIFT_FAMILY])
+await db.query(`insert into parents (user_id, family_id, name, role) values ($1, $2, 'Walk Gift Parent', 'parent')
+                on conflict (user_id) do update set family_id = excluded.family_id, role = 'parent'`, [GIFT_PARENT, GIFT_FAMILY])
+await db.query('select seed_consent($1, $2)', [GIFT_FAMILY, GIFT_PARENT])
+await db.query(`insert into kids (id, family_id, user_id, name) values ($1, $2, $3, 'Gifted')`, [GIFT_KID, GIFT_FAMILY, GIFT_KID_PHONE])
+await db.query(`insert into quests (id, family_id, kid_id, title, xp, done_means) values ($1, $2, $3, 'Lay the table', 40, 'Plates out')`,
+  [`${GIFT_CHORE.slice(0, -4)}e001`, GIFT_FAMILY, GIFT_KID])
+await db.query(`insert into submissions (id, family_id, quest_id, kid_id, status) values ($1, $2, $3, $4, 'pending')`,
+  [GIFT_CHORE, GIFT_FAMILY, `${GIFT_CHORE.slice(0, -4)}e001`, GIFT_KID])
+
+/** What the gift family would notice: the plan, the screens, the child's phone, the XP, a second child. */
+async function giftFamily() {
+  const row = (await db.query(`select tier, gift_tier, gift_starts_at, gift_until, effective_tier(id) as effective
+                                 from families where id = $1`, [GIFT_FAMILY])).rows[0]
+  const parentPhone = reducer({ ...createInitialState(), onboarded: true },
+    { type: 'MERGE_SNAPSHOT', snapshot: await rpcAs('family_snapshot', GIFT_PARENT, { p_since: 0 }), pending: [] })
+  const kidPhone = reducer({ ...createInitialState(), onboarded: true, device: { role: 'kid', linkedKidId: GIFT_KID } },
+    { type: 'MERGE_SNAPSHOT', snapshot: await rpcAs('family_snapshot', GIFT_KID_PHONE, { p_since: 0 }), pending: [] })
+  const award = (await db.query('select award_for_submission($1) as a', [GIFT_CHORE])).rows[0].a
+  let secondChild = true
+  await db.query('begin')
+  try { await db.query(`insert into kids (family_id, name) values ($1, 'Second')`, [GIFT_FAMILY]) } catch { secondChild = false }
+  await db.query('rollback')
+  return { row, parentPhone, kidPhone, kidTier: effectiveTier(kidPhone.family), xp: award?.xp, secondChild,
+    status: await rpcAs('billing_status', GIFT_PARENT) }
+}
+
+// Gifts started from this machine count against its hourly ten; a clean hour.
+await db.query('delete from gift_checkout_attempts')
+
+console.log('\n=== Gift 1. Buying, with no account ===')
+let firstCode
+let firstOrder
+{
+  const bad = await giftPost({ plan: 'elite', delivery: 'email', buyerEmail: 'walk-gift-buyer@example.com' })
+  ok('emailing a gift without the recipient\'s email is refused before Stripe', bad.status === 400)
+  const bought = await buyGift({ plan: 'elite', delivery: 'email', buyerEmail: 'walk-gift-buyer@example.com',
+    fromName: 'Grandma Walk', toName: 'The Gift family', toEmail: 'walk-gift-family@example.com', message: 'Happy holidays, all of you!' })
+  firstOrder = bought.orderId
+  ok('the buyer goes to Stripe: one payment, the Elite Pass gift price, their email for the receipt',
+    bought.status === 200 && bought.call?.params.get('mode') === 'payment'
+    && bought.call?.params.get('line_items[0][price]') === 'price_test_gift_elite_year'
+    && bought.call?.params.get('customer_email') === 'walk-gift-buyer@example.com', `status ${bought.status}`)
+  let o = await order(firstOrder)
+  ok('no code exists before Stripe confirms the payment', o && o.code_hash === null && o.paid_at === null, JSON.stringify(o))
+
+  const mailsBefore = mails.length
+  const pending = await webhook(event('gift1_completed_unpaid', 'checkout.session.completed', giftSession(firstOrder, 1, { payment_status: 'unpaid' })))
+  o = await order(firstOrder)
+  ok('a checkout completed but not yet paid (a bank payment clearing) makes no code and sends nothing',
+    pending.status === 200 && pending.body.gift === 'awaiting_payment' && o.code_hash === null && mails.length === mailsBefore,
+    JSON.stringify(pending))
+
+  const paidEvent = event('gift1_paid', 'checkout.session.async_payment_succeeded', giftSession(firstOrder, 1))
+  const paid = await webhook(paidEvent)
+  o = await order(firstOrder)
+  const receipt = mails.find((m) => m.to?.[0] === 'walk-gift-buyer@example.com' && m.key === `gift-receipt:cs_walk_gift1_${RUN}`)
+  const toThem = mails.find((m) => m.to?.[0] === 'walk-gift-family@example.com')
+  firstCode = codeIn(receipt)
+  ok('paid: the webhook makes the code, and keeps only its hash', paid.status === 200 && paid.body.gift === 'paid'
+    && /^[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}$/.test(firstCode || '') && o.code_hash === codeHash(firstCode)
+    && !JSON.stringify(o).includes(firstCode.replace(/-/g, '')), `${JSON.stringify(paid)} ${firstCode}`)
+  ok('the buyer gets the receipt: the code, the plan, the printable card, plain text and the footer',
+    receipt && receipt.subject === `Your RankUp gift: a year of ${TIERS.elite.name}` && receipt.text.includes('#/gift/card?code=')
+    && /RankUp is a product of MTRX Horizyn\./.test(receipt.text) && /<!doctype html>/i.test(receipt.html || ''), receipt?.subject)
+  ok('and the family gets the gift: "Grandma Walk gave your family a year of RankUp", the message, the same code',
+    toThem && toThem.subject === 'Grandma Walk gave your family a year of RankUp' && codeIn(toThem) === firstCode
+    && toThem.text.includes('Happy holidays, all of you!'), toThem?.subject)
+  ok('the gift email never carries the buyer\'s email address',
+    toThem && ![toThem.subject, toThem.text, toThem.html].join(' ').includes('walk-gift-buyer@example.com'))
+  ok('both are marked sent', o.receipt_sent_at !== null && o.gift_sent_at !== null)
+
+  const sent = mails.length
+  const again = await webhook(paidEvent)
+  const other = await webhook(event('gift1_completed_paid', 'checkout.session.completed', giftSession(firstOrder, 1)))
+  const o2 = await order(firstOrder)
+  ok('Stripe sending it again, or its other event for the same payment, makes no second code and no second email',
+    again.status === 200 && other.status === 200 && again.body.gift === 'duplicate' && mails.length === sent
+    && o2.code_hash === o.code_hash && String(o2.paid_at) === String(o.paid_at), `${JSON.stringify(again)} ${mails.length - sent}`)
+  ok('the money is counted once, against no family', (await db.query(
+    "select count(*)::int as n, bool_and(family_id is null) as none from billing_events where stripe_event = $1", [`gift:cs_walk_gift1_${RUN}`])).rows[0].n === 1)
+
+  const unknown = await webhook(event('gift_unknown', 'checkout.session.completed', giftSession('b16a0000-0000-4000-8000-0000000000ff', 99)))
+  ok('a paid checkout for an order this database never had makes no code', unknown.status === 200 && unknown.body.gift === 'no_order',
+    JSON.stringify(unknown))
+  const forged = await fetch(`${BASE}/api/stripe-webhook`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'stripe-signature': 't=1,v1=bad' },
+    body: JSON.stringify(event('gift_forged', 'checkout.session.completed', giftSession(firstOrder, 1))) })
+  ok('and an unsigned "paid" is refused', forged.status === 400)
+}
+
+console.log('\n=== Gift 2. The email provider down: the code waits, and is the same code ===')
+let secondCode
+let secondOrder
+{
+  const bought = await buyGift({ plan: 'standard', delivery: 'self', buyerEmail: 'walk-gift-buyer2@example.com', fromName: 'Uncle Walk' })
+  secondOrder = bought.orderId
+  mailMode = 'down'
+  const paidEvent = event('gift2_paid', 'checkout.session.completed', giftSession(secondOrder, 2, { amount_total: Math.round(TIERS.standard.yearPrice * 100), metadata: { kind: 'gift', gift_order: secondOrder, plan: 'standard' } }))
+  const failed = await webhook(paidEvent)
+  const o = await order(secondOrder)
+  ok('the receipt could not be sent, so Stripe is asked to try again (500); the code is already made',
+    failed.status === 500 && o.code_hash !== null && o.receipt_sent_at === null, `${failed.status}`)
+  mailMode = 'ok'
+  const retried = await webhook(paidEvent)
+  const receipt = mails.find((m) => m.key === `gift-receipt:cs_walk_gift2_${RUN}`)
+  secondCode = codeIn(receipt)
+  ok('Stripe\'s retry sends the receipt, with the code whose hash was kept', retried.status === 200 && secondCode
+    && (await order(secondOrder)).code_hash === codeHash(secondCode) && (await order(secondOrder)).code_hash === o.code_hash)
+  ok('"I\'ll give it myself": nobody else is emailed', !mails.some((m) => m.key === `gift-send:cs_walk_gift2_${RUN}`))
+}
+
+console.log('\n=== Gift 3. A family already paying ===')
+{
+  const renewing = await asUser('/api/redeem-gift', { code: firstCode }, PARENT)
+  const why = await renewing.json().catch(() => ({}))
+  ok('a family whose paid plan renews is told to turn renewal off first, and the code is not spent',
+    renewing.status === 409 && why.error === 'subscription_renews' && (await order(firstOrder)).redeemed_at === null, JSON.stringify(why))
+  const yearEnd = subs.get(YEARLY).items.data[0].current_period_end
+  subs.set(YEARLY, { ...subs.get(YEARLY), cancel_at_period_end: true, cancel_at: yearEnd })
+  await webhook(event('gift_year_cancel', 'customer.subscription.updated', subs.get(YEARLY)))
+  const redeemed = await asUser('/api/redeem-gift', { code: firstCode.toLowerCase() }, PARENT)
+  const got = await redeemed.json().catch(() => ({}))
+  ok('once renewal is off, the gift starts the day the paid year ends, and runs 12 months from then',
+    redeemed.status === 200 && Date.parse(got.starts_at) === yearEnd * 1000
+    && Date.parse(got.until) === new Date(new Date(yearEnd * 1000).setUTCMonth(new Date(yearEnd * 1000).getUTCMonth() + 12)).getTime(),
+    JSON.stringify(got))
+  const f = await family()
+  expectPlan('paid year still running, gift waiting', f, true)
+  ok('the plan screen says the paid plan is ending, then the gift, and not to turn renewal back on',
+    f.plan?.title === 'Your plan is ending' && /Then your gift of Elite runs until/.test(f.plan.body), JSON.stringify(f.plan))
+  const used = await asUser('/api/redeem-gift', { code: firstCode }, GIFT_PARENT)
+  ok('the code is used now, for every family', used.status === 400 && (await used.json()).error === 'used')
+}
+
+console.log('\n=== Gift 4. Redeeming gives 12 months, and the plan check honours it ===')
+{
+  let g = await giftFamily()
+  ok('before: Starter, everywhere', g.row.effective === 'starter' && g.kidTier === 'starter' && g.xp === BASE_XP && !g.secondChild)
+  const r = await asUser('/api/redeem-gift', { code: secondCode }, GIFT_PARENT)
+  const got = await r.json().catch(() => ({}))
+  g = await giftFamily()
+  const twelve = new Date(); twelve.setUTCMonth(twelve.getUTCMonth() + 12)
+  ok('a parent redeems a Standard gift: Standard for 12 months from today', r.status === 200 && got.tier === 'standard'
+    && Math.abs(Date.parse(got.until) - twelve.getTime()) < 120000, JSON.stringify(got))
+  ok('the database honours it', g.row.effective === 'standard' && g.row.tier === 'starter', JSON.stringify(g.row))
+  ok('the child\'s phone works it out from its own sync', g.kidTier === 'standard', g.kidTier)
+  ok('a second child can be added', g.secondChild === true)
+  ok('Settings says "Gift plan: Standard until <date>"', giftLine(g.parentPhone.family)?.startsWith(`Gift plan: ${TIERS.standard.name} until `),
+    giftLine(g.parentPhone.family))
+  ok('billing_status tells the plan screen', g.status.gift_tier === 'standard' && Boolean(g.status.gift_until))
+
+  // A third gift, Elite, stacks.
+  const third = await buyGift({ plan: 'elite', delivery: 'self', buyerEmail: 'walk-gift-buyer3@example.com' })
+  await webhook(event('gift3_paid', 'checkout.session.completed', giftSession(third.orderId, 3)))
+  const thirdCode = codeIn(mails.find((m) => m.key === `gift-receipt:cs_walk_gift3_${RUN}`))
+  const before = new Date(g.row.gift_until).getTime()
+  const stacked = await asUser('/api/redeem-gift', { code: thirdCode }, GIFT_PARENT)
+  const s = await stacked.json().catch(() => ({}))
+  g = await giftFamily()
+  const expected = new Date(before); expected.setUTCMonth(expected.getUTCMonth() + 12)
+  ok('a second gift adds 12 months to the end of the first', stacked.status === 200 && s.stacked === true
+    && new Date(g.row.gift_until).getTime() === expected.getTime(), JSON.stringify(s))
+  ok('at the better plan: Elite now, and a chore pays Elite\'s XP', g.row.effective === 'elite' && g.kidTier === 'elite' && g.xp === ELITE_XP,
+    `${g.row.effective} ${g.xp}`)
+
+  // Choosing a plan while the gift runs: the first charge is the day it ends.
+  // Two years of gift is longer than Stripe will wait for a first payment.
+  const tooLong = await asUser('/api/create-checkout', { tier: 'elite', cycle: 'year' }, GIFT_PARENT)
+  ok('with two years of gift ahead, a plan cannot be lined up yet (Stripe waits two years at most): refused, never charged early',
+    tooLong.status === 409 && (await tooLong.json()).error === 'gift_too_long', `status ${tooLong.status}`)
+  await db.query("update families set gift_until = now() + interval '300 days' where id = $1", [GIFT_FAMILY])
+  g = await giftFamily()
+  const checkout = await asUser('/api/create-checkout', { tier: 'elite', cycle: 'year' }, GIFT_PARENT)
+  const call = lastCall('/v1/checkout/sessions')
+  ok('a plan chosen during the gift is first charged the day the gift ends, never before',
+    checkout.status === 200 && Number(call?.params.get('subscription_data[trial_end]')) === Math.floor(new Date(g.row.gift_until).getTime() / 1000),
+    `status ${checkout.status} trial_end ${call?.params.get('subscription_data[trial_end]')}`)
+}
+
+console.log('\n=== Gift 5. The reminder, 30 days before it ends ===')
+{
+  await db.query("update families set gift_until = now() + interval '40 days' where id = $1", [GIFT_FAMILY])
+  let g = await giftFamily()
+  ok('40 days left: no reminder yet', giftNotice(g.parentPhone.family) === null)
+  await db.query("update families set gift_until = now() + interval '20 days' where id = $1", [GIFT_FAMILY])
+  g = await giftFamily()
+  const n = giftNotice(g.parentPhone.family)
+  ok('20 days left: the parent is reminded, with the date and what to do',
+    n?.title === `Your gift of ${TIERS.elite.name} ends in 20 days` && /choose a plan/.test(n.body) && /never before/.test(n.body), JSON.stringify(n))
+  await db.query("update families set tier = 'elite' where id = $1", [GIFT_FAMILY])
+  g = await giftFamily()
+  ok('a family already lined up to pay for the same plan is not nagged', giftNotice(g.parentPhone.family) === null)
+  await db.query("update families set tier = 'starter', gift_until = now() - interval '1 second' where id = $1", [GIFT_FAMILY])
+  g = await giftFamily()
+  ok('when it ends: back to Starter, nothing earned taken', g.row.effective === 'starter' && g.kidTier === 'starter' && g.xp === BASE_XP)
+}
+
+console.log('\n=== Gift 6. Too many codes that do not work ===')
+{
+  const spare = await buyGift({ plan: 'elite', delivery: 'self', buyerEmail: 'walk-gift-buyer4@example.com' })
+  await webhook(event('gift4_paid', 'checkout.session.completed', giftSession(spare.orderId, 4)))
+  const spareCode = codeIn(mails.find((m) => m.key === `gift-receipt:cs_walk_gift4_${RUN}`))
+  // A clean hour: the "used" code tried above counted as one that did not work.
+  await db.query('delete from gift_redeem_attempts where family_id = $1', [GIFT_FAMILY])
+  const answers = []
+  for (const guess of ['AAAA-AAAA-AAAA', 'BBBB-BBBB-BBBB', 'CCCC-CCCC-CCCC', 'DDDD-DDDD-DDDD', 'EEEE-EEEE-EEEE']) {
+    answers.push((await asUser('/api/redeem-gift', { code: guess }, GIFT_PARENT)).status)
+  }
+  const sixth = await asUser('/api/redeem-gift', { code: spareCode }, GIFT_PARENT)
+  ok('five wrong codes, and the sixth try waits an hour, even with a real code',
+    answers.every((s) => s === 400) && sixth.status === 429 && (await sixth.json()).error === 'too_many_tries', `${answers} ${sixth.status}`)
+  await db.query('delete from gift_redeem_attempts where family_id = $1', [GIFT_FAMILY])
+
+  console.log('\n=== Gift 7. Refunds ===')
+  const charge = (n, over = {}) => ({ id: `ch_walk_gift${n}_${RUN}`, object: 'charge', customer: null, payment_intent: `pi_walk_gift${n}_${RUN}`,
+    amount: ELITE_YEAR, amount_refunded: ELITE_YEAR, refunded: true, currency: 'usd', created: clock - 60, ...over })
+  const part = await webhook(event('gift4_partial', 'charge.refunded', charge(4, { id: `ch_walk_gift4p_${RUN}`, amount_refunded: 500, refunded: false })))
+  ok('a partial refund of a gift changes nothing', part.status === 200 && part.body.gift === 'partial_refund'
+    && (await order(spare.orderId)).voided_at === null, JSON.stringify(part))
+  const full = await webhook(event('gift4_refund', 'charge.refunded', charge(4)))
+  ok('a refund in full voids the unused code, and says so', full.status === 200 && full.body.gift === 'refunded_unused'
+    && (await order(spare.orderId)).voided_at !== null, JSON.stringify(full))
+  const dead = await asUser('/api/redeem-gift', { code: spareCode }, GIFT_PARENT)
+  ok('the refunded code no longer works', dead.status === 400 && (await dead.json()).error === 'refunded')
+  const replay = await webhook(event('gift4_refund_again', 'charge.refunded', charge(4)))
+  ok('the same refund again acts once', replay.status === 200 && replay.body.gift === 'duplicate')
+
+  const usedRefund = await webhook(event('gift1_refund', 'charge.refunded', charge(1)))
+  const o = await order(firstOrder)
+  ok('a refund of a code already used: it stays used, the family keeps its gift, and the decision is recorded',
+    usedRefund.body.gift === 'refunded_after_use' && o.redeemed_at !== null && o.voided_at === null && o.refund_note === 'refunded_after_use'
+    && (await db.query('select gift_until is not null as g from families where id = $1', [FAMILY])).rows[0].g, JSON.stringify(usedRefund))
+  ok('and a gift refund never touches a family\'s own plan', (await family()).row.tier === 'elite')
+}
+
+mailStandIn.close()
 
 /* ------------------------------------------------------------------ */
 /* Bring a friend: a free month when the family you invited pays       */

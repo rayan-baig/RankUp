@@ -25,6 +25,7 @@ import { schoolIdOf, schoolPriceId, schoolCycle } from './_shared/schoolBilling.
 import { cancelPendingBilling } from './_shared/cancelBilling.js'
 import { reportError } from './_shared/job.js'
 import { applyReferralRewards, referralInvoicePaid, referralPaymentReversed } from './_shared/referralReward.js'
+import { giftPaid } from './_shared/gifts.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -268,6 +269,31 @@ export default async function handler(req, res) {
 
   try {
     const object = event.data.object
+
+    /*
+     * ---- gifts: a year of RankUp bought for somebody else ----
+     *
+     * Before everything else, because a gift's payment belongs to no family
+     * and no school. Its checkout is marked `kind: gift` by
+     * api/gift-checkout.js; paid, it becomes a code and two emails
+     * (api/_shared/gifts.js), once, however often Stripe sends it.
+     */
+    if ((event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded')
+        && object?.metadata?.kind === 'gift') {
+      return res.status(200).json(await giftPaid({ session: object, event, serviceRpc, reportError }))
+    }
+    // A refund is a gift's when the database knows its payment; anything
+    // else (gift: false) carries on to the school and family rules below.
+    if (event.type === 'charge.refunded') {
+      const gift = await serviceRpc('apply_gift_refund', {
+        p_payment_intent: idOf(object.payment_intent),
+        p_charge_id: object.id || null,
+        p_full: refundedInFull(object),
+      })
+      if (gift?.gift) {
+        return res.status(200).json({ received: true, gift: gift.outcome || gift.ignored || (gift.duplicate ? 'duplicate' : 'refund') })
+      }
+    }
 
     // ---- schools: their own plans, never a family's tier ----
     const schoolId = await schoolIdFor(object)

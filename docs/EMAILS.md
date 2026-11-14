@@ -2,7 +2,8 @@
 
 Which emails a family (or a school) gets from RankUp, who sends each one, and
 what you have to set up for it. Three senders, and only one of them is this repository's
-code.
+code. A gift's two emails are the only ones that can go to somebody who has
+no RankUp account: the buyer, and the person they bought it for.
 
 | Email | Sent by | When | Set up |
 |---|---|---|---|
@@ -11,6 +12,8 @@ code.
 | **3 days left of your trial** | RankUp, `/api/send-trial-emails` | Three days before a family's free trial ends, in its own time zone | `EMAIL_API_KEY`, `EMAIL_FROM`, the hourly job (below) |
 | **Last day of your free trial** | RankUp, `/api/send-trial-emails` | On the day it ends, in its own time zone (late the evening before, for a trial that ends in the first two hours of a day, which an hourly job could miss) | The same |
 | **Your School League month** (to a school's admin) | RankUp, `/api/settle-schools` | Once a month, when the month is closed (the 2nd) | `EMAIL_API_KEY`, `EMAIL_FROM`, the monthly job |
+| **Your RankUp gift** (the buyer's receipt, with the code) | RankUp, the Stripe webhook (`api/_shared/gifts.js`) | The moment Stripe confirms a gift is paid for | `EMAIL_API_KEY`, `EMAIL_FROM`, `GIFT_CODE_SECRET` |
+| **"<name> gave your family a year of RankUp"** (to the person it is for) | RankUp, the same | The same moment, only if the buyer chose "Email it to them now" | The same |
 | **The error report** (to whoever runs RankUp, not a family) | RankUp, `/api/send-trial-emails` | Hourly, when there is a new error: each error at most once an hour, at most 20 a day | `ERRORS_EMAIL`, with `EMAIL_API_KEY` and `EMAIL_FROM` |
 | **Receipt** | Stripe | Each payment | Stripe dashboard (below) |
 | **A payment failed** | Stripe | A renewal's card is declined | Stripe dashboard (below) |
@@ -210,11 +213,113 @@ after the trial reminders; words in `api/_shared/email.js`
 
 ---
 
+## RankUp's own: a gift's two emails
+
+`api/_shared/gifts.js`, from the Stripe webhook once a gift's checkout is
+paid; words in `api/_shared/email.js` (`giftReceiptEmail`, `giftEmail`); the
+order in `supabase/billing.sql` (`fulfil_gift_order`, `mark_gift_sent`).
+[PAYMENTS.md](PAYMENTS.md#gift-subscriptions-a-year-of-rankup) has how gifts
+work.
+
+- **Who.** The receipt to the buyer's email, always. The gift to the
+  recipient's email, only if the buyer chose "Email it to them now"; "I'll
+  give it myself" sends nothing to anybody else. Never to a child.
+- **Once.** Each is marked sent after the provider accepts it and carries an
+  idempotency key (`gift-receipt:<session>`, `gift-send:<session>`), so
+  Stripe sending the payment twice, or retrying, never sends one twice. If
+  the provider refuses, the webhook answers 500 and Stripe's retry sends it,
+  with the same code. Without `EMAIL_API_KEY` and `EMAIL_FROM` the webhook
+  answers 500 until they are set: the code reaches people only by email.
+- **The receipt**, for Elite Pass emailed to the family:
+
+  > **Subject:** Your RankUp gift: a year of Elite Pass
+  >
+  > Hello,
+  >
+  > Thank you for giving a year of RankUp. Here is the gift code for Elite
+  > Pass, for 1 year:
+  >
+  > Gift code: ABCD-EFGH-JKMN
+  >
+  > We have emailed the gift to The Riveras at `<their email>`, with the code
+  > and how to use it. *("You said you would give it yourself: print the gift
+  > card, or pass the code on however you like." for "I'll give it myself".)*
+  >
+  > To redeem it, a parent opens RankUp (or sets it up, free), goes into
+  > Parent Mode, then Settings, Redeem a gift, and types the code. Their
+  > family then has Elite Pass free for 12 months from that day.
+  >
+  > The code can be used until 14 November 2028, once. If the family already
+  > pays for RankUp, the gift year starts when their paid plan ends, so they
+  > never pay twice.
+  >
+  > You paid $79.99, once. Nothing renews and nothing more is charged. Stripe
+  > sends its own receipt for the payment.
+  >
+  > [Print the gift card] → `https://rankup.mtrxhorizyn.com/#/gift/card?code=...`
+  >
+  > Need help? ... Or write to `<EMAIL_REPLY_TO>`; a person reads it.
+  >
+  > --
+  > RankUp is a product of MTRX Horizyn.
+  > You get this because you bought a RankUp gift. We keep your email for
+  > this receipt and for help with the gift until the code runs out.
+
+- **The gift**, to the person it is for:
+
+  > **Subject:** Grandma Jo gave your family a year of RankUp
+  > *("Someone gave ..." when the buyer left their name out)*
+  >
+  > Hello The Riveras,
+  >
+  > Grandma Jo gave your family a year of RankUp Elite Pass: your kids'
+  > chores become quests, and they earn XP and level up when you accept them.
+  >
+  > Grandma Jo wrote: "Happy holidays!"
+  >
+  > Your gift code: ABCD-EFGH-JKMN
+  >
+  > To redeem it, a parent opens RankUp (or sets it up, free), goes into
+  > Parent Mode, then Settings, Redeem a gift, and types the code. Your family
+  > then has Elite Pass free for 12 months from that day. No card is needed
+  > and nothing is charged.
+  >
+  > Use it by 14 November 2028. If you already pay for RankUp, your gift year
+  > starts when your paid plan ends.
+  >
+  > [Open RankUp] → `https://rankup.mtrxhorizyn.com/`
+  >
+  > Need help? ...
+  >
+  > --
+  > RankUp is a product of MTRX Horizyn.
+  > You get this because somebody bought you a RankUp gift and asked us to
+  > email it. Your name and email are used only to send it, and deleted
+  > within 30 days.
+
+- **Never the buyer's email address** in the gift: the builder is handed the
+  whole order and does not read it, and `tests/emails.mjs` and
+  `tests/billingwalk.mjs` check every variant. What the buyer typed is plain
+  text, escaped in the HTML part; links and email addresses are refused in
+  the names and the message, so RankUp's address cannot be used to send
+  somebody a link. The recipient's name is asked for as a grown-up's or the
+  family's, not a child's.
+- **The card link** carries the code after the `#`, which a browser never
+  sends to a server. Turn **click tracking off** at the email provider, so
+  the link is not rewritten through the provider's own address.
+- **Tested** by `tests/emails.mjs` (both, every variant: each plan, emailed
+  or given by hand, with and without names, message, amount and date, with
+  and without a site and a support address) and `tests/billingwalk.mjs`
+  (sent once through the real webhook, through replays and the provider
+  being down).
+
+---
+
 ## Every email, checked
 
 `tests/emails.mjs` renders every email RankUp's own code sends, in every
-variant (each plan, each kind of school month, with and without a site and a
-support address), and checks each has a plain-text part, no blank left
+variant (each plan, each kind of school month, each way a gift can be filled
+in, with and without a site and a support address), and checks each has a plain-text part, no blank left
 unfilled, the footer once in each part, nothing wider than 600px, and the
 same words and links in both parts. A new kind of email in
 `api/_shared/email.js` fails it until its variants are added.

@@ -29,6 +29,15 @@ Theme Genesis (0.11.0) added to `sync.sql` the tables `kid_themes`,
 `consent.sql` the children's themes in "Download my data". No new file and no
 change to the order: re-running the three files is the upgrade.
 
+Gift subscriptions (0.16.0) added to `schema.sql` the three gift columns on
+`families` (`gift_tier`, `gift_starts_at`, `gift_until`) and the gift in
+`effective_tier`; to `billing.sql` the tables `gift_orders`, `gift_buyers`,
+`gift_recipients`, `gift_redeem_attempts` and `gift_checkout_attempts` (row
+level security on, no policy) and the server-only functions that keep an
+order, make its code, redeem it and void it on a refund, and the gift in
+`billing_status`; and to `retention.sql` the deletion of a gift's personal
+details on their day. No new file and no change to the order.
+
 Bring a friend (0.14.0) added to `referrals.sql` the free month's columns on
 `referrals` and the functions the Stripe webhook calls to decide, bank, credit
 and withdraw it, and to `consent.sql` the referrals in "Download my data". No
