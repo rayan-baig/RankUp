@@ -101,6 +101,16 @@ insert into gift_buyers (order_id, email) values ('31a00000-0000-4000-8000-00000
 insert into gift_recipients (order_id, to_name, to_email) values ('31a00000-0000-4000-8000-0000000009f1', 'T31', 't31-to@example.com');
 insert into gift_redeem_attempts (family_id, ip_key) values ('31a00000-0000-4000-8000-00000000000f', 't31');
 insert into gift_checkout_attempts (ip_key) values ('t31');
+-- A school district, its admin, the school above in it with an invite, and a
+-- "Get a quote" mark. No family's, and none may be read by one.
+insert into auth.users (id, email) values ('31d00000-0000-4000-8000-0000000000d1', 't31-district@example.com');
+insert into districts (id, name, district_key, link_code) values
+  ('31d00000-0000-4000-8000-0000000000d0', 'T31 District', 't31 district', 'T31DLINK');
+insert into district_staff (user_id, district_id, name) values
+  ('31d00000-0000-4000-8000-0000000000d1', '31d00000-0000-4000-8000-0000000000d0', 'T31 Office');
+insert into district_schools (school_id, district_id, admin_invite, invite_expires_at) values
+  ('31a00000-0000-4000-8000-0000000005c1', '31d00000-0000-4000-8000-0000000000d0', 'T31INVITE0', now() + interval '1 day');
+insert into district_quote_attempts (ip_key) values ('t31');
 -- A Season that has started, with a theme in it: official, the same for every
 -- family. Removed again at the end of this file, so the app's tests that run
 -- on this database afterwards do not open on a "New Season!" moment.

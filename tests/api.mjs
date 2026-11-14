@@ -352,6 +352,14 @@ const stripeStandIn = http.createServer((req, res) => {
       return send(200, { id: `cs_test_${stripeCalls.length}`, object: 'checkout.session', url: `https://checkout.stripe.test/${stripeCalls.length}` })
     }
     if (url.pathname === '/v1/billing_portal/sessions') return send(200, { id: 'bps_test', object: 'billing_portal.session', url: 'https://billing.stripe.test/portal' })
+    // A district's plan: a customer, and a subscription invoiced by email.
+    if (url.pathname === '/v1/customers' && req.method === 'POST') return send(200, { id: `cus_test_${stripeCalls.length}`, object: 'customer' })
+    if (url.pathname.startsWith('/v1/customers/') && req.method === 'POST' && !url.pathname.includes('balance')) {
+      return send(200, { id: url.pathname.split('/')[3], object: 'customer' })
+    }
+    if (url.pathname === '/v1/subscriptions' && req.method === 'POST') {
+      return send(200, { id: `sub_test_${stripeCalls.length}`, object: 'subscription', status: 'active' })
+    }
     if (url.pathname === '/v1/subscriptions' && req.method === 'GET') {
       const customer = url.searchParams.get('customer')
       const data = [...stripeSubs.values()].filter((sub) => !customer || sub.customer === customer)
@@ -923,6 +931,164 @@ console.log('\n=== Gifts: buying needs no account; redeeming needs a parent ==='
   }
   await db.query('delete from gift_redeem_attempts where family_id = $1', [FAMILY])
   await db.query('delete from gift_orders where id = $1', [orderId])
+}
+
+console.log('\n=== A school district: its plan by invoice, and nobody else\'s ===')
+{
+  const OFFICE = 'a0000000-0000-4000-8000-00000000d0a1'
+  const STRANGER = 'a0000000-0000-4000-8000-00000000d0a2'
+  await db.query(`insert into auth.users (id, email) values ($1, 'api-district@example.com'), ($2, 'api-district-stranger@example.com')
+                  on conflict do nothing`, [OFFICE, STRANGER])
+  await db.query('delete from district_staff where user_id = $1', [OFFICE])
+  const rpc = (fn, args, token) => fetch(`${MOCK}/rest/v1/rpc/${fn}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(args),
+  }).then((r) => r.json())
+  const made = await rpc('register_district', { p_name: `API District ${RUN}`, p_your_name: 'Dr Api' }, OFFICE)
+  const DISTRICT = made.district_id
+  ok('a district office signs its district up through the API', made.ok === true, JSON.stringify(made))
+  for (const [name, students] of [['API Oak', 420], ['API Elm', 900], ['API Ash', 500]]) {
+    await rpc('add_district_school', { p_name: name, p_city: 'Apiville', p_students: students }, OFFICE)
+  }
+
+  ok('the district\'s billing takes POST only', (await fetch(`${BASE}/api/district-billing`)).status === 405)
+  ok('and a sign-in', (await post('/api/district-billing', { action: 'invoice', email: 'a@b.co' })).status === 401)
+  ok('and an action it knows', (await asUser('/api/district-billing', { action: 'free' }, OFFICE)).status === 400)
+  const strangerTry = await asUser('/api/district-billing', { action: 'invoice', email: 'x@example.com' }, STRANGER)
+  ok('a stranger cannot invoice anybody\'s district', strangerTry.status === 403 && (await strangerTry.json()).error === 'not_district_admin',
+    `status ${strangerTry.status}`)
+  const parentTry = await asUser('/api/district-billing', { action: 'invoice', email: 'x@example.com' }, PARENT)
+  ok('nor can a parent', parentTry.status === 403)
+  ok('the invoice needs an email to go to', (await asUser('/api/district-billing', { action: 'invoice', email: 'nope' }, OFFICE)).status === 400)
+  ok('there is no plan to update before there is a plan', (await asUser('/api/district-billing', { action: 'update' }, OFFICE)).status === 409)
+  ok('nor a portal before there is a customer', (await asUser('/api/district-billing', { action: 'portal' }, OFFICE)).status === 400)
+
+  const before = stripeCalls.length
+  const sent = await asUser('/api/district-billing', { action: 'invoice', email: 'Accounts@API-District.example' }, OFFICE)
+  const sentBody = await sent.json().catch(() => ({}))
+  const calls = stripeCalls.slice(before)
+  const customerCall = calls.find((c) => c.path === '/v1/customers' && c.method === 'POST')
+  const subCall = calls.find((c) => c.path === '/v1/subscriptions' && c.method === 'POST')
+  ok('the admin asks for the invoice and Stripe is told to send it', sent.status === 200 && sentBody.sent_to === 'accounts@api-district.example',
+    `${sent.status} ${JSON.stringify(sentBody)}`)
+  ok('to a customer for the district alone: its name, where the invoice goes, which district',
+    customerCall?.params.get('email') === 'accounts@api-district.example' && customerCall?.params.get('metadata[district_id]') === DISTRICT
+    && customerCall?.params.get('name') === `API District ${RUN}` && customerCall?.idempotencyKey === `district-customer:${DISTRICT}`,
+    customerCall ? [...customerCall.params].join('&') : 'no call')
+  const p = (k) => subCall?.params.get(k)
+  ok('a yearly plan invoiced by email, with the days to pay from the settings',
+    p('collection_method') === 'send_invoice' && p('days_until_due') === '21' && p('metadata[district_id]') === DISTRICT
+    && p('metadata[kind]') === 'district', subCall ? [...subCall.params].join('&') : 'no call')
+  const lines = [0, 1, 2].map((i) => [p(`items[${i}][price]`), p(`items[${i}][quantity]`)])
+  ok('one price per size and discount, the schools as quantities, and never an amount',
+    JSON.stringify(lines) === JSON.stringify([['price_test_district_large_10', '1'], ['price_test_district_medium_10', '2'], [null, null]])
+    && ![...subCall.params.keys()].some((k) => /amount|unit_amount|price_data/.test(k)), JSON.stringify(lines))
+  ok('with a key, so two taps make one plan', /^district-plan:/.test(subCall?.idempotencyKey || ''))
+  const customerId = (await db.query('select stripe_customer_id from districts where id = $1', [DISTRICT])).rows[0].stripe_customer_id
+  ok('the customer is kept against the district, never shown to the browser',
+    customerId === `cus_test_${stripeCalls.indexOf(customerCall) + 1}` && !JSON.stringify(sentBody).includes('cus_'), customerId)
+
+  // Stripe says the plan is live: the webhook reads what it pays for.
+  const live = await signed({
+    id: `evt_api_district_${RUN}_1`, type: 'customer.subscription.created', created: tick(),
+    data: { object: { id: `sub_api_district_${RUN}`, object: 'subscription', status: 'active', customer: customerId,
+      collection_method: 'send_invoice', metadata: { district_id: DISTRICT, kind: 'district' },
+      items: { data: [
+        { id: 'si_api_d1', quantity: 1, price: { id: 'price_test_district_large_10' } },
+        { id: 'si_api_d2', quantity: 2, price: { id: 'price_test_district_medium_10' } }] } } },
+  })
+  const row = (await db.query('select status, paid_bands, paid_all from districts where id = $1', [DISTRICT])).rows[0]
+  ok('the webhook switches the district\'s plan on, paying for one large and two medium schools',
+    live.status === 200 && row.status === 'active' && row.paid_bands.large === 1 && row.paid_bands.medium === 2 && !row.paid_all, JSON.stringify(row))
+  const covered = (await db.query(`select count(*)::int n from district_schools ds where ds.district_id = $1 and district_covers(ds.school_id)`, [DISTRICT])).rows[0].n
+  ok('which covers all three schools', covered === 3, String(covered))
+  ok('and touches no family\'s plan', (await db.query("select count(*)::int n from families where stripe_customer_id = $1", [customerId])).rows[0].n === 0)
+  const again = await asUser('/api/district-billing', { action: 'invoice', email: 'accounts@api-district.example' }, OFFICE)
+  ok('a paying district is not invoiced a second time', again.status === 409, `status ${again.status}`)
+
+  const paid = await signed({
+    id: `evt_api_district_${RUN}_2`, type: 'invoice.paid', created: tick(),
+    data: { object: { id: `in_api_district_${RUN}`, object: 'invoice', customer: customerId, amount_paid: 159300, currency: 'usd',
+      parent: { subscription_details: { metadata: { district_id: DISTRICT } } } } },
+  })
+  ok('its invoice, paid, is recorded with its amount, against the district',
+    paid.status === 200 && (await db.query('select amount_pence, district_id from billing_events where stripe_event = $1', [`invoice:in_api_district_${RUN}`])).rows[0]?.district_id === DISTRICT)
+
+  // A fourth school, then "update the plan".
+  await rpc('add_district_school', { p_name: 'API Pine', p_city: 'Apiville', p_students: 250 }, OFFICE)
+  stripeSubs.set(`sub_api_district_${RUN}`, { id: `sub_api_district_${RUN}`, object: 'subscription', status: 'active', customer: customerId,
+    items: { object: 'list', data: [
+      { id: 'si_api_d1', quantity: 1, price: { id: 'price_test_district_large_10' } },
+      { id: 'si_api_d2', quantity: 2, price: { id: 'price_test_district_medium_10' } }] } })
+  const from = stripeCalls.length
+  const updated = await asUser('/api/district-billing', { action: 'update' }, OFFICE)
+  const upd = stripeCalls.slice(from).find((c) => c.method === 'POST' && c.path === `/v1/subscriptions/sub_api_district_${RUN}`)
+  ok('updating the plan adds the new school to the same subscription, invoiced for the rest of the year',
+    updated.status === 200 && upd?.params.get('proration_behavior') === 'always_invoice'
+    && upd?.params.get('items[0][id]') === 'si_api_d1' && upd?.params.get('items[1][id]') === 'si_api_d2'
+    && upd?.params.get('items[2][price]') === 'price_test_district_small_10' && upd?.params.get('items[2][quantity]') === '1',
+    upd ? [...upd.params].join('&') : `status ${updated.status}`)
+  const portal = await asUser('/api/district-billing', { action: 'portal' }, OFFICE)
+  ok('the admin reaches its invoices and cancelling, coming back to the district page',
+    portal.status === 200 && lastCall('/v1/billing_portal/sessions')?.params.get('customer') === customerId
+    && lastCall('/v1/billing_portal/sessions')?.params.get('return_url') === `${BASE}/#/district`)
+
+  const ended = await signed({
+    id: `evt_api_district_${RUN}_3`, type: 'customer.subscription.deleted', created: tick(),
+    data: { object: { id: `sub_api_district_${RUN}`, object: 'subscription', status: 'canceled', customer: customerId,
+      metadata: { district_id: DISTRICT }, items: { data: [] } } },
+  })
+  const after = (await db.query('select status from districts where id = $1', [DISTRICT])).rows[0]
+  const kept = (await db.query('select count(*)::int n from district_schools where district_id = $1', [DISTRICT])).rows[0].n
+  ok('when the plan ends the district lapses, and its schools are all still there, on their own',
+    ended.status === 200 && after.status === 'lapsed' && kept === 4, `${after.status}, ${kept}`)
+
+  stripeMode = 'error500'
+  const down = await asUser('/api/district-billing', { action: 'invoice', email: 'accounts@api-district.example' }, OFFICE)
+  ok('Stripe down says so plainly', down.status === 503 && (await down.json()).error === 'stripe_unavailable')
+  stripeMode = 'ok'
+
+  await db.query('delete from schools where id in (select school_id from district_schools where district_id = $1)', [DISTRICT])
+  await db.query('delete from districts where id = $1', [DISTRICT])
+  await db.query('delete from auth.users where id in ($1, $2)', [OFFICE, STRANGER])
+}
+
+console.log('\n=== "Get a quote": to the owner by email, and rate limited ===')
+{
+  await db.query('delete from district_quote_attempts')
+  const quote = (body) => fetch(`${BASE}/api/district-quote`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Origin: BASE }, body: JSON.stringify(body),
+  })
+  ok('the quote form takes POST only', (await fetch(`${BASE}/api/district-quote`)).status === 405)
+  const bad = await quote({ district: '', email: 'nope', schools: 'lots' })
+  const badBody = await bad.json().catch(() => ({}))
+  ok('a form not filled in is refused, naming the fields, and nothing is sent',
+    bad.status === 400 && ['district', 'name', 'email', 'schools'].every((f) => badBody.fields?.includes(f)), JSON.stringify(badBody))
+  const before = emails.length
+  const form = { district: `Big Plains ${RUN}`, name: 'Dr Plains', role: 'Superintendent', email: `plains-${RUN}@district.example`,
+    schools: 140, students: 52000, message: 'We need a quote & a PO <soon>.' }
+  const sent = await quote(form)
+  const mail = emails[before]
+  ok('a request goes to the owner\'s sales address, with no sign-in at all', sent.status === 200 && emails.length === before + 1
+    && mail.body.to?.[0] === 'sales@example.test', `status ${sent.status}, ${emails.length - before} emails`)
+  ok('replying goes to the person who asked', mail?.body.reply_to === `plains-${RUN}@district.example`)
+  ok('it says what they asked for', /Big Plains/.test(mail?.body.subject || '') && /140 schools/.test(mail?.body.subject || '')
+    && mail?.body.text.includes('52,000') && mail?.body.text.includes('a PO <soon>') && !mail?.body.html.includes('<soon>'))
+  ok('with a key, so a retry is never a second email', /^district-quote:\d+$/.test(mail?.key || ''), mail?.key)
+  ok('and nothing they typed is stored: only a mark that a request was made',
+    (await db.query('select count(*)::int n from district_quote_attempts')).rows[0].n === 1
+    && !JSON.stringify((await db.query('select * from district_quote_attempts')).rows).includes('plains'))
+  await quote(form)
+  await quote(form)
+  const fourth = await quote(form)
+  ok('three an hour from one place, then wait', fourth.status === 429 && (await fourth.json()).error === 'too_many_quotes', `status ${fourth.status}`)
+  ok('and the fourth sent nothing', emails.length === before + 3)
+  await db.query('delete from district_quote_attempts')
+  emailMode = 'error500'
+  const failed = await quote(form)
+  ok('the email service down says the request was not sent', failed.status === 502 && (await failed.json()).error === 'not_sent')
+  emailMode = 'ok'
+  await db.query('delete from district_quote_attempts')
 }
 
 stripeStandIn.close()

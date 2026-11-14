@@ -194,7 +194,8 @@ begin
   -- Never an adult's account (a shared phone can play both roles) or staff.
   v_devices := array(select d from unnest(v_devices) d
                       where not exists (select 1 from parents p where p.user_id = d)
-                        and not exists (select 1 from school_staff st where st.user_id = d));
+                        and not exists (select 1 from school_staff st where st.user_id = d)
+                        and not exists (select 1 from district_staff ds where ds.user_id = d));
   v_n := coalesce(array_length(v_devices, 1), 0);
   if v_n > 0 then
     delete from pairing_claim_attempts where user_id = any(v_devices);
@@ -416,7 +417,8 @@ begin
   -- Another adult in the family keeps their own account, now empty.
   begin
     delete from auth.users where id = auth.uid()
-       and not exists (select 1 from school_staff where user_id = auth.uid());
+       and not exists (select 1 from school_staff where user_id = auth.uid())
+       and not exists (select 1 from district_staff where user_id = auth.uid());
   exception when insufficient_privilege then
     return v_out || jsonb_build_object('sign_in_kept', true);
   end;

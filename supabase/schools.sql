@@ -165,6 +165,84 @@ revoke all on schools, school_staff, school_members, school_rivalries,
   from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
+-- School districts: one customer paying for many schools. The tables are
+-- here because whether a school is live (school_is_live, below) asks whether
+-- its district pays for it; the district's functions are at the end of this
+-- file, under "School districts".
+--
+-- A district is never closer to a child than a school is. It holds no child
+-- and no family; it sees each of its schools' totals, and only for a school
+-- with enough students taking part that a total is not one child's number.
+-- ---------------------------------------------------------------------------
+
+create table if not exists districts (
+  id             uuid primary key default gen_random_uuid(),
+  name           text not null check (length(name) between 2 and 80),
+  -- Folded the same way as a school's district, so a school the district
+  -- adds plays in the district's own league.
+  district_key   text not null,
+  -- For a school already on RankUp: its admin types this to join.
+  link_code      text unique,
+  -- 'setup' until Stripe says a plan is live; 'lapsed' once it has ended.
+  status         text not null default 'setup' check (status in ('setup','active','lapsed')),
+  stripe_customer_id     text,
+  stripe_subscription_id text,
+  -- What Stripe last said, as for a school (see the school columns below).
+  billing_status     text,
+  billing_event_at   timestamptz,
+  billing_period_end timestamptz,
+  billing_ends_at    timestamptz,
+  -- How many schools of each size the live plan pays for, read from the
+  -- subscription's prices by the webhook: {"small": 3, "large": 1}.
+  paid_bands     jsonb,
+  -- A plan set up by hand in Stripe (a quoted deal) covers every school.
+  paid_all       boolean not null default false,
+  created_at     timestamptz not null default now()
+);
+
+-- One district per sign-in. Like school staff, keyed on auth.users: a
+-- district office is not a household and gets no way into one.
+create table if not exists district_staff (
+  user_id     uuid primary key references auth.users(id) on delete cascade,
+  district_id uuid not null references districts(id) on delete cascade,
+  name        text not null check (length(name) between 1 and 60),
+  role        text not null default 'admin' check (role in ('admin')),
+  joined_at   timestamptz not null default now()
+);
+
+-- One district per school. The primary key is the rule.
+create table if not exists district_schools (
+  school_id         uuid primary key references schools(id) on delete cascade,
+  district_id       uuid not null references districts(id) on delete cascade,
+  -- For a school the district added: the one-time code its principal signs
+  -- up with to become the school's admin. Cleared once used or expired.
+  admin_invite      text unique,
+  invite_expires_at timestamptz,
+  added_at          timestamptz not null default now()
+);
+
+create index if not exists district_schools_district on district_schools (district_id);
+
+-- "Get a quote" requests, as rate-limit marks only: a keyed hash of where the
+-- request came from and when. What the person typed goes by email to whoever
+-- runs RankUp and is not kept here.
+create table if not exists district_quote_attempts (
+  id       bigserial primary key,
+  ip_key   text not null,
+  tried_at timestamptz not null default now()
+);
+
+create index if not exists district_quote_attempts_tried on district_quote_attempts (tried_at);
+
+alter table districts               enable row level security;
+alter table district_staff          enable row level security;
+alter table district_schools        enable row level security;
+alter table district_quote_attempts enable row level security;
+
+revoke all on districts, district_staff, district_schools, district_quote_attempts
+  from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
 -- Prices. Kept in step with SCHOOL_PRICES in src/lib/schools.js, and
 -- tests/schools.mjs fails if the two ever disagree.
 -- ---------------------------------------------------------------------------
@@ -232,13 +310,43 @@ create or replace function school_daily_chores()
 returns int language sql immutable as $$ select 8 $$;
 revoke execute on function school_daily_chores() from public, anon, authenticated;
 
-/** Paid up, or still in its trial. Anything else sits the league out. */
+/**
+ * Whether a district's live plan pays for this school.
+ *
+ * The plan pays for so many schools of each size (paid_bands, from the
+ * subscription's prices). Within a size, the schools added first are the ones
+ * paid for, so a school added after the plan was bought waits until the plan
+ * is updated to include it. A plan set up by hand in Stripe pays for all.
+ */
+create or replace function district_covers(p_school uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1
+      from district_schools ds
+      join districts d on d.id = ds.district_id
+      join schools s on s.id = ds.school_id
+     where ds.school_id = p_school
+       and d.status = 'active'
+       and (d.paid_all
+            or (select count(*) from district_schools o join schools os on os.id = o.school_id
+                 where o.district_id = d.id and os.size_band = s.size_band
+                   and (o.added_at, o.school_id) <= (ds.added_at, ds.school_id))
+               <= coalesce((d.paid_bands ->> s.size_band)::int, 0)));
+$$;
+
+/**
+ * Paid up (by itself or by its district), or still in its trial. Anything
+ * else sits the league out. A suspension is the operator's, and no plan
+ * lifts it.
+ */
 create or replace function school_is_live(p_school uuid)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from schools s
                   where s.id = p_school
+                    and s.status <> 'suspended'
                     and (s.status = 'active'
-                         or (s.status = 'trial' and s.trial_ends_at > now())));
+                         or (s.status = 'trial' and s.trial_ends_at > now())
+                         or district_covers(s.id)));
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -617,7 +725,15 @@ begin
                                  order by st.role, st.name)
                   from school_staff st where st.school_id = p_school),
       'challenges_in', (select count(*) from school_rivalries
-                         where rival_id = p_school and status = 'pending'));
+                         where rival_id = p_school and status = 'pending'),
+      -- The district this school belongs to, if any, and whether its plan
+      -- pays for the school now. The district's name only: nothing about its
+      -- other schools.
+      'district_plan', (select jsonb_build_object('name', d.name,
+                                                  'covered', district_covers(p_school),
+                                                  'active', d.status = 'active')
+                          from district_schools ds join districts d on d.id = ds.district_id
+                         where ds.school_id = p_school));
   end if;
   return v_out;
 end $$;
@@ -902,14 +1018,23 @@ create or replace function unapplied_school_awards()
 returns jsonb language sql stable security definer set search_path = public as $$
   select coalesce(jsonb_agg(jsonb_build_object(
            'district_key', a.district_key, 'month_key', a.month_key,
-           'school_id', s.id, 'name', s.name, 'status', s.status,
-           'stripe_customer_id', s.stripe_customer_id,
-           'stripe_subscription_id', s.stripe_subscription_id,
+           'school_id', s.id, 'name', s.name,
+           -- A school its district pays for wins its month for the district:
+           -- the credit goes on the district's account, which is paying.
+           'status', case when dp.customer is not null then 'active' else s.status end,
+           'stripe_customer_id', coalesce(dp.customer, s.stripe_customer_id),
+           'stripe_subscription_id', coalesce(dp.subscription, s.stripe_subscription_id),
+           'district_paid', dp.customer is not null,
            -- A month at the school's own price, whatever its billing cycle: on
            -- a yearly plan a "100% off the next invoice" would be a free year.
            'monthly_cents', (school_price_quote(s.student_count)->>'monthly_cents')::int)
            order by a.month_key, a.district_key), '[]'::jsonb)
     from school_awards a join schools s on s.id = a.school_id
+    left join lateral (
+      select d.stripe_customer_id as customer, d.stripe_subscription_id as subscription
+        from district_schools ds join districts d on d.id = ds.district_id
+       where ds.school_id = s.id and d.stripe_customer_id is not null and district_covers(s.id)
+    ) dp on true
    where a.applied_at is null;
 $$;
 
@@ -1028,6 +1153,10 @@ begin
   if v_s.status = 'active' and v_s.stripe_subscription_id is not null then
     return jsonb_build_object('ok', false, 'reason', 'already_paying',
                               'school_id', v_s.id, 'has_customer', v_s.stripe_customer_id is not null);
+  end if;
+  -- Its district pays for it: a plan of its own would be paying twice.
+  if district_covers(v_s.id) then
+    return jsonb_build_object('ok', false, 'reason', 'district_pays');
   end if;
   return jsonb_build_object('ok', true, 'school_id', v_s.id, 'name', v_s.name,
                             'band', v_s.size_band, 'status', v_s.status,
@@ -1301,6 +1430,11 @@ returns jsonb language sql stable security definer set search_path = public as $
            'status', s.status, 'verified', s.verified,
            'trial_ends_at', s.trial_ends_at, 'created_at', s.created_at,
            'paying', s.stripe_subscription_id is not null,
+           -- The district account it belongs to, if any, and whether that
+           -- district's plan pays for it.
+           'district_account', (select d.name from district_schools ds join districts d on d.id = ds.district_id
+                                 where ds.school_id = s.id),
+           'district_paid', district_covers(s.id),
            'students_joined', (select count(*) from school_members m where m.school_id = s.id),
            'staff', (select coalesce(jsonb_agg(jsonb_build_object(
                               'name', st.name, 'role', st.role, 'email', u.email,
@@ -1545,6 +1679,11 @@ begin
     'rivalries', v_rivals,
     'paid', v_paid,
     'status', v_s.status,
+    -- Its district pays for it: the email says so instead of the school's
+    -- own plan, which may well have ended.
+    'district_plan', case when district_covers(p_school) then (
+      select d.name from district_schools ds join districts d on d.id = ds.district_id
+       where ds.school_id = p_school) end,
     -- What happens next: renews, ends, or the trial ends.
     'renews_at', case when v_s.status = 'active' and v_s.billing_ends_at is null then v_s.billing_period_end end,
     'ends_at', case when v_s.status = 'active' then v_s.billing_ends_at end,
@@ -1610,3 +1749,704 @@ end $$;
 revoke execute on function school_month_summary(uuid, text) from public, anon, authenticated;
 revoke execute on function claim_school_month_emails(date, int) from public, anon, authenticated;
 revoke execute on function finish_school_month_email(uuid, text, boolean) from public, anon, authenticated;
+
+-- ===========================================================================
+-- School districts.
+--
+-- One customer buying the School League for many schools at once. A district
+-- admin signs the district up, adds its schools (each gets a one-time invite
+-- for its principal, who becomes the school's admin), and sees the district
+-- picture: totals for each school and for the district.
+--
+-- What a district sees, and what it never sees:
+--   * Totals only. Per school: students taking part, how many did a chore
+--     this month, chores done, the average. Never a child's name, nickname or
+--     any one child's number, and nothing anybody typed.
+--   * Not even totals for a school with fewer students taking part than a
+--     league ranks (school_min_students). Below that a total is close to one
+--     family's number, so the district sees "too few to show". District
+--     totals add up only the schools that are shown, so they cannot be used to
+--     work a small school's number out by subtraction.
+--   * Nothing changes for a school's own privacy rules: what its staff see,
+--     its Stars, its verification. A district is not staff of its schools.
+--
+-- Paying: by invoice, yearly (api/district-billing.js, Stripe Invoicing). Each
+-- school is priced by its size at the School League's yearly price, less a
+-- discount that grows with its place in the district's plan
+-- (district_price_quote). A district that stops paying ends its plan; each
+-- school simply falls back to its own plan, its trial, or the free level.
+-- Nothing is deleted then: the retention job removes a district a year after
+-- its plan ended, and never a school.
+-- ===========================================================================
+
+create or replace function current_district_staff()
+returns district_staff language sql stable security definer set search_path = public as $$
+  select * from district_staff where user_id = auth.uid();
+$$;
+
+/** A district plan is for at least this many schools: one school is the School League. */
+create or replace function district_min_schools()
+returns int language sql immutable as $$ select 2 $$;
+
+/** More than this, and a district gets a quote instead (the "Get a quote" form). */
+create or replace function district_max_schools()
+returns int language sql immutable as $$ select 100 $$;
+
+/**
+ * The discount, in percent, on the school in this place in a district's plan.
+ * Places go biggest school first. Kept in step with DISTRICT_DISCOUNTS in
+ * src/lib/schools.js; tests/schools.mjs fails if the two disagree.
+ *
+ * Why by place, like tax brackets, rather than one discount for the whole
+ * plan: with one discount for everyone, 10 schools at 20% off cost less than
+ * 9 at 10% off (8.0 school-prices against 8.1), and 25 at 30% off less than
+ * 24 at 20%. A district would save money by adding a school it did not want.
+ * By place, each school added adds at least 70% of its own price, and moves
+ * at most two others (smaller or the same size) into a bigger discount, each
+ * worth 10% of their price: the total always goes up. docs/PAYMENTS.md.
+ */
+create or replace function district_discount_pct(p_place int)
+returns int language sql immutable as $$
+  select case when p_place >= 25 then 30 when p_place >= 10 then 20 else 10 end;
+$$;
+
+/**
+ * What a district pays a year for schools of these sizes. Public, like a
+ * school's price: a district wants the price before an account.
+ *
+ * Each school at its size's yearly School League price, less its place's
+ * discount. One line per size and discount, which is one Stripe price each
+ * (api/_shared/districtBilling.js), with a quantity.
+ */
+create or replace function district_price_quote(p_students int[])
+returns jsonb language plpgsql immutable as $$
+declare
+  v_n     int := coalesce(array_length(p_students, 1), 0);
+  v_lines jsonb;
+  v_total bigint;
+  v_full  bigint;
+begin
+  if exists (select 1 from unnest(coalesce(p_students, '{}'::int[])) n
+              where n is null or n < 1 or n > 20000) then
+    return jsonb_build_object('ok', false, 'reason', 'bad_size');
+  end if;
+  if v_n < district_min_schools() then
+    return jsonb_build_object('ok', false, 'reason', 'too_few_schools');
+  end if;
+  if v_n > district_max_schools() then
+    return jsonb_build_object('ok', false, 'reason', 'too_many_schools');
+  end if;
+
+  with placed as (
+    select q->>'band' as band, q->>'label' as label, (q->>'yearly_cents')::int as full_cents,
+           district_discount_pct((row_number() over (order by (q->>'yearly_cents')::int desc))::int) as pct
+      from (select school_price_quote(n) as q from unnest(p_students) n) s
+  ), lines as (
+    select band, label, pct, full_cents, count(*)::int as quantity,
+           -- Every yearly price is whole dollars and every discount a whole
+           -- ten percent, so this is exact.
+           (full_cents * (100 - pct) / 100)::int as unit_cents
+      from placed
+     group by band, label, pct, full_cents
+  )
+  select jsonb_agg(jsonb_build_object('band', band, 'label', label, 'pct', pct, 'quantity', quantity,
+                                      'unit_yearly_cents', unit_cents,
+                                      'yearly_cents', unit_cents * quantity)
+                   order by full_cents desc, pct),
+         sum(unit_cents * quantity), sum(full_cents * quantity)
+    into v_lines, v_total, v_full
+    from lines;
+
+  return jsonb_build_object('ok', true, 'schools', v_n, 'lines', v_lines,
+                            'yearly_cents', v_total, 'full_yearly_cents', v_full,
+                            'saving_cents', v_full - v_total);
+end $$;
+
+/** The plan a district's schools add up to now. Suspended schools are not billed. */
+create or replace function district_plan_quote(p_district uuid)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select district_price_quote(coalesce(array_agg(s.student_count order by s.id), '{}'::int[]))
+    from district_schools ds join schools s on s.id = ds.school_id
+   where ds.district_id = p_district and s.status <> 'suspended';
+$$;
+
+/**
+ * One school's month, as its district may see it: totals, and only when
+ * enough students take part that a total is not one child's number.
+ */
+create or replace function district_school_month(p_school uuid, p_month date)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select case
+    when count(*) < school_min_students()
+      then jsonb_build_object('students', count(*), 'shown', false)
+    else jsonb_build_object(
+      'students', count(*), 'shown', true,
+      'active', count(*) filter (where points > 0),
+      'chores', coalesce(sum(points), 0),
+      'score', round(avg(points)::numeric, 1))
+  end
+    from school_kid_points(p_school, p_month);
+$$;
+
+/** The district's totals: only the schools whose numbers are shown. */
+create or replace function district_totals(p_schools jsonb, p_which text)
+returns jsonb language sql immutable as $$
+  select jsonb_build_object(
+    'schools', count(*),
+    'shown', count(*) filter (where (e->p_which->>'shown')::boolean),
+    'students', coalesce(sum((e->p_which->>'students')::int) filter (where (e->p_which->>'shown')::boolean), 0),
+    'active', coalesce(sum((e->p_which->>'active')::int) filter (where (e->p_which->>'shown')::boolean), 0),
+    'chores', coalesce(sum((e->p_which->>'chores')::int) filter (where (e->p_which->>'shown')::boolean), 0),
+    'covered', count(*) filter (where (e->>'covered')::boolean))
+    from jsonb_array_elements(coalesce(p_schools, '[]'::jsonb)) e;
+$$;
+
+/** Unique codes in the same alphabet as every other code here. */
+create or replace function district_new_link_code()
+returns text language plpgsql volatile security definer set search_path = public as $$
+declare v text;
+begin
+  loop
+    v := school_code(8);
+    exit when not exists (select 1 from districts where link_code = v)
+          and not exists (select 1 from schools where staff_code = v);
+  end loop;
+  return v;
+end $$;
+
+create or replace function district_new_invite()
+returns text language plpgsql volatile security definer set search_path = public as $$
+declare v text;
+begin
+  loop
+    v := school_code(10);
+    exit when not exists (select 1 from district_schools where admin_invite = v);
+  end loop;
+  return v;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Signing a district up, and its schools.
+-- ---------------------------------------------------------------------------
+
+/**
+ * Someone at a district office signs the district up and becomes its admin.
+ * Open to any signed-in adult, like a school: a district sees totals of the
+ * schools it adds, and a school it adds is checked by us like any other
+ * before it joins a league or sees a name.
+ */
+create or replace function register_district(p_name text, p_your_name text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid  uuid := auth.uid();
+  v_name text := regexp_replace(trim(coalesce(p_name, '')), '\s+', ' ', 'g');
+  v_id   uuid;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'reason', 'not_signed_in'); end if;
+  if exists (select 1 from kids where user_id = v_uid) then
+    return jsonb_build_object('ok', false, 'reason', 'not_an_adult');
+  end if;
+  if exists (select 1 from district_staff where user_id = v_uid) then
+    return jsonb_build_object('ok', false, 'reason', 'already_district_staff');
+  end if;
+  if length(v_name) < 2 or length(v_name) > 80 then
+    return jsonb_build_object('ok', false, 'reason', 'bad_name');
+  end if;
+  if length(trim(coalesce(p_your_name, ''))) < 1 then
+    return jsonb_build_object('ok', false, 'reason', 'bad_your_name');
+  end if;
+
+  insert into districts (name, district_key, link_code)
+  values (v_name, school_district_key(v_name), district_new_link_code())
+  returning id into v_id;
+  insert into district_staff (user_id, district_id, name)
+  values (v_uid, v_id, left(trim(p_your_name), 60));
+  return jsonb_build_object('ok', true, 'district_id', v_id);
+end $$;
+
+/**
+ * The district admin adds a school that is not on RankUp yet. It starts like
+ * any new school (a free trial, not yet checked by us) in the district's own
+ * league, and the admin is given a one-time invite for its principal.
+ */
+create or replace function add_district_school(p_name text, p_city text, p_students int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_me     district_staff := current_district_staff();
+  v_d      districts;
+  v_name   text := trim(coalesce(p_name, ''));
+  v_id     uuid;
+  v_join   text;
+  v_staff  text;
+  v_invite text := district_new_invite();
+begin
+  if v_me.user_id is null then return jsonb_build_object('ok', false, 'reason', 'not_district_admin'); end if;
+  if length(v_name) < 2 or length(v_name) > 80 then
+    return jsonb_build_object('ok', false, 'reason', 'bad_name');
+  end if;
+  if p_students is null or p_students < 1 or p_students > 20000 then
+    return jsonb_build_object('ok', false, 'reason', 'bad_size');
+  end if;
+  select * into v_d from districts where id = v_me.district_id for update;
+  if (select count(*) from district_schools where district_id = v_d.id) >= district_max_schools() then
+    return jsonb_build_object('ok', false, 'reason', 'too_many_schools');
+  end if;
+
+  loop
+    v_join := school_code(6);
+    exit when not exists (select 1 from schools where join_code = v_join);
+  end loop;
+  loop
+    v_staff := school_code(8);
+    exit when not exists (select 1 from schools where staff_code = v_staff)
+          and not exists (select 1 from districts where link_code = v_staff);
+  end loop;
+
+  insert into schools (name, district, district_key, city, student_count, size_band, join_code, staff_code)
+  values (v_name, v_d.name, v_d.district_key, left(trim(coalesce(p_city, '')), 60),
+          p_students, school_size_band(p_students), v_join, v_staff)
+  returning id into v_id;
+  insert into district_schools (school_id, district_id, admin_invite, invite_expires_at)
+  values (v_id, v_d.id, v_invite, now() + interval '30 days');
+  return jsonb_build_object('ok', true, 'school_id', v_id, 'invite', v_invite,
+                            'invite_expires_at', now() + interval '30 days');
+end $$;
+
+/** A fresh invite for a school whose principal has not signed up yet. */
+create or replace function new_school_invite(p_school_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_me     district_staff := current_district_staff();
+  v_invite text := district_new_invite();
+begin
+  if v_me.user_id is null then return jsonb_build_object('ok', false, 'reason', 'not_district_admin'); end if;
+  if not exists (select 1 from district_schools where school_id = p_school_id and district_id = v_me.district_id) then
+    return jsonb_build_object('ok', false, 'reason', 'not_your_school');
+  end if;
+  if exists (select 1 from school_staff where school_id = p_school_id and role = 'admin') then
+    return jsonb_build_object('ok', false, 'reason', 'has_admin');
+  end if;
+  update district_schools set admin_invite = v_invite, invite_expires_at = now() + interval '30 days'
+   where school_id = p_school_id;
+  return jsonb_build_object('ok', true, 'invite', v_invite, 'invite_expires_at', now() + interval '30 days');
+end $$;
+
+/**
+ * Take a school out of the district. The school carries on as it was, on its
+ * own plan, its trial or the free level. A school the district added whose
+ * principal never signed up (no staff, no students) has nobody to carry on
+ * for, so it goes with it.
+ */
+create or replace function remove_district_school(p_school_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_me district_staff := current_district_staff();
+begin
+  if v_me.user_id is null then return jsonb_build_object('ok', false, 'reason', 'not_district_admin'); end if;
+  delete from district_schools where school_id = p_school_id and district_id = v_me.district_id;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'not_your_school'); end if;
+  if not exists (select 1 from school_staff where school_id = p_school_id)
+     and not exists (select 1 from school_members where school_id = p_school_id) then
+    delete from schools where id = p_school_id;
+    return jsonb_build_object('ok', true, 'school', 'deleted');
+  end if;
+  return jsonb_build_object('ok', true, 'school', 'kept');
+end $$;
+
+/** A new code for schools to join with, for when one has gone somewhere it should not. */
+create or replace function rotate_district_code()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_me   district_staff := current_district_staff();
+  v_code text := district_new_link_code();
+begin
+  if v_me.user_id is null then return jsonb_build_object('ok', false, 'reason', 'not_district_admin'); end if;
+  update districts set link_code = v_code where id = v_me.district_id;
+  return jsonb_build_object('ok', true, 'link_code', v_code);
+end $$;
+
+/** A principal signs up with the invite their district gave them, and becomes the school's admin. */
+create or replace function claim_school_invite(p_code text, p_your_name text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_ds  district_schools;
+  v_s   schools;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'reason', 'not_signed_in'); end if;
+  if exists (select 1 from kids where user_id = v_uid) then
+    return jsonb_build_object('ok', false, 'reason', 'not_an_adult');
+  end if;
+  if exists (select 1 from school_staff where user_id = v_uid) then
+    return jsonb_build_object('ok', false, 'reason', 'already_staff');
+  end if;
+  if length(trim(coalesce(p_your_name, ''))) < 1 then
+    return jsonb_build_object('ok', false, 'reason', 'bad_your_name');
+  end if;
+  select * into v_ds from district_schools where admin_invite = upper(trim(coalesce(p_code, ''))) for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_such_code'); end if;
+  if v_ds.invite_expires_at <= now() then
+    return jsonb_build_object('ok', false, 'reason', 'invite_expired');
+  end if;
+  select * into v_s from schools where id = v_ds.school_id;
+
+  insert into school_staff (user_id, school_id, name, role)
+  values (v_uid, v_s.id, left(trim(p_your_name), 60), 'admin');
+  update district_schools set admin_invite = null, invite_expires_at = null where school_id = v_s.id;
+  return jsonb_build_object('ok', true, 'school_id', v_s.id, 'name', v_s.name);
+end $$;
+
+/** A school already on RankUp joins its district, with the district's code. Its admin decides. */
+create or replace function join_district(p_code text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_me school_staff := current_school_staff();
+  v_d  districts;
+begin
+  if v_me.user_id is null or v_me.role <> 'admin' then
+    return jsonb_build_object('ok', false, 'reason', 'not_school_admin');
+  end if;
+  if exists (select 1 from district_schools where school_id = v_me.school_id) then
+    return jsonb_build_object('ok', false, 'reason', 'already_in_district');
+  end if;
+  select * into v_d from districts where link_code = upper(trim(coalesce(p_code, ''))) for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_such_code'); end if;
+  if (select count(*) from district_schools where district_id = v_d.id) >= district_max_schools() then
+    return jsonb_build_object('ok', false, 'reason', 'too_many_schools');
+  end if;
+  insert into district_schools (school_id, district_id) values (v_me.school_id, v_d.id);
+  return jsonb_build_object('ok', true, 'name', v_d.name);
+end $$;
+
+/** The school's admin takes the school out of its district. Same as the district doing it. */
+create or replace function leave_district()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_me school_staff := current_school_staff();
+begin
+  if v_me.user_id is null or v_me.role <> 'admin' then
+    return jsonb_build_object('ok', false, 'reason', 'not_school_admin');
+  end if;
+  delete from district_schools where school_id = v_me.school_id;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'not_in_district'); end if;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- The district picture.
+-- ---------------------------------------------------------------------------
+
+/**
+ * The district admin's page. Each school: its name, town and size, how it is
+ * paid for, whether its principal has signed up, and this month's and last
+ * month's totals. The district's totals. The plan and its price.
+ *
+ * `ref` is the school's id, which the admin's own buttons (a new invite,
+ * taking a school out) send back. Only ever given to this district's admin,
+ * and only for this district's schools.
+ */
+create or replace function district_overview()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  v_me      district_staff := current_district_staff();
+  v_d       districts;
+  v_month   date := date_trunc('month', now())::date;
+  v_last    date := (date_trunc('month', now()) - interval '1 month')::date;
+  v_schools jsonb;
+begin
+  if v_me.user_id is null then return jsonb_build_object('ok', true, 'district', null); end if;
+  select * into v_d from districts where id = v_me.district_id;
+
+  select coalesce(jsonb_agg(x.card order by x.name, x.ref), '[]'::jsonb) into v_schools from (
+    select s.name, s.id as ref, jsonb_build_object(
+             'ref', s.id,
+             'name', s.name, 'city', s.city,
+             'student_count', s.student_count, 'size_band', s.size_band,
+             'verified', s.verified,
+             'status', s.status,
+             'trial_ends_at', case when s.status = 'trial' then s.trial_ends_at end,
+             'covered', district_covers(s.id),
+             'own_plan', s.status = 'active' and s.stripe_subscription_id is not null,
+             'has_admin', exists (select 1 from school_staff st where st.school_id = s.id and st.role = 'admin'),
+             'staff', (select count(*) from school_staff st where st.school_id = s.id),
+             'invite', case when ds.invite_expires_at > now() then ds.admin_invite end,
+             'invite_expires_at', case when ds.invite_expires_at > now() then ds.invite_expires_at end,
+             'this_month', district_school_month(s.id, v_month),
+             'last_month', district_school_month(s.id, v_last)) as card
+      from district_schools ds join schools s on s.id = ds.school_id
+     where ds.district_id = v_d.id
+  ) x;
+
+  return jsonb_build_object('ok', true, 'district', jsonb_build_object(
+    'name', v_d.name,
+    'you', v_me.name,
+    'status', v_d.status,
+    'link_code', v_d.link_code,
+    'has_customer', v_d.stripe_customer_id is not null,
+    'paying', v_d.status = 'active' and v_d.stripe_subscription_id is not null,
+    'billing_status', v_d.billing_status,
+    'billing_period_end', v_d.billing_period_end,
+    'billing_ends_at', v_d.billing_ends_at,
+    'month', to_char(v_month, 'YYYY-MM'),
+    'last_month', to_char(v_last, 'YYYY-MM'),
+    'min_students', school_min_students(),
+    'min_schools', district_min_schools(),
+    'max_schools', district_max_schools(),
+    'schools', v_schools,
+    'totals', district_totals(v_schools, 'this_month'),
+    'last_totals', district_totals(v_schools, 'last_month'),
+    'quote', district_plan_quote(v_d.id)));
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Paying. As for a school: written by Stripe's webhook and nothing else.
+-- ---------------------------------------------------------------------------
+
+alter table billing_events add column if not exists district_id uuid references districts(id) on delete set null;
+
+/**
+ * What the district's invoice needs, for its admin. The plan comes from the
+ * district's own schools, never from the request.
+ */
+create or replace function district_checkout_info()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  v_me district_staff := current_district_staff();
+  v_d  districts;
+  v_q  jsonb;
+begin
+  if v_me.user_id is null then return jsonb_build_object('ok', false, 'reason', 'not_district_admin'); end if;
+  select * into v_d from districts where id = v_me.district_id;
+  v_q := district_plan_quote(v_d.id);
+  -- Paying already: a second plan would bill twice. The plan as it would be
+  -- now goes with the refusal, for "update the plan" and for the portal.
+  if v_d.status = 'active' and v_d.stripe_subscription_id is not null then
+    return jsonb_build_object('ok', false, 'reason', 'already_paying',
+                              'district_id', v_d.id, 'has_customer', v_d.stripe_customer_id is not null,
+                              'quote', v_q);
+  end if;
+  if not (v_q->>'ok')::boolean then return v_q; end if;
+  return jsonb_build_object('ok', true, 'district_id', v_d.id, 'name', v_d.name, 'status', v_d.status,
+                            'has_customer', v_d.stripe_customer_id is not null, 'quote', v_q);
+end $$;
+
+create or replace function attach_district_customer(p_district_id uuid, p_customer_id text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  update districts set stripe_customer_id = p_customer_id
+   where id = p_district_id and (stripe_customer_id is null or stripe_customer_id = p_customer_id);
+  return jsonb_build_object('ok', found);
+end $$;
+
+create or replace function district_for_customer(p_customer_id text)
+returns uuid language sql stable security definer set search_path = public as $$
+  select id from districts where stripe_customer_id = p_customer_id limit 1;
+$$;
+
+create or replace function stripe_customer_for_district(p_district_id uuid)
+returns text language sql stable security definer set search_path = public as $$
+  select stripe_customer_id from districts where id = p_district_id;
+$$;
+
+create or replace function stripe_subscription_for_district(p_district_id uuid)
+returns text language sql stable security definer set search_path = public as $$
+  select stripe_subscription_id from districts where id = p_district_id;
+$$;
+
+/**
+ * Apply what Stripe says about a district's subscription. The same rules as
+ * a school's (apply_school_subscription): once per event, older news ignored,
+ * news about an old plan ignored, a refunded period stays refunded. A late
+ * invoice (past_due) keeps the schools covered while Stripe chases it; a plan
+ * that has really ended takes the cover away, and each school is then on its
+ * own plan, its trial or the free level. Nothing is deleted.
+ *
+ * `p_paid_bands` is how many schools of each size the plan's prices pay for;
+ * `p_paid_all` is a plan made by hand in Stripe, which pays for every school.
+ */
+create or replace function apply_district_subscription(p_district_id uuid, p_status text,
+                                                       p_customer_id text default null,
+                                                       p_subscription_id text default null,
+                                                       p_stripe_event text default null,
+                                                       p_payload jsonb default '{}'::jsonb,
+                                                       p_event_created timestamptz default null,
+                                                       p_period_end timestamptz default null,
+                                                       p_paid_bands jsonb default null,
+                                                       p_paid_all boolean default false)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_d   districts;
+  v_new text;
+begin
+  select * into v_d from districts where id = p_district_id for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_district'); end if;
+
+  if p_stripe_event is not null then
+    insert into billing_events (district_id, stripe_event, type, payload)
+    values (p_district_id, p_stripe_event, 'district:' || coalesce(p_status, '?'), p_payload)
+    on conflict (stripe_event) do nothing;
+    if not found then return jsonb_build_object('ok', true, 'duplicate', true); end if;
+  end if;
+
+  if p_subscription_id is not null and v_d.stripe_subscription_id is not null
+     and p_subscription_id <> v_d.stripe_subscription_id
+     and p_status not in ('active', 'trialing') then
+    return jsonb_build_object('ok', true, 'status', v_d.status, 'ignored', 'not_current_subscription');
+  end if;
+  if p_event_created is not null and v_d.billing_event_at is not null
+     and p_event_created < v_d.billing_event_at then
+    return jsonb_build_object('ok', true, 'status', v_d.status, 'ignored', 'out_of_date');
+  end if;
+  if v_d.billing_status = 'refunded' and p_status in ('active', 'trialing', 'past_due')
+     and (p_subscription_id is null or p_subscription_id = v_d.stripe_subscription_id)
+     and (p_period_end is null
+          or (v_d.billing_period_end is not null and p_period_end <= v_d.billing_period_end)) then
+    update districts set billing_event_at = greatest(billing_event_at, p_event_created) where id = p_district_id;
+    return jsonb_build_object('ok', true, 'status', v_d.status, 'ignored', 'refunded_period');
+  end if;
+
+  v_new := case
+    when p_status in ('active', 'trialing', 'past_due') then 'active'
+    when p_status in ('canceled', 'unpaid', 'incomplete_expired') then 'lapsed'
+    else v_d.status
+  end;
+
+  update districts
+     set status = v_new,
+         stripe_customer_id = case when v_new = 'active' then coalesce(p_customer_id, stripe_customer_id)
+                                   else coalesce(stripe_customer_id, p_customer_id) end,
+         stripe_subscription_id = case when v_new = 'active' then coalesce(p_subscription_id, stripe_subscription_id)
+                                       when p_status in ('canceled', 'unpaid', 'incomplete_expired') then null
+                                       else stripe_subscription_id end,
+         -- What the plan pays for: from the subscription while it is live.
+         paid_bands = case when v_new = 'active' then coalesce(p_paid_bands, '{}'::jsonb) else paid_bands end,
+         paid_all = case when v_new = 'active' then coalesce(p_paid_all, false) else paid_all end,
+         billing_status = case when p_status in ('trialing','active','past_due','canceled','unpaid','incomplete',
+                                                 'incomplete_expired','paused')
+                               then p_status else 'unknown' end,
+         billing_event_at = greatest(billing_event_at, p_event_created),
+         billing_period_end = coalesce(p_period_end, billing_period_end),
+         billing_ends_at = case
+           when p_status in ('canceled', 'unpaid', 'incomplete_expired')
+             then coalesce(nullif(p_payload->>'ended_at', '')::timestamptz, now())
+           when p_status in ('active', 'trialing', 'past_due')
+             then nullif(p_payload->>'cancel_at', '')::timestamptz
+           else billing_ends_at end
+   where id = p_district_id;
+  return jsonb_build_object('ok', true, 'status', v_new);
+end $$;
+
+/**
+ * A district's payment handed back. As for a school: a partial refund changes
+ * nothing; a refund of an earlier year, with a later invoice paid since,
+ * leaves the year paid for standing; a refund in full of the current one ends
+ * the cover now. Once per charge.
+ */
+create or replace function apply_district_refund(p_district_id uuid, p_charge_id text,
+                                                 p_full boolean default false,
+                                                 p_event_created timestamptz default null,
+                                                 p_charge_created timestamptz default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_d districts;
+begin
+  if not coalesce(p_full, false) then
+    return jsonb_build_object('ok', true, 'ignored', 'partial_refund');
+  end if;
+  if p_charge_id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no_charge');
+  end if;
+  select * into v_d from districts where id = p_district_id for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_district'); end if;
+
+  insert into billing_events (district_id, stripe_event, type, payload)
+  values (p_district_id, 'refund:' || p_charge_id, 'district:refunded', '{}'::jsonb)
+  on conflict (stripe_event) do nothing;
+  if not found then return jsonb_build_object('ok', true, 'duplicate', true); end if;
+
+  if p_charge_created is not null and exists (
+       select 1 from billing_events
+        where district_id = p_district_id and stripe_event like 'invoice:%'
+          and received_at > p_charge_created + interval '7 days') then
+    return jsonb_build_object('ok', true, 'ignored', 'earlier_period');
+  end if;
+
+  update districts
+     set status = 'lapsed',
+         billing_status = 'refunded',
+         -- When the cover ended, which the retention job counts a year from.
+         billing_ends_at = now(),
+         billing_event_at = greatest(billing_event_at, p_event_created)
+   where id = p_district_id;
+  return jsonb_build_object('ok', true, 'status', 'lapsed', 'kind', 'district');
+end $$;
+
+/** A district's invoice was paid: recorded with its amount, once per invoice. */
+create or replace function record_district_payment(p_district_id uuid, p_stripe_event text,
+                                                   p_amount_pence int, p_currency text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  insert into billing_events (district_id, stripe_event, type, payload, amount_pence, currency)
+  values (p_district_id, p_stripe_event, 'district:invoice_paid', '{}'::jsonb, p_amount_pence, upper(p_currency))
+  on conflict (stripe_event) do nothing;
+  return jsonb_build_object('ok', true, 'recorded', found);
+end $$;
+
+/**
+ * A "Get a quote" request, before its email goes (api/district-quote.js).
+ * At most 3 an hour from one address (a keyed hash of it, never the address)
+ * and 30 an hour in all, so the form cannot be used to flood the inbox.
+ */
+create or replace function record_district_quote(p_ip_key text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_id bigint;
+begin
+  perform pg_advisory_xact_lock(hashtext('record_district_quote'));
+  if (select count(*) from district_quote_attempts where tried_at > now() - interval '1 hour') >= 30 then
+    return jsonb_build_object('ok', false, 'reason', 'busy');
+  end if;
+  if (select count(*) from district_quote_attempts
+       where ip_key = coalesce(p_ip_key, '') and tried_at > now() - interval '1 hour') >= 3 then
+    return jsonb_build_object('ok', false, 'reason', 'too_many_quotes');
+  end if;
+  insert into district_quote_attempts (ip_key) values (left(coalesce(p_ip_key, ''), 64)) returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Grants. Postgres grants EXECUTE to PUBLIC on every new function, and
+-- Supabase grants it to its two browser roles by name, so everything that is
+-- not the browser's is revoked from all three.
+-- ---------------------------------------------------------------------------
+
+grant execute on function district_price_quote(int[]) to anon, authenticated;
+grant execute on function register_district(text, text) to authenticated;
+grant execute on function add_district_school(text, text, int) to authenticated;
+grant execute on function new_school_invite(uuid) to authenticated;
+grant execute on function remove_district_school(uuid) to authenticated;
+grant execute on function rotate_district_code() to authenticated;
+grant execute on function claim_school_invite(text, text) to authenticated;
+grant execute on function join_district(text) to authenticated;
+grant execute on function leave_district() to authenticated;
+grant execute on function district_overview() to authenticated;
+grant execute on function district_checkout_info() to authenticated;
+
+-- Internals: each takes any school's or district's id, or makes codes.
+revoke execute on function district_covers(uuid) from public, anon, authenticated;
+revoke execute on function current_district_staff() from public, anon, authenticated;
+revoke execute on function district_plan_quote(uuid) from public, anon, authenticated;
+revoke execute on function district_school_month(uuid, date) from public, anon, authenticated;
+revoke execute on function district_totals(jsonb, text) from public, anon, authenticated;
+revoke execute on function district_new_link_code() from public, anon, authenticated;
+revoke execute on function district_new_invite() from public, anon, authenticated;
+-- district_min_schools, district_max_schools and district_discount_pct are
+-- constants, and the public price quote above runs as its caller and asks
+-- them, so they stay callable.
+
+-- The Stripe webhook's, the district checkout's and the quote form's: the
+-- server holds the service role, and nobody else reaches these.
+revoke execute on function attach_district_customer(uuid, text) from public, anon, authenticated;
+revoke execute on function district_for_customer(text) from public, anon, authenticated;
+revoke execute on function stripe_customer_for_district(uuid) from public, anon, authenticated;
+revoke execute on function stripe_subscription_for_district(uuid) from public, anon, authenticated;
+revoke execute on function apply_district_subscription(uuid, text, text, text, text, jsonb, timestamptz, timestamptz, jsonb, boolean) from public, anon, authenticated;
+revoke execute on function apply_district_refund(uuid, text, boolean, timestamptz, timestamptz) from public, anon, authenticated;
+revoke execute on function record_district_payment(uuid, text, int, text) from public, anon, authenticated;
+revoke execute on function record_district_quote(text) from public, anon, authenticated;

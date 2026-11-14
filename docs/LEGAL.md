@@ -181,6 +181,33 @@ chose to join it. The in-app privacy policy and terms describe it (see
   allowed to. You check each school by hand before it joins a league; decide
   what evidence you accept.
 
+## School districts: questions to add for the lawyer
+
+A district buys the School League for its schools (docs/PAYMENTS.md, "School
+districts"). It sees totals for each school and for the district (students
+taking part, chores done, how many did one), never a child's name or one
+child's numbers, nothing typed, and no numbers at all for a school with fewer
+than 5 students taking part; its totals add up only the schools shown, so a
+small school cannot be worked out by subtraction. No new data about children
+is collected, and nothing a child types reaches a district. The privacy policy
+says what a district sees and how long its account is kept (a year after its
+plan ends); a quote request is emailed and not stored. The consent notice is
+unchanged: a district sees less than a school. Ask:
+
+- **Aggregate data.** Is a school's monthly total, shown to its district only
+  from 5 students up, enough to keep it outside "personal information" under
+  COPPA and the state student-privacy laws? Would they set the floor higher?
+- **District contracts.** Districts usually sign a data processing agreement
+  and often a state's standard student-data agreement before paying an
+  invoice. Have one ready that matches what a district actually sees.
+- **Who may sign a district up.** The terms say whoever signs a school up must
+  work there; decide what you accept for a district office, and whether a
+  district should be checked by hand like a school before its schools are.
+- **Invoices and purchase orders.** Whether the terms need anything for a
+  district paying by invoice (net 30), and for what happens to its schools
+  when it does not pay (they fall back to their own plan or the free level,
+  and nothing is deleted).
+
 ## Gifts: what is collected from people who are not families
 
 "A year of RankUp" can be bought by somebody with no account, for another

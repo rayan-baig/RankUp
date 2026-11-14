@@ -22,6 +22,12 @@
 --                              typed that did not work, and the per-address
 --                              count of gifts started, after 2 days. The
 --                              privacy policy says each.
+--   district_* (schools.sql)   "Get a quote" rate-limit marks after 2 days; a
+--                              school invite nobody used, once it has run out
+--                              (30 days); a district a year after its plan
+--                              ended, or a year after it signed up if it never
+--                              paid. Its schools are never deleted with it:
+--                              they carry on as they are.
 --
 -- Guild messages are deliberately NOT in this list. They are the record of what
 -- children said to each other, they can be reported, and a job that quietly
@@ -58,6 +64,7 @@ declare
   v_crashes int;
   v_themes  int;
   v_gifts   int;
+  v_districts int;
 begin
   with gone as (
     delete from events
@@ -143,6 +150,24 @@ begin
     delete from gift_checkout_attempts where tried_at < now() - interval '2 days';
   end if;
 
+  -- School districts (schools.sql). Nothing is deleted the day a plan ends:
+  -- the schools simply stop being paid for. A year later the district itself
+  -- goes (its staff and its list of schools with it); the schools stay. A
+  -- district that signed up and never paid goes a year after it last did
+  -- anything with billing, or after it signed up.
+  if to_regclass('public.districts') is not null then
+    delete from district_quote_attempts where tried_at < now() - interval '2 days';
+    update district_schools set admin_invite = null, invite_expires_at = null
+     where invite_expires_at < now();
+    with gone as (
+      delete from districts
+       where status <> 'active'
+         and greatest(created_at, coalesce(billing_ends_at, created_at), coalesce(billing_event_at, created_at))
+             < now() - interval '365 days'
+      returning 1
+    ) select count(*) into v_districts from gone;
+  end if;
+
   -- The daily usage counts (health.sql): totals only, kept for 400 days, a
   -- year and a bit, so this month can be set beside the same month last year.
   if to_regclass('public.usage_daily') is not null then
@@ -156,7 +181,8 @@ begin
     'pairing_codes_deleted', v_codes,
     'claim_attempts_deleted', v_tries,
     'theme_submissions_deleted', coalesce(v_themes, 0),
-    'unpaid_gifts_deleted', coalesce(v_gifts, 0)
+    'unpaid_gifts_deleted', coalesce(v_gifts, 0),
+    'districts_deleted', coalesce(v_districts, 0)
   );
 end $$;
 

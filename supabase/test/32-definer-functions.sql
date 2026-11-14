@@ -190,7 +190,7 @@ begin
      order by p.proname
   loop
     v_count := v_count + 1;
-    if f.prosrc !~ '(auth\.uid\(\)|current_family_id\(\)|current_kid_id\(\)|is_parent\(\)|may_act_for_kid\(|current_school_staff\(\)|caller_school_ids\(\)|supporter_family_id\(\))' then
+    if f.prosrc !~ '(auth\.uid\(\)|current_family_id\(\)|current_kid_id\(\)|is_parent\(\)|may_act_for_kid\(|current_school_staff\(\)|caller_school_ids\(\)|current_district_staff\(\)|supporter_family_id\(\))' then
       v_silent := v_silent || f.fn::text;
     end if;
   end loop;
@@ -369,7 +369,17 @@ begin
     -- behind the server's limits, voided by a refund.
     'start_gift_order(text,text,text,text,text,text,text,text)', 'fulfil_gift_order(uuid,text,text,text,integer,text)',
     'gift_order_details(uuid)', 'mark_gift_sent(uuid,text)', 'redeem_gift_code(uuid,text,text)',
-    'apply_gift_refund(text,text,boolean)']
+    'apply_gift_refund(text,text,boolean)',
+    -- School districts: whether a district pays for a school, its numbers,
+    -- and what the Stripe webhook, the district checkout and the quote form
+    -- call with the service key.
+    'district_covers(uuid)', 'current_district_staff()', 'district_plan_quote(uuid)',
+    'district_school_month(uuid,date)', 'district_totals(jsonb,text)', 'district_new_link_code()',
+    'district_new_invite()', 'attach_district_customer(uuid,text)', 'district_for_customer(text)',
+    'stripe_customer_for_district(uuid)', 'stripe_subscription_for_district(uuid)',
+    'apply_district_subscription(uuid,text,text,text,text,jsonb,timestamptz,timestamptz,jsonb,boolean)',
+    'apply_district_refund(uuid,text,boolean,timestamptz,timestamptz)',
+    'record_district_payment(uuid,text,integer,text)', 'record_district_quote(text)']
   loop
     if to_regprocedure(f) is null then
       v_open := v_open || (f || ' (no longer exists — update this list)');

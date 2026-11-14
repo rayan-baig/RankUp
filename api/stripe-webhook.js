@@ -26,6 +26,7 @@ import { cancelPendingBilling } from './_shared/cancelBilling.js'
 import { reportError } from './_shared/job.js'
 import { applyReferralRewards, referralInvoicePaid, referralPaymentReversed } from './_shared/referralReward.js'
 import { giftPaid } from './_shared/gifts.js'
+import { districtIdOf, paidBands } from './_shared/districtBilling.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -164,6 +165,27 @@ async function keepSchoolOnItsBand(stripe, schoolId, subscription) {
   })
 }
 
+/**
+ * The district this object belongs to, if it is a district's plan: its own
+ * metadata (api/district-billing.js puts the district on the customer and the
+ * subscription), or the customer it was charged to. Asked before schools and
+ * families: a district's plan is neither.
+ */
+async function districtIdFor(object) {
+  const direct = districtIdOf(object)
+  if (direct) return direct
+  const customerId = typeof object?.customer === 'string' ? object.customer : object?.customer?.id
+  if (!customerId) return null
+  try {
+    return (await serviceRpc('district_for_customer', { p_customer_id: customerId })) || null
+  } catch (err) {
+    // A database without the district functions yet answers 404. That must
+    // not stop schools and families being billed.
+    if (String(err.message).endsWith(': 404')) return null
+    throw err
+  }
+}
+
 async function familyIdFor(object, stripe) {
   const direct = object?.metadata?.family_id || object?.client_reference_id
     || object?.parent?.subscription_details?.metadata?.family_id
@@ -293,6 +315,58 @@ export default async function handler(req, res) {
       if (gift?.gift) {
         return res.status(200).json({ received: true, gift: gift.outcome || gift.ignored || (gift.duplicate ? 'duplicate' : 'refund') })
       }
+    }
+
+    /*
+     * ---- school districts: one plan for many schools, by invoice ----
+     *
+     * The plan's prices say how many schools of each size it pays for
+     * (paidBands); the database decides which schools that covers. A late
+     * invoice keeps them covered while Stripe chases it; a plan that has
+     * ended takes the cover away, and each school falls back to its own plan,
+     * its trial or the free level. Never a family's tier, never a school's
+     * own plan.
+     */
+    const districtId = await districtIdFor(object)
+    if (districtId) {
+      const customerId = typeof object.customer === 'string' ? object.customer : object.customer?.id
+      if (event.type.startsWith('customer.subscription.')) {
+        const { bands, all } = paidBands(object)
+        await serviceRpc('apply_district_subscription', {
+          p_district_id: districtId,
+          p_status: event.type === 'customer.subscription.deleted' ? 'canceled' : object.status,
+          p_customer_id: customerId || null,
+          p_subscription_id: object.id,
+          p_stripe_event: event.id,
+          p_payload: { type: event.type, ...endDates(event, object) },
+          p_event_created: eventTime(event),
+          p_period_end: periodEnd(object),
+          p_paid_bands: bands,
+          p_paid_all: all,
+        })
+      } else if (event.type === 'charge.refunded') {
+        await serviceRpc('apply_district_refund', {
+          p_district_id: districtId,
+          p_charge_id: object.id,
+          p_full: refundedInFull(object),
+          p_event_created: eventTime(event),
+          p_charge_created: object.created ? new Date(object.created * 1000).toISOString() : null,
+        })
+      } else if (event.type === 'invoice.paid' || event.type === 'invoice.payment_succeeded') {
+        const paid = Number(object.amount_paid ?? object.amount_due ?? 0)
+        if (paid > 0) {
+          await serviceRpc('record_district_payment', {
+            p_district_id: districtId,
+            // The invoice, not the event: one payment arrives as two events.
+            p_stripe_event: `invoice:${object.id}`,
+            p_amount_pence: paid,
+            p_currency: String(object.currency || 'usd'),
+          })
+        }
+      }
+      // An unpaid invoice needs nothing here: the subscription events that
+      // follow say whether the plan survived it.
+      return res.status(200).json({ received: true, district: true })
     }
 
     // ---- schools: their own plans, never a family's tier ----

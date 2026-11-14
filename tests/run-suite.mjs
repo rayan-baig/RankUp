@@ -102,6 +102,7 @@ const SUITES = {
     { file: 'pinreset.mjs', weight: 25 },
     { file: 'schoolsignup.mjs', weight: 15 },
     { file: 'schoolchecks.mjs', weight: 8 },
+    { file: 'districts.mjs', weight: 20 },
     { file: 'oldphone.mjs', weight: 3 },
     { file: 'installprompt.mjs', weight: 30 },
     { file: 'oldsafari.mjs', weight: 20 },

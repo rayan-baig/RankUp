@@ -54,6 +54,71 @@ export function schoolPrice(students) {
   }
 }
 
+/*
+ * School districts: one plan, by invoice, for many schools (supabase/schools.sql,
+ * "School districts"). Each school is priced by its size at the yearly price
+ * above, less a discount that depends on its place in the district's plan,
+ * biggest school first: the 1st to 9th 10% off, the 10th to 24th 20% off, the
+ * 25th onwards 30% off. Like tax brackets, so adding a school always adds to
+ * the total: with one discount for the whole plan, ten schools at 20% off
+ * would cost less than nine at 10% off. district_price_quote() in the SQL is
+ * the same, and tests/schools.mjs fails if the two ever disagree.
+ */
+export const DISTRICT_DISCOUNTS = [
+  { from: 1, pct: 10 },
+  { from: 10, pct: 20 },
+  { from: 25, pct: 30 },
+]
+/** A district plan is for at least this many schools: one school is the School League. */
+export const DISTRICT_MIN_SCHOOLS = 2
+/** More than this, and a district asks for a quote. */
+export const DISTRICT_MAX_SCHOOLS = 100
+/** How long a school's invite for its principal lasts (add_district_school). */
+export const DISTRICT_INVITE_DAYS = 30
+
+/** The discount on the school in this place in a district's plan, in percent. */
+export function districtDiscount(place) {
+  let pct = 0
+  for (const step of DISTRICT_DISCOUNTS) if (place >= step.from) pct = step.pct
+  return pct
+}
+
+/**
+ * What a district pays a year for schools of these sizes, worked out the way
+ * the database does: one line per size and discount. Null when the sizes are
+ * not schools, or there are too few or too many of them.
+ */
+export function districtPrice(studentCounts) {
+  const list = Array.isArray(studentCounts) ? studentCounts : []
+  if (list.length < DISTRICT_MIN_SCHOOLS || list.length > DISTRICT_MAX_SCHOOLS) return null
+  const quotes = list.map((n) => schoolPrice(n))
+  if (quotes.some((q) => !q)) return null
+  const placed = [...quotes].sort((a, b) => b.yearlyCents - a.yearlyCents)
+  const lines = []
+  placed.forEach((q, i) => {
+    const pct = districtDiscount(i + 1)
+    let line = lines.find((l) => l.band === q.band && l.pct === pct)
+    if (!line) {
+      line = { band: q.band, label: q.label, pct, quantity: 0, fullCents: q.yearlyCents,
+        unitYearlyCents: Math.round((q.yearlyCents * (100 - pct)) / 100), yearlyCents: 0 }
+      lines.push(line)
+    }
+    line.quantity += 1
+    line.yearlyCents = line.unitYearlyCents * line.quantity
+  })
+  lines.sort((a, b) => b.fullCents - a.fullCents || a.pct - b.pct)
+  const yearlyCents = lines.reduce((sum, l) => sum + l.yearlyCents, 0)
+  const fullYearlyCents = quotes.reduce((sum, q) => sum + q.yearlyCents, 0)
+  return {
+    schools: list.length,
+    lines: lines.map((l) => ({ band: l.band, label: l.label, pct: l.pct, quantity: l.quantity,
+      unitYearlyCents: l.unitYearlyCents, yearlyCents: l.yearlyCents })),
+    yearlyCents,
+    fullYearlyCents,
+    savingCents: fullYearlyCents - yearlyCents,
+  }
+}
+
 /** "North Valley" → "North Valley district", but never "… District district". */
 export const districtLabel = (d) => (/\bdistrict$/i.test(String(d || '').trim()) ? d : `${d} district`)
 
@@ -97,6 +162,10 @@ export const SCHOOL_ERRORS = {
   last_staff: 'You are the only member of staff. Add a teacher with the staff code first, or contact us to close the school.',
   paying_contact_us: 'Your plan is being paid, so the price is on your card. Contact us to change your school’s size.',
   not_your_school: 'That league belongs to a school you are not part of.',
+  invite_expired: 'That invite has run out. Ask your district for a new one.',
+  already_in_district: 'Your school is already part of a district. Leave it first.',
+  not_in_district: 'Your school is not part of a district.',
+  too_many_schools: 'That district already has as many schools as a plan can hold. Ask the district to get a quote.',
 }
 
 export function schoolError(reason) {
@@ -123,6 +192,10 @@ export const schools = {
       p_students: Number(students), p_your_name: yourName,
     }),
   joinStaff: (staffCode, yourName) => call('join_school_staff', { p_staff_code: code(staffCode), p_your_name: yourName }),
+  // A principal whose district added the school, with the district's invite.
+  claimInvite: (invite, yourName) => call('claim_school_invite', { p_code: code(invite), p_your_name: yourName }),
+  joinDistrict: (districtCode) => call('join_district', { p_code: code(districtCode) }),
+  leaveDistrict: () => call('leave_district'),
   overview: () => call('school_overview'),
   rotateCodes: () => call('rotate_school_codes'),
   districtSchools: (query = '') => call('district_schools', { p_query: query }),

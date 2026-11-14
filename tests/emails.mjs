@@ -20,7 +20,7 @@
  * Reads code only; needs nothing running.
  */
 import { readFileSync } from 'node:fs'
-import { trialEmail, schoolMonthEmail, errorReportEmail, giftReceiptEmail, giftEmail } from '../api/_shared/email.js'
+import { trialEmail, schoolMonthEmail, errorReportEmail, giftReceiptEmail, giftEmail, districtQuoteEmail } from '../api/_shared/email.js'
 import { TIERS } from '../src/state/initialState.js'
 import { PRODUCT_OF } from '../src/data/legalText.js'
 
@@ -72,6 +72,9 @@ for (const site of [SITE, '']) {
       'paid twice': { ...base, paid: [{ currency: 'USD', minor: 4900 }, { currency: 'EUR', minor: 1200 }] },
       cancelling: { ...base, renews_at: null, ends_at: '2026-11-20T00:00:00Z' },
       lapsed: { ...base, status: 'lapsed', renews_at: null, paid: [] },
+      // Its district pays: its own plan has ended, and that is not the news.
+      'paid for by its district': { ...base, status: 'lapsed', renews_at: null, paid: [], district_plan: 'North Valley Unified' },
+      'champion, paid for by its district': { ...base, champion: true, status: 'trial', renews_at: null, paid: [], district_plan: 'North Valley Unified' },
     }
     for (const [k, m] of Object.entries(schools)) add(`school month, ${k}, ${where}`, schoolMonthEmail(m, { site, replyTo }))
 
@@ -101,6 +104,19 @@ for (const site of [SITE, '']) {
     }
   }
 
+  // A district's quote request, every way it can be filled in. What was typed
+  // may hold quotes, ampersands and angle brackets.
+  for (const full of [true, false]) {
+    for (const schools of [1, 140]) {
+      add(`district quote, ${schools} school(s), ${full ? 'everything filled in' : 'nothing optional'}, ${site ? 'with' : 'without'} a site`,
+        districtQuoteEmail({
+          district: 'Big "Plains" & <Co> Unified', name: 'Dr Ames', email: 'ames@district.example',
+          schools, role: full ? 'Head of Technology' : '', students: full ? 52000 : null,
+          message: full ? 'We need a PO & a W-9 <please>.\nThanks!' : '',
+        }, { site }))
+    }
+  }
+
   const errorKinds = [
     { source: 'app', where: '/parent/settings', message: 'TypeError: rewards.map is not a function', count: 3, new: true },
     { source: 'server', where: 'create-checkout', message: 'create_checkout failed: 500', count: 1, new: false },
@@ -114,8 +130,8 @@ for (const site of [SITE, '']) {
 console.log('\n=== Every email RankUp sends itself is rendered here ===')
 const source = readFileSync(new URL('../api/_shared/email.js', import.meta.url), 'utf8')
 const builders = [...source.matchAll(/^export function (\w+Email)\(/gm)].map((m) => m[1])
-const rendered = ['trialEmail', 'schoolMonthEmail', 'errorReportEmail', 'giftReceiptEmail', 'giftEmail']
-ok(`the builders in api/_shared/email.js are the five rendered here (${builders.join(', ')})`,
+const rendered = ['trialEmail', 'schoolMonthEmail', 'errorReportEmail', 'giftReceiptEmail', 'giftEmail', 'districtQuoteEmail']
+ok(`the builders in api/_shared/email.js are the six rendered here (${builders.join(', ')})`,
   builders.length === rendered.length && builders.every((b) => rendered.includes(b)),
   `a new one needs its variants added to tests/emails.mjs: ${builders.filter((b) => !rendered.includes(b)).join(', ')}`)
 ok(`${emails.length} emails rendered`, emails.length > 100)
@@ -183,6 +199,19 @@ console.log('\n=== The error report names no family ===')
   const both = `${leaky.text}\n${leaky.html}`
   ok('even a message the database somehow left an email, id, token or quoted value in comes out scrubbed',
     !/@example\.com|4f1c9a00|eyJabc|Quoted value/.test(both), leaky.text)
+}
+
+console.log('\n=== A district\'s quote request ===')
+{
+  const quotes = emails.filter((e) => e.name.startsWith('district quote'))
+  ok(`${quotes.length} quote requests rendered`, quotes.length >= 8)
+  ok('each says it is the only copy, and how to reply', quotes.every((e) => /the only copy/.test(e.text) && /Replying to this email goes to them/.test(e.text)))
+  ok('what was typed is escaped in the HTML part', quotes.every((e) => !/<Co>|<please>/.test(e.html)))
+}
+{
+  const district = emails.filter((e) => e.name.includes('paid for by its district'))
+  ok('a school its district pays for is told so, not that its plan ended',
+    district.length > 0 && district.every((e) => /North Valley Unified pays for/.test(e.text) && !/Your plan has ended/.test(e.text)))
 }
 
 console.log('\n=== A gift ===')

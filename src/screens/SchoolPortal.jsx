@@ -153,6 +153,9 @@ function Landing({ onStart }) {
       <button type="button" className="w-full text-sm underline text-muted mt-3" onClick={() => navigate('/school/help')}>
         Questions from schools, answered
       </button>
+      <button type="button" className="w-full text-sm underline text-muted mt-2" onClick={() => navigate('/district')}>
+        Buying for a whole district? One plan for all your schools
+      </button>
     </>
   )
 }
@@ -205,7 +208,11 @@ function Register({ onDone, students = '', onBack }) {
         return
       }
     }
-    const res = asStaff ? await schools.joinStaff(staffCode, form.yourName) : await schools.register(form)
+    // A staff code is eight letters; an invite from the district, ten.
+    const typed = staffCode.replace(/[^A-Za-z0-9]/g, '')
+    const res = !asStaff ? await schools.register(form)
+      : typed.length === 10 ? await schools.claimInvite(typed, form.yourName)
+        : await schools.joinStaff(typed, form.yourName)
     setBusy(false)
     if (!res.ok) { setError(schoolError(res.reason)); return }
     onDone()
@@ -214,7 +221,7 @@ function Register({ onDone, students = '', onBack }) {
   return (
     <Card>
       <div className="flex gap-1 p-1 card-flat mb-3" role="tablist">
-        {[[false, 'New school'], [true, 'I have a staff code']].map(([v, label]) => (
+        {[[false, 'New school'], [true, 'I have a code']].map(([v, label]) => (
           <button key={label} type="button" role="tab" aria-selected={asStaff === v}
                   className="flex-1 py-2 rounded-lg text-sm font-semibold"
                   style={{ background: asStaff === v ? 'var(--accent)' : 'transparent', color: asStaff === v ? 'var(--on-accent, #fff)' : 'inherit' }}
@@ -249,8 +256,8 @@ function Register({ onDone, students = '', onBack }) {
       </Field>
 
       {asStaff ? (
-        <Field label="Staff code" hint="Your school’s admin can find it on their page.">
-          <TextInput value={staffCode} onChange={(e) => setStaffCode(e.target.value.toUpperCase())} maxLength={8}
+        <Field label="Staff or invite code" hint="A staff code from your school’s admin, or the invite your district sent you.">
+          <TextInput value={staffCode} onChange={(e) => setStaffCode(e.target.value.toUpperCase())} maxLength={10}
                      style={{ letterSpacing: '0.25em', textTransform: 'uppercase' }} />
         </Field>
       ) : (
@@ -296,6 +303,9 @@ function Dashboard({ school, league, demo, onChange }) {
   const [size, setSize] = useState(String(school.student_count || ''))
   const [query, setQuery] = useState('')
   const [found, setFound] = useState([])
+  const [districtCode, setDistrictCode] = useState('')
+  const district = school.district_plan || null
+  const districtPays = Boolean(district?.covered)
 
   const act = async (fn, done) => {
     if (demo) { setNotice('This is a sample school, so nothing changes. A real one would.'); return }
@@ -422,11 +432,18 @@ function Dashboard({ school, league, demo, onChange }) {
             {schoolBillingNotice(school).body}
           </Banner>
         )}
+        {district && (
+          <Banner tone={districtPays ? 'good' : 'info'} icon="🏛️" title={districtPays ? `${district.name} pays for your school` : `Part of ${district.name}`} className="mb-2">
+            {districtPays
+              ? 'Your district’s plan covers the school, so there is nothing to pay here. If the district stops paying, your school goes back to its own plan, its free trial or the free level, and keeps its points.'
+              : 'Your district’s plan does not cover the school yet. Until it does, your school is on its own plan or its free trial. The district sees your school’s totals, never a student.'}
+          </Banner>
+        )}
         <p className="text-sm">
           {school.price?.label}, {dollars(school.price?.monthly_cents || 0)} a month
-          {trialDays !== null && <> · <Chip tone="var(--accent)">{trialDays} days of free trial left</Chip></>}
+          {trialDays !== null && !districtPays && <> · <Chip tone="var(--accent)">{trialDays} days of free trial left</Chip></>}
           {school.status === 'active' && <> · <Chip tone="var(--good)">Paid</Chip></>}
-          {school.status === 'lapsed' && <> · <Chip tone="var(--warn)">Ended</Chip></>}
+          {school.status === 'lapsed' && !districtPays && <> · <Chip tone="var(--warn)">Ended</Chip></>}
         </p>
         <p className="text-xs text-muted mt-1">
           Priced for {school.student_count} students. Paying for the year costs ten months.
@@ -440,7 +457,7 @@ function Dashboard({ school, league, demo, onChange }) {
             </>
           )}
         </p>
-        {admin && (demo || billingLive()) && (
+        {admin && (demo || billingLive()) && !(districtPays && !(school.status === 'active' && school.has_customer)) && (
           school.status === 'active' && school.has_customer ? (
             <Button variant="soft" className="w-full mt-3" disabled={busy}
                     onClick={() => pay(() => openSchoolBillingPortal())}>
@@ -465,6 +482,40 @@ function Dashboard({ school, league, demo, onChange }) {
           )
         )}
       </Card>
+
+      {admin && (
+        <Card flat className="mb-3" data-testid="school-district">
+          <SectionTitle>District</SectionTitle>
+          {district ? (
+            <>
+              <p className="text-xs text-muted mb-2">
+                Your school is part of {district.name}. The district sees your school’s totals (students taking
+                part, chores done), never a student’s name or numbers.
+              </p>
+              <button type="button" className="text-xs underline text-muted" disabled={busy}
+                      onClick={() => {
+                        if (demo || window.confirm(`Take your school out of ${district.name}? ${districtPays ? 'The district stops paying for it.' : ''}`)) {
+                          act(() => schools.leaveDistrict(), `Your school has left ${district.name}.`)
+                        }
+                      }}>
+                Leave the district
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-muted mb-2">Has your district bought RankUp for its schools? Type the code it gave you.</p>
+              <div className="flex gap-2">
+                <TextInput value={districtCode} onChange={(e) => setDistrictCode(e.target.value.toUpperCase())} maxLength={8}
+                           aria-label="District code" placeholder="District code" className="field font-mono tracking-widest" />
+                <Button className="py-2 min-h-0 text-sm shrink-0" disabled={busy || districtCode.trim().length < 8}
+                        onClick={() => act(() => schools.joinDistrict(districtCode), 'Your school is now part of the district.')}>
+                  Join
+                </Button>
+              </div>
+            </>
+          )}
+        </Card>
+      )}
 
       <button type="button" className="w-full text-sm underline text-muted mb-3" onClick={() => navigate('/school/help')}>
         Help: questions from schools
