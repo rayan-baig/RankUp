@@ -225,6 +225,9 @@ export default function OperatorSchools() {
         <p className="text-muted mt-1">
           Signed up {new Date(s.created_at).toLocaleDateString()} · {s.students_joined} {s.students_joined === 1 ? 'child' : 'children'} joined
         </p>
+        {s.district_account && (
+          <p className="text-muted">District account: {s.district_account}{s.district_paid ? ', which pays for it' : ''}</p>
+        )}
       </div>
       {list && (
         <div className="mt-3" data-testid="school-checklist">

@@ -149,7 +149,10 @@ begin
                              -- Gifts: the webhook, the gift checkout and the redeem
                              -- endpoint reach them, with the service key (billing.sql).
                              'gift_orders', 'gift_buyers', 'gift_recipients', 'gift_redeem_attempts',
-                             'gift_checkout_attempts');
+                             'gift_checkout_attempts',
+                             -- School districts: their functions and the server's
+                             -- reach them, nothing else (schools.sql).
+                             'districts', 'district_staff', 'district_schools', 'district_quote_attempts');
   perform ok('no table is left locked with no policy at all', coalesce(bare, '') = '',
              'bare: ' || coalesce(bare, ''));
 end $$;

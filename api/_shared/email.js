@@ -3,12 +3,14 @@
  *
  * Most of RankUp's email is not sent from here: sign-up confirmations and
  * password resets are Supabase's, and receipts and payment problems are
- * Stripe's. Both are set up in those dashboards (docs/EMAILS.md). Five kinds
+ * Stripe's. Both are set up in those dashboards (docs/EMAILS.md). Six kinds
  * are sent from this code: the free trial's two reminders
  * (api/send-trial-emails.js), a school's month (api/settle-schools.js), the
- * error report to whoever runs RankUp (api/_shared/errorReport.js), and a
+ * error report to whoever runs RankUp (api/_shared/errorReport.js), a
  * gift's two emails, the buyer's receipt with the code and the gift to the
- * person it is for (api/_shared/gifts.js, from the Stripe webhook).
+ * person it is for (api/_shared/gifts.js, from the Stripe webhook), and a
+ * district's "Get a quote" request, to whoever runs RankUp
+ * (api/district-quote.js). A district's invoices are Stripe's.
  *
  * Sent through the email provider's HTTP API, because a Cloudflare Worker
  * cannot speak SMTP. Written for Resend's API (POST /emails): one call, a
@@ -48,7 +50,7 @@ export const emailConfigured = (s = emailSettings()) => Boolean(s.apiKey && s.fr
  * One email. Resolves { ok: true } or { ok: false, status, error }; never
  * throws. Twenty seconds at most: a provider that hangs must not hold the job.
  */
-export async function sendEmail({ to, subject, text, html, idempotencyKey }, s = emailSettings()) {
+export async function sendEmail({ to, subject, text, html, idempotencyKey, replyTo }, s = emailSettings()) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 20000)
   try {
@@ -66,7 +68,9 @@ export async function sendEmail({ to, subject, text, html, idempotencyKey }, s =
         subject,
         text,
         html,
-        ...(s.replyTo ? { reply_to: s.replyTo } : {}),
+        // A quote request is answered to the person who asked; everything
+        // else to the support address.
+        ...(replyTo || s.replyTo ? { reply_to: replyTo || s.replyTo } : {}),
       }),
     })
     if (res.ok) return { ok: true }
@@ -195,9 +199,11 @@ export function schoolMonthEmail(m, { site, replyTo } = {}) {
   const league = []
   if (m.champion) {
     league.push(`${school} was District Champion in ${m.district} for ${month}, with ${score.toFixed(1)} points per student.`)
-    league.push(m.free_month_given
-      ? 'Your free month for winning has been given: it comes off your next bill (or adds a month to your trial).'
-      : 'Your free month for winning comes off your next bill (or adds a month to your trial).')
+    league.push(m.district_plan
+      ? `Your free month for winning comes off ${m.district_plan}'s next bill, since the district pays for the school.`
+      : m.free_month_given
+        ? 'Your free month for winning has been given: it comes off your next bill (or adds a month to your trial).'
+        : 'Your free month for winning comes off your next bill (or adds a month to your trial).')
   } else if (m.ranked && m.rank) {
     const place = m.ranked_schools > 1
       ? `${ordinal(m.rank)} of ${m.ranked_schools} schools in ${m.district}`
@@ -214,14 +220,17 @@ export function schoolMonthEmail(m, { site, replyTo } = {}) {
   }
 
   const paid = (m.paid || []).filter((p) => Number(p.minor) > 0)
-  const paidLine = paid.length
+  const paidLine = m.district_plan
+    ? `${m.district_plan} pays for ${school}'s plan, so nothing was charged to the school in ${month}.`
+    : paid.length
     ? `In ${month} you paid ${paid.map((p) => money(p.minor, p.currency)).join(' and ')}.`
     : m.status === 'trial'
       ? `Nothing was charged in ${month}: you are on your free trial.`
       : `Nothing was charged in ${month}.`
 
   let next
-  if (m.renews_at) next = `Your plan renews on ${dayName(m.renews_at)}.`
+  if (m.district_plan) next = `Your district's plan covers the school. If the district stops paying, the school goes back to its own plan, its free trial or the free level, and keeps its points.`
+  else if (m.renews_at) next = `Your plan renews on ${dayName(m.renews_at)}.`
   else if (m.ends_at) next = `Your plan ends on ${dayName(m.ends_at)}, as you asked. Nothing more will be charged.`
   else if (m.trial_ends_at) next = `Your free trial ends on ${dayName(m.trial_ends_at)}. Nothing is charged by itself: choose a plan on the school page to keep playing.`
   else next = 'Your plan has ended, so your school sits the league out until it starts again, from the school page.'
@@ -343,6 +352,36 @@ export function giftEmail(o) {
   const foot = [
     PRODUCT_OF,
     `You get this because somebody bought you a RankUp gift and asked us to email it. Your name and email are used only to send it, and deleted within ${GIFT_RECIPIENT_DAYS} days.`,
+  ]
+  const text = [...paragraphs, ...(link ? [`${link.label}: ${link.url}`] : []), help, '--', ...foot].join('\n\n')
+  return { subject, text, html: toHtml(paragraphs, link, help, foot) }
+}
+
+/**
+ * A district's "Get a quote" request, to whoever runs RankUp
+ * (api/district-quote.js; SALES_EMAIL, or SUPPORT_EMAIL). What the person
+ * typed, already checked (src/lib/quoteRules.js) and escaped in the HTML
+ * part like every other value here. Replying goes to them. Nothing in it is
+ * about a child, and nothing of it is kept anywhere else.
+ */
+export function districtQuoteEmail(q, { site } = {}) {
+  const schools = Number(q.schools) || 0
+  const subject = `District quote request: ${q.district}, ${schools} ${schools === 1 ? 'school' : 'schools'}`
+  const paragraphs = [
+    'Hello,',
+    `${q.name}${q.role ? `, ${q.role},` : ''} asked for a RankUp School League quote for ${q.district}.`,
+    `Schools: ${schools.toLocaleString('en-US')}.`,
+    ...(Number.isInteger(q.students) ? [`Students, about: ${q.students.toLocaleString('en-US')}.`] : []),
+    `Their email: ${q.email}. Replying to this email goes to them.`,
+    ...(q.message ? [`They wrote: “${q.message}”`] : []),
+    'Nothing from this request is kept in RankUp: this email is the only copy.',
+  ]
+  const base = site ? site.replace(/\/+$/, '') : ''
+  const link = base ? { url: `${base}/#/district`, label: 'The district page' } : null
+  const help = 'How districts pay, and how to set up a quoted plan in Stripe: docs/PAYMENTS.md, "School districts", in RankUp\'s code.'
+  const foot = [
+    PRODUCT_OF,
+    'You get this because SALES_EMAIL (or SUPPORT_EMAIL) is set to this address. At most 3 requests an hour from one place, and 30 in all.',
   ]
   const text = [...paragraphs, ...(link ? [`${link.label}: ${link.url}`] : []), help, '--', ...foot].join('\n\n')
   return { subject, text, html: toHtml(paragraphs, link, help, foot) }

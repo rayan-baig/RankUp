@@ -58,6 +58,7 @@ const ParentSchool = lazyLoad(() => import('./screens/parent/ParentSchool.jsx'))
 const SchoolPortal = lazyLoad(() => import('./screens/SchoolPortal.jsx'))
 const OperatorSchools = lazyLoad(() => import('./screens/OperatorSchools.jsx'))
 const SchoolHelp = lazyLoad(() => import('./screens/SchoolHelp.jsx'))
+const DistrictPortal = lazyLoad(() => import('./screens/DistrictPortal.jsx'))
 const LegalDoc = lazyLoad(() => import('./screens/LegalDoc.jsx'))
 const ParentGuilds = lazyLoad(() => import('./screens/parent/ParentGuilds.jsx'))
 const ParentLeaderboards = lazyLoad(() => import('./screens/parent/ParentLeaderboards.jsx'))
@@ -172,7 +173,7 @@ export default function App() {
 
   // Route guards.
   useEffect(() => {
-    if (route.startsWith('/legal/') || route === '/school' || route === '/school/help' || route === '/operator') return
+    if (route.startsWith('/legal/') || route === '/district' || route === '/school' || route === '/school/help' || route === '/operator') return
     /*
      * The gift pages. Anybody can open them on a phone that is not set up
      * (a grandparent buying one). On a phone that is set up, only in Parent
@@ -269,6 +270,22 @@ export default function App() {
         <ScreenBoundary key={route} route={route}>
           <Suspense fallback={<Loading />}>
             <SchoolHelp />
+          </Suspense>
+        </ScreenBoundary>
+      </>
+    )
+  }
+
+  // A school district's office: one plan for many schools. Like the School
+  // League's door, no family needed, and nothing about any child behind it.
+  if (route === '/district') {
+    return (
+      <>
+        <ParentBackground theme={parentTheme} />
+        <DemoBanner />
+        <ScreenBoundary key={route} route={route}>
+          <Suspense fallback={<Loading />}>
+            <DistrictPortal />
           </Suspense>
         </ScreenBoundary>
       </>

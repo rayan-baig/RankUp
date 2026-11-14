@@ -132,6 +132,21 @@ a second gift stacks; a family whose paid plan renews is told to turn renewal
 off first, and one whose plan is ending gets the gift from that end; nothing
 of it is reachable from a browser.
 
+`56-districts.sql` — school districts: the price ladder (two schools, ten,
+twenty-five, biggest first) and that adding any school to any plan always
+costs more, over 400 random districts; signing up, adding schools, a
+principal claiming the invite (once, for 30 days), a school joining with the
+district's code and leaving; what the district sees is totals only, none for
+a school with under 5 students taking part, never a child's name, id, chore
+or note; a live plan covers the schools its prices pay for (and a plan made
+by hand covers all), a suspension still wins, a covered school cannot start
+its own plan and its Champion month goes to the district; Stripe's events
+once and in order, a late invoice keeps the cover, an ended or refunded plan
+takes it away with nothing deleted; "Get a quote" limited to 3 an hour per
+place and 30 in all; retention removes a district a year after its plan
+ended and never a school; none of the server's half is reachable from a
+browser.
+
 `refusals.mjs` (`npm run test:refusals`) — reads every
 `jsonb_build_object('ok', false, 'reason', ...)` out of the SQL files, applies
 them to a scratch database with each one marked so it raises a notice naming

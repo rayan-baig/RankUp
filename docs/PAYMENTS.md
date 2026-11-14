@@ -716,6 +716,165 @@ it in Stripe too.
 
 ---
 
+## School districts
+
+One customer, many schools: a district buys the School League for its schools
+at once, by invoice, for a year. The district page is `#/district`, linked
+from the foot of the School League's front page. It is behind the same
+switches as the School League: signing up needs the sync service, and the
+invoice buttons need `VITE_STRIPE_ENABLED` and the server's Stripe settings,
+so nothing is invoiced until payments are set.
+
+### The price, and why it is built this way
+
+Each school is priced by its size at the School League's **yearly** price,
+less a discount that depends on its **place** in the district's plan, biggest
+school first:
+
+| Place in the plan | Discount on that school |
+|---|---|
+| 1st to 9th | 10% |
+| 10th to 24th | 20% |
+| 25th onwards | 30% |
+
+A plan is for 2 to 100 schools. One school is the School League itself; more
+than 100 is a quote ("Get a quote", below).
+
+The obvious ladder, "2–9 schools 10% off, 10–24 20% off, 25+ 30% off" for
+every school in the plan, makes more schools cheaper than fewer. In school
+prices: 9 schools at 10% off cost 8.1, 10 at 20% off cost 8.0; 24 at 20% off
+cost 19.2, 25 at 30% off cost 17.5. With mixed sizes it is worse: nine large
+schools and a small one cost less than the nine alone. A district would save
+money by adding a school it did not want, and could not trust the price.
+
+By place, like tax brackets, that cannot happen. A school added costs at least
+70% of its own price, and moves at most two schools (the same size or smaller,
+because places go biggest first) into a bigger discount, each worth 10% of its
+price. So every school added adds to the total, whatever the sizes, and a
+district always pays less than its schools would on their own.
+`supabase/test/56-districts.sql` checks it for every count from 2 to 100 at
+every size and for 400 random districts; `tests/schools.mjs` for 2,000 more
+and that the app's calculator (`districtPrice`, `src/lib/schools.js`) and the
+database (`district_price_quote`, `supabase/schools.sql`) agree.
+
+What each school costs a year in a district plan:
+
+| Size | Students | Alone (a year) | 10% off | 20% off | 30% off |
+|---|---|---|---|---|---|
+| small | up to 300 | $290 | $261 | $232 | $203 |
+| medium | 301–800 | $590 | $531 | $472 | $413 |
+| large | 801–1,500 | $990 | $891 | $792 | $693 |
+| xl | 1,501+ | $1,490 | $1,341 | $1,192 | $1,043 |
+
+For example, 12 schools (one large, eight medium, three small): the large and
+eight medium at 10% off, the 10th school (a small) at 20% off and two more
+small at 20% off: $891 + 8 × $531 + 3 × $232 = $5,835 a year, against $6,580
+alone.
+
+### Setting it up in Stripe
+
+1. Make a product, **RankUp School League for districts**, with twelve
+   **yearly recurring** prices at the amounts in the table's last three
+   columns, and put their ids in `STRIPE_PRICE_DISTRICT_SMALL_10`,
+   `_SMALL_20`, `_SMALL_30`, `_MEDIUM_10` … `_XL_30` (`.env.example`). The
+   code names these ids and never an amount; a plan whose line has no price
+   set is refused ("payments are not set up"), never invoiced at another
+   price.
+2. In **Settings → Billing → Subscriptions and emails**, turn on emailing
+   finalized invoices to customers, and choose what happens to a subscription
+   whose invoice stays unpaid after its due date (cancel it, or mark it
+   unpaid). That is when a district's schools stop being covered.
+3. Optionally set `DISTRICT_INVOICE_DAYS` (30 by default) for how long a
+   district has to pay each invoice, and `SALES_EMAIL` for quote requests.
+4. The webhook needs no new events: `customer.subscription.*`,
+   `invoice.paid` and `charge.refunded` carry districts too. Allow customers
+   to cancel in the billing portal's settings, as for schools.
+
+### How a district signs up, pays and adds schools
+
+1. **Sign up.** Someone at the district office opens `#/district`, taps "Set
+   up your district", and fills one form: their account (work email and a
+   password), their name and the district's name. They are the district's
+   admin.
+2. **Add schools.** "Add a school": its name, town and number of students.
+   The school is made like any new school (a 30-day trial, checked by the
+   operator before it joins a league or sees a name), in the district's own
+   league, and the admin is shown a one-time, 10-letter invite for its
+   principal, good for 30 days (and kept on the school's card until used).
+   The principal opens the School League page, "I have a code", types it, and
+   becomes the school's admin; they hand parents the school's code as any
+   school does. A school **already on RankUp** joins with the district's own
+   8-letter code: its admin types it in the "District" card on the school's
+   page.
+3. **Pay.** "Send me the invoice": the admin says where the invoice goes (a
+   finance team's address, say). `api/district-billing.js` makes a Stripe
+   customer for the district (its name, that email, the district's id;
+   nothing about any school or child) and a yearly subscription with
+   `collection_method: send_invoice` and `days_until_due` from
+   `DISTRICT_INVOICE_DAYS`: one item per size and discount, its quantity the
+   number of schools. Stripe emails the invoice; the district pays by card or
+   bank transfer on Stripe's page. Which schools and what they cost come
+   from the database, never from the request.
+4. **Covered.** The webhook (`apply_district_subscription`) switches the plan
+   on and records how many schools of each size its prices pay for. Within a
+   size, the schools added first are covered; a school added later waits
+   until the admin taps "Update the plan", which changes the same
+   subscription (an invoice for the rest of the year for what was added, a
+   credit on the next invoice for what was taken off). A plan you set up by
+   hand in Stripe for a district, with prices of your own and
+   `metadata.district_id` on the subscription (a quoted deal), covers every
+   school in the district. A covered school counts as paid: it plays in the
+   league, cannot start a plan of its own ("Your district pays for your
+   school"), and its District Champion month goes as one month's credit on
+   the district's Stripe account.
+5. **Renewals.** Yearly, with a new invoice from Stripe each year. The
+   district page says when it renews; "Invoices and cancelling" opens Stripe's
+   portal.
+
+### When a district stops paying, or cancels
+
+- An invoice paid late (`past_due`) keeps the schools covered while Stripe
+  chases it, and the district page says the invoice is overdue.
+- A plan that ends (cancelled, unpaid after Stripe's settings give up, or a
+  refund in full of the current year) takes the cover away. Each school falls
+  back to whatever it has of its own: its own plan if it pays, what is left
+  of its free trial, or the free level (families keep using RankUp; the
+  school sits the league out until it is paid for).
+- **Nothing is deleted then.** The schools, their staff, their students and
+  their points, and the district's list of schools, all stay; paying again
+  covers them again. The retention job removes the district's account (its
+  admin and its list of schools) a year after its plan ended, or a year after
+  it signed up if it never paid, and never a school.
+- Events are applied once, older news is ignored, and a refunded year stays
+  refunded, by the same rules as a school's.
+
+### Get a quote
+
+For a district with more than 100 schools, or one that needs to pay another
+way (a purchase order, a contract): the form asks for the district, a name,
+role, work email, number of schools, about how many students and a short
+note, and `api/district-quote.js` emails it to `SALES_EMAIL` (or
+`SUPPORT_EMAIL`) with the person as the reply-to. Nothing typed is stored; the
+database keeps a keyed hash of where requests come from, for a limit of 3 an
+hour from one place and 30 an hour in all. To set up a quoted deal, make the
+subscription by hand in Stripe on the district's customer (or a new one) with
+`metadata.district_id` set to the district's id, which the operator page's
+school list does not show yet: ask the district admin to send an invoice
+first and edit that subscription, or read the id from the `districts` table.
+
+### What a district sees
+
+Totals only (`district_overview`): for each school and the district, this
+month and last, students taking part, the share who did a chore, chores done
+and the average per student, and how each school is paid for. Never a child's
+name, nickname, numbers or anything typed; no numbers at all for a school with
+fewer than 5 students taking part; and the district's totals add up only the
+schools shown, so a small school's number cannot be worked out by
+subtraction. A school's own rules (its Stars, its verification, its codes)
+are unchanged and not the district's to see.
+
+---
+
 ## Still to do
 
 **Before charging a single real family**, confirm all of:

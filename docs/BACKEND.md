@@ -29,6 +29,18 @@ Theme Genesis (0.11.0) added to `sync.sql` the tables `kid_themes`,
 `consent.sql` the children's themes in "Download my data". No new file and no
 change to the order: re-running the three files is the upgrade.
 
+School districts (0.17.0) added to `schools.sql` the tables `districts`,
+`district_staff`, `district_schools` and `district_quote_attempts` (row level
+security on, no policy; reached only through functions), `district_covers` and
+the district in `school_is_live`, `school_card`, `school_checkout_info`,
+`unapplied_school_awards`, `school_month_summary` and `operator_schools`, the
+district's own functions (signing up, adding schools, invites, the district
+picture, the invoice, Stripe's events, the quote form's rate limit; every
+server-only one revoked from `public, anon, authenticated`) and
+`billing_events.district_id`; to `retention.sql` the district rules; and to
+`consent.sql` keeping a district admin's sign-in like a school admin's. No new
+file and no change to the order.
+
 Gift subscriptions (0.16.0) added to `schema.sql` the three gift columns on
 `families` (`gift_tier`, `gift_starts_at`, `gift_until`) and the gift in
 `effective_tier`; to `billing.sql` the tables `gift_orders`, `gift_buyers`,

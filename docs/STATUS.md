@@ -94,9 +94,11 @@ one phone, with no account (see "On one phone only" below).
 | Rival schools | ✅ | At most three at a time; monthly results kept |
 | School Stars (top ten) | ✅ | The admin checks the list before families see it; first names only with a parent's yes |
 | Checking a school is real | ✅ | `/#/operator` with your `OPERATOR_SECRET`, with a checklist per school beside what RankUp knows (email domain and confirmation, size and price, same-named schools, the district's spelling). Until verified, a school is in no league and sees no names |
-| Help for schools | ✅ | `/#/school/help`: eleven questions, prices and numbers read from the code |
+| Help for schools | ✅ | `/#/school/help`: twelve questions, prices and numbers read from the code |
 | Charging schools | ✅ with Stripe | `api/school-checkout.js`, priced by the school's size; needs the eight `STRIPE_PRICE_SCHOOL_*` prices |
 | Closing each month, the Champion's free month | ✅ | `api/settle-schools.js`, monthly. **You have to schedule it.** Safe to run twice |
+| School districts | ✅ with Stripe | `/#/district`: one plan, by invoice, yearly, for 2 to 100 schools, a discount by each school's place (10% / 20% / 30%). The district adds schools and invites each principal, and sees totals per school and for the district, never a child. Needs the twelve `STRIPE_PRICE_DISTRICT_*` prices ([PAYMENTS.md](PAYMENTS.md#school-districts)) |
+| Get a quote (districts) | ✅ with email | Emailed to `SALES_EMAIL` (or `SUPPORT_EMAIL`), not stored; 3 an hour from one place, 30 in all |
 
 Known limits, decided rather than missed:
 

@@ -341,6 +341,9 @@ changes no other row in any table):
 | A gift buyer's email | When the code runs out, 2 years after it was paid for |
 | A gift checkout nobody paid for, with what was typed into it | 14 days |
 | Gift codes typed that did not work, and gifts started per address (the rate limits) | 2 days |
+| A district's "Get a quote" marks (a keyed hash of where a request came from; what was typed is never stored) | 2 days |
+| A school's invite from its district that nobody used | When it runs out, 30 days after it was made |
+| A school district's account (its admin and its list of schools), once its plan has ended or it never paid | A year after its plan ended, or after it signed up. Never a school: each carries on by itself |
 
 A gift's order itself is kept (the plan, when it was paid, used or refunded,
 and its code's hash): it is the record of the sale.
@@ -375,6 +378,17 @@ cancellation still waiting for Stripe is never deleted.
         $59 / $590, up to 1,500 $99 / $990, more $149 / $1,490 → the
         `STRIPE_PRICE_SCHOOL_*` settings. See
         [PAYMENTS.md](PAYMENTS.md#the-school-league).
+      - School districts (one plan, by invoice, for many schools): a product
+        such as **RankUp School League for districts** with twelve **yearly**
+        recurring prices, each school size's yearly price less 10%, 20% and
+        30%: small $261 / $232 / $203, medium $531 / $472 / $413, large
+        $891 / $792 / $693, xl $1,341 / $1,192 / $1,043 →
+        `STRIPE_PRICE_DISTRICT_SMALL_10` … `STRIPE_PRICE_DISTRICT_XL_30`. In
+        Stripe's settings (Billing → Subscriptions and emails) turn on
+        emailing finalized invoices to customers, and choose what happens to a
+        subscription whose invoice stays unpaid (cancel it, or mark it
+        unpaid): that is when a district's schools stop being covered. See
+        [PAYMENTS.md](PAYMENTS.md#school-districts).
 
       These are the prices in the code (`TIERS` in
       `src/state/initialState.js`, `FLASH_TICKET_PACKS` in
@@ -448,9 +462,11 @@ every phone downloads. A secret in a `VITE_` name is a published secret.
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe's secret key and the webhook's signing secret | **Yes** |
 | `STRIPE_PRICE_*` | The price ids from section 3 | No |
 | `GIFT_CODE_SECRET` | One more long random string (`openssl rand -hex 32`), set once: gift codes are worked out from the paid checkout with it, so only the server can make one ([PAYMENTS.md](PAYMENTS.md#gift-subscriptions-a-year-of-rankup)). Without it a paid gift's webhook answers 500 until it is set, and Stripe keeps retrying. Changing it later does not break codes already sold | **Yes** |
+| `DISTRICT_INVOICE_DAYS` | Optional. Days a school district has to pay each invoice: 30 unless set (1 to 90) ([PAYMENTS.md](PAYMENTS.md#school-districts)) | No |
 | `CRON_SECRET` | One long random string (`openssl rand -hex 32`) that protects all seven scheduled jobs and the detailed health check | **Yes** |
-| `EMAIL_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | The email provider's API key, who RankUp's own emails are from (`RankUp <no-reply@rankup.mtrxhorizyn.com>`), and an optional support address for replies (`help@rankup.mtrxhorizyn.com`). RankUp's own emails use them: the trial reminders, a school's month, the error report ([EMAILS.md](EMAILS.md)). Without the first two, `/api/send-trial-emails` sends nothing and the health check says so. Leave `EMAIL_API_BASE` unset: it is for the tests | Key: **yes** |
+| `EMAIL_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | The email provider's API key, who RankUp's own emails are from (`RankUp <no-reply@rankup.mtrxhorizyn.com>`), and an optional support address for replies (`help@rankup.mtrxhorizyn.com`). RankUp's own emails use them: the trial reminders, a school's month, a district's quote request, the error report ([EMAILS.md](EMAILS.md)). Without the first two, `/api/send-trial-emails` sends nothing and the health check says so. Leave `EMAIL_API_BASE` unset: it is for the tests | Key: **yes** |
 | `ERRORS_EMAIL` | Optional. One inbox for the error report: new crashes on phones and errors in the server functions, from the hourly email job, each error at most once an hour and at most 20 reports a day, with no name, email or family id in it ([EMAILS.md](EMAILS.md#rankups-own-the-error-report)) | No |
+| `SALES_EMAIL` | Optional. Where a school district's "Get a quote" request goes, one email each, with the person's address as the reply-to; nothing they type is stored. A company address (`sales@rankup.mtrxhorizyn.com`). Unset, `SUPPORT_EMAIL`; with neither, the form says quotes are not set up | No |
 | `SUPPORT_EMAIL` | Optional. The support address the app shows under Settings → Help & about and on both help pages (`help@rankup.mtrxhorizyn.com`), built in when the app is built; the emails use it too when `EMAIL_REPLY_TO` is unset. Without it, the contact email in `src/data/legalText.js` once filled in (section 5) | No |
 | `OPERATOR_SECRET` | A different long random string: your key to `/#/operator`, where you check each school is real | **Yes** |
 | `STATS_KEY` | Optional. Lets your own console read two counts (families, active families) and the daily usage totals for the last 30 days from `/api/stats`. Unset, that address does not exist. | **Yes** |

@@ -1,6 +1,6 @@
 import {
   SCHOOL_PRICES, SCHOOL_TRIAL_DAYS, SCHOOL_CHAMPION_TRIAL_DAYS, SCHOOL_YEAR_MONTHS, SCHOOL_MIN_STUDENTS,
-  SCHOOL_DAILY_CHORES, SCHOOL_MAX_RIVALS, SCHOOL_STARS, dollars,
+  SCHOOL_DAILY_CHORES, SCHOOL_MAX_RIVALS, SCHOOL_STARS, DISTRICT_DISCOUNTS, DISTRICT_MIN_SCHOOLS, dollars,
 } from '../lib/schools.js'
 
 /**
@@ -117,6 +117,15 @@ export function schoolHelp() {
       a: [
         'A paying school’s admin opens “Card, invoices and cancelling” on the school’s page: that is Stripe’s own page for cards, invoices and cancelling.',
         'On the trial, the admin can change the number of students on the school’s page. Once paying, or to make a checked school smaller, contact us and we change it.',
+      ],
+    },
+    {
+      id: 'district',
+      q: 'Can our district pay for all its schools?',
+      a: [
+        `Yes, from ${DISTRICT_MIN_SCHOOLS} schools, with one invoice a year. Each school is priced by its size, then ${DISTRICT_DISCOUNTS.map((d, i) => (i === 0 ? `the first schools are ${d.pct}% off` : `from the ${d.from}th school ${d.pct}% off`)).join(', ')}. Adding a school never lowers the total.`,
+        'The district adds its schools and sends each principal an invite, and a school already on RankUp joins with the district’s code. The district sees each school’s totals, never a student.',
+        'If the district stops paying, each school goes back to its own plan, its free trial or the free level, and keeps its points. The district page is linked from the foot of the School League’s front page.',
       ],
     },
   ]

@@ -123,6 +123,30 @@ export async function openSchoolBillingPortal() {
   return result
 }
 
+const DISTRICT_BILLING_URL = import.meta.env?.VITE_DISTRICT_BILLING_URL || '/api/district-billing'
+
+/**
+ * A school district's plan: yearly, by invoice (api/district-billing.js).
+ * Which schools, their sizes and so the price are the server's to work out
+ * from the district's own record; this only says where the invoice goes.
+ * Stripe emails the invoice; nobody is sent anywhere.
+ */
+export async function sendDistrictInvoice(email) {
+  return post(DISTRICT_BILLING_URL, { action: 'invoice', email: String(email || '').trim() })
+}
+
+/** Bring the plan up to the district's schools now: an invoice for what is added. */
+export async function updateDistrictPlan() {
+  return post(DISTRICT_BILLING_URL, { action: 'update' })
+}
+
+/** The district's invoices and cancelling, on Stripe's own pages. */
+export async function openDistrictBillingPortal() {
+  const result = await post(DISTRICT_BILLING_URL, { action: 'portal' })
+  if (result.ok && result.url) window.location.href = result.url
+  return result
+}
+
 /** Send them to Stripe's portal to cancel, change card or get invoices. */
 export async function openBillingPortal() {
   const result = await post(PORTAL_URL, {})
@@ -204,6 +228,14 @@ export const BILLING_ERRORS = {
   refunded_plan_renews: 'Your refunded plan is still set to renew. Cancel it from “Manage billing, cancel, or update card” first, so you are never charged for two plans.',
   gift_too_long: 'Your gift plans run for more than two years from now, longer than Stripe can wait to take a first payment. Choose a plan once less than two years of gift are left.',
   already_paying: 'Your school is already paying. Use “Card, invoices and cancelling” to change the plan.',
+  district_pays: 'Your district pays for your school, so there is nothing to pay here.',
+  not_district_admin: 'Only the district’s admin can manage its plan.',
+  too_few_schools: 'A district plan is for two schools or more. Add your schools first.',
+  too_many_schools: 'That is more schools than a plan here can hold. Use “Get a quote” and we will sort it out with you.',
+  bad_email: 'Give the email address the invoice should go to.',
+  district_already_paying: 'Your district is already paying. Use “Update the plan” or “Invoices and cancelling”.',
+  not_paying: 'There is no plan to update yet. Send the invoice first.',
+  custom_plan: 'Your plan was set up with us by hand. Write to us to change it.',
 }
 
 export function billingError(reason) {

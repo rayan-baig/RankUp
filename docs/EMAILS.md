@@ -14,6 +14,8 @@ no RankUp account: the buyer, and the person they bought it for.
 | **Your School League month** (to a school's admin) | RankUp, `/api/settle-schools` | Once a month, when the month is closed (the 2nd) | `EMAIL_API_KEY`, `EMAIL_FROM`, the monthly job |
 | **Your RankUp gift** (the buyer's receipt, with the code) | RankUp, the Stripe webhook (`api/_shared/gifts.js`) | The moment Stripe confirms a gift is paid for | `EMAIL_API_KEY`, `EMAIL_FROM`, `GIFT_CODE_SECRET` |
 | **"<name> gave your family a year of RankUp"** (to the person it is for) | RankUp, the same | The same moment, only if the buyer chose "Email it to them now" | The same |
+| **A district's quote request** (to whoever runs RankUp, not a family) | RankUp, `/api/district-quote` | When somebody sends the "Get a quote" form on the district page: at most 3 an hour from one place, 30 in all | `SALES_EMAIL` (or `SUPPORT_EMAIL`), with `EMAIL_API_KEY` and `EMAIL_FROM` |
+| **A district's invoice** | Stripe | When a district's yearly plan starts and each year it renews | Stripe dashboard: email finalized invoices to customers ([PAYMENTS.md](PAYMENTS.md#school-districts)) |
 | **The error report** (to whoever runs RankUp, not a family) | RankUp, `/api/send-trial-emails` | Hourly, when there is a new error: each error at most once an hour, at most 20 a day | `ERRORS_EMAIL`, with `EMAIL_API_KEY` and `EMAIL_FROM` |
 | **Receipt** | Stripe | Each payment | Stripe dashboard (below) |
 | **A payment failed** | Stripe | A renewal's card is declined | Stripe dashboard (below) |
@@ -315,11 +317,38 @@ work.
 
 ---
 
+## RankUp's own: a district's quote request
+
+The "Get a quote" form on the district page (`#/district`) is for a district
+with more schools than a plan holds (100), or one that needs to pay another
+way. `api/district-quote.js` checks what was typed with the same rules as the
+form (`src/lib/quoteRules.js`) and sends one email to `SALES_EMAIL`, or
+`SUPPORT_EMAIL` when that is all that is set: the district, the person's name
+and role, how many schools and about how many students, their note, and their
+email, which is also the reply-to, so answering it answers them.
+
+- **Nothing they typed is stored.** The email is the only copy. The database
+  keeps only a keyed hash of where the request came from and when, for the
+  limit (3 an hour from one place, 30 an hour in all), and the retention job
+  deletes those after 2 days.
+- **Never a child.** Only a grown-up at a district fills it in, and it asks
+  nothing about any child.
+- If the email cannot be sent, the person is told to try again in a few
+  minutes, and the error goes in the error report.
+- **Tested** by `tests/emails.mjs` (every variant) and `tests/api.mjs` (sent
+  through the real function, refused when not filled in, rate limited, the
+  provider down).
+
+A school its district pays for gets its month's email as before, saying the
+district pays for the school instead of what the school paid.
+
+---
+
 ## Every email, checked
 
 `tests/emails.mjs` renders every email RankUp's own code sends, in every
-variant (each plan, each kind of school month, each way a gift can be filled
-in, with and without a site and a support address), and checks each has a plain-text part, no blank left
+variant (each plan, each kind of school month, each way a gift or a quote
+request can be filled in, with and without a site and a support address), and checks each has a plain-text part, no blank left
 unfilled, the footer once in each part, nothing wider than 600px, and the
 same words and links in both parts. A new kind of email in
 `api/_shared/email.js` fails it until its variants are added.
