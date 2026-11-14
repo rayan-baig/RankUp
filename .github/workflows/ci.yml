@@ -55,7 +55,7 @@ jobs:
           --health-cmd pg_isready --health-interval 5s
           --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare
         with:
           database: 'true'
@@ -85,7 +85,7 @@ jobs:
         run: npm run test:built
       - name: Screenshots from the failure, if there was one
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: screenshots-checks
           path: tests/screenshots/
@@ -112,7 +112,7 @@ jobs:
           --health-cmd pg_isready --health-interval 5s
           --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare
         with:
           database: 'true'
@@ -122,7 +122,7 @@ jobs:
         run: node tests/run-suite.mjs smoke --shard ${{ matrix.shard }}/3
       - name: Screenshots from the failure, if there was one
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: screenshots-smoke-${{ matrix.shard }}
           path: tests/screenshots/
@@ -143,7 +143,7 @@ jobs:
           --health-cmd pg_isready --health-interval 5s
           --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare
         with:
           database: 'true'
@@ -159,7 +159,7 @@ jobs:
         run: npm run test:sync
       - name: Screenshots from the failure, if there was one
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: screenshots-sync
           path: tests/screenshots/
@@ -183,7 +183,7 @@ jobs:
           --health-cmd pg_isready --health-interval 5s
           --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare
         with:
           database: 'true'
