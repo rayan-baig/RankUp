@@ -22,9 +22,14 @@ console.log('\n=== Three plans, all billed monthly ===')
 await page.evaluate(() => { window.location.hash = '/parent/plan' })
 await page.waitForTimeout(900)
 const body = await page.evaluate(() => document.body.innerText)
-;['Free', '$9.99', '$15.99'].every((p) => body.includes(p))
-  ? pass('all three plans are priced on the plan screen, Starter free')
+// The prices the owner chose, typed here on purpose: the app reads them from
+// TIERS, and this is the check that TIERS says what was decided.
+;['Free', '$5.99', '$9.99'].every((p) => body.includes(p))
+  ? pass('all three plans are priced on the plan screen: Starter free, Standard $5.99, Elite $9.99')
   : fail('three prices shown', body.slice(0, 160))
+;['$15.99', '$159.9', '$99.9'].some((p) => body.includes(p))
+  ? fail('no old price on the plan screen', 'an old price is still shown')
+  : pass('and no old price is left on it')
 // A free plan must never render as "$0/mo", which reads as a bug.
 !body.includes('$0')
   ? pass('and free is written as Free, not as zero dollars')
@@ -39,8 +44,8 @@ body.includes('Billed monthly')
 // The question a parent actually asks is "why would I pay more".
 // Standard is measured against free, so it states its own price; Elite is
 // measured against Standard, so it states the difference.
-body.includes('$9.99 a month') && body.includes('more than Standard')
-  ? pass('each step up says what the extra money buys')
+body.includes('$5.99 a month') && body.includes('$4.00 more than Standard')
+  ? pass('each step up says what the extra money buys ($5.99 a month; $4.00 more than Standard)')
   : fail('upgrade reason shown', 'no price-difference line')
 // innerText returns text with CSS text-transform applied, so section headings
 // come back upper-cased.
@@ -81,20 +86,30 @@ await page.waitForTimeout(700)
 await page.getByRole('tab', { name: /Yearly/ }).click()
 await page.waitForTimeout(500)
 const yearly = await page.evaluate(() => document.body.innerText)
-yearly.includes('$99.9') && yearly.includes('$159.9')
-  ? pass('yearly prices replace the monthly ones')
+yearly.includes('$49.99/yr') && yearly.includes('$79.99/yr')
+  ? pass('yearly prices replace the monthly ones ($49.99 and $79.99 a year)')
   : fail('yearly prices shown', yearly.slice(0, 200))
-yearly.includes('2 months free')
-  ? pass('and the control itself says what yearly buys')
-  : fail('2 months free stated', 'phrase missing')
+// $49.99 is not a whole number of $5.99 months, so the switch gives the
+// smaller of the two real savings as a percentage (30%, against Elite's 33%),
+// never "2 months free".
+yearly.includes('Save 30% or more') && !/months? free/.test(yearly)
+  ? pass('and the control itself says what yearly buys, honestly: "Save 30% or more"')
+  : fail('saving stated on the switch', 'phrase missing, or it still says months free')
+yearly.includes('A year saves 30%') && yearly.includes('A year saves 33%')
+  ? pass('each card gives its own percentage: Standard 30%, Elite 33%')
+  : fail('per-plan percentage', yearly.slice(0, 300))
 // Assigned rather than written inline: a regex literal opening a line after a
 // closing paren is read as division, and the file stops parsing.
 const showsSaving = /\$\d+\.\d\d saved/.test(yearly)
 showsSaving
   ? pass('each plan shows the money saved in cash, not a percentage')
   : fail('saving in cash', yearly.slice(0, 200))
+const SAVES = { standard: '21.89', elite: '39.89' }
 for (const tier of TIER_LADDER.filter((t) => annualSaving(t))) {
   const s = annualSaving(tier)
+  s.saved === SAVES[tier.id]
+    ? pass(`${tier.name}: the saving worked out is $${SAVES[tier.id]}`)
+    : fail(`${tier.name} saving worked out`, `$${s.saved}, should be $${SAVES[tier.id]}`)
   const chip = await page.locator(`[data-testid="saving-${tier.id}"]`).innerText().catch(() => '')
   chip.trim() === `$${s.saved} saved a year`
     ? pass(`${tier.name}: saves $${s.saved}, twelve months at $${tier.price.toFixed(2)} less $${tier.yearPrice.toFixed(2)}`)
@@ -106,7 +121,7 @@ yearly.includes('Billed yearly')
   : fail('billed yearly stated', 'phrase missing')
 
 // Every price the screen shows, monthly and yearly, is a price in the table in
-// docs/PAYMENTS.md, written the same way. "$99.9/yr" is not "$99.90 / year".
+// docs/PAYMENTS.md, written the same way. "$79.9/yr" is not "$79.90 / year".
 {
   const { readFileSync } = await import('node:fs')
   const doc = readFileSync(new URL('../docs/PAYMENTS.md', import.meta.url), 'utf8')
@@ -136,7 +151,7 @@ await page.evaluate(() => { window.location.hash = '/parent/plan' })
 await page.waitForFunction(() => /\$\d/.test(document.body.innerText), null, { timeout: 15000 })
   .catch(() => {})
 const fresh = await page.evaluate(() => document.body.innerText)
-fresh.includes('$9.99') && !fresh.includes('$99.9')
+fresh.includes('$5.99/mo') && !fresh.includes('$49.99')
   ? pass('monthly is what a parent sees first')
   : fail('monthly is the default', fresh.slice(0, 200))
 

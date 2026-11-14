@@ -61,11 +61,11 @@ console.log('\n=== Invites: counts, never who ===')
 {
   const withRefs = familySummaryHtml({ ...server, referrals: {
     joined_with_a_code: null, your_code: 'HJ4K2P', families_joined_with_your_code: 2,
-    free_months: [{ decided_at: '2026-11-04T10:00:00Z', state: 'applied', amount: 1599, currency: 'USD', plan: 'elite' },
+    free_months: [{ decided_at: '2026-11-04T10:00:00Z', state: 'applied', amount: 999, currency: 'USD', plan: 'elite' },
       { decided_at: '2026-11-05T10:00:00Z', state: 'banked' }],
   } })
   ok('the download says how many families joined with the code', withRefs.includes('<h2>Invites</h2>') && withRefs.includes('2 families joined with your code'))
-  ok('and each free month, what it was worth and where it is', withRefs.includes('On your account') && withRefs.includes('15.99 USD')
+  ok('and each free month, what it was worth and where it is', withRefs.includes('On your account') && withRefs.includes('9.99 USD')
     && withRefs.includes('Banked until you choose a plan'))
   ok('a download with no referrals has no invites section', !html.includes('<h2>Invites</h2>'))
 }

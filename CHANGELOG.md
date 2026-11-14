@@ -5,6 +5,16 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.15.0 — 2026-11-14
+
+New plan prices.
+
+- Standard is now $5.99 a month or $49.99 a year (was $9.99 / $99.90). Elite Pass is now $9.99 a month or $79.99 a year (was $15.99 / $159.90). Starter stays free, the 14-day trial, the Flash Ticket packs and the School League prices are unchanged.
+- A year now saves $21.89 on Standard (30%) and $39.89 on Elite Pass (33%). The new yearly prices are not a whole number of months, so the Monthly / Yearly switch no longer says "2 months free": it says "Save 30% or more", the smaller of the two, and each plan's card says what it saves in dollars and as a percentage. All worked out from the plan list, as before.
+- The plan screen, the banners, the front door, the help page and the terms show the new prices, read from the one plan list. The Alliance prize line now reads $7.99 instead of $9.99; a yearly Elite family's referral free month is $6.67.
+- **Stripe, before deploying:** make four new recurring prices ($5.99 and $49.99 on Standard, $9.99 and $79.99 on Elite Pass), put their ids in `STRIPE_PRICE_STANDARD`, `STRIPE_PRICE_STANDARD_YEAR`, `STRIPE_PRICE_ELITE` and `STRIPE_PRICE_ELITE_YEAR`, and deploy this version at the same time. The app shows what Stripe charges a new family only while those ids match the plan list. Families already subscribed stay on their old price and their plan until moved: keep them as they are, or move them in the Stripe dashboard. docs/PAYMENTS.md, "Changing a price", has the steps.
+- No SQL changes.
+
 ## 0.14.0 — 2026-11-13
 
 Invite a family, get a free month.

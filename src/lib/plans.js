@@ -15,19 +15,19 @@ import { KID_THEMES } from '../data/kidThemes.js'
 import { PARENT_THEMES } from '../data/parentThemes.js'
 import { MAX_TOKENS, DAILY_COIN_CAP } from '../data/minigames.js'
 
-/** Dollars as a price is written: 99.9 is "99.90", the way Stripe and docs/PAYMENTS.md say it. */
+/** Dollars as a price is written: 5.9 is "5.90", the way Stripe and docs/PAYMENTS.md say it. */
 export const usd = (n) => Number(n).toFixed(2)
 
 /** Whole cents, so money is never added up in floating point. */
 export const toCents = (n) => Math.round(Number(n) * 100)
 
-/** "Free", "$9.99/mo" or "$99.90/yr". */
+/** "Free", "$5.99/mo" or "$49.99/yr". */
 export function priceTag(tier, cycle = 'month') {
   if (!tier || !tier.price) return 'Free'
   return cycle === 'year' && tier.yearPrice ? `$${usd(tier.yearPrice)}/yr` : `$${usd(tier.price)}/mo`
 }
 
-/** "free", "$9.99 a month" or "$99.90 a year", for sentences. */
+/** "free", "$5.99 a month" or "$49.99 a year", for sentences. */
 export function priceWords(tier, cycle = 'month') {
   if (!tier || !tier.price) return 'free'
   return cycle === 'year' && tier.yearPrice ? `$${usd(tier.yearPrice)} a year` : `$${usd(tier.price)} a month`
@@ -37,10 +37,11 @@ export function priceWords(tier, cycle = 'month') {
  * What paying for a year saves against twelve monthly payments, from the two
  * real prices. Null for a plan with no yearly price, or one that saves nothing.
  *
- *   savedCents  1998 for $9.99 a month against $99.90 a year
- *   saved       "19.98"
- *   percent     17 (rounded down, so it never claims more than it saves)
- *   monthsFree  2 when the year costs a whole number of months, else null
+ *   savedCents  2189 for $5.99 a month against $49.99 a year
+ *   saved       "21.89"
+ *   percent     30 (30.45 rounded down, so it never claims more than it saves)
+ *   monthsFree  the months free when the year costs a whole number of months
+ *               ($100 against $10 a month: 2), else null ($49.99 is not)
  */
 export function annualSaving(tier) {
   if (!tier?.price || !tier?.yearPrice) return null
@@ -61,7 +62,8 @@ export function annualSaving(tier) {
  * The line on the Monthly / Yearly switch. "2 months free" when every paid
  * plan's year is the same whole number of months; otherwise the smallest
  * saving any plan gives, as a percentage, so it never promises more than the
- * plan a parent picks.
+ * plan a parent picks. Today's prices are not whole months (Standard saves
+ * 30%, Elite 33%), so it says "Save 30% or more".
  */
 export function yearlyNote(ladder = TIER_LADDER) {
   const savings = ladder.map(annualSaving).filter(Boolean)

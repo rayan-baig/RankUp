@@ -19,8 +19,9 @@ export const TRIAL_DAYS = 14
  * is a promise the app does not keep. tests/planwords.mjs checks each limit
  * against the code that enforces it.
  *
- * Standard and Elite are billed monthly or yearly (ten months' money). The
- * trial is free and asks for no card.
+ * Standard and Elite are billed monthly or yearly (a year saves 30% to
+ * 33% against twelve months; lib/plans.js works the saving out). The trial
+ * is free and asks for no card.
  */
 /* What only Elite unlocks, each one gated by isElite() in the app. */
 const NO_ELITE_TOOLS = {
@@ -56,9 +57,11 @@ export const TIERS = {
   standard: {
     id: 'standard',
     name: 'Standard',
-    price: 9.99,
+    price: 5.99,
     /*
-     * Ten months' money for twelve months' app.
+     * A year for a little over eight months' money: $49.99 against twelve
+     * at $5.99. The saving, and the label on the Monthly / Yearly switch, are
+     * worked out from these two numbers in lib/plans.js, never typed.
      *
      * The saving is the smaller half of why this exists. The larger half is
      * that the decision to cancel then happens once a year instead of twelve
@@ -66,7 +69,7 @@ export const TIERS = {
      * a quiet month where nobody opened it and the charge looked like a good
      * thing to stop.
      */
-    yearPrice: 99.9,
+    yearPrice: 49.99,
     order: 1,
     guildSize: 5,
     xpMultiplier: 1,
@@ -75,8 +78,8 @@ export const TIERS = {
   elite: {
     id: 'elite',
     name: 'Elite Pass',
-    price: 15.99,
-    yearPrice: 159.9,
+    price: 9.99,
+    yearPrice: 79.99,
     order: 2,
     guildSize: 10,
     xpMultiplier: 1.5,

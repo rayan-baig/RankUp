@@ -77,6 +77,23 @@ ok('planPrices() lists every plan, cheapest first', planPrices().length === TIER
 const source = readFileSync('src/data/parentHelp.js', 'utf8')
 ok('and none is typed into the help text by hand', !/\$\d/.test(source.replace(/\$\{[^}]*\}/g, '')))
 
+console.log('\n=== The help page and the terms say the prices the owner chose ===')
+// Typed here on purpose: the app reads them from TIERS, and this checks TIERS
+// says what was decided (0.15.0). The plan screen is checked in tests/plans.mjs.
+{
+  const { TERMS, PRIVACY_POLICY } = await import('../src/data/legalText.js')
+  const prices = answer('prices')
+  ok('help: "Standard: $5.99 a month, or $49.99 a year"', prices.includes('Standard: $5.99 a month, or $49.99 a year'), prices)
+  ok('help: "Elite Pass: $9.99 a month, or $79.99 a year"', prices.includes('Elite Pass: $9.99 a month, or $79.99 a year'), prices)
+  const terms = TERMS.sections.flatMap((s) => s.body).join(' ')
+  ok('terms: Standard is $5.99 a month or $49.99 a year', terms.includes('Standard is $5.99 a month or $49.99 a year'), terms.slice(0, 200))
+  ok('terms: Elite Pass is $9.99 a month or $79.99 a year', terms.includes('Elite Pass is $9.99 a month or $79.99 a year'))
+  const old = ['$15.99', '$99.90', '$159.90']
+  const policy = PRIVACY_POLICY.sections.flatMap((s) => s.body).join(' ')
+  ok('no old price is left in the help page, the terms or the privacy policy',
+    !old.some((p) => everything.includes(p) || terms.includes(p) || policy.includes(p)))
+}
+
 console.log('\n=== The other numbers are the code\'s too ===')
 ok(`the trial is ${TRIAL_DAYS} days of ${TIERS.elite.name}, no card`,
   answer('trial').includes(`${TRIAL_DAYS} days of ${TIERS.elite.name}`) && /No card/i.test(answer('trial')))

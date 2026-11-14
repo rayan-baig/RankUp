@@ -100,13 +100,13 @@ begin
   perform ok('a trial''s $0 invoice is not paying', res->>'ignored' = 'nothing_paid', res::text);
   perform ok('and leaves nothing behind', (t54_row(10)).paid_invoice is null and (t54_row(10)).reward_state is null);
 
-  res := earn_referral_reward(t54_fam(10), null, 999, '{}');
+  res := earn_referral_reward(t54_fam(10), null, 599, '{}');
   perform ok('an invoice with no id is refused', res->>'reason' = 'no_invoice', res::text);
 
-  res := earn_referral_reward(t54_fam(60), 'in_t54_nobody', 999, '{pi_t54_60}');
+  res := earn_referral_reward(t54_fam(60), 'in_t54_nobody', 599, '{pi_t54_60}');
   perform ok('a family nobody invited earns nobody anything', res->>'ignored' = 'not_referred', res::text);
 
-  res := earn_referral_reward(t54_fam(10), 'in_t54_first', 1599, '{pi_t54_10,ch_t54_10}', 'cus_t54_friend10', now());
+  res := earn_referral_reward(t54_fam(10), 'in_t54_first', 999, '{pi_t54_10,ch_t54_10}', 'cus_t54_friend10', now());
   perform ok('the first paid invoice earns the inviting family its month', res->>'state' = 'owed', res::text);
   perform ok('which is owed as a credit, because the inviting family pays',
     (res->>'referrer_family_id')::uuid = t54_fam(1));
@@ -114,10 +114,10 @@ begin
   perform ok('the invoice and its payment are kept with the referral',
     r.paid_invoice = 'in_t54_first' and r.paid_refs @> '{pi_t54_10,ch_t54_10}' and r.reward_at is not null, r::text);
 
-  res := earn_referral_reward(t54_fam(10), 'in_t54_first', 1599, '{pi_t54_10}', 'cus_t54_friend10', now());
+  res := earn_referral_reward(t54_fam(10), 'in_t54_first', 999, '{pi_t54_10}', 'cus_t54_friend10', now());
   perform ok('the same invoice again (Stripe sends two events and retries both) is a duplicate',
     (res->>'duplicate')::boolean and res->>'state' = 'owed', res::text);
-  res := earn_referral_reward(t54_fam(10), 'in_t54_renewal', 1599, '{pi_t54_10b}', 'cus_t54_friend10', now());
+  res := earn_referral_reward(t54_fam(10), 'in_t54_renewal', 999, '{pi_t54_10b}', 'cus_t54_friend10', now());
   perform ok('and so is the next month''s: one reward per invited family',
     (res->>'duplicate')::boolean and (t54_row(10)).paid_invoice = 'in_t54_first', res::text);
 end $$;
@@ -131,11 +131,11 @@ begin
     jsonb_array_length(owed) = 1 and owed->0->>'customer_id' = 'cus_t54_1'
     and (owed->0->>'invited_family_id')::uuid = t54_fam(10), owed::text);
 
-  res := mark_referral_reward_applied(t54_fam(10), 'cbtxn_t54_1', 1599, 'usd', 'elite', 'month');
+  res := mark_referral_reward_applied(t54_fam(10), 'cbtxn_t54_1', 999, 'usd', 'elite', 'month');
   perform ok('once it is on the account it is marked applied', (res->>'applied')::boolean
-    and (t54_row(10)).reward_state = 'applied' and (t54_row(10)).reward_amount = 1599
+    and (t54_row(10)).reward_state = 'applied' and (t54_row(10)).reward_amount = 999
     and (t54_row(10)).reward_currency = 'USD', res::text);
-  res := mark_referral_reward_applied(t54_fam(10), 'cbtxn_t54_again', 1599, 'usd', 'elite', 'month');
+  res := mark_referral_reward_applied(t54_fam(10), 'cbtxn_t54_again', 999, 'usd', 'elite', 'month');
   perform ok('and marking it again changes nothing', not (res->>'applied')::boolean
     and (t54_row(10)).reward_credit = 'cbtxn_t54_1', res::text);
   perform ok('nothing is owed any more', jsonb_array_length(referral_rewards_owed(t54_fam(1))) = 0);
@@ -146,10 +146,10 @@ do $$
 declare res jsonb;
 begin
   -- Family 30's parent's email is family 1's with a +tag.
-  res := earn_referral_reward(t54_fam(30), 'in_t54_same_email', 1599, '{pi_t54_30}', 'cus_t54_thirty', now());
+  res := earn_referral_reward(t54_fam(30), 'in_t54_same_email', 999, '{pi_t54_30}', 'cus_t54_thirty', now());
   perform ok('no free month for inviting yourself by email', res->>'state' = 'blocked' and res->>'why' = 'same_email', res::text);
 
-  res := earn_referral_reward(t54_fam(31), 'in_t54_same_card', 1599, '{pi_t54_31}', 'cus_t54_1', now());
+  res := earn_referral_reward(t54_fam(31), 'in_t54_same_card', 999, '{pi_t54_31}', 'cus_t54_1', now());
   perform ok('nor by paying with your own Stripe customer', res->>'state' = 'blocked' and res->>'why' = 'same_customer', res::text);
 
   perform ok('neither is owed', jsonb_array_length(referral_rewards_owed(t54_fam(1))) = 0);
@@ -164,11 +164,11 @@ do $$
 declare res jsonb;
 begin
   -- 11: the first payment refunded within 14 days, the credit still unused.
-  perform earn_referral_reward(t54_fam(11), 'in_t54_11', 1599, '{pi_t54_11,ch_t54_11}', 'cus_t54_friend11', now() - interval '3 days');
-  perform mark_referral_reward_applied(t54_fam(11), 'cbtxn_t54_11', 1599, 'usd', 'elite', 'month');
+  perform earn_referral_reward(t54_fam(11), 'in_t54_11', 999, '{pi_t54_11,ch_t54_11}', 'cus_t54_friend11', now() - interval '3 days');
+  perform mark_referral_reward_applied(t54_fam(11), 'cbtxn_t54_11', 999, 'usd', 'elite', 'month');
   res := referral_payment_reversed(t54_fam(11), '{ch_t54_11,pi_t54_11}', 'refund', now(), now() - interval '3 days');
   perform ok('a refund of the first payment within 14 days asks for the credit back',
-    res->>'action' = 'reverse_credit' and res->>'customer_id' = 'cus_t54_1' and (res->>'amount')::int = 1599, res::text);
+    res->>'action' = 'reverse_credit' and res->>'customer_id' = 'cus_t54_1' and (res->>'amount')::int = 999, res::text);
   res := finish_referral_withdrawal(t54_fam(11), true, 'refund', 'cbtxn_t54_back_11');
   perform ok('and, the account still holding it, it is withdrawn',
     (t54_row(11)).reward_state = 'withdrawn' and (t54_row(11)).reward_note = 'refund_within_14_days'
@@ -177,8 +177,8 @@ begin
   perform ok('the same refund again changes nothing', res->>'ignored' = 'nothing_to_withdraw', res::text);
 
   -- 12: refunded within 14 days, but the credit has already come off an invoice.
-  perform earn_referral_reward(t54_fam(12), 'in_t54_12', 1599, '{pi_t54_12}', 'cus_t54_friend12', now() - interval '10 days');
-  perform mark_referral_reward_applied(t54_fam(12), 'cbtxn_t54_12', 1599, 'usd', 'elite', 'month');
+  perform earn_referral_reward(t54_fam(12), 'in_t54_12', 999, '{pi_t54_12}', 'cus_t54_friend12', now() - interval '10 days');
+  perform mark_referral_reward_applied(t54_fam(12), 'cbtxn_t54_12', 999, 'usd', 'elite', 'month');
   res := referral_payment_reversed(t54_fam(12), '{pi_t54_12}', 'refund', now(), null);
   perform finish_referral_withdrawal(t54_fam(12), false, 'refund');
   perform ok('a month already used is left, and what happened is written down',
@@ -188,15 +188,15 @@ begin
   perform ok('and is not asked about twice', res->>'ignored' = 'already_decided', res::text);
 
   -- 13: refunded 20 days after it was paid.
-  perform earn_referral_reward(t54_fam(13), 'in_t54_13', 1599, '{pi_t54_13}', 'cus_t54_friend13', now() - interval '20 days');
-  perform mark_referral_reward_applied(t54_fam(13), 'cbtxn_t54_13', 1599, 'usd', 'elite', 'month');
+  perform earn_referral_reward(t54_fam(13), 'in_t54_13', 999, '{pi_t54_13}', 'cus_t54_friend13', now() - interval '20 days');
+  perform mark_referral_reward_applied(t54_fam(13), 'cbtxn_t54_13', 999, 'usd', 'elite', 'month');
   res := referral_payment_reversed(t54_fam(13), '{pi_t54_13}', 'refund', now(), null);
   perform ok('a refund after 14 days leaves the month, and says so',
     (res->>'kept')::boolean and (t54_row(13)).reward_state = 'applied'
     and (t54_row(13)).reward_note = 'refund_after_14_days', res::text);
 
   -- 14: a later payment refunded: not the first.
-  perform earn_referral_reward(t54_fam(14), 'in_t54_14', 1599, '{pi_t54_14}', 'cus_t54_friend14', now() - interval '2 days');
+  perform earn_referral_reward(t54_fam(14), 'in_t54_14', 999, '{pi_t54_14}', 'cus_t54_friend14', now() - interval '2 days');
   res := referral_payment_reversed(t54_fam(14), '{pi_t54_14_later}', 'refund', now(), now() - interval '40 days');
   perform ok('a refund of some other payment has nothing to do with the month',
     res->>'ignored' = 'not_first_payment' and (t54_row(14)).reward_state = 'owed', res::text);
@@ -208,7 +208,7 @@ begin
     res->>'ignored' = 'not_a_plan_payment' and (t54_row(14)).reward_state = 'owed', res::text);
 
   -- 15: an owed month (not on the account yet) is simply withdrawn.
-  perform earn_referral_reward(t54_fam(15), 'in_t54_15', 1599, '{pi_t54_15}', 'cus_t54_friend15', now() - interval '1 day');
+  perform earn_referral_reward(t54_fam(15), 'in_t54_15', 999, '{pi_t54_15}', 'cus_t54_friend15', now() - interval '1 day');
   res := referral_payment_reversed(t54_fam(15), '{pi_t54_15}', 'dispute', now(), null);
   perform ok('a dispute of the first payment withdraws a month still owed',
     (res->>'withdrawn')::boolean and (t54_row(15)).reward_state = 'withdrawn'
@@ -217,12 +217,12 @@ begin
   -- 16: the refund arrives before the invoice it undoes (Stripe does not deliver in order).
   res := referral_payment_reversed(t54_fam(16), '{ch_t54_16,pi_t54_16}', 'refund', now(), now());
   perform ok('a refund before the first invoice was counted is remembered', res->>'recorded' = 'before_first_invoice', res::text);
-  res := earn_referral_reward(t54_fam(16), 'in_t54_16', 1599, '{pi_t54_16}', 'cus_t54_friend16', now());
+  res := earn_referral_reward(t54_fam(16), 'in_t54_16', 999, '{pi_t54_16}', 'cus_t54_friend16', now());
   perform ok('and that invoice, arriving late, earns nothing',
     res->>'state' = 'blocked' and res->>'why' = 'payment_reversed', res::text);
 
   -- 17: an invoice that named no payment; the refund is recognised by when it was made.
-  perform earn_referral_reward(t54_fam(17), 'in_t54_17', 1599, '{}', 'cus_t54_friend17', now() - interval '2 days');
+  perform earn_referral_reward(t54_fam(17), 'in_t54_17', 999, '{}', 'cus_t54_friend17', now() - interval '2 days');
   res := referral_payment_reversed(t54_fam(17), '{ch_t54_17}', 'refund', now(), now() - interval '2 days' + interval '5 seconds');
   perform ok('with no payment id on the invoice, a charge made with it is taken to be it',
     (res->>'withdrawn')::boolean, res::text);
@@ -232,7 +232,7 @@ end $$;
 do $$
 declare res jsonb; owed jsonb;
 begin
-  res := earn_referral_reward(t54_fam(21), 'in_t54_21', 999, '{pi_t54_21}', 'cus_t54_friend21', now());
+  res := earn_referral_reward(t54_fam(21), 'in_t54_21', 599, '{pi_t54_21}', 'cus_t54_friend21', now());
   perform ok('a family on Starter has its month banked, not lost', res->>'state' = 'banked', res::text);
   perform ok('and nothing is credited while it has no plan to take it off',
     jsonb_array_length(referral_rewards_owed(t54_fam(2))) = 0);
@@ -245,11 +245,11 @@ begin
   owed := referral_rewards_owed(t54_fam(2));
   perform ok('the moment it subscribes, the banked month is owed to its new Stripe customer',
     jsonb_array_length(owed) = 1 and owed->0->>'customer_id' = 'cus_t54_2', owed::text);
-  perform mark_referral_reward_applied(t54_fam(21), 'cbtxn_t54_21', 999, 'usd', 'standard', 'month');
+  perform mark_referral_reward_applied(t54_fam(21), 'cbtxn_t54_21', 599, 'usd', 'standard', 'month');
   perform ok('and is then on the account', (t54_row(21)).reward_state = 'applied');
 
   -- 23: banked, then the paying family's first payment is refunded within the 14 days.
-  perform earn_referral_reward(t54_fam(23), 'in_t54_23', 999, '{pi_t54_23}', 'cus_t54_friend23', now());
+  perform earn_referral_reward(t54_fam(23), 'in_t54_23', 599, '{pi_t54_23}', 'cus_t54_friend23', now());
   res := referral_payment_reversed(t54_fam(23), '{pi_t54_23}', 'refund', now(), now());
   perform ok('a banked month is withdrawn by a refund within 14 days (it was never used)',
     (res->>'withdrawn')::boolean and res->>'was' = 'banked' and (t54_row(23)).reward_state = 'withdrawn', res::text);
@@ -270,10 +270,10 @@ begin
   perform t54_ref(53, 40);
   perform t54_ref(54, 40);
 
-  res := earn_referral_reward(t54_fam(53), 'in_t54_53', 1599, '{pi_t54_53}', 'cus_t54_friend53', now());
+  res := earn_referral_reward(t54_fam(53), 'in_t54_53', 999, '{pi_t54_53}', 'cus_t54_friend53', now());
   perform ok('the twelfth free month in 365 days is given (one from last year does not count)',
     res->>'state' = 'owed', res::text);
-  res := earn_referral_reward(t54_fam(54), 'in_t54_54', 1599, '{pi_t54_54}', 'cus_t54_friend54', now());
+  res := earn_referral_reward(t54_fam(54), 'in_t54_54', 999, '{pi_t54_54}', 'cus_t54_friend54', now());
   perform ok('the thirteenth is not', res->>'state' = 'blocked' and res->>'why' = 'cap', res::text);
 end $$;
 

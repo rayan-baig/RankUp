@@ -27,10 +27,12 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
  * to be billed nothing.
  *
  * Annual exists because the cancel decision then happens once a year instead of
- * twelve times, which is most of what churn actually is in a family app. Two
- * months free is the usual shape and is priced in Stripe, not here — this file
- * only ever names a price id, so the numbers on the plan screen and the numbers
- * on the card can never disagree because of something in this code.
+ * twelve times, which is most of what churn actually is in a family app. The
+ * yearly price is priced in Stripe, not here — this file only ever names a
+ * price id, so the numbers on the plan screen and the numbers on the card can
+ * never disagree because of something in this code. They agree only if each
+ * STRIPE_PRICE_* id is a Stripe price for exactly the amount in TIERS
+ * (src/state/initialState.js): see docs/PAYMENTS.md, "Changing a price".
  */
 const PRICES = {
   month: {

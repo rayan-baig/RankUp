@@ -576,13 +576,26 @@ console.log('\n=== Annual prices map back to the right plan in every subscriptio
     data: { object: sub('price_test_elite_year', 'active', [{ id: 'si_api_extra', price: { id: 'price_some_other_line' } }]) } })
   ok('a yearly Elite price is found when it is not the first line', (await billingRow(YEARLY)).tier === 'elite')
   await signed({ id: `evt_api_yearly_paid_${Date.now()}`, type: 'invoice.paid', created: tick(),
-    data: { object: { id: 'in_api_yearly', object: 'invoice', customer: 'cus_api_yearly', amount_paid: 15990, currency: 'usd',
+    data: { object: { id: 'in_api_yearly', object: 'invoice', customer: 'cus_api_yearly', amount_paid: 7999, currency: 'usd',
       parent: { subscription_details: { metadata: { family_id: YEARLY, tier: 'standard' } } },
       lines: { data: [{ price: { id: 'price_test_elite_year' } }] } } } })
   await signed({ id: `evt_api_yearly_cs_${Date.now()}`, type: 'checkout.session.completed', created: tick(),
     data: { object: { id: 'cs_api_yearly', object: 'checkout.session', mode: 'subscription', customer: 'cus_api_yearly',
       payment_status: 'paid', metadata: { family_id: YEARLY, tier: 'standard', cycle: 'year' } } } })
   ok('invoice.paid and checkout.session.completed leave a yearly Elite family on Elite', (await billingRow(YEARLY)).tier === 'elite')
+  // A price change gives the plans new Stripe price ids. A family that
+  // subscribed before it stays on its old price, which is in no STRIPE_PRICE_*
+  // setting any more: it keeps the plan its checkout wrote on the subscription
+  // (docs/PAYMENTS.md, "Changing a price"). Both ways, so neither is the
+  // plan the family happened to have already.
+  await signed({ id: `evt_api_yearly_retired_std_${Date.now()}`, type: 'customer.subscription.updated', created: tick(),
+    data: { object: { ...sub('price_retired_standard_year'), metadata: { family_id: YEARLY, tier: 'standard', cycle: 'year' } } } })
+  const retiredStandard = await billingRow(YEARLY)
+  await signed({ id: `evt_api_yearly_retired_elite_${Date.now()}`, type: 'customer.subscription.updated', created: tick(),
+    data: { object: { ...sub('price_retired_elite_year'), metadata: { family_id: YEARLY, tier: 'elite', cycle: 'year' } } } })
+  const retiredElite = await billingRow(YEARLY)
+  ok('a family still on a retired price keeps the plan its checkout recorded (Standard, then Elite)',
+    retiredStandard.tier === 'standard' && retiredElite.tier === 'elite', JSON.stringify([retiredStandard, retiredElite]))
   const deleted = await signed({ id: `evt_api_yearly_del_${Date.now()}`, type: 'customer.subscription.deleted', created: tick(),
     data: { object: sub('price_test_elite_year', 'canceled') } })
   const ended = await billingRow(YEARLY)
@@ -633,12 +646,12 @@ console.log('\n=== A failed renewal drops the plan, and the parent is told why =
   console.log('\n=== A refund ===')
   const refund = (over) => signed({ id: `evt_api_refund_${Date.now()}_${Math.random()}`, type: 'charge.refunded', created: tick(),
     data: { object: { id: `ch_api_renew_${RUN}`, object: 'charge', customer: 'cus_api_renew', payment_intent: `pi_api_renew_${RUN}`,
-      amount: 1599, amount_refunded: 1599, refunded: true, currency: 'usd', created: Math.floor(Date.now() / 1000), ...over } } })
+      amount: 999, amount_refunded: 999, refunded: true, currency: 'usd', created: Math.floor(Date.now() / 1000), ...over } } })
   await refund({ id: `ch_api_goodwill_${RUN}`, amount_refunded: 500, refunded: false })
   ok('a partial refund leaves the plan alone', (await billingRow(RENEW)).tier === 'elite')
   // This month's renewal has been paid; last month's is refunded in full.
   await signed({ id: `evt_api_renew_paid_${Date.now()}`, type: 'invoice.paid', created: tick(),
-    data: { object: { id: `in_api_renew_this_month_${RUN}`, object: 'invoice', customer: 'cus_api_renew', amount_paid: 1599, currency: 'usd',
+    data: { object: { id: `in_api_renew_this_month_${RUN}`, object: 'invoice', customer: 'cus_api_renew', amount_paid: 999, currency: 'usd',
       parent: { subscription_details: { metadata: { family_id: RENEW } } } } } })
   await refund({ id: `ch_api_last_month_${RUN}`, created: Math.floor(Date.now() / 1000) - 35 * 86400 })
   ok('refunding an earlier month leaves the month that is paid for standing', (await billingRow(RENEW)).tier === 'elite',
@@ -834,13 +847,13 @@ console.log('\n=== A failed renewal drops the plan, and the parent is told why =
       metadata: { family_id: late.family, tier: 'elite' } } } })
   ok('its other events are answered too, not failed for days', updatedLate.status === 200, `status ${updatedLate.status}`)
   const invoiceLate = await signed({ id: `evt_api_del_late_inv_${RUN}`, type: 'invoice.paid', created: tick(),
-    data: { object: { id: `in_api_del_late_${RUN}`, object: 'invoice', customer: late.customer, amount_paid: 1599, currency: 'usd',
+    data: { object: { id: `in_api_del_late_${RUN}`, object: 'invoice', customer: late.customer, amount_paid: 999, currency: 'usd',
       parent: { subscription_details: { metadata: { family_id: late.family } } } } } })
   const counted = (await db.query('select family_id, amount_pence from billing_events where stripe_event = $1', [`invoice:in_api_del_late_${RUN}`])).rows[0]
   ok('money already taken is still counted, against no family', invoiceLate.status === 200
-    && counted?.family_id === null && counted?.amount_pence === 1599, `status ${invoiceLate.status} ${JSON.stringify(counted)}`)
+    && counted?.family_id === null && counted?.amount_pence === 999, `status ${invoiceLate.status} ${JSON.stringify(counted)}`)
   const refundLate = await signed({ id: `evt_api_del_late_ref_${RUN}`, type: 'charge.refunded', created: tick(),
-    data: { object: { id: `ch_api_del_late_${RUN}`, object: 'charge', customer: late.customer, amount: 1599, amount_refunded: 1599,
+    data: { object: { id: `ch_api_del_late_${RUN}`, object: 'charge', customer: late.customer, amount: 999, amount_refunded: 999,
       refunded: true, currency: 'usd', metadata: { family_id: late.family } } } })
   ok('and a refund the operator gives it is answered', refundLate.status === 200, `status ${refundLate.status}`)
 

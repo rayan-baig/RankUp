@@ -125,18 +125,31 @@ for (const tier of TIER_LADDER) {
   const year = toCents(tier.yearPrice)
   ok(`${tier.name}: ${priceWords(tier)} × 12 is $${(twelve / 100).toFixed(2)}; a year is ${priceWords(tier, 'year')}; saves $${((twelve - year) / 100).toFixed(2)}`,
     s && s.savedCents === twelve - year && s.saved === ((twelve - year) / 100).toFixed(2), JSON.stringify(s))
-  ok(`${tier.name}: the year is ${year / toCents(tier.price)} months' money, so ${s.monthsFree} free`, s.monthsFree === 12 - year / toCents(tier.price))
+  ok(`${tier.name}: months free only when the year is whole months (${(year / toCents(tier.price)).toFixed(2)} months' money: ${s.monthsFree ?? 'not whole, so none'})`,
+    Number.isInteger(year / toCents(tier.price)) ? s.monthsFree === 12 - year / toCents(tier.price) : s.monthsFree === null)
   ok(`${tier.name}: the percentage is not rounded up`, s.percent <= ((twelve - year) * 100) / twelve && s.percent > 0)
   ok(`${tier.name}: priced as ${priceTag(tier)} and ${priceTag(tier, 'year')}`, priceTag(tier) === `$${tier.price.toFixed(2)}/mo` && priceTag(tier, 'year') === `$${tier.yearPrice.toFixed(2)}/yr`)
 }
-ok(`the switch says "${yearlyNote()}"`, yearlyNote() === `${annualSaving(TIERS.standard).monthsFree} months free`)
+// The prices the owner chose, and what they come to. Standard: $5.99 x 12 is
+// $71.88, less $49.99 is $21.89, 30.45%. Elite: $9.99 x 12 is $119.88, less
+// $79.99 is $39.89, 33.27%. Neither year is whole months, so no "months free".
+ok('Standard is $5.99 a month or $49.99 a year', priceTag(TIERS.standard) === '$5.99/mo' && priceTag(TIERS.standard, 'year') === '$49.99/yr')
+ok('Elite Pass is $9.99 a month or $79.99 a year', priceTag(TIERS.elite) === '$9.99/mo' && priceTag(TIERS.elite, 'year') === '$79.99/yr')
+ok('Standard saves $21.89 a year, 30%', annualSaving(TIERS.standard).saved === '21.89' && annualSaving(TIERS.standard).savedCents === 2189
+  && annualSaving(TIERS.standard).percent === 30 && annualSaving(TIERS.standard).monthsFree === null, JSON.stringify(annualSaving(TIERS.standard)))
+ok('Elite Pass saves $39.89 a year, 33%', annualSaving(TIERS.elite).saved === '39.89' && annualSaving(TIERS.elite).savedCents === 3989
+  && annualSaving(TIERS.elite).percent === 33 && annualSaving(TIERS.elite).monthsFree === null, JSON.stringify(annualSaving(TIERS.elite)))
+ok(`the switch says "${yearlyNote()}": the smaller saving, never more than the plan picked`, yearlyNote() === 'Save 30% or more')
+// The old prices were ten months' money each, and the switch said so.
+ok('a year that is whole months still says "2 months free"', yearlyNote([{ price: 9.99, yearPrice: 99.9 }, { price: 15.99, yearPrice: 159.9 }]) === '2 months free')
 // A plan whose year is not a whole number of months, or no yearly plan at all.
 const odd = { id: 'x', price: 10, yearPrice: 100.5 }
 ok('a year that is not whole months is given as a percentage, never months', annualSaving(odd).monthsFree === null
   && yearlyNote([odd]) === `Save ${annualSaving(odd).percent}% or more`)
 ok('no yearly price, no saving and no switch', annualSaving({ price: 5 }) === null && !yearlyOffered([{ price: 5 }]) && yearlyNote([{ price: 5 }]) === null)
 ok('a "yearly" price dearer than twelve months saves nothing', annualSaving({ price: 1, yearPrice: 13 }) === null)
-ok('floating point does not leak in: 9.99 × 12 − 99.90 is exactly 19.98', annualSaving(TIERS.standard).saved === '19.98')
+ok('floating point does not leak in: 5.99 × 12 − 49.99 is exactly 21.89', annualSaving(TIERS.standard).saved === '21.89')
+ok('nor in 9.99 × 12 − 79.99, exactly 39.89', annualSaving(TIERS.elite).saved === '39.89')
 
 console.log('\n=== Settings names the plan the family is really on ===')
 ok('a free Starter family is "Starter", not "Standard"', planSummary(familyOn('starter')) === TIERS.starter.name, planSummary(familyOn('starter')))

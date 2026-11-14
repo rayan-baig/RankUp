@@ -115,8 +115,9 @@ export default function ParentPlan() {
       {error && <p className="text-sm mt-3" style={{ color: 'var(--bad)' }} role="alert">{error}</p>}
 
       {/*
-        Two months free is the whole pitch for annual, so it is stated on the
-        control rather than hidden inside the cards a tap away.
+        What a year saves is the whole pitch for annual, so it is stated on the
+        control rather than hidden inside the cards a tap away (yearlyNote:
+        months free when the year is whole months, otherwise a percentage).
       */}
       {yearlyOffered() && (
       <div className="flex gap-1.5 p-1 rounded-xl mt-3" style={{ background: 'var(--surface-2)' }} role="tablist" aria-label="Billing period">

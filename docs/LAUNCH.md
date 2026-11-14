@@ -349,9 +349,9 @@ cancellation still waiting for Stripe is never deleted.
       **service role** key.
 - [ ] Stripe → the plans and the ticket packs:
       - Starter is **free**: no Stripe price.
-      - Standard: $9.99 a month **and** $99.90 a year → `STRIPE_PRICE_STANDARD`,
+      - Standard: $5.99 a month **and** $49.99 a year → `STRIPE_PRICE_STANDARD`,
         `STRIPE_PRICE_STANDARD_YEAR`.
-      - Elite: $15.99 a month **and** $159.90 a year → `STRIPE_PRICE_ELITE`,
+      - Elite: $9.99 a month **and** $79.99 a year → `STRIPE_PRICE_ELITE`,
         `STRIPE_PRICE_ELITE_YEAR`.
       - Three **one-off** Flash Ticket prices ($2.99 for 2, $5.99 for 5,
         $11.99 for 12) → `STRIPE_PRICE_FLASH_2`, `_FLASH_5`, `_FLASH_12`.
@@ -366,8 +366,22 @@ cancellation still waiting for Stripe is never deleted.
       `src/lib/billing.js`, `SCHOOL_PRICES` in `src/lib/schools.js`); the app,
       the help pages and the terms all read them from there. A Stripe price
       must match the code's, or a family is shown one price and charged
-      another. Yearly is ten months' money. A new family gets 14 days of Elite
-      free, no card; a school 30 days.
+      another: nothing in the code compares them, so the four
+      `STRIPE_PRICE_*` ids are the guarantee. A family's yearly plan saves
+      $21.89 on Standard and $39.89 on Elite (the plan screen says "Save 30%
+      or more"); a school's year is ten months' money. A new family gets 14
+      days of Elite free, no card; a school 30 days.
+
+      **If these prices change again** (they did in 0.15.0: Standard was
+      $9.99 / $99.90 and Elite $15.99 / $159.90): make new Stripe prices for
+      the new amounts (a Stripe price cannot be edited), put their ids in the
+      four settings and deploy the matching code together, then start a
+      checkout for each and check Stripe shows the same amount. Families
+      already subscribed **stay on their old Stripe price** until moved: keep
+      them as they are (their plan carries on), or move them in the Stripe
+      dashboard (the subscription → Update subscription → the new price, no
+      proration). Do not archive or delete an old price while anyone is on
+      it. [PAYMENTS.md](PAYMENTS.md#changing-a-price) has the details.
 
       Set every yearly id if you sell yearly: a missing one means a family who
       has just paid for a year is put back on the free plan by the very

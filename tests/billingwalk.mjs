@@ -46,6 +46,15 @@ const { createInitialState, TIERS } = await import('../src/state/initialState.js
 const { billingNotice, dashboardBillingNotice, planDate } = await import('../src/lib/billing.js')
 const { schoolBillingNotice } = await import('../src/lib/schools.js')
 const { inviteSummary, rewardNotice } = await import('../src/lib/referrals.js')
+/*
+ * What the stand-in Stripe charges: the plan list's own prices, in cents, as
+ * the real Stripe prices must be (docs/PAYMENTS.md, "Changing a price"). Read
+ * from TIERS, so a price change changes the walk with it.
+ */
+const cents = (dollars) => Math.round(dollars * 100)
+const ELITE_MONTH = cents(TIERS.elite.price)
+const ELITE_YEAR = cents(TIERS.elite.yearPrice)
+const STANDARD_MONTH = cents(TIERS.standard.price)
 
 const BASE = process.env.API_BASE || 'http://localhost:8788'
 const MOCK = process.env.MOCK_URL || 'http://localhost:54321'
@@ -246,7 +255,7 @@ console.log('\n=== 1. Subscribe monthly ===')
   const r2 = await webhook(event('checkout', 'checkout.session.completed', {
     id: `cs_walk_${RUN}`, object: 'checkout.session', mode: 'subscription', payment_status: 'paid', customer: CUSTOMER,
     subscription: MONTHLY, client_reference_id: FAMILY, metadata: { family_id: FAMILY, tier: 'elite', cycle: 'month' } }))
-  const paid = invoice('first', 1599, MONTHLY)
+  const paid = invoice('first', ELITE_MONTH, MONTHLY)
   const r3 = await webhook(event('paid1', 'invoice.paid', paid))
   const r4 = await webhook(event('succeeded1', 'invoice.payment_succeeded', paid))
   ok('Stripe\'s events are all answered', [r1, r2, r3, r4].every((r) => r.status === 200), JSON.stringify([r1, r2, r3, r4]))
@@ -255,7 +264,7 @@ console.log('\n=== 1. Subscribe monthly ===')
   ok('subscribed: the plan screen has nothing to warn about, and renews at the period end',
     f.plan === null && f.dashboard === null && Date.parse(f.status.renews_at) === p1 * 1000, JSON.stringify(f.status))
   const counted = (await db.query('select count(*)::int as n, sum(amount_pence)::int as paid from billing_events where stripe_event = $1', [`invoice:${paid.id}`])).rows[0]
-  ok('the payment is counted once, though Stripe sent it as two events', counted.n === 1 && counted.paid === 1599, JSON.stringify(counted))
+  ok('the payment is counted once, though Stripe sent it as two events', counted.n === 1 && counted.paid === ELITE_MONTH, JSON.stringify(counted))
 
   const replay = await webhook(created)
   ok('the same event again is answered and changes nothing', replay.status === 200 && (await family()).row.tier === 'elite')
@@ -267,7 +276,7 @@ console.log('\n=== 2. Renew ===')
 {
   const p2 = clock + 60 * DAY
   const stale = event('stale', 'customer.subscription.updated', subscription(MONTHLY, 'active', { periodEnd: clock + 30 * DAY }), tick())
-  const paid = invoice('renewal', 1599, MONTHLY)
+  const paid = invoice('renewal', ELITE_MONTH, MONTHLY)
   // The renewal's invoice lands before the subscription says it moved on.
   await webhook(event('paid2', 'invoice.paid', paid))
   subs.set(MONTHLY, subscription(MONTHLY, 'active', { periodEnd: p2 }))
@@ -287,7 +296,7 @@ console.log('\n=== 3. A payment fails ===')
 let recovered
 {
   const before = event('before_fail', 'customer.subscription.updated', subs.get(MONTHLY), tick())
-  const failedInvoice = { ...invoice('failed', 1599, MONTHLY), amount_paid: 0, status: 'open' }
+  const failedInvoice = { ...invoice('failed', ELITE_MONTH, MONTHLY), amount_paid: 0, status: 'open' }
   const ignored = await webhook(event('failed', 'invoice.payment_failed', failedInvoice))
   ok('"payment failed" on its own is answered and changes nothing',
     ignored.status === 200 && (await family()).row.tier === 'elite', JSON.stringify(ignored))
@@ -306,7 +315,7 @@ let recovered
   const portal = await asUser('/api/billing-portal', {}, PARENT)
   ok('"Manage billing" opens Stripe\'s portal for this family', portal.status === 200
     && lastCall('/v1/billing_portal/sessions')?.params.get('customer') === CUSTOMER)
-  recovered = invoice('recovered', 1599, MONTHLY)
+  recovered = invoice('recovered', ELITE_MONTH, MONTHLY)
   subs.set(MONTHLY, subscription(MONTHLY, 'active', { periodEnd: clock + 90 * DAY }))
   await webhook(event('recovered', 'customer.subscription.updated', subs.get(MONTHLY)))
   await webhook(event('paid3', 'invoice.paid', recovered))
@@ -318,7 +327,7 @@ let recovered
 console.log('\n=== 4. A refund ===')
 {
   const charge = (over = {}) => ({ id: `ch_walk_${RUN}`, object: 'charge', customer: CUSTOMER, payment_intent: `pi_walk_${RUN}`,
-    amount: 1599, amount_refunded: 1599, refunded: true, currency: 'usd', created: clock - 60, ...over })
+    amount: ELITE_MONTH, amount_refunded: ELITE_MONTH, refunded: true, currency: 'usd', created: clock - 60, ...over })
   const partial = await webhook(event('partial', 'charge.refunded', charge({ id: `ch_walk_goodwill_${RUN}`, amount_refunded: 500, refunded: false })))
   ok('a partial refund is goodwill: the plan stays', partial.status === 200 && (await family()).row.tier === 'elite', JSON.stringify(partial))
   const full = await webhook(event('refund', 'charge.refunded', charge()))
@@ -383,7 +392,7 @@ console.log('\n=== 6. Subscribe again, for a year ===')
     id: `cs_walk_year_${RUN}`, object: 'checkout.session', mode: 'subscription', payment_status: 'paid', customer: CUSTOMER,
     subscription: YEARLY, client_reference_id: FAMILY, metadata: { family_id: FAMILY, tier: 'elite', cycle: 'year' } }))
   await webhook(event('created_year', 'customer.subscription.created', subs.get(YEARLY)))
-  await webhook(event('paid_year', 'invoice.paid', invoice('year', 15990, YEARLY)))
+  await webhook(event('paid_year', 'invoice.paid', invoice('year', ELITE_YEAR, YEARLY)))
   // The old plan's end, delivered again after the new one began.
   await webhook(event('old_deleted_again', 'customer.subscription.deleted', subs.get(MONTHLY), tick()))
   let f = await family()
@@ -448,9 +457,9 @@ await db.query('insert into auth.users (id) values ($1)', [REF_KID_PHONE])
 await db.query(`insert into kids (family_id, user_id, name) values ($1, $2, 'Walk Referral Kid')`, [REF.id, REF_KID_PHONE])
 
 const PRICES = {
-  elite_month: { id: 'price_test_elite_month', unit_amount: 1599, currency: 'usd', recurring: { interval: 'month', interval_count: 1 } },
-  elite_year: { id: 'price_test_elite_year', unit_amount: 15990, currency: 'usd', recurring: { interval: 'year', interval_count: 1 } },
-  standard_month: { id: 'price_test_standard_only', unit_amount: 999, currency: 'usd', recurring: { interval: 'month', interval_count: 1 } },
+  elite_month: { id: 'price_test_elite_month', unit_amount: ELITE_MONTH, currency: 'usd', recurring: { interval: 'month', interval_count: 1 } },
+  elite_year: { id: 'price_test_elite_year', unit_amount: ELITE_YEAR, currency: 'usd', recurring: { interval: 'year', interval_count: 1 } },
+  standard_month: { id: 'price_test_standard_only', unit_amount: STANDARD_MONTH, currency: 'usd', recurring: { interval: 'month', interval_count: 1 } },
 }
 const refSub = (f, status, price, { customer = f.customer, extra = {} } = {}) => ({
   id: f.sub, object: 'subscription', status, customer, currency: 'usd',
@@ -481,7 +490,7 @@ console.log('\n=== Bring a friend 1. The inviting family pays; a friend joins wi
 let refCode
 {
   const paying = await subscribe(REF, 'active', PRICES.elite_month)
-  await webhook(event('ref1_paid', 'invoice.paid', refInvoice(REF, 'ref1_first', 1599)))
+  await webhook(event('ref1_paid', 'invoice.paid', refInvoice(REF, 'ref1_first', ELITE_MONTH)))
   ok('the inviting family is on Elite, paid monthly', paying.answers.every((a) => a.status === 200)
     && (await db.query('select tier from families where id = $1', [REF.id])).rows[0].tier === 'elite')
   const mine = await rpcAs('my_referrals', REF.user)
@@ -507,7 +516,7 @@ console.log('\n=== Bring a friend 2. A trial, a $0 invoice and a failed payment 
     && creditsTo(REF.customer).length === 0 && !(await reward(FRIEND)).paid_invoice, JSON.stringify([z1, z2]))
   // The trial ends and the card is declined.
   const failed = await webhook(event('friend_failed', 'invoice.payment_failed',
-    refInvoice(FRIEND, 'declined', 0, { extra: { status: 'open', amount_due: 999 } })))
+    refInvoice(FRIEND, 'declined', 0, { extra: { status: 'open', amount_due: STANDARD_MONTH } })))
   subs.set(FRIEND.sub, refSub(FRIEND, 'past_due', PRICES.standard_month))
   await webhook(event('friend_past_due', 'customer.subscription.updated', subs.get(FRIEND.sub)))
   ok('a failed payment earns nothing', failed.status === 200 && creditsTo(REF.customer).length === 0
@@ -518,7 +527,7 @@ console.log('\n=== Bring a friend 3. The friend\'s first invoice is paid: one fr
 {
   // The card is updated and Stripe takes the payment. On this API version the
   // invoice names no payment; it is listed under invoice_payments.
-  const first = refInvoice(FRIEND, 'first', 999)
+  const first = refInvoice(FRIEND, 'first', STANDARD_MONTH)
   invoicePayments.set(first.id, [{ id: `inpay_${RUN}`, object: 'invoice_payment', invoice: first.id, status: 'paid',
     payment: { type: 'payment_intent', payment_intent: `pi_ref_friend_${RUN}` } }])
   subs.set(FRIEND.sub, refSub(FRIEND, 'active', PRICES.standard_month))
@@ -531,8 +540,8 @@ console.log('\n=== Bring a friend 3. The friend\'s first invoice is paid: one fr
   const credits = creditsTo(REF.customer)
   ok('the inviting family gets one credit, however often Stripe sends it', a.status === 200 && b.status === 200
     && replay.status === 200 && credits.length === 1, JSON.stringify(credits))
-  ok('worth one month of the plan it pays for (Elite, monthly: 15.99), not the friend\'s plan',
-    credits[0]?.amount === -1599 && credits[0]?.currency === 'usd', JSON.stringify(credits[0]))
+  ok(`worth one month of the plan it pays for (Elite, monthly: ${TIERS.elite.price}), not the friend's plan`,
+    credits[0]?.amount === -ELITE_MONTH && credits[0]?.currency === 'usd', JSON.stringify(credits[0]))
   ok('and it says nothing about the friend\'s family to Stripe', !JSON.stringify(credits[0]).includes(FRIEND.id)
     && Object.keys(credits[0]?.metadata || {}).length === 0, JSON.stringify(credits[0]))
   ok('the credit was asked for once, with an idempotency key naming the referral',
@@ -540,12 +549,12 @@ console.log('\n=== Bring a friend 3. The friend\'s first invoice is paid: one fr
     && calls.find((c) => c.path === `/v1/customers/${REF.customer}/balance_transactions`)?.key === `referral-reward:${FRIEND.id}`)
   const r = await reward(FRIEND)
   ok('the database has it applied, with the invoice and the payment it was paid with', r.reward_state === 'applied'
-    && r.paid_invoice === first.id && r.paid_refs.includes(`pi_ref_friend_${RUN}`) && r.reward_amount === 1599
+    && r.paid_invoice === first.id && r.paid_refs.includes(`pi_ref_friend_${RUN}`) && r.reward_amount === ELITE_MONTH
     && r.reward_tier === 'elite' && r.reward_cycle === 'month', JSON.stringify(r))
   ok('Stripe\'s answer says a free month was given', a.body.referral === 'owed', JSON.stringify(a.body))
 
   // A month later the friend renews.
-  await webhook(event('friend_renewed', 'invoice.paid', refInvoice(FRIEND, 'renewal', 999)))
+  await webhook(event('friend_renewed', 'invoice.paid', refInvoice(FRIEND, 'renewal', STANDARD_MONTH)))
   ok('the friend\'s next invoice gives nothing more: one reward per family', creditsTo(REF.customer).length === 1)
 }
 
@@ -576,7 +585,7 @@ console.log('\n=== Bring a friend 5. The same card account, and the cap ===')
   // SAMECARD pays through the inviting family's own Stripe customer.
   await subscribe(SAMECARD, 'active', PRICES.standard_month, { customer: REF.customer })
   const before = creditsTo(REF.customer).length
-  await webhook(event('samecard_paid', 'invoice.paid', refInvoice(SAMECARD, 'samecard', 999, { customer: REF.customer })))
+  await webhook(event('samecard_paid', 'invoice.paid', refInvoice(SAMECARD, 'samecard', STANDARD_MONTH, { customer: REF.customer })))
   const r = await reward(SAMECARD)
   ok('a family paying with the inviter\'s own Stripe customer earns nothing', creditsTo(REF.customer).length === before
     && r.reward_state === 'blocked' && r.reward_note === 'same_customer', JSON.stringify(r))
@@ -590,7 +599,7 @@ console.log('\n=== Bring a friend 5. The same card account, and the cap ===')
   }
   ok('a thirteenth friend can still join', (await claim(CAPPED, refCode)).ok === true)
   await subscribe(CAPPED, 'active', PRICES.standard_month)
-  await webhook(event('capped_paid', 'invoice.paid', refInvoice(CAPPED, 'capped', 999)))
+  await webhook(event('capped_paid', 'invoice.paid', refInvoice(CAPPED, 'capped', STANDARD_MONTH)))
   const c = await reward(CAPPED)
   ok('but twelve free months in a year is the most: the thirteenth earns nothing',
     creditsTo(REF.customer).length === before && c.reward_state === 'blocked' && c.reward_note === 'cap', JSON.stringify(c))
@@ -601,7 +610,7 @@ console.log('\n=== Bring a friend 5. The same card account, and the cap ===')
 console.log('\n=== Bring a friend 6. A refund within 14 days takes an unused month back ===')
 {
   await subscribe(REF2, 'active', PRICES.elite_year)
-  await webhook(event('ref2_paid', 'invoice.paid', refInvoice(REF2, 'ref2_year', 15990)))
+  await webhook(event('ref2_paid', 'invoice.paid', refInvoice(REF2, 'ref2_year', ELITE_YEAR)))
   const code = (await rpcAs('my_referrals', REF2.user)).code
   ok('two friends join the yearly family', (await claim(FRIEND2, code)).ok === true && (await claim(FRIEND3, code)).ok === true)
 
@@ -609,14 +618,14 @@ console.log('\n=== Bring a friend 6. A refund within 14 days takes an unused mon
   // The older API shape: the invoice names its charge and payment.
   const charge = `ch_ref_friend2_${RUN}`
   const pi = `pi_ref_friend2_${RUN}`
-  await webhook(event('friend2_paid', 'invoice.paid', refInvoice(FRIEND2, 'friend2', 999, { extra: { charge, payment_intent: pi } })))
+  await webhook(event('friend2_paid', 'invoice.paid', refInvoice(FRIEND2, 'friend2', STANDARD_MONTH, { extra: { charge, payment_intent: pi } })))
   const credits = creditsTo(REF2.customer)
-  ok('a yearly payer\'s free month is a twelfth of its yearly price (159.90 / 12)', credits.length === 1
-    && credits[0].amount === -1333, JSON.stringify(credits))
-  ok('the credit is still on the account, unused', balanceOf(REF2.customer) === -1333)
+  ok(`a yearly payer's free month is a twelfth of its yearly price (${TIERS.elite.yearPrice} / 12 = ${(Math.round(ELITE_YEAR / 12) / 100).toFixed(2)})`, credits.length === 1
+    && credits[0].amount === -Math.round(ELITE_YEAR / 12), JSON.stringify(credits))
+  ok('the credit is still on the account, unused', balanceOf(REF2.customer) === -Math.round(ELITE_YEAR / 12))
 
-  const refunded = { id: charge, object: 'charge', customer: FRIEND2.customer, payment_intent: pi, amount: 999,
-    amount_refunded: 999, refunded: true, currency: 'usd', created: clock - 30 }
+  const refunded = { id: charge, object: 'charge', customer: FRIEND2.customer, payment_intent: pi, amount: STANDARD_MONTH,
+    amount_refunded: STANDARD_MONTH, refunded: true, currency: 'usd', created: clock - 30 }
   const back = await webhook(event('friend2_refund', 'charge.refunded', refunded))
   const again = await webhook(event('friend2_refund_again', 'charge.refunded', refunded))
   const r = await reward(FRIEND2)
@@ -633,12 +642,12 @@ console.log('\n=== Bring a friend 7. A payment disputed before its invoice arriv
   await subscribe(FRIEND3, 'active', PRICES.standard_month)
   const charge = `ch_ref_friend3_${RUN}`
   charges.set(charge, { id: charge, object: 'charge', customer: FRIEND3.customer, payment_intent: `pi_ref_friend3_${RUN}`,
-    amount: 999, created: clock })
+    amount: STANDARD_MONTH, created: clock })
   const before = creditsTo(REF2.customer).length
   // Stripe does not deliver in order: the dispute names only the charge.
   const disputed = await webhook(event('friend3_dispute', 'charge.dispute.created', {
-    id: `dp_ref_${RUN}`, object: 'dispute', charge, amount: 999, created: clock }))
-  await webhook(event('friend3_paid', 'invoice.paid', refInvoice(FRIEND3, 'friend3', 999, { extra: { charge } })))
+    id: `dp_ref_${RUN}`, object: 'dispute', charge, amount: STANDARD_MONTH, created: clock }))
+  await webhook(event('friend3_paid', 'invoice.paid', refInvoice(FRIEND3, 'friend3', STANDARD_MONTH, { extra: { charge } })))
   const r = await reward(FRIEND3)
   ok('the disputed payment earns nothing when its invoice turns up', disputed.status === 200
     && creditsTo(REF2.customer).length === before && r.reward_state === 'blocked' && r.reward_note === 'payment_reversed',
@@ -650,7 +659,7 @@ console.log('\n=== Bring a friend 8. A family on Starter: its month is banked un
   const code = (await rpcAs('my_referrals', STARTER.user)).code
   ok('a friend joins the Starter family', (await claim(FRIEND4, code)).ok === true)
   await subscribe(FRIEND4, 'active', PRICES.standard_month)
-  await webhook(event('friend4_paid', 'invoice.paid', refInvoice(FRIEND4, 'friend4', 999)))
+  await webhook(event('friend4_paid', 'invoice.paid', refInvoice(FRIEND4, 'friend4', STANDARD_MONTH)))
   let mine = await rpcAs('my_referrals', STARTER.user)
   ok('the month is banked: nothing to take it off yet, so nothing is sent to Stripe',
     (await reward(FRIEND4)).reward_state === 'banked' && !calls.some((c) => c.path === `/v1/customers/${STARTER.customer}/balance_transactions`)
@@ -662,10 +671,10 @@ console.log('\n=== Bring a friend 8. A family on Starter: its month is banked un
   // The Starter family subscribes to Standard, monthly.
   const { created } = await subscribe(STARTER, 'active', PRICES.standard_month)
   await webhook(created)
-  await webhook(event('starter_paid', 'invoice.paid', refInvoice(STARTER, 'starter_first', 999)))
+  await webhook(event('starter_paid', 'invoice.paid', refInvoice(STARTER, 'starter_first', STANDARD_MONTH)))
   const credits = creditsTo(STARTER.customer)
   ok('the moment it subscribes, the banked month is credited: one month of the plan it chose',
-    credits.length === 1 && credits[0].amount === -999, JSON.stringify(credits))
+    credits.length === 1 && credits[0].amount === -STANDARD_MONTH, JSON.stringify(credits))
   mine = await rpcAs('my_referrals', STARTER.user)
   ok('and the card now has it as earned', mine.banked === 0 && mine.earned === 1, JSON.stringify(mine))
 }

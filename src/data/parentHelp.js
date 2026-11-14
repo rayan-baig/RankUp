@@ -19,7 +19,7 @@ import { MAX_TOKENS, DAILY_COIN_CAP } from '../data/minigames.js'
  * opens the screen the answer talks about.
  */
 
-/** Dollars as a price is written: 99.9 is "99.90". */
+/** Dollars as a price is written: 5.9 is "5.90". */
 export function usd(amount) {
   return Number(amount).toFixed(2)
 }

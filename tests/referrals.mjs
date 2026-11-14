@@ -62,7 +62,7 @@ for (const n of [1, 2]) {
 }
 await db.query('insert into referrals (invited_family_id, referrer_family_id) values ($1, $3), ($2, $3)', [others[0].id, others[1].id, family])
 await db.query(`update referrals set paid_invoice = 'in_ui_${RUN}', paid_at = now(), reward_state = 'applied', reward_at = now(),
-                reward_amount = 1599, reward_currency = 'USD', reward_applied_at = now() where invited_family_id = $1`, [others[0].id])
+                reward_amount = 999, reward_currency = 'USD', reward_applied_at = now() where invited_family_id = $1`, [others[0].id])
 
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForTimeout(1200)

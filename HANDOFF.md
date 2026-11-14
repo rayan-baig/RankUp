@@ -593,7 +593,7 @@ retention job clears anything an older version left behind.
 
 | | Starter | Standard | Elite Pass |
 |---|---|---|---|
-| Price | **Free** | 9.99/mo · 99.90/yr | 15.99/mo · 159.90/yr |
+| Price | **Free** | 5.99/mo · 49.99/yr | 9.99/mo · 79.99/yr |
 | Children | 1 | Unlimited | Unlimited |
 | Quests & rewards | Unlimited | Unlimited | Unlimited |
 | AI photo check | — | ✅ | ✅ |

@@ -142,7 +142,7 @@ regardless of theme — a chart has to stay readable and colour-blind safe in al
 
 | | Standard | Elite Pass |
 |---|---|---|
-| Price | $9.99/mo | $15.99/mo |
+| Price | $5.99/mo · $49.99/yr | $9.99/mo · $79.99/yr |
 | Quests and kid profiles | Unlimited | Unlimited |
 | All 15 kid + 10 parent themes | ✓ | ✓ |
 | Guild size | 5 | **10** (Megacluster) |

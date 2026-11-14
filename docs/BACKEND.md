@@ -158,4 +158,4 @@ Worth knowing in advance so it does not feel like something went wrong:
 
 Supabase's free tier covers 500 MB of database and 1 GB of file storage — plenty for
 development and a pilot with real families. The first paid tier is $25/month. That is
-the point at which the $9.99 subscriptions need to be real. → [PAYMENTS.md](PAYMENTS.md)
+the point at which the $5.99 and $9.99 subscriptions need to be real. → [PAYMENTS.md](PAYMENTS.md)

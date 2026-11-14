@@ -34,17 +34,75 @@ progress does not.
 ### 1. Create the products
 
 In the Stripe dashboard, two products, each with a monthly and a yearly
-recurring price (the plan screen offers both; a year is ten months' money):
+recurring price (the plan screen offers both):
 
 | Product | Price | Note the price id |
 |---|---|---|
-| RankUp Standard | $9.99 / month | `price_...` → `STRIPE_PRICE_STANDARD` |
-| RankUp Standard | $99.90 / year | `price_...` → `STRIPE_PRICE_STANDARD_YEAR` |
-| RankUp Elite Pass | $15.99 / month | `price_...` → `STRIPE_PRICE_ELITE` |
-| RankUp Elite Pass | $159.90 / year | `price_...` → `STRIPE_PRICE_ELITE_YEAR` |
+| RankUp Standard | $5.99 / month | `price_...` → `STRIPE_PRICE_STANDARD` |
+| RankUp Standard | $49.99 / year | `price_...` → `STRIPE_PRICE_STANDARD_YEAR` |
+| RankUp Elite Pass | $9.99 / month | `price_...` → `STRIPE_PRICE_ELITE` |
+| RankUp Elite Pass | $79.99 / year | `price_...` → `STRIPE_PRICE_ELITE_YEAR` |
+
+A year saves $21.89 on Standard (30%) and $39.89 on Elite Pass (33%) against
+twelve monthly payments. Neither is a whole number of months, so the plan
+screen's Monthly / Yearly switch says "Save 30% or more" (the smaller of the
+two, so it never promises more than the plan a parent picks) and each card
+gives its own saving in dollars. All of it is worked out from `TIERS` by
+`annualSaving` and `yearlyNote` in `src/lib/plans.js`.
 
 Starter is free and has no Stripe price. `tests/plans.mjs` reads this table
 and fails if a price on the plan screen is not in it.
+
+### Changing a price
+
+The prices a parent reads (plan screen, banners, front door, help page, terms)
+all come from `TIERS` in `src/state/initialState.js`. What a card is charged
+comes from the Stripe price whose id is in `STRIPE_PRICE_*`. Nothing in the
+code compares the two: checkout only names a price id, and the webhook maps a
+price id to a plan without looking at the amount. So **the app shows what
+Stripe charges a new family only if each of the four ids is a Stripe price for
+exactly the amount in `TIERS`**, monthly and yearly. That is the guarantee, and
+it is kept by hand, in this order:
+
+1. In Stripe, on the existing products, add a new recurring price for each
+   new amount (a Stripe price's amount cannot be edited). Leave the old
+   prices where they are: families on them still renew through them.
+2. Put the four new price ids in `STRIPE_PRICE_STANDARD`,
+   `STRIPE_PRICE_STANDARD_YEAR`, `STRIPE_PRICE_ELITE` and
+   `STRIPE_PRICE_ELITE_YEAR` on the host, and deploy the version whose
+   `TIERS` has the same amounts, at the same time. Between the two, a new
+   family is shown one price and charged the other.
+3. Open the plan screen, start a checkout for each of the four, and check that
+   Stripe's page shows the same amount as the button. Cancel each one.
+
+**Families already subscribed stay on the price they signed up at** until
+they are moved. Stripe never changes an existing subscription's price by
+itself, and nothing in RankUp does either. Either of these is fine; pick one
+on purpose:
+
+- **Keep them as they are.** Nothing to do. They go on paying the old price
+  until they cancel or change plan. Their plan is unaffected: once
+  `STRIPE_PRICE_*` holds the new ids, the webhook no longer knows the old ones
+  and goes by the plan RankUp's checkout wrote on the subscription
+  (`metadata.tier`), which every subscription it made carries
+  (`tests/api.mjs` checks it). A subscription you made by hand in Stripe,
+  without that metadata, would fall to Starter: move it instead. The new
+  prices are lower, and a family will see them on the plan screen, so it is
+  worth telling them they can move.
+- **Move them in the Stripe dashboard.** Customers → the subscription →
+  Update subscription → replace the price with the new one for the same plan
+  and the same period, with no proration, so the new amount starts at the next
+  renewal. A yearly subscriber moves at the end of the year they have paid
+  for. The webhook sees the new price id and keeps the family on the same
+  plan.
+
+The plan screen only ever shows the current prices. A family still on an old
+price sees the new one there; its own amount is on its Stripe invoices and in
+"Manage billing".
+
+The referral free month and the Alliance prize are read from the family's own
+Stripe subscription, not from `TIERS`, so a family on an old price gets a
+month at the price it really pays.
 
 ### 2. Run the SQL
 
@@ -194,8 +252,8 @@ its retries and the invited family's later invoices all answer `duplicate`.
 
 **How it is given: a customer balance credit.** One month at the price of the
 plan the inviting family pays for, read from its own Stripe subscription (a
-yearly plan gets a twelfth of its yearly price, so $159.90 a year gives
-$13.33), in its currency, as a negative balance transaction on its customer
+yearly plan gets a twelfth of its yearly price, so Elite Pass at $79.99 a year
+gives $6.67), in its currency, as a negative balance transaction on its customer
 (`api/_shared/referralReward.js`). Stripe takes it off the next invoice by
 itself. This is how the Alliance and School League prizes are already paid:
 
@@ -346,12 +404,25 @@ paid after the deletion, and a family the database never had.
 
 ## What this costs you
 
-Stripe takes about 2.9% + 30¢ per transaction. On $9.99 that is roughly 59¢, so
-you keep about $9.40.
+Stripe takes about 2.9% + 30¢ per transaction. What that leaves you, before
+sales tax and Stripe Tax's own fee:
+
+| Plan | Price | Stripe takes | You keep |
+|---|---|---|---|
+| Standard, monthly | $5.99 | about 47¢ | about $5.52 |
+| Standard, yearly | $49.99 | about $1.75 | about $48.24 |
+| Elite Pass, monthly | $9.99 | about 59¢ | about $9.40 |
+| Elite Pass, yearly | $79.99 | about $2.62 | about $77.37 |
+
+The flat 30¢ is a bigger share of a smaller price: about 8% of $5.99, against
+under 4% of $49.99. A yearly plan pays it once instead of twelve times, so
+over a year Standard yearly keeps about $48.24 against about $66.20 for twelve
+monthly payments ($71.88 less twelve fees of about 47¢), and Elite Pass about
+$77.37 against about $112.80.
 
 If you ever ship native iOS or Android apps, Apple and Google **require** their
-own billing for digital subscriptions and take 15–30%. On $9.99 that is
-$1.50–$3.00 per family per month. It is a real argument for staying a web app
+own billing for digital subscriptions and take 15–30%. On $5.99 that is about
+$0.90–$1.80, and on $9.99 $1.50–$3.00, per family per month. It is a real argument for staying a web app
 longer than feels comfortable.
 
 ---
@@ -361,7 +432,9 @@ longer than feels comfortable.
 Parent Alliances are real: `supabase/alliances.sql` counts each member family's
 approved quests for the month, and `api/settle-alliances.js` gives the winner
 20% of one month's price as credit on their Stripe account (worked out from
-their own subscription, so a yearly plan gets 20% of a month, not of a year). **Nothing pays out until you schedule that endpoint**, so
+their own subscription, so a yearly plan gets 20% of a month, not of a year:
+Elite Pass monthly at $9.99 gets $2.00 off, and at $79.99 a year about
+$1.33). **Nothing pays out until you schedule that endpoint**, so
 until you do, families will see a leaderboard and never see a discount.
 
 Set `CRON_SECRET` to a long random string, then call it once a month:

@@ -3,7 +3,7 @@ import LoopPreview from '../components/LoopPreview.jsx'
 import { Words } from '../components/Motion.jsx'
 import { TIERS, TRIAL_DAYS } from '../state/initialState.js'
 
-/* "$9.99", never "$9.990" or "$10". */
+/* "$5.99", never "$5.990" or "$6". */
 const dollars = (n) => `$${n.toFixed(2)}`
 
 /**
