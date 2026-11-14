@@ -4,9 +4,8 @@
 -- Run after schema.sql.
 --
 -- COPPA requires verifiable parental consent BEFORE a service collects
--- anything from a child under 13. RankUp collects a first name, activity, and
--- photographs taken inside the child's home — about as sensitive as children's
--- data gets.
+-- anything from a child under 13. RankUp collects a first name and the child's
+-- chores and progress. It takes and keeps no photographs.
 --
 -- So consent is not a checkbox the app remembers. It is a row, and the database
 -- REFUSES TO CREATE A CHILD without one. That is the difference between a
@@ -20,10 +19,17 @@
 /**
  * The wording each parent agreed to, kept forever and by version.
  *
- * If you change what you collect, you publish a new version and ask again. The
- * old rows stay, because "what exactly did this parent agree to, and when" is
- * the question a regulator asks, and pointing at today's policy is not an
- * answer.
+ * A published version is never edited: "what exactly did this parent agree
+ * to, and when" is the question a regulator asks, and pointing at today's
+ * policy is not an answer. A change of wording is a new row. The newest
+ * published row is the one new parents read and sign (current_consent_version).
+ *
+ * A new version does not by itself undo the consents given to older ones:
+ * has_valid_consent counts any consent not withdrawn. That is right when a
+ * version collects the same or less (2026-11 only removed photographs). A
+ * version that collects MORE needs every existing parent asked again, which
+ * means changing has_valid_consent to require it and building the screen that
+ * asks; neither exists yet. See docs/LEGAL.md.
  */
 create table if not exists consent_notices (
   version      text primary key,
@@ -59,12 +65,39 @@ create table if not exists parental_consents (
 
 create index if not exists parental_consents_family_idx on parental_consents (family_id, revoked_at);
 
+/*
+ * The wording of a published notice cannot be changed, only added to. A
+ * version is what a parent signed; rewriting it afterwards would make the
+ * record say they agreed to words they never saw.
+ */
+create or replace function consent_notice_is_fixed() returns trigger
+language plpgsql as $$
+begin
+  if new.version is distinct from old.version or new.summary is distinct from old.summary
+     or new.body is distinct from old.body or new.published_at is distinct from old.published_at then
+    raise exception 'consent notice % is published and cannot be changed; publish a new version', old.version;
+  end if;
+  return new;
+end $$;
+drop trigger if exists consent_notices_fixed on consent_notices;
+create trigger consent_notices_fixed before update on consent_notices
+  for each row execute function consent_notice_is_fixed();
+
+/** The version a new parent is shown and signs: the newest published. */
+create or replace function current_consent_version()
+returns text
+language sql stable security definer set search_path = public as $$
+  select version from consent_notices order by published_at desc, version desc limit 1;
+$$;
+
 alter table consent_notices enable row level security;
 alter table parental_consents enable row level security;
 
 drop policy if exists consent_notices_read on consent_notices;
-drop policy if exists consent_notices_read on consent_notices;
-create policy consent_notices_read on consent_notices for select using (true);
+-- Signed-in accounts only. The wording is public (the app ships it), but the
+-- anon key reads no table at all, and supabase/test/31-every-table.sql holds
+-- it to that.
+create policy consent_notices_read on consent_notices for select to authenticated using (true);
 
 drop policy if exists parental_consents_read on parental_consents;
 drop policy if exists parental_consents_read on parental_consents;
@@ -105,6 +138,14 @@ begin
   if not exists (select 1 from consent_notices where version = p_version) then
     return jsonb_build_object('ok', false, 'reason', 'unknown_version');
   end if;
+  -- New consent is to the wording in force. An app open since before a new
+  -- version was published is showing the old words, and recording them as
+  -- agreed to now would be wrong; it is told to reload and show the new ones.
+  -- Consents already given to an older version are untouched.
+  if p_version is distinct from current_consent_version() then
+    return jsonb_build_object('ok', false, 'reason', 'outdated_version',
+                              'current', current_consent_version());
+  end if;
 
   insert into parental_consents (family_id, parent_id, version, method, method_detail, signed_name)
   values (v_parent.family_id, v_parent.id, p_version, p_method,
@@ -121,6 +162,54 @@ end $$;
  * children, which cascades to their quests, submissions and photos. It is not
  * a flag that quietly leaves the data in place.
  */
+/**
+ * What is left of a family's children once their rows are deleted.
+ *
+ * Deleting the kids rows cascades to their chores, history, notes, guilds and
+ * schools. Three things did not go with them, and each still named or pointed
+ * at a child after the parent had been told it was all gone:
+ *   - the pairing codes their phones showed, which carry the child's first
+ *     name and the family's name, kept until the retention job a day or two
+ *     later;
+ *   - the receipts for retried coin calls, keyed by the child, for a month;
+ *   - the sign-in each child's phone had, which outlived the child for good.
+ * Called before the rows go (it reads which phones were theirs). Not callable
+ * from a browser.
+ */
+create or replace function erase_child_traces(p_family uuid)
+returns int language plpgsql security definer set search_path = public as $$
+declare
+  v_kids uuid[];
+  v_devices uuid[];
+  v_n int;
+begin
+  select coalesce(array_agg(id), '{}'), coalesce(array_agg(user_id) filter (where user_id is not null), '{}')
+    into v_kids, v_devices from kids where family_id = p_family;
+
+  delete from pairing_codes
+   where claimed_by_family_id = p_family or kid_id = any(v_kids) or kid_user_id = any(v_devices);
+  delete from rpc_receipts where kid_id = any(v_kids);
+
+  -- A child's phone signs in anonymously and that sign-in is theirs alone.
+  -- Never an adult's account (a shared phone can play both roles) or staff.
+  v_devices := array(select d from unnest(v_devices) d
+                      where not exists (select 1 from parents p where p.user_id = d)
+                        and not exists (select 1 from school_staff st where st.user_id = d));
+  v_n := coalesce(array_length(v_devices, 1), 0);
+  if v_n > 0 then
+    delete from pairing_claim_attempts where user_id = any(v_devices);
+    begin
+      delete from auth.users where id = any(v_devices);
+    exception when insufficient_privilege then
+      -- The hosted auth schema refused; the rows are already unlinked from
+      -- every child (kids.user_id goes with the child).
+      v_n := 0;
+    end;
+  end if;
+  return v_n;
+end $$;
+revoke all on function erase_child_traces(uuid) from public, anon, authenticated;
+
 create or replace function revoke_parental_consent(p_reason text default '')
 returns jsonb
 language plpgsql security definer set search_path = public as $$
@@ -138,6 +227,9 @@ begin
    where family_id = v_parent.family_id and revoked_at is null;
 
   select count(*) into v_kids from kids where family_id = v_parent.family_id;
+  -- Immediately, in this call: the notice promises the children's data goes
+  -- with the consent, and no later job is relied on for it.
+  perform erase_child_traces(v_parent.family_id);
   delete from kids where family_id = v_parent.family_id;
 
   return jsonb_build_object('ok', true, 'children_deleted', v_kids);
@@ -178,6 +270,8 @@ language plpgsql security definer set search_path = public as $$
 declare
   v_family uuid;
   v_school jsonb;
+  v_boards jsonb;
+  v_refs   jsonb;
 begin
   -- A parent, not a supporter: a grandparent who can look in has no right to
   -- download the whole household's records.
@@ -189,9 +283,21 @@ begin
   if to_regprocedure('public.export_family_school_data(uuid)') is not null then
     execute 'select public.export_family_school_data($1)' into v_school using v_family;
   end if;
+  -- The leaderboards (Adventure or Arena, the nickname, the country), from
+  -- leaderboards.sql, also applied after this file.
+  if to_regprocedure('public.export_family_leaderboard_data(uuid)') is not null then
+    execute 'select public.export_family_leaderboard_data($1)' into v_boards using v_family;
+  end if;
+  -- Referrals and the free months they earned (referrals.sql, also applied
+  -- after this file): counts only about other families, never who they are.
+  if to_regprocedure('public.export_family_referral_data(uuid)') is not null then
+    execute 'select public.export_family_referral_data($1)' into v_refs using v_family;
+  end if;
 
   return jsonb_build_object(
     'school_league', coalesce(v_school, '[]'::jsonb),
+    'leaderboards', coalesce(v_boards, '{}'::jsonb),
+    'referrals',   coalesce(v_refs, '{}'::jsonb),
     'exported_at', now(),
     'family',      (select to_jsonb(f) from families f where f.id = v_family),
     'parents',     coalesce((select jsonb_agg(to_jsonb(p)) from parents p where p.family_id = v_family), '[]'::jsonb),
@@ -199,19 +305,80 @@ begin
     'children',    coalesce((select jsonb_agg(to_jsonb(k)) from kids k where k.family_id = v_family), '[]'::jsonb),
     'quests',      coalesce((select jsonb_agg(to_jsonb(q)) from quests q where q.family_id = v_family), '[]'::jsonb),
     'submissions', coalesce((
-        select jsonb_agg(to_jsonb(s) - 'photo_data' || jsonb_build_object('photo_included', s.photo_data is not null))
+        select jsonb_agg(to_jsonb(s))
           from submissions s where s.family_id = v_family), '[]'::jsonb),
     'rewards',     coalesce((select jsonb_agg(to_jsonb(r)) from rewards r where r.family_id = v_family), '[]'::jsonb),
+    -- What each child spent their currency on. The readable summary the app
+    -- builds from this export lists it per child; it was missing from both.
+    'redemptions', coalesce((select jsonb_agg(to_jsonb(r) order by r.created_at) from redemptions r where r.family_id = v_family), '[]'::jsonb),
     'notes',       coalesce((select jsonb_agg(to_jsonb(n)) from notes n where n.family_id = v_family), '[]'::jsonb),
-    'activity',    coalesce((select jsonb_agg(to_jsonb(e)) from events e where e.family_id = v_family), '[]'::jsonb)
+    'activity',    coalesce((select jsonb_agg(to_jsonb(e)) from events e where e.family_id = v_family), '[]'::jsonb),
+    -- Themes the children made (Theme Genesis), and any a parent sent to
+    -- RankUp for a Season, as they were sent. Both live in sync.sql, which is
+    -- applied before this file.
+    'kid_themes',  coalesce((select jsonb_agg(to_jsonb(t) order by t.created_at) from kid_themes t where t.family_id = v_family), '[]'::jsonb),
+    'theme_submissions', coalesce((
+        select jsonb_agg(jsonb_build_object('kid_id', s.kid_id, 'theme', s.payload, 'credit', s.credit,
+                                            'status', s.status, 'sent_at', s.created_at) order by s.created_at)
+          from theme_submissions s where s.family_id = v_family), '[]'::jsonb)
   );
 end $$;
 
-/** Delete the whole account. Everything cascades; nothing is kept. */
+/*
+ * Subscriptions still to be cancelled at Stripe for families that deleted
+ * their account.
+ *
+ * Deleting the family used to leave its Stripe subscription running: the
+ * family's row, with the only link to it, was gone, and the card went on being
+ * charged every month for an account that no longer existed. Stripe can only
+ * be told with the secret key, which the database does not have, and Stripe
+ * may not be answering at that moment. So the deletion writes the
+ * subscription here in the same transaction as it removes the family, and a
+ * server function holding the key cancels it: api/delete-account.js straight
+ * away, and the daily api/run-retention.js for anything still waiting. A row
+ * is only marked done once Stripe has confirmed, so nothing is forgotten, and
+ * health_snapshot reports any that have waited more than a day.
+ *
+ * It holds no family id. `family_key` is a one-way fingerprint of it, enough
+ * for the webhook to recognise news about a deleted family (a checkout page
+ * left open and paid after the deletion, say) and nothing else. Every
+ * deletion leaves one, with or without billing, for a week: that covers a
+ * checkout page's 24 hours and Stripe's three days of webhook retries.
+ * Cancelled rows go after 30 days. Not readable from a browser.
+ */
+create table if not exists billing_cancellations (
+  id                     bigserial primary key,
+  family_key             text not null,
+  stripe_customer_id     text,
+  stripe_subscription_id text,
+  queued_at              timestamptz not null default now(),
+  attempts               int not null default 0,
+  last_try_at            timestamptz,
+  last_error             text,
+  done_at                timestamptz
+);
+create unique index if not exists billing_cancellations_once
+  on billing_cancellations (family_key, (coalesce(stripe_subscription_id, '')));
+alter table billing_cancellations enable row level security;
+revoke all on billing_cancellations from public, anon, authenticated;
+
+create or replace function billing_family_key(p_family_id uuid)
+returns text language sql immutable set search_path = public as $$
+  select encode(sha256(convert_to(p_family_id::text, 'UTF8')), 'hex');
+$$;
+
+/**
+ * Delete the whole account. Everything cascades. What stays is the row in
+ * billing_cancellations above (Stripe ids under a fingerprint, no family id),
+ * so the subscription is cancelled rather than left charging.
+ */
 create or replace function delete_family_account(p_confirm text)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_family uuid;
+declare
+  v_family uuid;
+  v_billing boolean;
+  v_out jsonb;
 begin
   -- A parent, not a supporter. Without the role check a grandparent with
   -- read-only access could delete the entire family, children and all.
@@ -221,44 +388,56 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'confirmation_required');
   end if;
 
+  -- Before the family row (and with it the Stripe ids) goes. Same
+  -- transaction: if the deletion fails, nothing is queued; if it succeeds, the
+  -- cancellation cannot be lost. See billing_cancellations above.
+  insert into billing_cancellations (family_key, stripe_customer_id, stripe_subscription_id, done_at)
+  select billing_family_key(f.id), f.stripe_customer_id, f.stripe_subscription_id,
+         -- Nothing to cancel: kept only as the marker, already done.
+         case when f.stripe_customer_id is null and f.stripe_subscription_id is null then now() end
+    from families f where f.id = v_family
+  on conflict do nothing;
+  select stripe_customer_id is not null or stripe_subscription_id is not null into v_billing
+    from families where id = v_family;
+
+  perform erase_child_traces(v_family);
+  delete from adult_invite_attempts where user_id = auth.uid();
+  delete from pairing_claim_attempts where user_id = auth.uid();
   delete from families where id = v_family;
-  return jsonb_build_object('ok', true);
+
+  -- The server function that called this cancels the subscription with
+  -- Stripe now, and needs to know which. The family id is the caller's own.
+  v_out := case when v_billing
+                then jsonb_build_object('ok', true, 'billing', 'cancel_queued', 'family_id', v_family)
+                else jsonb_build_object('ok', true, 'billing', 'none') end;
+
+  -- The parent's own sign-in, which holds their email address: the privacy
+  -- policy says deleting the account removes it, and it outlived the family.
+  -- Another adult in the family keeps their own account, now empty.
+  begin
+    delete from auth.users where id = auth.uid()
+       and not exists (select 1 from school_staff where user_id = auth.uid());
+  exception when insufficient_privilege then
+    return v_out || jsonb_build_object('sign_in_kept', true);
+  end;
+  return v_out;
 end $$;
 
-/**
- * The photo backstop.
- *
- * Reviewed photos are already gone — approve_submission and reject_submission
- * destroy them at the moment of the decision. This exists for the ones nobody
- * ever decided: a parent who never got round to it, a quest abandoned halfway.
- * Those would otherwise sit there for ever.
- *
- * Run on a schedule (Supabase pg_cron, or any external scheduler).
- */
-create or replace function purge_stale_photos(p_keep_days int default 14)
-returns int
-language plpgsql security definer set search_path = public as $$
-declare v_count int;
-begin
-  with cleared as (
-    update submissions
-       set photo_data = null, photo_deleted_at = now()
-     where photo_data is not null
-       and submitted_at < now() - make_interval(days => greatest(1, p_keep_days))
-    returning 1
-  )
-  select count(*) into v_count from cleared;
-  return v_count;
-end $$;
+-- RankUp takes no photos, so there is none left to purge. Dropped; see
+-- run_retention in retention.sql.
+drop function if exists purge_stale_photos(int);
 
-grant execute on function has_valid_consent(uuid) to anon, authenticated;
+-- The database's own question, asked by the trigger on `kids`. Not a
+-- browser's: given any family's id it said whether that family had signed.
+revoke execute on function has_valid_consent(uuid) from public, anon, authenticated;
 grant execute on function record_parental_consent(text, text, text, text) to authenticated;
 grant execute on function revoke_parental_consent(text) to authenticated;
 grant execute on function export_family_data() to authenticated;
 grant execute on function delete_family_account(text) to authenticated;
-revoke execute on function purge_stale_photos(int) from public;
 
--- The wording in force. Change what you collect, publish a new version, ask again.
+-- The first published wording. Superseded by 2026-11 below and kept exactly as
+-- it was, because it is what the parents who signed it agreed to. Do not edit
+-- it (the trigger above refuses): publish a new version instead.
 insert into consent_notices (version, summary, body) values (
   '2026-01',
   'What RankUp collects about your child, and your rights.',
@@ -290,3 +469,62 @@ By signing you confirm you are this child's parent or legal guardian and that
 you agree to RankUp collecting the above.
 $notice$
 ) on conflict (version) do nothing;
+
+-- The wording in force from November 2026: the same as src/data/legalText.js
+-- (CONSENT_NOTICE), which is what the app shows. 2026-01 still described
+-- photographs and an AI photo check that RankUp no longer has. This version
+-- only collects less, so consents given to 2026-01 stay valid and nobody is
+-- asked again; new parents sign this one. tests/consent.mjs checks the app's
+-- words and these agree.
+insert into consent_notices (version, summary, body) values (
+  '2026-11',
+  'What RankUp collects about your child, and your rights.',
+  $notice$
+What RankUp collects about your child
+
+What we collect
+
+  * The first name you enter for your child. Nothing else identifying — no
+    surname, no birthday, no email address, no home address.
+  * The chores you assign, and whether they were completed.
+  * The theme they choose, and their XP, level and in-app currency.
+
+No photographs
+
+  * RankUp never takes, sends or keeps photographs. If you want to see that
+    a chore is done, your child can send you a picture from their own
+    phone's camera app, the way you already message each other. It never
+    passes through RankUp.
+
+What we never do
+
+  * We do not sell your data or your child's data. To anyone. Ever.
+  * We show no advertising to children.
+  * Your child is never asked for an email address, a password or a phone
+    number.
+  * We do not track your child across other websites or apps.
+
+Guilds, if you use them
+
+  * A guild lets your child see other children's first names, levels and
+    weekly XP, and exchange short messages with them.
+  * Nobody joins a guild until a parent on each side has agreed — yours, and
+    the other child's.
+  * Phone numbers, email addresses and links are blocked in guild chat. Any
+    child can report a message, which hides it immediately and shows it to
+    both parents.
+  * You can remove your child from a guild at any moment.
+
+Your rights, at any time
+
+  * See everything held about your child — Settings → Download my data.
+  * Delete all of it — Settings → Delete account. It is immediate and
+    permanent.
+  * Withdraw this consent, which deletes your children's data with it.
+
+I confirm I am the parent or legal guardian of the children I add to this
+account, and I consent to RankUp collecting the information described above.
+$notice$
+) on conflict (version) do nothing;
+
+grant execute on function current_consent_version() to anon, authenticated;

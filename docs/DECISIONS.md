@@ -104,3 +104,26 @@ something that loads over a phone connection.
 Their colours are fixed and neutral rather than following the parent's theme, and were
 checked with a colour-blindness and contrast validator. A chart has to stay readable in
 all ten dashboard themes, and it cannot do that if its series colours move around.
+
+---
+
+## Screens download when they are opened
+
+The app used to ship as one JavaScript file holding every screen, all twenty-four
+games and the battle scenes, so a phone opening it downloaded and read about 250 kB
+(compressed) before anything appeared. Now each screen, and each game, is its own file
+fetched the first time somebody goes there (`src/lib/lazy.js`). Opening the app fetches
+the shared core and the one screen it lands on — about half of what it was. The front
+door is only ever seen once, so after setup it is never downloaded again.
+
+React sits in a file of its own too, because it changes far less often than the app:
+a phone keeps it across updates instead of downloading it again inside every new app
+file.
+
+**The trade-off.** A screen opened for the first time waits for its file. The service
+worker (`public/sw.js`) answers for that: it keeps every file it has fetched, and once
+the first screen is up it quietly fetches the rest in the background, so after the
+first visit everything opens instantly and works with no signal. It asks the network
+for the page first every time, so nobody is left on an old version; only the
+fingerprinted files under `assets/`, whose names change whenever their contents do,
+come straight from the phone.

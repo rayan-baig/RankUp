@@ -44,6 +44,18 @@ if (guard) {
     extra.length ? `left behind after a game was removed: ${extra.join(', ')}` : '')
 }
 
+console.log('\n=== The quickest a perfect round can be is the same number on both sides ===')
+{
+  // minigame_floor_ms reads `when 'game' then 1234`.
+  const fn = sql.match(/create or replace function minigame_floor_ms[\s\S]*?\$\$;/)
+  ok('the floor function is there to check', Boolean(fn))
+  const inSql = new Map([...(fn ? fn[0] : '').matchAll(/when '([a-z_]+)'\s+then (\d+)/g)].map((m) => [m[1], Number(m[2])]))
+  const differ = MINIGAMES.filter((g) => inSql.get(g.id) !== g.minMs).map((g) => `${g.id} (app ${g.minMs}, database ${inSql.get(g.id)})`)
+  ok(`every one of the ${MINIGAMES.length} games has the same floor in the app and the database`, differ.length === 0, differ.join(', '))
+  ok('and the database has a floor for nothing the app does not ship',
+    [...inSql.keys()].every((id) => MINIGAMES.some((g) => g.id === id)))
+}
+
 console.log('\n=== Every game is wired up in the app too ===')
 const screen = readFileSync(new URL('../src/screens/kid/KidArcade.jsx', import.meta.url), 'utf8')
 const wired = MINIGAMES.filter((g) => !new RegExp(`\\b${g.id}:`).test(screen)).map((g) => g.id)

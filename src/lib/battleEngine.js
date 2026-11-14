@@ -58,13 +58,22 @@ export function createBattle(canvas, opts = {}) {
   const scene = SCENES[opts.chapter] || SCENES.raid
   const ctx = canvas.getContext('2d')
   const makeBuffer = opts.makeBuffer || (() => document.createElement('canvas'))
-  // Two layers off screen: the still parts of the world, painted once per
-  // size, and the frame being built.
+  /*
+   * One layer off screen: the still parts of the world, painted once per size.
+   * Everything that moves is drawn straight onto the canvas.
+   *
+   * It used to be built in a second off-screen frame and then copied onto the
+   * canvas, and the frame was blacked out first: two full-screen copies and a
+   * full-screen fill on every frame before anything moved. Profiled on a CPU
+   * slowed four times (tests/battleperf.mjs), those copies were most of the
+   * time each frame took, and the dragon fight ran at about 22ms of work a
+   * frame against a 16ms budget. The vignette, a full-screen gradient worked
+   * out afresh sixty times a second, is now painted once per size as well.
+   */
   const bg = makeBuffer()
-  const buf = makeBuffer()
+  const vig = makeBuffer()
   const bgc = bg.getContext('2d')
-  const g = buf.getContext('2d')
-  const art = makeArt(g)
+  const art = makeArt(ctx)
   const bgArt = makeArt(bgc)
   let k = 0
 
@@ -77,9 +86,12 @@ export function createBattle(canvas, opts = {}) {
     const scale = cw / W
     if (scale === k) return
     k = scale
-    for (const c of [bg, buf]) { c.width = Math.round(W * k); c.height = Math.round(H * k) }
+    for (const c of [bg, vig]) { c.width = Math.round(W * k); c.height = Math.round(H * k) }
     bgc.setTransform(k, 0, 0, k, 0, 0)
     bgArt.staticWorld(scene.world)
+    const vc = vig.getContext('2d')
+    vc.setTransform(k, 0, 0, k, 0, 0)
+    makeArt(vc).vignette()
   }
 
   /* ---------------------------------------------------------- particles */
@@ -315,31 +327,48 @@ export function createBattle(canvas, opts = {}) {
   }
 
   /* The arrival glitch: torn rows, split colour, static, then the world. */
+  let tear = null
   function glitch(t) {
     const strength = t < 0.9 ? 1 : 1 - (t - 0.9) / 0.3
-    const bw = buf.width
+    // Torn from the frame just drawn: copied once, then torn from the copy
+    // (a canvas drawn onto itself is copied again for every call). Only for
+    // the first second of two scenes, so the copy is made only then.
+    const bw = canvas.width
+    const kk = canvas.width / W
+    if (!tear) tear = makeBuffer()
+    if (tear.width !== bw || tear.height !== canvas.height) { tear.width = bw; tear.height = canvas.height }
+    const tc = tear.getContext('2d')
+    tc.drawImage(canvas, 0, 0)
     for (let i = 0; i < 9; i++) {
-      const y = Math.floor(rnd() * H) * k
-      const h = (2 + Math.floor(rnd() * 12)) * k
-      const off = Math.round((rnd() - 0.5) * 40 * strength * k)
-      ctx.drawImage(buf, 0, y, bw, h, off, y, bw, h)
+      const y = Math.floor(rnd() * H) * kk
+      const h = (2 + Math.floor(rnd() * 12)) * kk
+      const off = Math.round((rnd() - 0.5) * 40 * strength * kk)
+      ctx.drawImage(tear, 0, y, bw, h, off, y, bw, h)
     }
     ctx.globalCompositeOperation = 'lighter'
-    ctx.globalAlpha = 0.35 * strength; ctx.drawImage(buf, 3 * k, 0); ctx.globalAlpha = 1
+    ctx.globalAlpha = 0.35 * strength; ctx.drawImage(tear, 3 * kk, 0); ctx.globalAlpha = 1
     ctx.globalCompositeOperation = 'source-over'
     for (let i = 0; i < 40 * strength; i++) {
       ctx.fillStyle = ['#ff00ff', '#00ffff', '#ffffff', '#000000'][i % 4]
-      ctx.fillRect(Math.floor(rnd() * W) * k, Math.floor(rnd() * H) * k, (1 + Math.floor(rnd() * 8)) * k, k)
+      ctx.fillRect(Math.floor(rnd() * W) * kk, Math.floor(rnd() * H) * kk, (1 + Math.floor(rnd() * 8)) * kk, kk)
     }
-    if (t < 0.15 || (t > 0.45 && t < 0.52)) { ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fillRect(0, 0, bw, buf.height) }
+    if (t < 0.15 || (t > 0.45 && t < 0.52)) { ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fillRect(0, 0, bw, canvas.height) }
   }
 
   function render(dt) {
     fit()
     moveParts(dt)
-    g.setTransform(1, 0, 0, 1, 0, 0)
-    g.drawImage(bg, 0, 0)
-    g.setTransform(k, 0, 0, k, 0, 0)
+    // Wider than MAX_WIDTH, the still layers are stretched to fit, as the
+    // whole frame used to be.
+    const up = bg.width ? canvas.width / bg.width : 1
+    const sx = shake > 0 ? (rnd() - 0.5) * 4 * k * up : 0
+    const sy = shake > 0 ? (rnd() - 0.5) * 3 * k * up : 0
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    // Only a shaking frame leaves an edge uncovered.
+    if (sx || sy) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height) }
+    ctx.setTransform(up, 0, 0, up, sx, sy)
+    ctx.drawImage(bg, 0, 0)
+    ctx.setTransform(k * up, 0, 0, k * up, sx, sy)
     art.liveWorld(scene.world, T, scene.portal ? 36 : null)
     if (scene.celebrate) {
       art.sign(T)
@@ -357,14 +386,10 @@ export function createBattle(canvas, opts = {}) {
     art.hero(hero, T)
     art.particles(parts)
     if (boss) renderBoss()
-    art.vignette()
+    ctx.setTransform(up, 0, 0, up, sx, sy)
+    ctx.drawImage(vig, 0, 0)
 
     ctx.setTransform(1, 0, 0, 1, 0, 0)
-    ctx.fillStyle = '#000'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-    const sx = shake > 0 ? (rnd() - 0.5) * 4 * k : 0
-    const sy = shake > 0 ? (rnd() - 0.5) * 3 * k : 0
-    ctx.drawImage(buf, sx, sy, canvas.width, canvas.height)
     if (scene.glitch && T < 1.2) glitch(T)
   }
 
@@ -382,10 +407,41 @@ export function createBattle(canvas, opts = {}) {
   function frame(now) {
     if (stopped) return
     const dt = Math.min(0.05, (now - (last || now)) / 1000)
+    if (last) keepUp(dt)
     last = now
     step(dt)
     raf = requestAnimationFrame(frame)
   }
+
+  /*
+   * A phone that cannot keep up gets fewer pixels to fill.
+   *
+   * Nearly all the time a frame takes on a slow phone is filling pixels, and
+   * the scene is drawn at the screen's full density. Measured with the CPU
+   * slowed four times (tests/battleperf.mjs), the dragon fight was spending
+   * more than its 16ms a frame and dropping frames. So every forty frames the
+   * average gap between them is checked, and while it is slower than forty
+   * frames a second the scene is drawn a quarter smaller, down to twice its
+   * own size; the browser stretches it to the same place on screen. A phone
+   * that keeps up never changes.
+   */
+  let gaps = 0
+  let gapCount = 0
+  function keepUp(dt) {
+    gaps += dt
+    gapCount += 1
+    if (gapCount < 40) return
+    const slow = gaps / gapCount > 1 / 40
+    gaps = 0
+    gapCount = 0
+    if (!slow) return
+    const w = Math.max(W * 2, Math.round(canvas.width * 0.75))
+    if (w >= canvas.width) return
+    canvas.width = w
+    canvas.height = Math.round((w * 9) / 16)
+    shrunk = true
+  }
+  let shrunk = false
 
   /*
    * With reduced motion the whole scene still happens — the bars still end
@@ -421,6 +477,8 @@ export function createBattle(canvas, opts = {}) {
     /** After the canvas changed size: a still frame has to be painted again. */
     redraw() { if (opts.reducedMotion) render(0) },
     destroy: stop,
+    /** Whether the scene has had to draw smaller to keep up. */
+    shrunk: () => shrunk,
     /** For tests: what the bars say and whether the fight is over. */
     snapshot: () => ({
       T, won, dragon: boss?.hp ?? null, hero: boss?.php ?? null, heroX: hero.x,

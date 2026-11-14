@@ -43,6 +43,14 @@ begin
                   where table_name = 'families' and column_name = 'timezone') then
     missing := missing || 'families.timezone ';
   end if;
+  if not exists (select 1 from information_schema.columns
+                  where table_name = 'family_goals' and column_name = 'start_xp') then
+    missing := missing || 'family_goals.start_xp ';
+  end if;
+  if not exists (select 1 from information_schema.columns
+                  where table_name = 'family_goals' and column_name = 'rev') then
+    missing := missing || 'family_goals.rev ';
+  end if;
   perform ok('every column added since the first release is present', missing = '',
              'missing: ' || missing);
 end $$;
@@ -124,12 +132,62 @@ begin
                              'alliances','alliance_members','alliance_results',
                              'schools','school_staff','school_members','school_rivalries',
                              'school_month_scores','school_awards','school_rivalry_results',
-                             'school_top_students', 'photo_check_claims', 'push_sends',
+                             'school_top_students', 'push_sends',
                              'pairing_codes','pairing_claim_attempts',
-                             'reminder_schedules','digest_sends','job_runs',
+                             'reminder_schedules','digest_sends','trial_reminder_sends','job_runs',
                              'crash_reports','billing_events','push_subscriptions',
                              'parental_consents','deletions','referrals',
-                             'parent_invites','adult_invite_attempts','rpc_receipts');
+                             'parent_invites','adult_invite_attempts','rpc_receipts',
+                             'billing_cancellations', 'school_month_emails',
+                             'server_errors', 'error_report_kinds', 'error_report_sends', 'usage_daily',
+                             -- Themes sent for a Season: the operator's page reads them, nobody else.
+                             'theme_submissions',
+                             -- The leaderboards: read through leaderboard_board and
+                             -- written by refresh_leaderboards (leaderboards.sql).
+                             'leaderboard_profiles', 'leaderboard_families', 'leaderboard_kid_stats',
+                             'leaderboard_ranks', 'leaderboard_runs',
+                             -- Gifts: the webhook, the gift checkout and the redeem
+                             -- endpoint reach them, with the service key (billing.sql).
+                             'gift_orders', 'gift_buyers', 'gift_recipients', 'gift_redeem_attempts',
+                             'gift_checkout_attempts');
   perform ok('no table is left locked with no policy at all', coalesce(bare, '') = '',
              'bare: ' || coalesce(bare, ''));
+end $$;
+
+-- ---------- every function, trigger, policy and grant came through the same ----------
+--
+-- run.sh recorded the schema after the first application and again after the
+-- second (upgrade-snapshot.sql). They must be identical. Nothing here lists
+-- functions by name: one added to any SQL file is in both records, so it is
+-- checked the day it is written. What this catches that the rest does not: a
+-- `drop trigger` whose `create trigger` was renamed, so the trigger is gone
+-- after an upgrade; a grant that the second run gives back to PUBLIC after the
+-- first took it away; a function whose settings (search_path, security
+-- definer) differ between two definitions in two files, so the later file
+-- wins only on the second run.
+do $$
+declare
+  v_diff  text;
+  v_count int;
+begin
+  select count(*) into v_count from upgrade_check.objects where pass = 'first';
+  perform ok('the schema was recorded after each application', v_count > 0
+    and v_count = (select count(*) from upgrade_check.objects where pass = 'second'),
+    v_count::text || ' first, ' || (select count(*) from upgrade_check.objects where pass = 'second') || ' second');
+
+  select string_agg(coalesce(a.kind, b.kind) || ' ' || coalesce(a.name, b.name)
+                    || case when a.name is null then ' (only after the second run)'
+                            when b.name is null then ' (gone after the second run)'
+                            else ' (changed: ' || a.detail || '  ->  ' || b.detail || ')' end, E'\n')
+    into v_diff
+    from (select * from upgrade_check.objects where pass = 'first') a
+    full join (select * from upgrade_check.objects where pass = 'second') b
+      on a.kind = b.kind and a.name = b.name
+   where a.name is null or b.name is null or a.detail is distinct from b.detail;
+  perform ok(format('all %s functions, triggers, policies and tables are the same after the second run',
+                    (select count(*) from upgrade_check.objects where pass = 'second')),
+             v_diff is null, coalesce(v_diff, ''));
+
+  select count(*) into v_count from upgrade_check.objects where pass = 'second' and kind = 'function';
+  perform ok(format('%s functions among them, each with its grants and settings', v_count), v_count > 100);
 end $$;

@@ -130,6 +130,56 @@ export async function openBillingPortal() {
   return result
 }
 
+const GIFT_CHECKOUT_URL = import.meta.env?.VITE_GIFT_CHECKOUT_URL || '/api/gift-checkout'
+const REDEEM_GIFT_URL = import.meta.env?.VITE_REDEEM_GIFT_URL || '/api/redeem-gift'
+
+/**
+ * Can a gift be bought here? Only Stripe has to be on: the buyer needs no
+ * account, so no sync service is involved until the family redeems it.
+ */
+export function giftsLive() {
+  return STRIPE_ENABLED
+}
+
+/**
+ * Send the buyer of a gift to Stripe. No sign-in: the gift's own checkout
+ * (api/gift-checkout.js) takes the form as it is, checks it again, and
+ * answers with Stripe's page. `form` is checkGiftForm's `clean`.
+ */
+export async function startGiftCheckout(form) {
+  try {
+    const res = await fetch(GIFT_CHECKOUT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, reason: data.error || `http_${res.status}`, fields: data.fields || [] }
+    if (data.url) window.location.href = data.url
+    return { ok: true, ...data }
+  } catch (err) {
+    return { ok: false, reason: /fetch|network/i.test(String(err?.message)) ? 'stripe_unavailable' : 'checkout_failed' }
+  }
+}
+
+/** A parent redeems a gift code, in Parent Mode. The server checks who and how often. */
+export async function redeemGift(code) {
+  const token = await freshAccessToken()
+  if (!token) return { ok: false, reason: 'signed_out' }
+  try {
+    const res = await fetch(REDEEM_GIFT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ code }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, reason: data.error || `http_${res.status}` }
+    return { ok: true, ...data }
+  } catch (err) {
+    return { ok: false, reason: err.message }
+  }
+}
+
 /** What the server says this family currently has. */
 export async function fetchBillingStatus() {
   if (!transport.isConfigured()) return null
@@ -147,12 +197,116 @@ export const BILLING_ERRORS = {
   no_customer: 'No billing account found for this family.',
   checkout_failed: 'Stripe could not start the checkout. Please try again.',
   portal_failed: 'Could not open the billing portal. Please try again.',
+  stripe_unavailable: 'Stripe, who look after billing, is not answering right now. Nothing about your plan has changed. Try again in a few minutes.',
   not_school_admin: 'Only the school’s admin can manage its plan.',
   suspended: 'This school is suspended. Contact us to sort it out.',
   already_subscribed: 'You already have a plan. Change it from “Manage billing, cancel, or update card”, where Stripe swaps it over without charging you twice.',
+  refunded_plan_renews: 'Your refunded plan is still set to renew. Cancel it from “Manage billing, cancel, or update card” first, so you are never charged for two plans.',
+  gift_too_long: 'Your gift plans run for more than two years from now, longer than Stripe can wait to take a first payment. Choose a plan once less than two years of gift are left.',
   already_paying: 'Your school is already paying. Use “Card, invoices and cancelling” to change the plan.',
 }
 
 export function billingError(reason) {
-  return BILLING_ERRORS[reason] || 'Something went wrong. Please try again.'
+  if (BILLING_ERRORS[reason]) return BILLING_ERRORS[reason]
+  // The host answering for a function that did not (a 502 or 504 from the
+  // platform, or no connection at all) is Stripe's side being down as far as
+  // a parent can tell, and saying "something went wrong" told them nothing.
+  if (/^http_5\d\d$/.test(String(reason || '')) || /fetch|network/i.test(String(reason || ''))) {
+    return BILLING_ERRORS.stripe_unavailable
+  }
+  return 'Something went wrong. Please try again.'
+}
+
+const PLAN_NAMES = { standard: 'Standard', elite: 'Elite' }
+
+/** A date on a plan notice, in words: "15 November 2026", not "11/15/2026". */
+export const planDate = (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+
+/**
+ * What a parent is told when their plan has stopped, and why.
+ *
+ * The webhook moves the family the moment Stripe says a payment failed or was
+ * handed back, and the app simply showed fewer features: no reason, nothing
+ * to do about it. Only past_due had a banner, and it said "Elite" to a family
+ * that paid for Standard. `status` is billing_status()'s answer, or the
+ * synced family's subscription status as { status }. Null when there is
+ * nothing to say.
+ */
+export function billingNotice(status) {
+  const state = status?.status
+  const kept = 'Nothing your kids have earned has been touched.'
+  const until = status?.ends_at ? new Date(status.ends_at) : null
+  const plan = PLAN_NAMES[status?.paid_tier] || 'paid'
+  // A gift plan running now, or waiting for the paid plan to end.
+  const giftUntil = status?.gift_until ? new Date(status.gift_until) : null
+  const gift = status?.gift_tier && giftUntil && giftUntil.getTime() > Date.now() ? (PLAN_NAMES[status.gift_tier] || 'gift') : null
+  if (gift && state === 'canceled') {
+    // Not "you are on Starter now": the gift is what they are on.
+    return null
+  }
+  switch (state) {
+    case 'past_due':
+      return {
+        tone: 'bad', icon: '⚠️', title: 'A payment failed',
+        body: `Your card was declined when your ${plan} plan renewed, so you are on Starter until it goes through. Update your card in “Manage billing” and Stripe will try again. ${kept}`,
+      }
+    case 'unpaid':
+    case 'incomplete_expired':
+      return {
+        tone: 'bad', icon: '⚠️', title: 'Your plan has stopped',
+        body: `Stripe could not take the payment for your ${plan} plan after several tries, so you are on Starter now. Choose a plan below to start again. ${kept}`,
+      }
+    case 'incomplete':
+      return {
+        tone: 'bad', icon: '⚠️', title: 'Your payment has not gone through yet',
+        body: `Your bank has not confirmed the first payment, so the ${plan} plan has not started. Finish it in “Manage billing”, or choose a plan below to try again. ${kept}`,
+      }
+    case 'paused':
+      return {
+        tone: 'info', icon: '⏸️', title: 'Your plan is paused',
+        body: `Your free trial ended with no card saved, so you are on Starter. Add a card in “Manage billing” to carry on. ${kept}`,
+      }
+    case 'refunded':
+      return {
+        tone: 'info', icon: '↩️', title: 'Your payment was refunded',
+        body: `Your last payment was handed back in full, so that period is not paid for and you are on Starter. Choose a plan below whenever you want it back. ${kept}`,
+      }
+    case 'canceled':
+      // Stripe says "canceled" once the plan has ended, and the family is on
+      // Starter from that moment. This used to say "It runs until" the end
+      // of the period for a plan cancelled at once, to a family already on
+      // Starter.
+      return {
+        tone: 'info', icon: 'ℹ️', title: 'Your plan has ended',
+        body: `Your ${plan} plan has ended, so you are on Starter now. Choose a plan below to start again. ${kept}`,
+      }
+    case 'active':
+    case 'trialing':
+      // Cancelled in the portal and still running: nothing has changed yet,
+      // and the parent should not find out on the day.
+      if (until && until.getTime() > Date.now()) {
+        return {
+          tone: 'info', icon: '📅', title: 'Your plan is ending',
+          body: gift
+            ? `You cancelled, so your ${PLAN_NAMES[status?.tier] || plan} plan stops on ${planDate(until)}. Then your gift of ${gift} runs until ${planDate(giftUntil)}. Leave renewal off, or you will pay for time the gift covers.`
+            : `You cancelled, so your ${PLAN_NAMES[status?.tier] || plan} plan stops on ${planDate(until)}. Nothing changes until then. Changed your mind? Use “Manage billing”.`,
+        }
+      }
+      return null
+    default:
+      return null
+  }
+}
+
+/** The statuses that mean a payment stopped the plan, which the dashboard shows. */
+const PAYMENT_STOPPED = ['past_due', 'unpaid', 'incomplete', 'incomplete_expired', 'paused', 'refunded']
+
+/**
+ * The notice on the parent dashboard, from the synced family row: only a
+ * plan a payment stopped. A plan they cancelled themselves, or one ending on
+ * a date they chose, is not news there; the plan screen says it.
+ */
+export function dashboardBillingNotice(family, { demo = false } = {}) {
+  if (demo || !PAYMENT_STOPPED.includes(family?.subscriptionStatus)) return null
+  return billingNotice({ status: family.subscriptionStatus, paid_tier: family.lastPaidTier })
 }

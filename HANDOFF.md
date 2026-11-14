@@ -1,5 +1,9 @@
 # RankUp — complete handoff
 
+> **A snapshot from 25 October 2026.** Since then RankUp stopped taking photos
+> altogether: the camera, the photo check and the AI review described below are
+> gone. For what is true now, read [docs/STATUS.md](docs/STATUS.md) and the rest of `docs/`.
+
 Everything needed to pick this project up cold, on a new machine or in a new
 Claude account, and be productive in under an hour.
 
@@ -233,6 +237,7 @@ Block Craft at 125 becomes **The Nether Portal**; at 250, **The End**; at 399,
 │  stripe-webhook · send-push · send-reminders                │
 │  send-digests · settle-alliances · run-retention · health   │
 │  school-checkout · settle-schools · operator-schools        │
+│  refresh-leaderboards · operator-themes · stats · …         │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -324,7 +329,7 @@ school_top_students`
 | `claim_pairing_code` / `record_pairing_attempt` | rate-limited, attempts exhausted after N |
 | `may_act_for_kid` / `is_parent` / `current_family_id` | the authorisation spine |
 | `delete_family_account` / `export_family_data` | GDPR rights, really implemented |
-| `run_retention` / `purge_stale_photos` | scheduled cleanup |
+| `run_retention` | scheduled cleanup |
 
 **36 RLS policies.** Every table is deny-by-default; one family can never read
 another's rows. There are tests that attempt exactly that and assert failure.
@@ -588,7 +593,7 @@ retention job clears anything an older version left behind.
 
 | | Starter | Standard | Elite Pass |
 |---|---|---|---|
-| Price | **Free** | 9.99/mo · 99.90/yr | 15.99/mo · 159.90/yr |
+| Price | **Free** | 5.99/mo · 49.99/yr | 9.99/mo · 79.99/yr |
 | Children | 1 | Unlimited | Unlimited |
 | Quests & rewards | Unlimited | Unlimited | Unlimited |
 | AI photo check | — | ✅ | ✅ |
@@ -631,8 +636,8 @@ Hardened over several explicit adversarial passes — see commits
 3. **The kid limit is a database trigger**, not a screen check.
 4. **Pairing and invites are rate-limited** with attempt tables, and codes are
    revocable.
-5. **Photos are destroyed on review.** Plus `purge_stale_photos` and
-   `run_retention` for anything that slips through.
+5. **No photos are kept at all.** RankUp takes none; the photo columns, the
+   photo check and its allowance were dropped from the database in November 2026.
 6. **Parental consent is real** (`supabase/consent.sql`), as are data export and
    account deletion.
 7. **No secret may carry a `VITE_` prefix.** Anything `VITE_` is compiled into
@@ -771,7 +776,7 @@ In the order they are worth doing.
 
 - My two vector MTRX marks were deleted — the owner had GPT finish the logo.
   `src/assets/brand/` now holds the supplied `mtrx-logo.webp` plus squared
-  512/192/64 PNGs and a tight `mtrx-mark-512.png` used in the Horizon page.
+  512/192/64 PNGs and a tight `mtrx-mark-512.png` used in the Horizyn page.
 
 ### Open question with a measured answer
 
@@ -849,7 +854,7 @@ RankUp/
 │                               + mock-server.mjs)
 ├── api/                        10 serverless endpoints + _shared/
 ├── functions/api/[[route]].js  Cloudflare Pages adapter
-├── horizon/                    the MTRX Horizon page, in git
+├── horizon/                    the MTRX Horizyn page, in git
 ├── tests/                      44 suites + helpers.mjs + screenshots/
 ├── scripts/slice-sheet.py      cuts a design sheet into per-tab images
 └── marketing/ · public/

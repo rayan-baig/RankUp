@@ -45,9 +45,9 @@ drop policy if exists alliances_read on alliances;
 drop policy if exists alliance_members_read on alliance_members;
 drop policy if exists alliance_results_read on alliance_results;
 
-revoke all on alliances from public;
-revoke all on alliance_members from public;
-revoke all on alliance_results from public;
+revoke all on alliances from public, anon, authenticated;
+revoke all on alliance_members from public, anon, authenticated;
+revoke all on alliance_results from public, anon, authenticated;
 
 /** Elite is the tier that includes alliances; everyone else gets a clear no. */
 create or replace function alliance_capacity(p_family_id uuid)
@@ -237,22 +237,39 @@ create or replace function settle_alliances(p_month date)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_new jsonb;
+  -- The month, whatever day of it was asked for. A mid-month date used to be
+  -- scored from that day to the same day a month on, under the month's key.
+  v_month date := date_trunc('month', p_month)::date;
 begin
-  with contested as (
+  -- Only a month that is over. Settled early it would be decided on part of
+  -- the month, and the key below would then stop it being settled properly:
+  -- once per alliance per month means the first run is the one that counts.
+  if v_month + interval '1 month' > now() then
+    return jsonb_build_object('ok', false, 'reason', 'month_not_over', 'month', v_month);
+  end if;
+
+  with members as (
+    -- Who was in it during the month. A family that joins on the first of the
+    -- next month, before the job runs, did not compete last month and must
+    -- not win it with chores done before it arrived.
+    select * from alliance_members where joined_at < v_month + interval '1 month'
+  ), contested as (
     -- A tournament needs opponents. Without this floor an Elite parent could
     -- create an alliance nobody else joins and win a real 20% discount every
     -- month for ever, which is a self-service price cut rather than a prize.
-    select alliance_id from alliance_members
+    select alliance_id from members
      group by alliance_id having count(*) >= 2
   ), winners as (
     select distinct on (m.alliance_id)
-           m.alliance_id, m.family_id, alliance_score(m.family_id, p_month) as score
-      from alliance_members m
+           m.alliance_id, m.family_id, alliance_score(m.family_id, v_month) as score
+      from members m
       join contested c on c.alliance_id = m.alliance_id
-     order by m.alliance_id, alliance_score(m.family_id, p_month) desc, m.joined_at asc
+     -- Ties go to whoever joined first, then (two joining in the same
+     -- instant) by id, so a rerun can never pick someone else.
+     order by m.alliance_id, alliance_score(m.family_id, v_month) desc, m.joined_at asc, m.family_id
   ), inserted as (
     insert into alliance_results (alliance_id, month_key, winning_family_id, score)
-    select alliance_id, to_char(p_month, 'YYYY-MM'), family_id, score
+    select alliance_id, to_char(v_month, 'YYYY-MM'), family_id, score
       from winners where score > 0
     on conflict (alliance_id, month_key) do nothing
     returning alliance_id, winning_family_id as family_id, score
@@ -263,7 +280,7 @@ begin
     into v_new
     from inserted i join families f on f.id = i.family_id;
 
-  return jsonb_build_object('ok', true, 'month', p_month, 'awards', v_new);
+  return jsonb_build_object('ok', true, 'month', v_month, 'awards', v_new);
 end $$;
 
 /** Records that Stripe accepted the coupon, so an unapplied award stays visible. */
@@ -287,14 +304,14 @@ grant execute on function alliance_standings(date) to authenticated;
 -- grant to `authenticated` let any signed-in parent read any household's
 -- approved-chore count and plan tier by guessing a uuid. They are internals of
 -- alliance_standings and settle_alliances, which do their own checks.
-revoke execute on function alliance_capacity(uuid) from public;
-revoke execute on function alliance_score(uuid, date) from public;
+revoke execute on function alliance_capacity(uuid) from public, anon, authenticated;
+revoke execute on function alliance_score(uuid, date) from public, anon, authenticated;
 
 -- settle_alliances and mark_alliance_award_applied are deliberately NOT granted
 -- to authenticated. They decide and record real money off a real bill, so they
 -- are reachable only by the service role the monthly job runs as.
-revoke execute on function settle_alliances(date) from public;
-revoke execute on function mark_alliance_award_applied(uuid, date, text) from public;
+revoke execute on function settle_alliances(date) from public, anon, authenticated;
+revoke execute on function mark_alliance_award_applied(uuid, date, text) from public, anon, authenticated;
 
 /**
  * Every alliance prize decided but not yet given, with what billing needs.

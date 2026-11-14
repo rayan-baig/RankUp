@@ -36,3 +36,51 @@ export function navigate(to) {
   window.location.hash = to
   window.scrollTo(0, 0)
 }
+
+/**
+ * Go somewhere, then run `fn` as the new screen arrives.
+ *
+ * For leaving Parent Mode: locking it while a parent screen is still showing
+ * makes the route guard send the phone to the PIN screen instead of where it
+ * was going. Run in the same hashchange as the route update, so both land in
+ * one render.
+ */
+export function navigateThen(to, fn) {
+  if (window.location.hash.replace(/^#/, '') === to) { fn(); return }
+  window.addEventListener('hashchange', fn, { once: true })
+  navigate(to)
+}
+
+/**
+ * Where "Go home" leads from a screen at `route`: the home of whichever side
+ * of the app it is on. "/" for anything else, which the route guard in App
+ * turns into the right place for this phone.
+ */
+export function homeFor(route) {
+  const path = String(route || '').split('?')[0]
+  if (path.startsWith('/parent')) return '/parent'
+  if (path.startsWith('/kid')) return '/kid'
+  return '/'
+}
+
+/**
+ * Where Parent Mode opens once the PIN is right.
+ *
+ * A link into the parent side (a notification's "chores waiting for you", the
+ * weekly digest, the way back from Stripe) meets the PIN first, and the PIN
+ * screen used to open the dashboard afterwards: the link had led nowhere in
+ * particular. The route guard sends `/switch?next=<where it was going>`, and
+ * this reads it back. Only a parent screen, and only a path: anything else
+ * opens the dashboard.
+ */
+export function lockedLink(path) {
+  const target = String(path || '')
+  return target.startsWith('/parent/') ? `/switch?next=${encodeURIComponent(target)}` : '/switch'
+}
+
+export function afterUnlock(hash = typeof window !== 'undefined' ? window.location.hash : '') {
+  const query = String(hash || '').replace(/^#/, '').split('?').slice(1).join('?')
+  let next = null
+  try { next = new URLSearchParams(query).get('next') } catch { next = null }
+  return next && /^\/parent(\/[\w-]+)*(\?[\w=&%.-]*)?$/.test(next) ? next : '/parent'
+}

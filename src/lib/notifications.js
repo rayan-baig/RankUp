@@ -17,6 +17,8 @@
  */
 
 import { transport, freshAccessToken } from './sync/transport.js'
+import { dayKey } from './dates.js'
+import { NOTICES } from '../data/noticeWords.js'
 
 const VAPID_PUBLIC_KEY = import.meta.env?.VITE_VAPID_PUBLIC_KEY || ''
 const PREF_KEY = 'rankup.notifications.v1'
@@ -178,8 +180,12 @@ const SEND_URL = import.meta.env?.VITE_PUSH_SEND_URL || '/api/send-push'
  * app has already shown the notification locally where it can. There is no
  * point telling a parent their notification "failed" when the thing they cared
  * about — seeing it — already happened.
+ *
+ * `reason: 'network'` means the server was never reached, so nothing was
+ * decided and the notice is worth sending again; see sendNotice in the sync
+ * engine, which is what calls this.
  */
-export async function notifyRemote({ familyId, role, kidId, kind, args }) {
+export async function notifyRemote({ familyId, role, kidId, kind, args, guildId }) {
   if (!pushConfigured() || !familyId) return { ok: false, reason: 'not_configured' }
   const token = await freshAccessToken()
   if (!token) return { ok: false, reason: 'signed_out' }
@@ -188,48 +194,88 @@ export async function notifyRemote({ familyId, role, kidId, kind, args }) {
     const res = await fetch(SEND_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ familyId, role, kidId, kind, args }),
+      body: JSON.stringify({ familyId, role, kidId, kind, args, ...(guildId ? { guildId } : {}) }),
     })
     if (!res.ok) return { ok: false, reason: `http_${res.status}` }
     return { ok: true, ...(await res.json()) }
   } catch (err) {
-    return { ok: false, reason: err.message }
+    return { ok: false, reason: 'network', detail: err.message }
   }
 }
 
-/** The wording for each thing worth interrupting someone about. */
-export const NOTICES = {
-  submission: (kidName, questTitle) => ({
-    title: `${kidName} finished a quest`,
-    body: `"${questTitle}" is waiting for you to review.`,
-    tag: 'submission',
-    url: '/#/parent/approvals',
-  }),
-  approved: (questTitle, xp) => ({
-    title: 'Approved! 🎉',
-    body: `"${questTitle}" earned you ${xp} XP.`,
-    tag: 'decision',
-    url: '/#/kid',
-  }),
-  rejected: (questTitle) => ({
-    title: 'Sent back to redo',
-    body: `"${questTitle}" needs another go. Tap to see why.`,
-    tag: 'decision',
-    url: '/#/kid/quests',
-  }),
-  guildRequest: (kidName, guildName) => ({
-    title: 'A guild request needs you',
-    body: `${kidName} wants to join ${guildName}. Nobody joins without you.`,
-    tag: 'guild',
-    url: '/#/parent/guilds',
-  }),
-  reminder: (label) => ({
-    title: 'RankUp',
-    body: label,
-    tag: 'reminder',
-    url: '/#/kid/quests',
-  }),
+/**
+ * What to do with one notice the reducer raised, on this device.
+ *
+ * `local` is shown here, and only if this person turned notifications on and
+ * the person it is for uses this phone (the one who did it is not buzzed).
+ * `remote` says whether to ask for a push to the family's other phones, and
+ * this device's own setting has nothing to do with it: a child's phone has no
+ * notification settings at all, and gating on it meant a child tapping
+ * "I did it!" on their own phone never told a parent.
+ */
+export function routeNotice(notice, { deviceRole, showHere, pushReady }) {
+  const payload = NOTICES[notice.kind]?.(...(notice.args || []))
+  if (!payload) return { local: null, remote: false }
+  // A notice is raised on the phone where the thing was done. Shown there only
+  // if the person it is for uses that phone too: a parent's phone a child also
+  // does chores on. It was the other way round, so a parent's own phone
+  // buzzed "Approved!" at every tap of Accept, and a phone the family shares
+  // never showed the parent a chore done on it.
+  const forThisDevice =
+    (notice.role === 'parent' && deviceRole !== 'kid') ||
+    (notice.role === 'kid' && deviceRole === 'kid')
+  return { local: showHere && forThisDevice ? payload : null, remote: Boolean(pushReady) }
 }
+
+/**
+ * What goes in the outbox to ask for a push: which notice, for whom, and the
+ * ids the server needs to check it. Never the sentence itself.
+ *
+ * A guild request carries the guild as well: the server works out from it
+ * which parents, in which families, still have to say yes.
+ */
+export function pushRequest(notice, familyId) {
+  return {
+    familyId,
+    role: notice.role,
+    kidId: notice.kidId,
+    kind: notice.kind,
+    args: notice.args || [],
+    ...(notice.guildId ? { guildId: notice.guildId } : {}),
+  }
+}
+
+/**
+ * Which in-app reminders are due now, and the record of what has fired.
+ *
+ * Each fires once a day, at or after its time but not more than ninety
+ * minutes late (opening the app at 9pm should not replay the morning one).
+ * "Fired today" is kept under the LOCAL date: it was the UTC date, read
+ * against local hours, so a reminder within ninety minutes before UTC
+ * midnight fired at its time and then again once UTC's date turned.
+ */
+export function remindersToFire(reminders, now = new Date(), fired = {}) {
+  const today = dayKey(now)
+  const minutes = now.getHours() * 60 + now.getMinutes()
+  const next = { ...fired }
+  const due = []
+  for (const reminder of reminders || []) {
+    if (!reminder.on) continue
+    const [h, m] = (reminder.time || '00:00').split(':').map(Number)
+    const at = h * 60 + m
+    if (minutes < at || minutes - at > 90) continue
+    if (next[reminder.id] === today) continue
+    due.push(reminder)
+    next[reminder.id] = today
+  }
+  return { due, fired: next }
+}
+
+/**
+ * The wording for each thing worth interrupting someone about. One copy, in
+ * src/data/noticeWords.js, which the server functions read too.
+ */
+export { NOTICES } from '../data/noticeWords.js'
 
 /**
  * Push this device's reminder times up to the server.

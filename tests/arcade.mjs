@@ -4,7 +4,7 @@
  * The rule being proved is the economic one: a token comes from a chore, and
  * grinding games can never out-earn doing them.
  */
-import { launch, reporter, setUpFamily, readState, asKid, asParent, submitPhotoProof, finish, setKidInDatabase, SHOT_DIR } from './helpers.mjs'
+import { launch, reporter, setUpFamily, readState, asKid, asParent, sendToParent, finish, setKidInDatabase, SHOT_DIR } from './helpers.mjs'
 
 const { browser, page, errors } = await launch()
 const { fails, pass, fail } = reporter()
@@ -20,7 +20,7 @@ const locked = await page.evaluate(() => document.body.innerText)
 ;/no tokens yet/i.test(locked)
   ? pass('with nothing approved the arcade is shut')
   : fail('arcade locked without a token', locked.slice(0, 140))
-;/that is where tokens come from|approved/i.test(locked)
+;/that is where tokens come from|approved|chore your parent accepts gives you 1 token/i.test(locked)
   ? pass('and it points back at the quest list')
   : fail('arcade explains where tokens come from', locked.slice(0, 140))
 // With no token the button says so rather than pretending it is playable.
@@ -33,7 +33,7 @@ await page.evaluate(() => { window.location.hash = '/kid/quests' })
 await page.waitForTimeout(500)
 await page.locator('button.card').first().click()
 await page.waitForTimeout(400)
-await submitPhotoProof(page)
+await sendToParent(page)
 await asParent(page)
 await page.evaluate(() => { window.location.hash = '/parent/approvals' })
 await page.waitForTimeout(700)
@@ -134,8 +134,8 @@ await page.waitForTimeout(2500)
 await page.evaluate(() => { window.location.hash = '/kid/arcade' })
 await page.waitForTimeout(800)
 const cappedText = await page.evaluate(() => document.body.innerText)
-;/today's winnings|will not pay out again/i.test(cappedText)
-  ? pass('at the cap it says so plainly instead of quietly paying nothing')
+;/won all 15 .* for today.*winnings come back at midnight, in /i.test(cappedText)
+  ? pass('at the cap it says so plainly, and when the winnings come back')
   : fail('cap explained', cappedText.slice(0, 200))
 ;/15\/15/.test(cappedText)
   ? pass('and shows the day’s total against the cap')

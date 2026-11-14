@@ -3,7 +3,7 @@
  * they did not earn, a lockout can outlast its timer, or a deleted child's
  * photos can survive on the device. Those are the failures worth a browser.
  */
-import { launch, reporter, readState, setUpFamily, asParent, asKid, submitPhotoProof, finish, SHOT_DIR } from './helpers.mjs'
+import { launch, reporter, readState, setUpFamily, asParent, asKid, sendToParent, finish, SHOT_DIR } from './helpers.mjs'
 
 const { browser, page, errors } = await launch()
 const { fails, pass, fail } = reporter()
@@ -17,7 +17,7 @@ await page.waitForTimeout(500)
 await page.locator('button.card').first().click()
 await page.waitForTimeout(400)
 const questUrl = page.url()
-await submitPhotoProof(page)
+await sendToParent(page)
 
 let state = await readState(page)
 const questId = state.submissions[0].questId
@@ -97,15 +97,15 @@ await page.waitForTimeout(900)
   ? pass('falls back to the first kid instead of rendering nothing')
   : fail('falls back to the first kid', `screen read: ${(await page.evaluate(() => document.body.innerText)).slice(0, 120)}`)
 
-console.log('\n=== A reviewed photo is destroyed, not retained ===')
-// This is now the stronger guarantee: the photo goes at the moment of the
-// decision, so there is never a library of them to lose in the first place.
+console.log('\n=== No photo is kept on the phone ===')
+// RankUp takes no photos. The store an older version kept them in stays
+// empty through a whole submit-and-accept.
 const afterDecision = await page.evaluate(
   () => Object.keys(JSON.parse(localStorage.getItem('rankup.photos.v1') || '{}')).length,
 )
 afterDecision === 0
-  ? pass('approving destroys the photo on the device')
-  : fail('approving destroys the photo', `${afterDecision} still stored`)
+  ? pass('nothing is in the old photo store after a chore is accepted')
+  : fail('nothing is in the old photo store after a chore is accepted', `${afterDecision} stored`)
 
 console.log('\n=== Removing a kid, with a chore still waiting ===')
 // Submit something and leave it undecided. RankUp keeps no photos, so there
@@ -115,7 +115,7 @@ await page.evaluate(() => { window.location.hash = '/kid/quests' })
 await page.waitForTimeout(600)
 await page.locator('button.card').first().click()
 await page.waitForTimeout(400)
-await submitPhotoProof(page)
+await sendToParent(page)
 await asParent(page)
 const before = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('rankup.photos.v1') || '{}')).length)
 await page.evaluate(() => {

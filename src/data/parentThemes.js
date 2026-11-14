@@ -2,7 +2,7 @@
  * The 10 parent dashboard themes.
  *
  * These are purely cosmetic — they change nothing about how the app behaves.
- * `mode` tells the charts in the AI Behaviour Blueprint which validated colour
+ * `mode` tells the charts in the Behaviour Blueprint which validated colour
  * steps to use (see src/components/charts/palette.js).
  */
 

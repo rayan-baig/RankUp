@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useApp, useElite, useParentTheme } from '../../state/AppContext.jsx'
-import { lastSevenDays, shortDayName, dayKey } from '../../lib/dates.js'
+import { lastSevenDays, shortDayName } from '../../lib/dates.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
-import { formatXp, levelFromXp } from '../../lib/xp.js'
+import { formatXp, levelFromXp, liveStreak } from '../../lib/xp.js'
 import { DailyBars, StackedBars, HorizontalBars, StatTile } from '../../components/charts/Charts.jsx'
 import { Screen, Card, SectionTitle, Select, Field, Banner, EmptyState, Chip } from '../../components/ui.jsx'
 import EliteGate from '../../components/EliteGate.jsx'
+import { activityFeed } from '../../lib/activity.js'
 
 const SLOTS = [
   { id: 'morning', label: 'Morning', from: 5, to: 12 },
@@ -31,7 +32,9 @@ export default function ParentBlueprint({ initialKidId }) {
   const report = useMemo(() => {
     if (!kid) return null
     const window = new Set(days)
-    const events = state.events.filter((e) => e.kidId === kid.id && window.has(e.day))
+    // From the synced submissions: approvals made on another parent's phone and
+    // chores sent from the child's own phone were missing from this one's log.
+    const events = activityFeed(state).filter((e) => e.kidId === kid.id && window.has(e.day))
     const approved = events.filter((e) => e.type === 'quest_approved')
     const rejected = events.filter((e) => e.type === 'quest_rejected')
     const submitted = events.filter((e) => e.type === 'quest_submitted')
@@ -67,11 +70,6 @@ export default function ParentBlueprint({ initialKidId }) {
     const decided = approved.length + rejected.length
     const approvalRate = decided ? Math.round((approved.length / decided) * 100) : null
 
-    const scores = state.submissions
-      .filter((s) => s.kidId === kid.id && s.report && window.has(dayKey(new Date(s.submittedAt))))
-      .map((s) => s.report.score)
-    const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null
-
     const adaptiveCount = approved.filter((e) => e.meta?.adaptive).length
     const activeDays = new Set(approved.map((e) => e.day)).size
 
@@ -81,7 +79,6 @@ export default function ParentBlueprint({ initialKidId }) {
       bySlot,
       byCategory,
       approvalRate,
-      avgScore,
       adaptiveCount,
       activeDays,
       totalXp: xpByDay.reduce((s, d) => s + d.value, 0),
@@ -89,14 +86,14 @@ export default function ParentBlueprint({ initialKidId }) {
       rejectedCount: rejected.length,
       sampleSize: decided,
     }
-  }, [state.events, state.submissions, kid, days])
+  }, [state.events, state.submissions, state.quests, kid, days])
 
   if (!elite) {
     return (
       <EliteGate
         perk="blueprint"
         icon="📊"
-        title="Advanced AI Behaviour Blueprints"
+        title="Behaviour Blueprints"
         body="Weekly chart breakdowns tracking your child's focus patterns and chore-completion history, built from what actually happened in the app."
       />
     )
@@ -199,14 +196,14 @@ export default function ParentBlueprint({ initialKidId }) {
             )}
           </Card>
 
-          <Banner tone="info" icon="🤖" title="How this is built">
+          <Banner tone="info" icon="📊" title="How this is built">
             The charts and the read-out are computed from this family's own activity log on this
             device. Nothing is sent anywhere.
           </Banner>
 
           <div className="flex flex-wrap gap-1.5 mt-3">
             <Chip>Level {levelFromXp(kid.xp).level}</Chip>
-            <Chip>🔥 {kid.streak.count}-day streak</Chip>
+            <Chip>🔥 {liveStreak(kid.streak)}-day streak</Chip>
             {report.adaptiveCount > 0 && <Chip tone="var(--accent-2)">♿ {report.adaptiveCount} adaptive completed</Chip>}
           </div>
         </>

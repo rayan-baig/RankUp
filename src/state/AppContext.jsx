@@ -2,13 +2,16 @@ import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useS
 import { reducer, isElite, guildCapacity, activeLockout } from './reducer.js'
 import { createInitialState, TIERS } from './initialState.js'
 import { buildDemoFamily, DEMO_VERSION } from '../lib/demoFamily.js'
-import { loadState, saveState, clearState, purgeOrphanPhotos, getPhoto } from '../lib/storage.js'
+import { loadState, saveState, clearState, dropOldPhotos, wipeDevice } from '../lib/storage.js'
+import { setCrashNames } from '../lib/crashReport.js'
 import { createSyncEngine, SYNC_STATUS, resetCursor } from '../lib/sync/syncEngine.js'
-import { queueChanges, recordDelivered, pendingRows } from '../lib/sync/shadow.js'
+import { queueChanges, recordDelivered, pendingRows, forgetRows } from '../lib/sync/shadow.js'
+import { pruneHistory } from '../lib/prune.js'
 import { enqueue as enqueueOp, readOutbox } from '../lib/sync/outbox.js'
 import { transport } from '../lib/sync/transport.js'
-import { NOTICES, notifyLocally, notifyRemote, getPrefs as notificationPrefs } from '../lib/notifications.js'
-import { resolveKidTheme } from '../data/kidThemes.js'
+import { NOTICES, notifyLocally, notifyRemote, pushRequest, routeNotice, pushConfigured, remindersToFire, getPrefs as notificationPrefs, disable as disableNotifications } from '../lib/notifications.js'
+import { resolveKidTheme, setExtraThemes } from '../data/kidThemes.js'
+import { themesFromState, cleanSeasons, SEASON_CHECK_MS } from '../data/themeGenesis.js'
 import { storyProgress } from '../lib/dragonFight.js'
 import { resolveParentTheme } from '../data/parentThemes.js'
 import { levelFromXp } from '../lib/xp.js'
@@ -21,9 +24,40 @@ function localZone() {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null } catch { return null }
 }
 
+/** What an older version's submit_quest carried about a photo, which none now has. */
+const OLD_PHOTO_KEYS = ['photo_data', 'photo_hash', 'capture_source', 'ai_verdict', 'ai_score', 'ai_report']
+function withoutPhoto(payload) {
+  const copy = { ...payload }
+  OLD_PHOTO_KEYS.forEach((key) => delete copy[key])
+  return copy
+}
+
+/** The photo and photo-check fields an older version kept on a submission. */
+const OLD_SUBMISSION_FIELDS = ['photoId', 'photoData', 'hasPhoto', 'photoDeletedAt', 'photoUnavailable',
+  'hash', 'captureSource', 'report']
+function forgetPhotos(saved) {
+  if (!Array.isArray(saved.submissions)) return saved
+  return {
+    ...saved,
+    submissions: saved.submissions.map((s) => {
+      if (!s || !OLD_SUBMISSION_FIELDS.some((key) => key in s)) return s
+      const copy = { ...s }
+      OLD_SUBMISSION_FIELDS.forEach((key) => delete copy[key])
+      return copy
+    }),
+  }
+}
+
 function init() {
-  const saved = loadState()
-  if (!saved) return createInitialState()
+  /*
+   * RankUp takes no photos. A phone that ran an older version may still hold
+   * proof pictures, and photo-check verdicts on its submissions: both go the
+   * first time this version starts, rather than sitting on the phone for ever.
+   */
+  dropOldPhotos()
+  const loaded = loadState()
+  if (!loaded) return createInitialState()
+  const saved = forgetPhotos(loaded)
 
   /*
    * A saved look-around is rebuilt when it is out of date, and otherwise
@@ -77,6 +111,8 @@ const syncs = (state) =>
   /** The state as last rendered, for the engine, which lives outside React. */
   const latest = useRef(state)
   latest.current = state
+  /** The last save to this phone's storage failed (it is full). See StorageFullBanner. */
+  const [storageFull, setStorageFull] = useState(false)
   const [sync, setSync] = useState({
     status: transport.isConfigured() ? SYNC_STATUS.IDLE : SYNC_STATUS.DISABLED,
     error: null,
@@ -85,7 +121,6 @@ const syncs = (state) =>
 
   // One engine for the life of the app.
   if (!engineRef.current) {
-    const photoFor = (submission) => (submission.photoId ? getPhoto(submission.photoId) : null)
     engineRef.current = createSyncEngine({
       dispatch: (action) => {
         /*
@@ -107,9 +142,12 @@ const syncs = (state) =>
           const current = latest.current
           let pending = new Set()
           if (syncs(current)) {
-            queueChanges(current, { photoFor, role: current.device?.role })
-            pending = pendingRows(readOutbox())
-            recordDelivered(current, action.snapshot, { photoFor, skip: pending })
+            queueChanges(current, { role: current.device?.role })
+            // Calls the reducer has asked for but that are not in the outbox
+            // yet hold their rows as well; the reducer holds the same ones.
+            const queued = (current.syncQueue || []).map((item) => ({ type: 'rpc', fn: item.fn, args: item.args }))
+            pending = pendingRows([...readOutbox(), ...queued], current)
+            recordDelivered(current, action.snapshot, { skip: pending })
           }
           dispatch({ ...action, pending: [...pending] })
           return
@@ -123,11 +161,46 @@ const syncs = (state) =>
         dispatch({ type: 'RPC_REFUSED', ...refusal })
         resetCursor()
       },
-      // A submission queued by an older version may still carry a picture:
-      // it is dropped here, before it can leave the phone.
-      prepare: async (op) => (op.fn === 'submit_quest' && op.args?.p_payload?.photo_data
-        ? { ...op.args, p_payload: { ...op.args.p_payload, photo_data: null } }
+      // A submission queued by an older version may still carry a picture
+      // and the photo check's verdict: they are dropped here, before they can
+      // leave the phone. The server would ignore them; the picture should
+      // never cross the network at all.
+      prepare: async (op) => (op.fn === 'submit_quest' && op.args?.p_payload
+        ? { ...op.args, p_payload: withoutPhoto(op.args.p_payload) }
         : op.args),
+      /*
+       * The server says this signed-in phone is in no family. A child's phone
+       * that was paired (so it was unlinked, or its child deleted), or a
+       * parent's that had a family (so they were removed from it, or it was
+       * deleted): erased, sign-in and all. A phone that never had a family —
+       * a supporter's, or one still being set up — is left alone.
+       */
+      onNoFamily: () => {
+        const s = latest.current
+        const pairedKid = s.device?.role === 'kid' && Boolean(s.device?.pairedAt)
+        const formerParent = s.device?.role !== 'kid' && s.onboarded && !s.demo && Boolean(s.lastSyncedAt)
+        if (!pairedKid && !formerParent) return
+        engineRef.current?.stop()
+        disableNotifications().catch(() => {})
+        wipeDevice()
+        transport.signOut()
+        dispatch({ type: 'DEVICE_WIPED', reason: pairedKid ? 'unlinked' : 'removed' })
+        window.location.hash = '/'
+      },
+      // A push to the family's other phones, sent from the outbox in its turn.
+      // Not reaching the server is worth another try; any answer from it is
+      // final, because a push that cannot be sent must never hold up the
+      // family's chores behind it.
+      sendNotice: async (notice) => {
+        const result = await notifyRemote(notice)
+        if (result.reason === 'network' || result.reason === 'signed_out') {
+          const err = new Error('The notice could not be sent yet.')
+          err.retryable = true
+          err.auth = result.reason === 'signed_out'
+          throw err
+        }
+        return result
+      },
     })
   }
 
@@ -157,6 +230,36 @@ const syncs = (state) =>
     const engine = engineRef.current
     engine.start()
     return () => engine.stop()
+  }, [syncing])
+
+  /*
+   * Theme Genesis: the children's own themes and the Season themes are data,
+   * built into themes here, before any screen below resolves one by id. Done
+   * during render rather than in an effect so the first frame already has
+   * them; it only runs again when one of the two lists changes.
+   */
+  useMemo(() => setExtraThemes(themesFromState(state)), [state.kidThemes, state.seasons])
+
+  /*
+   * The Seasons that have started, the same for every family. Asked for when
+   * the app opens and then once an hour, apart from the family's own sync:
+   * a new Season appears on the day it starts without anything else moving.
+   * Kept on the phone, so the Season themes are there offline too.
+   */
+  useEffect(() => {
+    if (!syncing) return undefined
+    let stopped = false
+    const check = async () => {
+      try {
+        const seasons = await transport.rpc('live_seasons', {})
+        if (stopped || !Array.isArray(seasons)) return
+        const clean = cleanSeasons(seasons)
+        if (JSON.stringify(clean) !== JSON.stringify(latest.current.seasons || [])) dispatch({ type: 'SET_SEASONS', seasons: clean })
+      } catch { /* offline, or a server without Seasons yet: what this phone has stays */ }
+    }
+    check()
+    const timer = setInterval(check, SEASON_CHECK_MS)
+    return () => { stopped = true; clearInterval(timer) }
   }, [syncing])
 
   /**
@@ -198,17 +301,10 @@ const syncs = (state) =>
   }, [state.device?.pairedAt])
 
   /*
-   * Photos: RankUp no longer handles any. A submission carries no picture and
-   * none is fetched; a parent who wants proof gets it from the child's own
-   * camera app, by message. Pictures saved on this device by an older version
-   * are deleted by purgeOrphanPhotos once nothing points at them.
-   */
-
-  /*
    * Move any server calls the reducer asked for into the outbox.
    *
    * Only the ones that actually made it in leave the queue. The outbox lives in
-   * localStorage, which fills up (proof photos live there too), and when it
+   * localStorage, which fills up, and when it
    * refused the write this used to drain the queue anyway: a child's chore
    * submission vanished while their phone said "waiting for approval" for
    * ever, and could not be sent again because one was already waiting.
@@ -223,18 +319,26 @@ const syncs = (state) =>
     }
     const left = []
     for (const item of state.syncQueue) {
-      const { fn, args } = item
-      const op = { type: 'rpc', fn, args }
+      const { fn, args, foldKey } = item
+      const op = foldKey ? { type: 'rpc', fn, args, foldKey } : { type: 'rpc', fn, args }
       if (!enqueueOp(op)) left.push(item)
     }
     if (left.length < state.syncQueue.length) engineRef.current?.wake()
     dispatch({ type: 'DRAIN_SYNC_QUEUE', keep: left })
     if (!left.length) return undefined
+    setStorageFull(true)
     console.warn(`[RankUp] ${left.length} change(s) could not be saved for sending yet (storage is full); retrying.`)
     clearTimeout(queueRetry.current)
     queueRetry.current = setTimeout(() => dispatch({ type: 'RETRY_SYNC_QUEUE' }), 15000)
     return () => clearTimeout(queueRetry.current)
   }, [state.syncQueue])
+
+  // A family goal set before goals were shared goes up once (SHARE_FAMILY_GOAL).
+  const goal = state.familyGoal
+  const unsharedGoal = syncing && state.device?.role !== 'kid' && goal && !goal.shared && goal.rev == null
+  useEffect(() => {
+    if (unsharedGoal) dispatch({ type: 'SHARE_FAMILY_GOAL' })
+  }, [unsharedGoal])
 
   /**
    * Send the notifications the reducer asked for.
@@ -243,32 +347,39 @@ const syncs = (state) =>
    * people will actually have. Then the remote push, which reaches the other
    * device when the app is closed — the case that matters for a parent who
    * needs to review something.
+   *
+   * The push goes into the outbox, behind the change it is about, rather than
+   * straight out. Sent on the spot, a child tapping "I did it!" with no signal
+   * lost the notice for good while the chore itself went up later, so the
+   * parent was never told; and even with signal, the push could reach the
+   * parent before the chore did, so tapping it showed nothing to review.
    */
   useEffect(() => {
     if (!state.noticeQueue?.length) return
     const queue = state.noticeQueue
     dispatch({ type: 'DRAIN_NOTICE_QUEUE' })
 
-    if (!notificationPrefs().enabled) return
+    const pushReady = pushConfigured() && syncs(latest.current) && Boolean(state.family.id)
+    let queued = 0
     queue.forEach((notice) => {
-      const payload = NOTICES[notice.kind]?.(...(notice.args || []))
-      if (!payload) return
-      // Do not buzz the device that caused it — only the other side.
-      const forThisDevice =
-        (notice.role === 'parent' && state.device?.role !== 'kid') ||
-        (notice.role === 'kid' && state.device?.role === 'kid')
-      if (!forThisDevice) notifyLocally(payload)
+      const route = routeNotice(notice, {
+        deviceRole: state.device?.role,
+        showHere: notificationPrefs().enabled,
+        pushReady,
+      })
+      if (route.local) notifyLocally(route.local)
+      if (!route.remote) return
       // The words are the server's to write — see api/send-push.js. This only
       // says which notice it is, so a device cannot put its own sentence on
       // somebody else's lock screen.
-      notifyRemote({
-        familyId: state.family.id,
-        role: notice.role,
-        kidId: notice.kidId,
-        kind: notice.kind,
-        args: notice.args || [],
+      const sent = enqueueOp({
+        type: 'notice',
+        ...(notice.ref ? { ref: notice.ref } : {}),
+        notice: pushRequest(notice, state.family.id),
       })
+      if (sent) queued += 1
     })
+    if (queued) engineRef.current?.wake()
   }, [state.noticeQueue, state.device?.role, state.family.id])
 
   /**
@@ -284,26 +395,14 @@ const syncs = (state) =>
     const FIRED_KEY = 'rankup.reminders.fired.v1'
     const check = () => {
       if (!notificationPrefs().enabled) return
-      const now = new Date()
-      const today = now.toISOString().slice(0, 10)
-      const minutes = now.getHours() * 60 + now.getMinutes()
       let fired = {}
       try { fired = JSON.parse(localStorage.getItem(FIRED_KEY) || '{}') } catch { fired = {} }
-
-      let changed = false
-      for (const reminder of state.settings.reminders || []) {
-        if (!reminder.on) continue
-        const [h, m] = (reminder.time || '00:00').split(':').map(Number)
-        const due = h * 60 + m
-        // Fire if the time has passed today, but not if it is hours stale —
-        // opening the app at 9pm should not replay the morning reminder.
-        if (minutes < due || minutes - due > 90) continue
-        if (fired[reminder.id] === today) continue
-        notifyLocally(NOTICES.reminder(reminder.label))
-        fired[reminder.id] = today
-        changed = true
+      // See remindersToFire: once a day, on this phone's own date.
+      const result = remindersToFire(state.settings.reminders, new Date(), fired)
+      result.due.forEach((reminder) => notifyLocally(NOTICES.reminder(reminder.label, latest.current.device?.role === 'kid' ? 'kid' : 'parent')))
+      if (result.due.length) {
+        try { localStorage.setItem(FIRED_KEY, JSON.stringify(result.fired)) } catch { /* storage full: worst case, a repeat */ }
       }
-      if (changed) localStorage.setItem(FIRED_KEY, JSON.stringify(fired))
     }
 
     check()
@@ -329,19 +428,33 @@ const syncs = (state) =>
   useEffect(() => {
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
-      saveState(state)
-      // Drop photos nothing points at any more — see purgeOrphanPhotos.
-      purgeOrphanPhotos(state)
-
+      /*
+       * Old, finished chores and notes the server already has are let go of
+       * here, before saving, so a year of them never fills the phone. Never
+       * anything waiting to be sent (lib/prune.js). The shadow forgets them
+       * first, and the change list below is worked out from the smaller state,
+       * so letting go of a row is never mistaken for deleting it.
+       */
+      let saving = state
       if (syncs(state)) {
-        const photoFor = (submission) => (submission.photoId ? getPhoto(submission.photoId) : null)
+        const pruned = pruneHistory(state, { work: [readOutbox(), state.syncQueue || []] })
+        if (pruned.dropped.count) {
+          forgetRows(pruned.dropped)
+          saving = pruned.state
+          dispatch({ type: 'PRUNE_HISTORY', dropped: pruned.dropped })
+        }
+      }
+      // A full phone is told so, rather than losing everything since the last
+      // good save without a word. The app keeps going on what is in memory.
+      setStorageFull(!saveState(saving))
+      if (syncs(state)) {
         // Rows the server sent were recorded as the server's when they arrived
         // (see the engine's dispatch above); everything else goes out.
         //
         // Anything queued should go now rather than wait out the idle backoff —
         // the poll slows down precisely because nothing is happening, and this
         // is something happening.
-        if (queueChanges(state, { photoFor, role: state.device?.role }) > 0) {
+        if (queueChanges(saving, { role: state.device?.role }) > 0) {
           engineRef.current?.wake()
         }
       }
@@ -349,9 +462,22 @@ const syncs = (state) =>
     return () => clearTimeout(saveTimer.current)
   }, [state])
 
+  // A crash report leaves out this family's own names (see lib/crashReport.js).
+  useEffect(() => {
+    setCrashNames(() => {
+      const s = latest.current || {}
+      return [
+        s.family?.name, s.family?.parentName,
+        ...(s.kids || []).map((k) => k.name),
+        ...(s.adults || []).map((a) => a?.name),
+        s.pendingPairing?.kidName,
+      ].filter(Boolean)
+    })
+  }, [])
+
   const value = useMemo(
-    () => ({ state, dispatch, sync, syncNow: () => engineRef.current?.sync() }),
-    [state, sync],
+    () => ({ state, dispatch, sync, storageFull, syncNow: () => engineRef.current?.sync() }),
+    [state, sync, storageFull],
   )
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }
@@ -389,7 +515,8 @@ export function useParentTheme() {
 
 export function useTier() {
   const { state } = useApp()
-  return TIERS[state.family.tier] || TIERS.standard
+  // An unknown or missing tier is the free plan, never a paid one.
+  return TIERS[state.family.tier] || TIERS.starter
 }
 
 export function useElite() {

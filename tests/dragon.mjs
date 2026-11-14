@@ -15,6 +15,7 @@
 import { dragonFight, storyProgress, DRAGON_LEVEL, IDLE_MS } from '../src/lib/dragonFight.js'
 import { totalXpForLevel } from '../src/lib/xp.js'
 import { resolveKidTheme, nextEvolution } from '../src/data/kidThemes.js'
+import { kids as kidMapper } from '../src/lib/sync/mappers.js'
 
 let fails = 0
 const ok = (label, cond, detail = '') => {
@@ -149,6 +150,40 @@ console.log('\n=== Idle gaps are measured from the last chore, not from the star
   const d = dives(dragonFight(state, kid, T0 + 78 * HOUR + 1))
   ok('a dive at 78 hours', d.length === 1 && d[0].at === T0 + 78 * HOUR, d.map((e) => (e.at - T0) / HOUR).join())
   ok('IDLE_MS is two days', IDLE_MS === 48 * HOUR)
+}
+
+console.log('\n=== Every phone fights the same fight ===')
+{
+  // The child reached the dragon at T0 on another theme, then switched to
+  // Block Craft on their own phone at T0 + 10h. Two hard chores came before
+  // the switch and one after.
+  const { state, kid } = family([[2, 'approved', 'hard'], [5, 'approved', 'hard'], [20, 'approved', 'hard']])
+  const SWITCH = T0 + 10 * HOUR
+  const serverRow = {
+    id: kid.id, name: 'Kid', theme_id: 'blockcraft', xp: kid.xp, coins: 0,
+    theme_chosen_at: new Date(SWITCH).toISOString(),
+  }
+  // The kid's phone made the switch and remembers it; the parent's phone has
+  // only ever seen the child on the old theme, from long ago.
+  const kidsPhone = kidMapper.fromRow(serverRow, { ...kid, themeChosenAt: SWITCH + 1500 })
+  const parentsPhone = kidMapper.fromRow(serverRow, { ...kid, themeChosenAt: T0 - 1000 * HOUR })
+  const freshPhone = kidMapper.fromRow(serverRow, {})
+  const now = T0 + 30 * HOUR
+  const a = dragonFight(state, kidsPhone, now)
+  const b = dragonFight(state, parentsPhone, now)
+  const c = dragonFight(state, freshPhone, now)
+  ok('the moment the theme was chosen comes from the server, on every phone',
+    kidsPhone.themeChosenAt === SWITCH && parentsPhone.themeChosenAt === SWITCH && freshPhone.themeChosenAt === SWITCH)
+  ok('so the dragon has the same health on the kid\'s, the parent\'s and a new phone',
+    a.dragon === b.dragon && b.dragon === c.dragon && a.hero === c.hero, `${a.dragon} / ${b.dragon} / ${c.dragon}`)
+  ok('and only the chore after the switch counts: 1000 - 150', a.dragon === 850, String(a.dragon))
+
+  // A child who was on Block Craft before the server kept this: null, so every
+  // phone falls back to the chore that took them to the dragon.
+  const old = { ...serverRow, theme_chosen_at: null }
+  const p1 = dragonFight(state, kidMapper.fromRow(old, { ...kid, themeChosenAt: T0 + 3 * HOUR }), now)
+  const p2 = dragonFight(state, kidMapper.fromRow(old, {}), now)
+  ok('with no time on the server, every phone agrees too', p1.dragon === p2.dragon && p1.dragon === 550, `${p1.dragon} / ${p2.dragon}`)
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL CHECKS PASSED')

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useElite } from '../../state/AppContext.jsx'
 import { TIERS } from '../../state/initialState.js'
+import { usd, toCents } from '../../lib/plans.js'
 import { alliances, allianceError } from '../../lib/alliances.js'
 import { Screen, Card, Button, SectionTitle, Banner, Chip, TextInput, Modal, ProgressBar } from '../../components/ui.jsx'
 import EliteGate from '../../components/EliteGate.jsx'
@@ -62,7 +63,8 @@ export default function ParentAlliance() {
     )
   }
 
-  const discounted = (TIERS.elite.price * 0.8).toFixed(2)
+  const discounted = usd((toCents(TIERS.elite.price) * 0.8) / 100)
+  const full = usd(TIERS.elite.price)
   const monthName = new Date().toLocaleDateString(undefined, { month: 'long' })
   const standings = data?.standings || []
   const alliance = data?.alliance || null
@@ -84,7 +86,7 @@ export default function ParentAlliance() {
           <h2 className="font-display font-bold text-lg mb-1">Win 20% off, earned not bought</h2>
           <p className="text-sm text-muted">
             Up to ten families form an alliance. Whoever has the most quests approved by the end of
-            the month gets 20% off their next bill — ${discounted} instead of ${TIERS.elite.price}.
+            the month gets 20% off their next bill — ${discounted} instead of ${full}.
             No chat, no contact between families: a name and a score, nothing else.
           </p>
         </Card>
@@ -249,7 +251,7 @@ export default function ParentAlliance() {
       <Card className="mb-3">
         <SectionTitle>Grand prize</SectionTitle>
         <p className="text-sm">
-          20% off the winning family's next month — ${discounted} instead of ${TIERS.elite.price}.
+          20% off the winning family's next month — ${discounted} instead of ${full}.
           Ranked on quests approved, not XP, so the plan with the bigger XP boost cannot buy the win.
         </p>
       </Card>

@@ -119,8 +119,8 @@ end $$;
  * live out of the database — and `count(distinct family_id)` is a subscriber
  * count, which is nobody else's business.
  */
-revoke execute on function charity_week_total(int) from public;
-revoke execute on function charity_week_start(int) from public;
+revoke execute on function charity_week_total(int) from public, anon, authenticated;
+revoke execute on function charity_week_start(int) from public, anon, authenticated;
 
 
 /**
@@ -164,4 +164,4 @@ end $$;
 
 -- Service role only, like the rest of billing. A browser that could log a
 -- payment could inflate the charity total.
-revoke execute on function record_payment(uuid, text, text, int, text) from public;
+revoke execute on function record_payment(uuid, text, text, int, text) from public, anon, authenticated;

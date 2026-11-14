@@ -14,8 +14,8 @@ this order, or `psql -f` it.
 
 ```
 schema.sql  sync.sql  coparents.sql  allowance.sql  guilds.sql  notifications.sql
-consent.sql  billing.sql  charity.sql  alliances.sql  schools.sql  reminders.sql
-digests.sql  referrals.sql  retention.sql  crashes.sql  health.sql
+consent.sql  billing.sql  charity.sql  alliances.sql  schools.sql  leaderboards.sql
+reminders.sql  digests.sql  referrals.sql  retention.sql  crashes.sql  health.sql
 ```
 
 Every one of them is safe to run again over a live database, and that IS the upgrade
@@ -23,7 +23,39 @@ procedure — there is no migration tool and no version table. A column added la
 appears as an explicit `alter table ... add column if not exists` at the end of
 `schema.sql`, so an existing database catches up without being rebuilt.
 
-`supabase/test/run.sh` applies all seventeen files twice, over a database with rows in it,
+Theme Genesis (0.11.0) added to `sync.sql` the tables `kid_themes`,
+`theme_submissions`, `seasons` and `season_themes` and their functions, to
+`retention.sql` the 90-day clear-out of unpicked submissions, and to
+`consent.sql` the children's themes in "Download my data". No new file and no
+change to the order: re-running the three files is the upgrade.
+
+Gift subscriptions (0.16.0) added to `schema.sql` the three gift columns on
+`families` (`gift_tier`, `gift_starts_at`, `gift_until`) and the gift in
+`effective_tier`; to `billing.sql` the tables `gift_orders`, `gift_buyers`,
+`gift_recipients`, `gift_redeem_attempts` and `gift_checkout_attempts` (row
+level security on, no policy) and the server-only functions that keep an
+order, make its code, redeem it and void it on a refund, and the gift in
+`billing_status`; and to `retention.sql` the deletion of a gift's personal
+details on their day. No new file and no change to the order.
+
+Bring a friend (0.14.0) added to `referrals.sql` the free month's columns on
+`referrals` and the functions the Stripe webhook calls to decide, bank, credit
+and withdraw it, and to `consent.sql` the referrals in "Download my data". No
+new file and no change to the order (`referrals.sql` already runs after
+`billing.sql`, whose Stripe columns it reads).
+0.12.0 added `kid_brands_ok` (server only) and the brand check in
+`submit_kid_theme`, and the new patterns and mascots to `kid_theme_design_ok`,
+all in `sync.sql`: re-running it is the upgrade.
+0.13.0 added a file, `leaderboards.sql`, run after `schools.sql` (the
+leaderboards, Adventure and Arena, and the job `refresh_leaderboards`), and
+changed `schema.sql` (`submissions.base_xp`, `kids.streak_best`, what
+`award_for_submission` and `approve_submission` store), `guilds.sql` (quick
+chat: `quick_chat_ok`, `post_quick_chat`, free text refused), `schools.sql`
+(`school_daily_chores`), `consent.sql` (the leaderboards in "Download my
+data") and `health.sql` (the new job). Re-run every file in the order above,
+then schedule `/api/refresh-leaderboards` (docs/LAUNCH.md).
+
+`supabase/test/run.sh` applies all eighteen files twice, over a database with rows in it,
 and `supabase/test/18-upgrade.sql` then checks that the data survived and that the later
 columns and constraints really arrived. So "safe to re-run" is a tested claim rather
 than an intention.
@@ -135,4 +167,4 @@ Worth knowing in advance so it does not feel like something went wrong:
 
 Supabase's free tier covers 500 MB of database and 1 GB of file storage — plenty for
 development and a pilot with real families. The first paid tier is $25/month. That is
-the point at which the $9.99 subscriptions need to be real. → [PAYMENTS.md](PAYMENTS.md)
+the point at which the $5.99 and $9.99 subscriptions need to be real. → [PAYMENTS.md](PAYMENTS.md)

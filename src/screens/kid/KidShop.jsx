@@ -1,17 +1,47 @@
+import { useEffect, useRef, useState } from 'react'
 import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import { formatXp } from '../../lib/xp.js'
 import { relativeTime } from '../../lib/dates.js'
-import { Screen, Card, Button, SectionTitle, EmptyState, Stat, Chip } from '../../components/ui.jsx'
+import { Screen, Card, Button, SectionTitle, EmptyState, Chip } from '../../components/ui.jsx'
 import HeroArt from '../../components/HeroArt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
 import { isMarketOpen, nextOpeningLabel } from '../../data/marketSkins.js'
 import { navigate } from '../../lib/router.js'
+import { rewardLeftThisWeek, rewardFreesUpAt } from '../../state/reducer.js'
 
 export default function KidShop() {
   const { state, dispatch } = useApp()
   const kid = useKid()
   const theme = useKidTheme()
+  /*
+   * The reward just bought, for a moment. A child taps "buy" twice when the
+   * first tap seems to do nothing, and each tap was a real purchase sent to
+   * the server: the second one spent the coins again. The button now says it
+   * worked and stays still long enough for the second tap to land on nothing.
+   */
+  const [justGot, setJustGot] = useState(null)
+  const settle = useRef(null)
+  /*
+   * The same thing, read at the moment of the tap. `justGot` is what the last
+   * render saw, so two taps that arrive before the screen redraws (two events
+   * in one frame) both found it empty. A ref has the first tap's answer at
+   * once.
+   */
+  const buying = useRef(false)
+  useEffect(() => () => clearTimeout(settle.current), [])
   if (!kid) return null
+
+  const redeem = (r) => {
+    if (justGot || buying.current) return
+    buying.current = true
+    dispatch({ type: 'REDEEM_REWARD', rewardId: r.id, kidId: kid.id })
+    setJustGot(r.id)
+    clearTimeout(settle.current)
+    settle.current = setTimeout(() => {
+      buying.current = false
+      setJustGot(null)
+    }, 1500)
+  }
 
   const mine = state.redemptions.filter((r) => r.kidId === kid.id).sort((a, b) => b.at - a.at)
 
@@ -92,7 +122,10 @@ export default function KidShop() {
         <EmptyState icon="🎁" title="No rewards yet" body="Ask your parent to add some in Parent Mode." />
       ) : (
         state.rewards.map((r) => {
-          const affordable = kid.coins >= r.cost
+          // The parent's weekly limit, as the server counts it. Null: none.
+          const left = rewardLeftThisWeek(state, kid.id, r)
+          const freesUp = left === 0 ? rewardFreesUpAt(state, kid.id, r) : null
+          const affordable = kid.coins >= r.cost && left !== 0
           return (
             <Card key={r.id} className="mb-2.5 flex items-center gap-3">
               <span
@@ -109,14 +142,22 @@ export default function KidShop() {
               <div className="min-w-0 flex-1">
                 <div className="font-semibold text-sm truncate">{r.name}</div>
                 {r.description && <div className="text-xs text-muted truncate">{r.description}</div>}
+                {left !== null && (
+                  <div className="text-xs text-muted truncate">
+                    {left === 0
+                      ? `All used this week. Next one ${new Date(freesUp).toLocaleDateString(undefined, { weekday: 'long' })}.`
+                      : `${left} left this week`}
+                  </div>
+                )}
               </div>
               <Button
                 variant={affordable ? 'primary' : 'soft'}
-                disabled={!affordable}
+                disabled={!affordable || justGot === r.id}
+                aria-busy={justGot === r.id}
                 className="px-3 py-2 min-h-0 text-sm shrink-0"
-                onClick={() => dispatch({ type: 'REDEEM_REWARD', rewardId: r.id, kidId: kid.id })}
+                onClick={() => redeem(r)}
               >
-                {theme.currency.icon} {r.cost}
+                {justGot === r.id ? 'Got it!' : <>{theme.currency.icon} {r.cost}</>}
               </Button>
             </Card>
           )

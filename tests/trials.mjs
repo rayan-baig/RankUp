@@ -77,6 +77,40 @@ ok('it does lift a free one',
 ok('and when it runs out they keep what they pay for',
   effectiveTier({ tier: 'standard', trialTier: 'elite', trialEndsAt: Date.now() - 1000 }) === 'standard')
 
+console.log('\n=== A gift plan: the app and the database agree on that too ===')
+{
+  // What they pay for, a trial or none, and a gift that has ended, is
+  // running, or is waiting for a paid plan to end (gift_starts_at ahead).
+  const GIFTS = [null, 'standard', 'elite']
+  const SPANS = [[-9000, -1], [-1, 300], [24, 9000], [-48, 0]]
+  const off = []
+  let n = 0
+  for (const tier of TIERS) {
+    for (const trial of [null, 'standard']) {
+      for (const gift of GIFTS) {
+        for (const [from, to] of gift ? SPANS : [[null, null]]) {
+          const starts = from === null ? null : new Date(Date.now() + from * 3600000)
+          const until = to === null ? null : new Date(Date.now() + to * 3600000)
+          const trialEnds = trial ? new Date(Date.now() + 72 * 3600000) : null
+          await db.query(
+            `update families set tier = $1, trial_tier = $2, trial_ends_at = $3, gift_tier = $4, gift_starts_at = $5, gift_until = $6
+              where id = $7`, [tier, trial, trialEnds, gift, starts, until, FAMILY])
+          const fromDb = (await db.query('select effective_tier($1) as t', [FAMILY])).rows[0].t
+          const fromApp = effectiveTier({ tier, trialTier: trial, trialEndsAt: trialEnds?.getTime() ?? null,
+            giftTier: gift, giftStartsAt: starts?.getTime() ?? null, giftUntil: until?.getTime() ?? null })
+          n += 1
+          if (to !== 0 && fromDb !== fromApp) off.push(`paid=${tier} trial=${trial} gift=${gift} ${from}..${to}h app=${fromApp} db=${fromDb}`)
+        }
+      }
+    }
+  }
+  ok(`the app and the database agree on all ${n} of them`, off.length === 0, `${off.length} differ, first: ${off[0] || ''}`)
+  ok('a running gift lifts a free family', effectiveTier({ tier: 'starter', giftTier: 'elite', giftStartsAt: Date.now() - 1000, giftUntil: Date.now() + 8.64e7 }) === 'elite')
+  ok('one waiting for the paid plan to end does not, yet', effectiveTier({ tier: 'standard', giftTier: 'elite', giftStartsAt: Date.now() + 8.64e7, giftUntil: Date.now() + 9e9 }) === 'standard')
+  ok('and one past gift_until is over', effectiveTier({ tier: 'starter', giftTier: 'elite', giftStartsAt: Date.now() - 9e9, giftUntil: Date.now() - 1000 }) === 'starter')
+  await db.query('update families set gift_tier = null, gift_starts_at = null, gift_until = null where id = $1', [FAMILY])
+}
+
 console.log('\n=== The countdown a parent is shown ===')
 ok('a fortnight reads as 14 days', trialDaysLeft({ trialTier: 'elite', trialEndsAt: Date.now() + 14 * 86400000 }) === 14)
 ok('the last few hours still read as a day, never zero',

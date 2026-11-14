@@ -11,7 +11,9 @@
  * anyone could start a checkout that upgrades somebody else's account.
  */
 
-import { makeStripe } from './_shared/stripe.js'
+import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
+import { reportError, userHeaders } from './_shared/job.js'
+import { returnOrigin } from './_shared/site.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -25,10 +27,12 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
  * to be billed nothing.
  *
  * Annual exists because the cancel decision then happens once a year instead of
- * twelve times, which is most of what churn actually is in a family app. Two
- * months free is the usual shape and is priced in Stripe, not here — this file
- * only ever names a price id, so the numbers on the plan screen and the numbers
- * on the card can never disagree because of something in this code.
+ * twelve times, which is most of what churn actually is in a family app. The
+ * yearly price is priced in Stripe, not here — this file only ever names a
+ * price id, so the numbers on the plan screen and the numbers on the card can
+ * never disagree because of something in this code. They agree only if each
+ * STRIPE_PRICE_* id is a Stripe price for exactly the amount in TIERS
+ * (src/state/initialState.js): see docs/PAYMENTS.md, "Changing a price".
  */
 const PRICES = {
   month: {
@@ -74,7 +78,7 @@ async function callerBilling(token) {
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/billing_status`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: token, Authorization: `Bearer ${token}` },
+      headers: userHeaders(token),
       body: '{}',
     })
     if (!res.ok) return null
@@ -123,22 +127,19 @@ function trialEndFor(billing, now = Date.now()) {
 }
 
 /**
- * Only our own site. PUBLIC_SITE_URL is the authority when set; otherwise the
- * request's own Origin header is allowed, because that is the browser's word
- * rather than the body's. Anything else is refused outright rather than
- * silently rewritten, so a misconfiguration is visible.
+ * A gift plan the family has (redeem_gift_code), as a Stripe trial end: a
+ * plan chosen while a gift runs, or before one that is waiting to start,
+ * charges nothing until the gift ends, so the gift year is never paid for
+ * twice. Null with no gift. Stripe allows a trial at most two years away;
+ * a gift stacked beyond that is refused (gift_too_long) rather than charged
+ * early.
  */
-function safeOrigin(candidate) {
-  const allowed = (process.env.PUBLIC_SITE_URL || '').replace(/\/+$/, '')
-  if (allowed) return allowed
-  try {
-    const url = new URL(candidate)
-    if (url.protocol !== 'https:' && url.hostname !== 'localhost') return ''
-    return url.origin
-  } catch {
-    return ''
-  }
+function giftEndFor(billing, now = Date.now()) {
+  const until = new Date(billing.gift_until || 0).getTime()
+  if (!billing.gift_tier || !Number.isFinite(until) || until <= now + 2 * 86400000) return null
+  return Math.floor(until / 1000)
 }
+const STRIPE_LONGEST_TRIAL = 730 * 86400
 
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end()
@@ -177,6 +178,14 @@ export default async function handler(req, res) {
   if (!oneOff && billing.has_subscription && ['active', 'trialing', 'past_due'].includes(billing.status)) {
     return res.status(409).json({ error: 'already_subscribed' })
   }
+  // Refunded in full, but the subscription is still live at Stripe and set to
+  // renew (a refund does not cancel it, docs/PAYMENTS.md). The plan screen
+  // says "choose a plan below", and a checkout here started a second
+  // subscription beside it: both then charged the card every period. Once it
+  // is cancelled (ends_at is set) or has ended, a new plan is fine.
+  if (!oneOff && billing.has_subscription && billing.status === 'refunded' && !billing.ends_at) {
+    return res.status(409).json({ error: 'refunded_plan_renews' })
+  }
 
   // Whatever lands in success_url/cancel_url is where Stripe sends the person
   // after paying, on a page carrying RankUp's name. An unvalidated origin from
@@ -184,7 +193,7 @@ export default async function handler(req, res) {
   // The browser's own Origin header, never the request body: a body that named
   // any https site let a checkout page carrying RankUp's name send the payer
   // on to it afterwards.
-  const origin = safeOrigin(req.headers.origin || '')
+  const origin = returnOrigin(req)
   // No origin means no absolute URL to send Stripe back to. Sending a relative
   // one produced a Stripe 400 reported to the parent as "checkout_failed",
   // which says nothing about the actual problem: PUBLIC_SITE_URL is not set.
@@ -196,7 +205,12 @@ export default async function handler(req, res) {
   }
   const stripe = makeStripe(STRIPE_SECRET)
   const customer = billing.has_customer ? await existingCustomer(familyId) : null
-  const trialEnd = oneOff ? undefined : trialEndFor(billing)
+  const giftEnd = oneOff ? null : giftEndFor(billing)
+  if (giftEnd && giftEnd - Math.floor(Date.now() / 1000) > STRIPE_LONGEST_TRIAL) {
+    return res.status(409).json({ error: 'gift_too_long' })
+  }
+  // The later of what is left of the in-app trial and the gift.
+  const trialEnd = oneOff ? undefined : (Math.max(trialEndFor(billing) || 0, giftEnd || 0) || undefined)
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -211,7 +225,8 @@ export default async function handler(req, res) {
       ...(oneOff ? {} : {
         subscription_data: {
           metadata: { family_id: familyId, tier, cycle },
-          // What is left of the in-app trial, if anything. See trialEndFor.
+          // What is left of the in-app trial, or of a gift plan, if
+          // anything. See trialEndFor and giftEndFor.
           ...(trialEnd ? { trial_end: trialEnd } : {}),
         },
       }),
@@ -227,7 +242,7 @@ export default async function handler(req, res) {
   } catch (err) {
     // Logged here, not returned: Stripe's message can describe this
     // deployment's configuration ("No such price ...").
-    console.error('[create-checkout]', err.message)
-    return res.status(502).json({ error: 'checkout_failed' })
+    await reportError('create-checkout', err)
+    return res.status(stripeUnavailable(err) ? 503 : 502).json({ error: stripeUnavailable(err) ? 'stripe_unavailable' : 'checkout_failed' })
   }
 }

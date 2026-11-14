@@ -1,7 +1,7 @@
-import { useEffect, useMemo } from 'react'
+import { Suspense, useEffect, useMemo } from 'react'
 import { useApp, pendingSubmissions } from './state/AppContext.jsx'
 import { activeLockout, guildsAllowedByPlan, overdriveActive } from './state/reducer.js'
-import { useRoute, navigate } from './lib/router.js'
+import { useRoute, navigate, lockedLink } from './lib/router.js'
 import { applyTheme } from './lib/applyTheme.js'
 import { resolveKidTheme } from './data/kidThemes.js'
 import { storyProgress } from './lib/dragonFight.js'
@@ -12,43 +12,65 @@ import ThemeBackground from './components/ThemeBackground.jsx'
 import Atmosphere from './components/Atmosphere.jsx'
 import ParentBackground from './components/ParentBackground.jsx'
 import NavBar from './components/NavBar.jsx'
-import LevelUpOverlay from './components/LevelUpOverlay.jsx'
+import LevelUpOverlay, { StreakMoment } from './components/LevelUpOverlay.jsx'
 import BadgeToast from './components/BadgeToast.jsx'
 
-import Onboarding from './screens/Onboarding.jsx'
 import RoleSwitch from './screens/RoleSwitch.jsx'
 import LockoutScreen from './screens/kid/LockoutScreen.jsx'
-import KidHome from './screens/kid/KidHome.jsx'
-import KidQuests from './screens/kid/KidQuests.jsx'
-import QuestDetail from './screens/kid/QuestDetail.jsx'
-import KidGuild from './screens/kid/KidGuild.jsx'
-import KidShop from './screens/kid/KidShop.jsx'
-import KidMarket from './screens/kid/KidMarket.jsx'
-import KidArcade from './screens/kid/KidArcade.jsx'
-import KidProfile from './screens/kid/KidProfile.jsx'
-import KidStory from './screens/kid/KidStory.jsx'
-import KidDragon from './screens/kid/KidDragon.jsx'
-import KidSchool from './screens/kid/KidSchool.jsx'
-import KidPairing from './screens/kid/KidPairing.jsx'
-import ParentDashboard from './screens/parent/ParentDashboard.jsx'
-import ParentApprovals from './screens/parent/ParentApprovals.jsx'
-import ParentAssign from './screens/parent/ParentAssign.jsx'
-import ParentKids from './screens/parent/ParentKids.jsx'
-import ParentBlueprint from './screens/parent/ParentBlueprint.jsx'
-import ParentOverride from './screens/parent/ParentOverride.jsx'
-import ParentAlliance from './screens/parent/ParentAlliance.jsx'
-import ParentSchool from './screens/parent/ParentSchool.jsx'
-import SchoolPortal from './screens/SchoolPortal.jsx'
-import OperatorSchools from './screens/OperatorSchools.jsx'
 import { guildsEnabled } from './lib/guilds.js'
-import LegalDoc from './screens/LegalDoc.jsx'
-import ParentGuilds from './screens/parent/ParentGuilds.jsx'
-import ParentPairKid from './screens/parent/ParentPairKid.jsx'
-import ParentPlan from './screens/parent/ParentPlan.jsx'
-import ParentSettings from './screens/parent/ParentSettings.jsx'
 import ScreenBoundary from './components/ScreenBoundary.jsx'
 import DemoBanner from './components/DemoBanner.jsx'
+import StorageFullBanner from './components/StorageFullBanner.jsx'
 import { buildDemoFamily } from './lib/demoFamily.js'
+import { lazyLoad } from './lib/lazy.js'
+import { Loading } from './components/ui.jsx'
+
+/*
+ * Every screen downloads when it is first opened, so a phone opening the app
+ * fetches the shared core and the one screen it lands on — the front door, the
+ * parent dashboard or the kid home — and nothing else. The front door is only
+ * ever seen once, so after setup it is never downloaded again at all. See
+ * lib/lazy.js.
+ */
+const Onboarding = lazyLoad(() => import('./screens/Onboarding.jsx'))
+const KidPairing = lazyLoad(() => import('./screens/kid/KidPairing.jsx'))
+const KidHome = lazyLoad(() => import('./screens/kid/KidHome.jsx'))
+const ParentDashboard = lazyLoad(() => import('./screens/parent/ParentDashboard.jsx'))
+const KidQuests = lazyLoad(() => import('./screens/kid/KidQuests.jsx'))
+const QuestDetail = lazyLoad(() => import('./screens/kid/QuestDetail.jsx'))
+const KidGuild = lazyLoad(() => import('./screens/kid/KidGuild.jsx'))
+const KidShop = lazyLoad(() => import('./screens/kid/KidShop.jsx'))
+const KidMarket = lazyLoad(() => import('./screens/kid/KidMarket.jsx'))
+const KidArcade = lazyLoad(() => import('./screens/kid/KidArcade.jsx'))
+const KidProfile = lazyLoad(() => import('./screens/kid/KidProfile.jsx'))
+const KidStory = lazyLoad(() => import('./screens/kid/KidStory.jsx'))
+const KidDragon = lazyLoad(() => import('./screens/kid/KidDragon.jsx'))
+const KidSchool = lazyLoad(() => import('./screens/kid/KidSchool.jsx'))
+const KidLeaderboards = lazyLoad(() => import('./screens/kid/KidLeaderboards.jsx'))
+const ThemeGenesis = lazyLoad(() => import('./screens/kid/ThemeGenesis.jsx'))
+const ParentApprovals = lazyLoad(() => import('./screens/parent/ParentApprovals.jsx'))
+const ParentAssign = lazyLoad(() => import('./screens/parent/ParentAssign.jsx'))
+const ParentKids = lazyLoad(() => import('./screens/parent/ParentKids.jsx'))
+const ParentBlueprint = lazyLoad(() => import('./screens/parent/ParentBlueprint.jsx'))
+const ParentOverride = lazyLoad(() => import('./screens/parent/ParentOverride.jsx'))
+const ParentAlliance = lazyLoad(() => import('./screens/parent/ParentAlliance.jsx'))
+const ParentSchool = lazyLoad(() => import('./screens/parent/ParentSchool.jsx'))
+const SchoolPortal = lazyLoad(() => import('./screens/SchoolPortal.jsx'))
+const OperatorSchools = lazyLoad(() => import('./screens/OperatorSchools.jsx'))
+const SchoolHelp = lazyLoad(() => import('./screens/SchoolHelp.jsx'))
+const LegalDoc = lazyLoad(() => import('./screens/LegalDoc.jsx'))
+const ParentGuilds = lazyLoad(() => import('./screens/parent/ParentGuilds.jsx'))
+const ParentLeaderboards = lazyLoad(() => import('./screens/parent/ParentLeaderboards.jsx'))
+const ParentPairKid = lazyLoad(() => import('./screens/parent/ParentPairKid.jsx'))
+const ParentPlan = lazyLoad(() => import('./screens/parent/ParentPlan.jsx'))
+const ParentSettings = lazyLoad(() => import('./screens/parent/ParentSettings.jsx'))
+const ParentHelp = lazyLoad(() => import('./screens/parent/ParentHelp.jsx'))
+const ParentHistory = lazyLoad(() => import('./screens/parent/ParentHistory.jsx'))
+const ParentMoney = lazyLoad(() => import('./screens/parent/ParentMoney.jsx'))
+const NotFound = lazyLoad(() => import('./screens/NotFound.jsx'))
+const GiveRankUp = lazyLoad(() => import('./screens/GiveRankUp.jsx'))
+const GiftCard = lazyLoad(() => import('./screens/GiftCard.jsx'))
+const ParentRedeem = lazyLoad(() => import('./screens/parent/ParentRedeem.jsx'))
 
 const KID_NAV = [
   { to: '/kid', icon: '🏠', label: 'Home', exact: true },
@@ -106,13 +128,18 @@ export default function App() {
 
   const isParentArea = route.startsWith('/parent')
   const isKidArea = route.startsWith('/kid')
+  // Give RankUp and the printable gift card: public, like the privacy policy,
+  // but never where a child is holding the phone.
+  const isGiftPage = route === '/gift' || route === '/gift/card'
 
   const activeKid = state.kids.find((k) => k.id === state.session.kidId) || state.kids[0] || null
   const kidTheme = useMemo(
     () => (activeKid
       ? resolveKidTheme(activeKid.themeId, levelFromXp(activeKid.xp).level, storyProgress(state, activeKid))
       : null),
-    [activeKid, state.submissions, state.quests],
+    // The children's own themes and the Season themes are themes too: a
+    // change to one (a new colour, a rename) is a change to the look.
+    [activeKid, state.submissions, state.quests, state.kidThemes, state.seasons],
   )
   const parentTheme = useMemo(() => resolveParentTheme(state.family.parentThemeId), [state.family.parentThemeId])
   const pendingTheme = state.pendingPairing
@@ -145,7 +172,19 @@ export default function App() {
 
   // Route guards.
   useEffect(() => {
-    if (route.startsWith('/legal/') || route === '/school' || route === '/operator') return
+    if (route.startsWith('/legal/') || route === '/school' || route === '/school/help' || route === '/operator') return
+    /*
+     * The gift pages. Anybody can open them on a phone that is not set up
+     * (a grandparent buying one). On a phone that is set up, only in Parent
+     * Mode: children never see buying or redeeming, so a child's own phone
+     * goes home, and a shared phone that is not unlocked asks for the PIN.
+     */
+    if (isGiftPage) {
+      if (!state.onboarded) return
+      if (state.device?.role === 'kid') navigate('/kid')
+      else if (!state.session.parentUnlocked) navigate('/switch')
+      return
+    }
     if (!state.onboarded && route !== '/welcome') {
       navigate('/welcome')
       return
@@ -168,22 +207,43 @@ export default function App() {
       navigate('/kid')
       return
     }
-    // Parent Mode always needs the PIN gate, even on a direct link.
+    // Parent Mode always needs the PIN gate, even on a direct link. The
+    // link is kept, so the PIN opens where it was going.
     if (state.onboarded && isParentArea && !state.session.parentUnlocked) {
-      navigate('/switch')
+      navigate(lockedLink(path))
     }
-  }, [state.onboarded, state.session.parentUnlocked, state.device?.role, route, isParentArea])
+  }, [state.onboarded, state.session.parentUnlocked, state.device?.role, route, isParentArea, isGiftPage])
 
   // The privacy policy and terms are readable without an account — a parent
   // deciding whether to sign up should not have to sign up to read them.
   if (route.startsWith('/legal/')) {
+    const which = route === '/legal/terms' ? 'terms' : route === '/legal/privacy' ? 'privacy' : null
     return (
       <>
         <ParentBackground theme={parentTheme} />
-        <LegalDoc which={route.endsWith('terms') ? 'terms' : 'privacy'} />
+        <ScreenBoundary key={route} route={route}>
+          <Suspense fallback={<Loading />}>
+            {which ? <LegalDoc which={which} /> : <NotFound />}
+          </Suspense>
+        </ScreenBoundary>
       </>
     )
   }
+
+  if (isGiftPage && (!state.onboarded || (state.device?.role !== 'kid' && state.session.parentUnlocked))) {
+    const query = path.split('?').slice(1).join('?')
+    return (
+      <>
+        <ParentBackground theme={parentTheme} />
+        <ScreenBoundary key={route} route={route}>
+          <Suspense fallback={<Loading />}>
+            {route === '/gift/card' ? <GiftCard query={query} /> : <GiveRankUp query={query} />}
+          </Suspense>
+        </ScreenBoundary>
+      </>
+    )
+  }
+  if (isGiftPage) return null
 
   // The School League's door for teachers and principals. No family needed:
   // a principal should never be walked through setting up a household.
@@ -194,7 +254,22 @@ export default function App() {
       <>
         <ParentBackground theme={parentTheme} />
         <ScreenBoundary key={route} route={route}>
-          <OperatorSchools />
+          <Suspense fallback={<Loading />}>
+            <OperatorSchools />
+          </Suspense>
+        </ScreenBoundary>
+      </>
+    )
+  }
+
+  if (route === '/school/help') {
+    return (
+      <>
+        <ParentBackground theme={parentTheme} />
+        <ScreenBoundary key={route} route={route}>
+          <Suspense fallback={<Loading />}>
+            <SchoolHelp />
+          </Suspense>
         </ScreenBoundary>
       </>
     )
@@ -206,7 +281,9 @@ export default function App() {
         <ParentBackground theme={parentTheme} />
         <DemoBanner />
         <ScreenBoundary key={route} route={route}>
-          <SchoolPortal />
+          <Suspense fallback={<Loading />}>
+            <SchoolPortal />
+          </Suspense>
         </ScreenBoundary>
       </>
     )
@@ -240,15 +317,21 @@ export default function App() {
       return (
         <>
           <ThemeBackground theme={chosen} />
-          <KidPairing
-            name={state.pendingPairing.kidName}
-            themeId={state.pendingPairing.themeId}
-            onCancel={() => dispatch({ type: 'CANCEL_PAIRING' })}
-          />
+          <Suspense fallback={<Loading />}>
+            <KidPairing
+              name={state.pendingPairing.kidName}
+              themeId={state.pendingPairing.themeId}
+              onCancel={() => dispatch({ type: 'CANCEL_PAIRING' })}
+            />
+          </Suspense>
         </>
       )
     }
-    return <Onboarding />
+    return (
+      <Suspense fallback={<Loading />}>
+        <Onboarding />
+      </Suspense>
+    )
   }
 
   /* A locked-out kid sees nothing but the lockout screen. */
@@ -267,7 +350,9 @@ export default function App() {
     )
   }
 
+  // Chores waiting, and any theme a child has asked a parent about (Theme Genesis).
   const pending = pendingSubmissions(state).length
+    + (state.kidThemes || []).filter((t) => t.useAsk || (t.sendAsk && !t.sentAt)).length
   // The arrival glitch keeps tearing the screen until the child has watched
   // the chapter that explains it.
   const glitch = Boolean(kidTheme?.evolution?.glitchIntro && !activeKid?.storySeen?.[kidTheme.evolution.chapter])
@@ -280,6 +365,7 @@ export default function App() {
       {/* Outside the boundary: if a screen crashes, the way out of the demo
           must still be on screen. */}
       <DemoBanner />
+      <StorageFullBanner />
 
       {/*
         Keyed on the route, so a screen that crashed gets a clean mount when you
@@ -288,7 +374,9 @@ export default function App() {
         screen leaves the rest of the app usable instead of taking it all down.
       */}
       <ScreenBoundary key={route} route={route}>
-        {renderRoute(route, path, activeKid, state)}
+        <Suspense fallback={<Loading />}>
+          {renderRoute(route, path, activeKid, state)}
+        </Suspense>
       </ScreenBoundary>
 
       {isKidArea && (
@@ -312,7 +400,17 @@ export default function App() {
             (state.kids.find((k) => k.id === state.pendingLevelUp.kidId) || activeKid).themeId,
             state.pendingLevelUp.to,
           )}
+          streak={state.pendingStreak?.kidId === state.pendingLevelUp.kidId ? state.pendingStreak : null}
           onClose={() => dispatch({ type: 'CLEAR_LEVEL_UP' })}
+        />
+      )}
+      {/* A streak on its own, in the child's half only: a parent does not need
+          a moment for it. One waiting with a level-up is shown inside that. */}
+      {!state.pendingLevelUp && state.pendingStreak && isKidArea && (
+        <StreakMoment
+          key={`${state.pendingStreak.kidId}-${state.pendingStreak.count}`}
+          streak={state.pendingStreak}
+          onClose={() => dispatch({ type: 'CLEAR_STREAK' })}
         />
       )}
     </>
@@ -323,6 +421,9 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route === '/legal/terms') return <LegalDoc which="terms" />
   if (route === '/legal/privacy') return <LegalDoc which="privacy" />
   if (route === '/switch' || route === '/') return <RoleSwitch />
+  // Set up already: the route guard is moving this phone on from the front
+  // door this very moment, so there is nothing to show for one frame.
+  if (route === '/welcome') return null
 
   if (route === '/kid') return <KidHome />
   if (route === '/kid/quests') return <KidQuests />
@@ -337,6 +438,8 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route.startsWith('/kid/story/')) return <KidStory chapter={route.replace('/kid/story/', '')} />
   if (route === '/kid/dragon') return <KidDragon />
   if (route === '/kid/school') return <KidSchool />
+  if (route === '/kid/leaderboards') return <KidLeaderboards />
+  if (route === '/kid/genesis') return <ThemeGenesis key={fullPath} kidId={activeKid?.id} editId={queryParam(fullPath, 'edit')} area="kid" />
 
   if (route === '/parent') return <ParentDashboard />
   if (route === '/parent/approvals') return <ParentApprovals />
@@ -347,9 +450,20 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route === '/parent/alliance') return <ParentAlliance />
   if (route === '/parent/school') return <ParentSchool />
   if (route === '/parent/guilds') return guildsEnabled() ? <ParentGuilds /> : <ParentDashboard />
+  if (route === '/parent/leaderboards') return <ParentLeaderboards />
   if (route === '/parent/pair') return <ParentPairKid />
   if (route === '/parent/plan') return <ParentPlan />
+  if (route === '/parent/redeem') return <ParentRedeem />
   if (route === '/parent/settings') return <ParentSettings />
+  if (route === '/parent/help') return <ParentHelp />
+  if (route === '/parent/history') return <ParentHistory initialKidId={queryParam(fullPath, 'kid')} />
+  if (route === '/parent/money') return <ParentMoney initialKidId={queryParam(fullPath, 'kid')} />
+  if (route === '/parent/genesis') {
+    return <ThemeGenesis key={fullPath} kidId={queryParam(fullPath, 'kid') || activeKid?.id} editId={queryParam(fullPath, 'edit')} area="parent" />
+  }
 
-  return <RoleSwitch />
+  // A link to somewhere that does not exist (an old bookmark, a typo, a
+  // screen that was renamed) says so, with a way home, rather than quietly
+  // showing a different screen.
+  return <NotFound />
 }

@@ -9,6 +9,7 @@ set client_min_messages to notice;
 
 insert into auth.users (id, email) values
   ('a1111111-1111-1111-1111-111111111111', 'pair-parent@example.com'),
+  ('a1111111-1111-1111-1111-111111111112', 'pair-other-parent@example.com'),
   ('a5555555-5555-5555-5555-555555555555', null),
   ('a7777777-7777-7777-7777-777777777777', null),
   ('a6666666-6666-6666-6666-666666666666', null),
@@ -29,6 +30,11 @@ insert into families (id, name, tier) values
   ('a2222222-0000-0000-0000-000000000001', 'Pairing Family', 'standard');
 insert into parents (user_id, family_id, name) values
   ('a1111111-1111-1111-1111-111111111111', 'a2222222-0000-0000-0000-000000000001', 'Pair Parent');
+-- A second, unrelated family, for "that phone is somebody else's".
+insert into families (id, name, tier) values
+  ('a2222222-0000-0000-0000-000000000002', 'Other Pairing Family', 'standard');
+insert into parents (user_id, family_id, name) values
+  ('a1111111-1111-1111-1111-111111111112', 'a2222222-0000-0000-0000-000000000002', 'Other Parent');
 
 select seed_consent('a2222222-0000-0000-0000-000000000001', 'a1111111-1111-1111-1111-111111111111');
 
@@ -114,7 +120,18 @@ begin
 
   v_res := claim_pairing_code('123456', 'a2222222-0000-0000-0000-000000000001', 'Pairing Family');
   perform ok('a claimed code CANNOT be used twice',
-    (v_res->>'ok')::boolean = false and v_res->>'reason' = 'claimed');
+    (v_res->>'ok')::boolean = false);
+  perform ok('and the family that linked it is told the phone is already theirs',
+    v_res->>'reason' = 'already_linked');
+
+  perform become('a1111111-1111-1111-1111-111111111112');
+  v_res := claim_pairing_code('123456', 'a2222222-0000-0000-0000-000000000002', 'Other Pairing Family');
+  perform ok('another family is told it is linked to a family, and not which',
+    (v_res->>'ok')::boolean = false and v_res->>'reason' = 'claimed'
+    and v_res::text not like '%Pairing Family%');
+  perform become('a1111111-1111-1111-1111-111111111111');
+  perform ok('and the phone stays where it was',
+    (select family_id from kids where id = v_kid) = 'a2222222-0000-0000-0000-000000000001');
 end $$;
 
 -- ---------- expiry and the attempt limit ----------

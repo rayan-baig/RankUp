@@ -25,6 +25,14 @@ grant all on all sequences in schema public to anon, authenticated;
 -- The blanket grant above re-opens the billing columns; lock them again.
 select lock_billing_columns();
 
+-- has_valid_consent is the database's own (the trigger on `kids` asks it) and
+-- is not callable from a browser, so these checks ask it through a helper
+-- only the test role may run.
+create or replace function t07_consent_on_file(p uuid) returns boolean
+language sql security definer set search_path = public as $$ select has_valid_consent(p) $$;
+revoke execute on function t07_consent_on_file(uuid) from public;
+grant execute on function t07_consent_on_file(uuid) to app_user;
+
 set role app_user;
 
 do $$
@@ -33,7 +41,7 @@ begin
   perform become('d1111111-1111-1111-1111-111111111111');
 
   perform ok('a new family has no consent on file',
-    has_valid_consent('d2222222-0000-0000-0000-000000000001') = false);
+    t07_consent_on_file('d2222222-0000-0000-0000-000000000001') = false);
 
   -- The gate.
   begin
@@ -45,17 +53,25 @@ begin
   end;
 
   -- A signature is required, and it has to be a real one.
-  res := record_parental_consent('2026-01', 'payment_card', ' ');
+  res := record_parental_consent('2026-11', 'payment_card', ' ');
   perform ok('an empty signature is refused', res->>'reason' = 'signature_required');
 
   res := record_parental_consent('does-not-exist', 'payment_card', 'Dana Example');
   perform ok('consent to an unpublished notice version is refused',
     res->>'reason' = 'unknown_version');
 
+  -- The notice in force is the one a new parent signs.
+  perform ok('the notice new parents are shown is 2026-11', current_consent_version() = '2026-11');
   res := record_parental_consent('2026-01', 'payment_card', 'Dana Example');
+  perform ok('a NEW consent to the superseded 2026-01 wording is refused, and names the current one',
+    res->>'reason' = 'outdated_version' and res->>'current' = '2026-11');
+  perform ok('and records nothing',
+    not exists (select 1 from parental_consents where family_id = 'd2222222-0000-0000-0000-000000000001'));
+
+  res := record_parental_consent('2026-11', 'payment_card', 'Dana Example');
   perform ok('a parent can give consent', (res->>'ok')::boolean);
   perform ok('and it is now on file',
-    has_valid_consent('d2222222-0000-0000-0000-000000000001'));
+    t07_consent_on_file('d2222222-0000-0000-0000-000000000001'));
 
   insert into kids (family_id, name) values ('d2222222-0000-0000-0000-000000000001', 'Dot');
   perform ok('with consent, a child can be created',
@@ -63,7 +79,69 @@ begin
 
   perform ok('the exact wording agreed to is kept, by version',
     (select version from parental_consents
-      where family_id = 'd2222222-0000-0000-0000-000000000001') = '2026-01');
+      where family_id = 'd2222222-0000-0000-0000-000000000001') = '2026-11');
+end $$;
+
+-- The two published notices: what each says, and that neither can be edited.
+do $$
+declare v_old text; v_new text;
+begin
+  select body into v_old from consent_notices where version = '2026-01';
+  select body into v_new from consent_notices where version = '2026-11';
+  perform ok('2026-01 is still there, word for word as parents signed it (photographs, the AI check)',
+    v_old like '%Photographs your child takes in the app%' and v_old like '%AI photo check%'
+    and v_old like '%Anthropic%');
+  perform ok('2026-11 says RankUp takes no photographs',
+    v_new like '%RankUp never takes, sends or keeps photographs.%');
+  perform ok('2026-11 mentions no AI check, no Anthropic, and no photograph taken in the app',
+    v_new not like '%AI %' and v_new not ilike '%Anthropic%' and v_new not ilike '%photo check%'
+    and v_new not ilike '%takes in the app%' and v_new not ilike '%proof%');
+  perform ok('2026-11 was published after 2026-01',
+    (select published_at from consent_notices where version = '2026-11')
+      >= (select published_at from consent_notices where version = '2026-01'));
+  -- As the owner: a browser cannot reach the table to try (no update policy).
+  set local role postgres;
+  begin
+    update consent_notices set body = 'rewritten' where version = '2026-01';
+    raise exception 'FAIL a published notice was rewritten';
+  exception when others then
+    if sqlerrm like 'FAIL%' then raise; end if;
+    raise notice '  PASS a published notice CANNOT be rewritten, even by the owner (%)', left(sqlerrm, 40);
+  end;
+  perform ok('so 2026-01 is unchanged', (select body from consent_notices where version = '2026-01') = v_old);
+end $$;
+reset role;
+-- Applying consent.sql again (the upgrade path) changes neither notice.
+\ir ../consent.sql
+set role app_user;
+do $$
+begin
+  perform ok('re-applying the schema leaves 2026-01 and 2026-11 as they were, and 2026-11 current',
+    (select count(*) from consent_notices) = 2 and current_consent_version() = '2026-11'
+    and (select body from consent_notices where version = '2026-01') like '%AI photo check%');
+end $$;
+
+-- A family that signed 2026-01 before 2026-11 was published. Removing
+-- photographs collects less, so its consent stands: nobody is asked again.
+reset role;
+insert into auth.users (id, email) values ('d8888888-8888-8888-8888-888888888888', 'signed-old@example.com');
+insert into families (id, name) values ('d8888888-0000-0000-0000-0000000000f1', 'Signed The Old Notice');
+insert into parents (user_id, family_id, name)
+values ('d8888888-8888-8888-8888-888888888888', 'd8888888-0000-0000-0000-0000000000f1', 'Early');
+insert into parental_consents (family_id, parent_id, version, method, signed_name, granted_at)
+select 'd8888888-0000-0000-0000-0000000000f1', id, '2026-01', 'payment_card', 'Early Parent', now() - interval '200 days'
+  from parents where user_id = 'd8888888-8888-8888-8888-888888888888';
+set role app_user;
+do $$
+begin
+  perform become('d8888888-8888-8888-8888-888888888888');
+  perform ok('a consent given to 2026-01 is still valid after 2026-11 is published',
+    t07_consent_on_file('d8888888-0000-0000-0000-0000000000f1'));
+  insert into kids (family_id, name) values ('d8888888-0000-0000-0000-0000000000f1', 'Early Kid');
+  perform ok('and that family can still add a child without consenting again',
+    exists (select 1 from kids where name = 'Early Kid'));
+  perform ok('its record still says 2026-01, the words that parent actually read',
+    (select version from parental_consents where family_id = 'd8888888-0000-0000-0000-0000000000f1') = '2026-01');
 end $$;
 
 -- Consent belongs to one family and does not cover another.
@@ -71,7 +149,7 @@ do $$
 begin
   perform become('d5555555-5555-5555-5555-555555555555');
   perform ok('one family''s consent does not cover another',
-    has_valid_consent('d3333333-0000-0000-0000-000000000002') = false);
+    t07_consent_on_file('d3333333-0000-0000-0000-000000000002') = false);
 
   begin
     insert into kids (family_id, name) values ('d3333333-0000-0000-0000-000000000002', 'Nope');
@@ -82,6 +160,15 @@ begin
   end;
 end $$;
 
+-- What each child spent: one redemption here, one in the family that signed
+-- the old notice. The export must carry this family's and only this family's.
+reset role;
+insert into redemptions (family_id, kid_id, name, cost, status)
+select 'd2222222-0000-0000-0000-000000000001', id, 'Pick the film', 50, 'given' from kids where name = 'Dot';
+insert into redemptions (family_id, kid_id, name, cost)
+select 'd8888888-0000-0000-0000-0000000000f1', id, 'Someone else''s treat', 40 from kids where name = 'Early Kid';
+set role app_user;
+
 -- Export and deletion: the rights a parent actually has.
 do $$
 declare dump jsonb; res jsonb;
@@ -91,10 +178,15 @@ begin
   dump := export_family_data();
   perform ok('a parent can download everything held about their family',
     jsonb_array_length(dump->'children') = 1 and dump->'family'->>'name' = 'Consent Family');
+  perform ok('the export says what each child spent their currency on',
+    jsonb_array_length(dump->'redemptions') = 1 and dump->'redemptions'->0->>'name' = 'Pick the film');
+  perform ok('and never what another family''s child spent',
+    (dump->'redemptions')::text not like '%Someone else%');
   perform ok('the export records what was consented to',
     jsonb_array_length(dump->'consents') = 1);
-  perform ok('the export references photos rather than inlining them',
-    not (dump->'submissions')::text like '%photo_data%');
+  perform ok('the export holds no photo or photo-check field, because there are none',
+    (dump->'submissions')::text !~ '(photo|ai_verdict|ai_score|ai_report|capture_source)'
+    and (dump->'family')::text !~ 'ai_checks');
 
   perform become('d5555555-5555-5555-5555-555555555555');
   dump := export_family_data();
@@ -108,7 +200,7 @@ begin
   perform ok('the child is really gone',
     not exists (select 1 from kids where name = 'Dot'));
   perform ok('and consent is no longer on file',
-    has_valid_consent('d2222222-0000-0000-0000-000000000001') = false);
+    t07_consent_on_file('d2222222-0000-0000-0000-000000000001') = false);
 end $$;
 
 -- Deleting the account.
@@ -159,11 +251,8 @@ begin
   set local role app_user;
 end $$;
 
--- Photos.
---
--- The rule is now blunt: a reviewed photo is destroyed at the moment of the
--- decision. Nothing is retained, so there is no library of photographs of
--- children's bedrooms to lose.
+-- No photos. A submission carries none, so deciding one has none to destroy,
+-- and approving and sending back simply work.
 do $$
 declare v_sub uuid := gen_random_uuid(); v_stale uuid := gen_random_uuid();
 begin
@@ -175,52 +264,27 @@ begin
   insert into quests (id, family_id, kid_id, title, xp) values
     ('d6666666-0000-0000-0000-000000000001', 'd2222222-0000-0000-0000-000000000001',
      'd4444444-0000-0000-0000-000000000001', 'Old chore', 10);
-  insert into submissions (id, family_id, quest_id, kid_id, status, photo_data)
+  insert into submissions (id, family_id, quest_id, kid_id, status)
   values (v_sub, 'd2222222-0000-0000-0000-000000000001', 'd6666666-0000-0000-0000-000000000001',
-          'd4444444-0000-0000-0000-000000000001', 'pending', 'base64photo');
-
-  perform ok('a photo waiting for review is still there',
-    (select photo_data from submissions where id = v_sub) is not null);
+          'd4444444-0000-0000-0000-000000000001', 'pending');
   set local role app_user;
 
-  -- Approving destroys it immediately.
   perform become('d1111111-1111-1111-1111-111111111111');
   perform approve_submission(v_sub, 10, 2, 'nice');
-  perform ok('APPROVING destroys the photo on the spot',
-    (select photo_data from submissions where id = v_sub) is null);
-  perform ok('and records when it went',
-    (select photo_deleted_at from submissions where id = v_sub) is not null);
+  perform ok('approving a submission works with no photo columns at all',
+    (select status from submissions where id = v_sub) = 'approved');
 
-  -- So does sending it back.
   set local role postgres;
-  insert into quests (id, family_id, kid_id, title, xp) values
-    ('d6666666-0000-0000-0000-000000000002', 'd2222222-0000-0000-0000-000000000001',
-     'd4444444-0000-0000-0000-000000000001', 'Another chore', 10);
-  insert into submissions (id, family_id, quest_id, kid_id, status, photo_data)
-  values (v_stale, 'd2222222-0000-0000-0000-000000000001', 'd6666666-0000-0000-0000-000000000002',
-          'd4444444-0000-0000-0000-000000000001', 'pending', 'base64photo');
+  insert into submissions (id, family_id, quest_id, kid_id, status)
+  values (v_stale, 'd2222222-0000-0000-0000-000000000001', 'd6666666-0000-0000-0000-000000000001',
+          'd4444444-0000-0000-0000-000000000001', 'pending');
   set local role app_user;
 
   perform reject_submission(v_stale, 'not quite');
-  perform ok('SENDING BACK destroys the photo too',
-    (select photo_data from submissions where id = v_stale) is null);
-end $$;
-
--- The backstop, for photos nobody ever got round to reviewing.
-do $$
-declare v_forgotten uuid := gen_random_uuid();
-begin
-  set local role postgres;
-  insert into submissions (id, family_id, quest_id, kid_id, status, photo_data, submitted_at)
-  values (v_forgotten, 'd2222222-0000-0000-0000-000000000001',
-          'd6666666-0000-0000-0000-000000000001', 'd4444444-0000-0000-0000-000000000001',
-          'pending', 'forgotten photo', now() - interval '30 days');
-
-  perform ok('a photo nobody ever reviewed is swept up eventually',
-    purge_stale_photos(14) = 1);
-  perform ok('and a recent one waiting for review is left alone',
-    purge_stale_photos(14) = 0);
-  set local role app_user;
+  perform ok('and so does sending one back',
+    (select status from submissions where id = v_stale) = 'rejected');
 end $$;
 
 reset role;
+
+drop function t07_consent_on_file(uuid);

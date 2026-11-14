@@ -1,9 +1,10 @@
 -- ---------------------------------------------------------------------------
 -- Referrals, and the farming they have to survive.
 --
--- The whole design rests on one choice — the reward lands on a first APPROVED
--- CHORE, not on a signup — so most of what is checked here is the set of
--- things a determined person would try if it paid on signup instead.
+-- Nothing is paid for a signup: the new family's trial lands on a first
+-- APPROVED CHORE, and the inviting family's free month on the new family's
+-- first PAID INVOICE (54-referral-rewards.sql). Most of what is checked here is
+-- the set of things a determined person would try if it paid on signup.
 -- ---------------------------------------------------------------------------
 
 \set ON_ERROR_STOP on
@@ -120,7 +121,7 @@ begin
       where invited_family_id = '4a222222-0000-0000-0000-000000000002'));
 end $$;
 
--- ---------- the first approved chore pays both sides ----------
+-- ---------- the first approved chore gives the new family its trial ----------
 set role app_user;
 do $$
 begin
@@ -132,27 +133,29 @@ set role postgres;
 do $$
 declare ends_first timestamptz;
 begin
-  perform ok('a finished chore pays the family who invited them',
-    effective_tier('4a222222-0000-0000-0000-000000000001') = 'standard');
-  perform ok('and the family who arrived',
+  perform ok('a finished chore gives the family who arrived its trial',
     effective_tier('4a222222-0000-0000-0000-000000000002') = 'standard');
   perform ok('for the month it promised',
-    (select trial_ends_at from families where id = '4a222222-0000-0000-0000-000000000001')
+    (select trial_ends_at from families where id = '4a222222-0000-0000-0000-000000000002')
       > now() + interval '29 days');
-  perform ok('the referral is marked paid',
+  -- The family who invited is paid when this one pays, not for a chore:
+  -- 54-referral-rewards.sql.
+  perform ok('the family who invited gets nothing for a chore (its free month comes when they pay)',
+    effective_tier('4a222222-0000-0000-0000-000000000001') = 'starter');
+  perform ok('the referral is marked qualified',
     (select qualified_at is not null from referrals
       where invited_family_id = '4a222222-0000-0000-0000-000000000002'));
 
   -- Idempotence. A household doing chores every day must not mint a month
   -- every day.
   select trial_ends_at into ends_first
-    from families where id = '4a222222-0000-0000-0000-000000000001';
+    from families where id = '4a222222-0000-0000-0000-000000000002';
   set local role app_user;
   perform become('4a111111-1111-1111-1111-111111111112');
   perform approve_submission('4a555555-0000-0000-0000-000000000002', 20, 4, 'again');
   set local role postgres;
-  perform ok('the second chore pays nothing more',
-    (select trial_ends_at from families where id = '4a222222-0000-0000-0000-000000000001')
+  perform ok('the second chore gives nothing more',
+    (select trial_ends_at from families where id = '4a222222-0000-0000-0000-000000000002')
       = ends_first);
 end $$;
 
@@ -163,7 +166,7 @@ begin
   perform become('4a111111-1111-1111-1111-111111111111');
 
   perform ok('a parent can see what their invites have come to',
-    (my_referrals()->>'qualified')::int = 1);
+    (my_referrals()->>'qualified')::int = 1 and (my_referrals()->>'claimed')::int = 1);
   perform ok('and their own code is in it',
     length(my_referrals()->>'code') = 6);
 

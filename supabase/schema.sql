@@ -27,14 +27,13 @@ create table if not exists families (
   -- Flash Tickets the family has left. Written only by the Stripe webhook and
   -- by buy_market_skin spending one; never by a device.
   flash_tickets   int not null default 0 check (flash_tickets >= 0),
-  -- AI photo checks used this month. Only claim_photo_check() moves these.
-  ai_checks_month date,
-  ai_checks_used  int not null default 0,
   -- Subscription state is written by the Stripe webhook, never by the browser.
   stripe_customer_id      text,
   stripe_subscription_id  text,
   subscription_status     text not null default 'none'
-                          check (subscription_status in ('none','trialing','active','past_due','canceled')),
+                          -- The full list, and why it is the full list: billing.sql.
+                          check (subscription_status in ('none','trialing','active','past_due','canceled','unpaid',
+                                                         'incomplete','incomplete_expired','paused','refunded','unknown')),
   subscription_renews_at  timestamptz,
   /*
    * A trial the family has not paid for.
@@ -196,12 +195,6 @@ create table if not exists submissions (
   quest_id      uuid not null references quests(id) on delete cascade,
   kid_id        uuid not null references kids(id) on delete cascade,
 
-  -- Path into the `proof-photos` Storage bucket, not the image itself.
-  photo_path      text,
-  photo_hash      text,        -- perceptual fingerprint, for duplicate detection
-  capture_source  text not null default 'live-camera'
-                  check (capture_source in ('live-camera','upload','none')),
-
   note          text not null default '',
   -- A parent's one-tap reaction on approval. A fixed list rather than free
   -- text: a child reads this, so it must not be a field anything can write a
@@ -211,11 +204,6 @@ create table if not exists submissions (
   test_score    int check (test_score between 0 and 100),
   elapsed_ms    int,
   on_time       boolean not null default true,
-
-  -- The advisory photo report. Advisory only: it never decides anything.
-  ai_verdict    text check (ai_verdict in ('looks_good','needs_review','suspicious')),
-  ai_score      int check (ai_score between 0 and 100),
-  ai_report     jsonb,
 
   status        text not null default 'pending'
                 check (status in ('pending','approved','rejected')),
@@ -228,8 +216,47 @@ create table if not exists submissions (
   submitted_at  timestamptz not null default now()
 );
 
-create index if not exists submissions_family_pending_idx on submissions(family_id, status);
-create index if not exists submissions_kid_hash_idx on submissions(kid_id, photo_hash);
+/*
+ * The photo and photo-check columns, from when RankUp took photos. It takes
+ * none now, and nothing reads or writes these. Every phone sends a submission
+ * through submit_quest, whose payload is a JSON object: an older phone that
+ * still puts a photo or a capture source in it has those keys ignored, so
+ * dropping the columns breaks nobody. No device writes a submission row
+ * directly (FUNCTION_OWNED in src/lib/sync/shadow.js).
+ *
+ * Safe to re-run: `if exists` does nothing once they are gone.
+ */
+alter table submissions drop column if exists photo_data;
+alter table submissions drop column if exists photo_deleted_at;
+alter table submissions drop column if exists photo_path;
+alter table submissions drop column if exists photo_hash;
+alter table submissions drop column if exists capture_source;
+alter table submissions drop column if exists ai_verdict;
+alter table submissions drop column if exists ai_score;
+alter table submissions drop column if exists ai_report;
+
+/*
+ * Measured on a family with 60,000 chores among 3,000 other families
+ * (supabase/test/36-hot-queries.sql keeps them honest):
+ *
+ *   (family_id, status, decided_at)  a month or a week of a family's approvals
+ *       (the Alliance score, the weekly digest) read ~300 rows, not every
+ *       approval the family ever had. It also serves "what is waiting".
+ *   (kid_id, status, decided_at)     the same for one child: the School
+ *       League's points, worked out for every child in every school whenever
+ *       a league is shown.
+ *   (quest_id)                       "is this chore already waiting?" on every
+ *       submit, which otherwise read every pending chore in the database; and
+ *       deleting a chore, whose submissions went with it by a full scan.
+ *
+ * They replace (family_id, status), which the first now covers, and
+ * (kid_id, photo_hash), for a photo RankUp no longer takes.
+ */
+create index if not exists submissions_family_decided_idx on submissions(family_id, status, decided_at);
+create index if not exists submissions_kid_decided_idx on submissions(kid_id, status, decided_at);
+create index if not exists submissions_quest_idx on submissions(quest_id);
+drop index if exists submissions_family_pending_idx;
+drop index if exists submissions_kid_hash_idx;
 
 -- ---------------------------------------------------------------------------
 -- Rewards, notes, goals
@@ -376,7 +403,16 @@ create table if not exists events (
 );
 
 create index if not exists events_family_day_idx on events(family_id, day);
-create index if not exists events_kid_type_idx on events(kid_id, type);
+/*
+ * One child's events of one kind, by day: a guild's roster sums each member's
+ * accepted chores over the last seven days, for every member, every time a
+ * child opens it. (kid_id, type) alone read every such event the child had in
+ * the 90 days retention keeps, about 115 for a child doing a chore or two a
+ * day, to use 8; with the day in the index it reads the 8. It serves
+ * everything (kid_id, type) did, so that one goes. docs/LOAD-TEST.md.
+ */
+create index if not exists events_kid_type_day_idx on events(kid_id, type, day);
+drop index if exists events_kid_type_idx;
 
 -- ---------------------------------------------------------------------------
 -- Row Level Security
@@ -385,6 +421,14 @@ create index if not exists events_kid_type_idx on events(kid_id, type);
 -- browser, so a determined person can send any query they like. These policies
 -- are what make that safe.
 -- ---------------------------------------------------------------------------
+--
+-- Every helper in a policy below is written `(select current_family_id())`
+-- rather than `current_family_id()`. The meaning is identical; the cost is
+-- not. Bare, Postgres may call the function once for every row it looks at:
+-- a phone's first pull of a busy family read 750 chores and asked "is this a
+-- parent?" 750 times. In a subselect it is asked once per query. (Supabase
+-- gives the same advice for auth.uid() in policies.) Measured in
+-- docs/LOAD-TEST.md; supabase/test/45-load.sql holds every policy here to it.
 
 -- Which family does the logged-in user belong to?
 /**
@@ -404,39 +448,70 @@ create index if not exists events_kid_type_idx on events(kid_id, type);
  * exactly one function — supporter_view() in coparents.sql — which returns
  * the handful of things they are meant to see and nothing else.
  */
+/*
+ * Written in PL/pgSQL, not SQL, for speed alone; what it returns is unchanged.
+ * A security definer SQL function is never inlined, and Postgres plans its
+ * body afresh at every place a statement calls it. A sync pull calls it in
+ * ten places, so every pull planned this one line ten times. PL/pgSQL keeps
+ * the plan for the life of the connection. Measured
+ * under load (docs/LOAD-TEST.md); is_parent() and current_kid_id() below
+ * changed for the same reason.
+ */
 create or replace function current_family_id()
-returns uuid language sql stable security definer set search_path = public as $$
-  select coalesce(
+returns uuid language plpgsql stable security definer set search_path = public as $$
+begin
+  return coalesce(
     (select family_id from parents
       where user_id = auth.uid() and role = 'parent'),
     (select family_id from kids    where user_id = auth.uid())
   );
-$$;
+end $$;
+
+/*
+ * A gift plan: a year of Standard or Elite Pass that somebody else bought for
+ * this family and a parent redeemed with its code (billing.sql,
+ * redeem_gift_code). Kept beside `tier` for the same reason as the trial:
+ * `tier` is Stripe's, written by the webhook alone, and a gift ending has to
+ * leave whatever the family pays for sitting there untouched.
+ *
+ * gift_starts_at is later than now only when the gift was redeemed while a
+ * paid plan was still running to the end it was cancelled at: the gift year
+ * starts the day the paid one stops, so no day is paid for twice. Written by
+ * redeem_gift_code and nothing else; the column grants (lock_billing_columns)
+ * leave a browser no way to touch them.
+ */
+alter table families add column if not exists gift_tier text check (gift_tier in ('standard','elite'));
+alter table families add column if not exists gift_starts_at timestamptz;
+alter table families add column if not exists gift_until timestamptz;
 
 /**
  * What this family is actually entitled to, right now.
  *
- * The better of what they pay for and an unexpired trial. Every gate in this
- * schema asks this rather than reading `tier` directly, so a trial is real
- * everywhere — the AI photo check, a second child, guilds, alliances — rather
- * than being a flag some screens remember to honour and others do not.
+ * The best of what they pay for, an unexpired trial and a running gift plan.
+ * Every gate in this schema asks this rather than reading `tier` directly, so
+ * a trial or a gift is real everywhere (a second child, guilds, alliances,
+ * the XP boost) rather than being a flag some screens remember to honour and
+ * others do not.
  *
- * Immutable in the ordering sense: starter < standard < elite, and a trial can
- * only ever raise. A family on Elite who is handed a Standard trial by a
- * referral keeps Elite.
+ * Immutable in the ordering sense: starter < standard < elite, and a trial or
+ * a gift can only ever raise. A family on Elite who is handed a Standard trial
+ * by a referral keeps Elite. Mirrored by effectiveTier in src/state/reducer.js
+ * (tests/trials.mjs runs the two against each other).
  */
 create or replace function effective_tier(p_family_id uuid)
 returns text language sql stable security definer set search_path = public as $$
-  select case
-    when f.trial_tier is null or f.trial_ends_at is null or f.trial_ends_at <= now()
-      then f.tier
-    -- Rank both and keep the higher. Comparing the words themselves would put
-    -- 'elite' below 'standard' alphabetically and quietly demote people.
-    when (case f.trial_tier when 'elite' then 2 when 'standard' then 1 else 0 end)
-       > (case f.tier       when 'elite' then 2 when 'standard' then 1 else 0 end)
-      then f.trial_tier
-    else f.tier
-  end
+  -- Rank each and keep the highest. Comparing the words themselves would put
+  -- 'elite' below 'standard' alphabetically and quietly demote people.
+  select case greatest(
+           case f.tier when 'elite' then 2 when 'standard' then 1 else 0 end,
+           case when f.trial_tier is not null and f.trial_ends_at > now()
+                then case f.trial_tier when 'elite' then 2 when 'standard' then 1 else 0 end
+                else 0 end,
+           case when f.gift_tier is not null and f.gift_until > now()
+                     and coalesce(f.gift_starts_at, '-infinity'::timestamptz) <= now()
+                then case f.gift_tier when 'elite' then 2 when 'standard' then 1 else 0 end
+                else 0 end)
+         when 2 then 'elite' when 1 then 'standard' else 'starter' end
   from families f where f.id = p_family_id;
 $$;
 
@@ -448,7 +523,7 @@ $$;
 -- Nothing needs the grant: every caller is another function in this schema
 -- running as the owner, and the app works its own entitlement out from the
 -- family row it already has.
-revoke execute on function effective_tier(uuid) from public;
+revoke execute on function effective_tier(uuid) from public, anon, authenticated;
 
 /**
  * Start a trial, without touching what they pay for.
@@ -481,17 +556,54 @@ end $$;
 -- Not granted to anyone signed in: a browser asking for its own free month is
 -- the whole thing this must not allow. Trials are started by create_family,
 -- by a referral and by a guild invite — all of them server-side.
-revoke execute on function grant_trial(uuid, text, int) from public;
+revoke execute on function grant_trial(uuid, text, int) from public, anon, authenticated;
 
 create or replace function is_parent()
-returns boolean language sql stable security definer set search_path = public as $$
-  select exists (select 1 from parents
+returns boolean language plpgsql stable security definer set search_path = public as $$
+begin
+  return exists (select 1 from parents
                   where user_id = auth.uid() and role = 'parent');
-$$;
+end $$;
 
 create or replace function current_kid_id()
-returns uuid language sql stable security definer set search_path = public as $$
-  select id from kids where user_id = auth.uid();
+returns uuid language plpgsql stable security definer set search_path = public as $$
+begin
+  return (select id from kids where user_id = auth.uid());
+end $$;
+
+/*
+ * Is this a time zone Postgres can convert to?
+ *
+ * Asking pg_timezone_names reads the whole time zone database from disk, about
+ * 9 ms every time. family_week_digest asked it once per family, so the Sunday
+ * digest job spent 9.5 seconds on 1,000 families before it sent anything
+ * (docs/LOAD-TEST.md). Trying the conversion costs microseconds and accepts
+ * exactly what every caller then does with the zone.
+ */
+create or replace function is_time_zone(p_tz text)
+returns boolean language plpgsql stable set search_path = public as $$
+begin
+  if nullif(trim(p_tz), '') is null then return false; end if;
+  perform now() at time zone p_tz;
+  return true;
+exception when others then
+  return false;
+end $$;
+
+/*
+ * Is this child one of the caller's family's? (No child at all also passes.)
+ *
+ * The write policies below checked the row's family and nothing else, so a
+ * parent could write a chore, note or penalty into their OWN family naming
+ * ANOTHER family's child — or move one of their own rows onto that child.
+ * Everything that reads by child (School League points, a guild's weekly XP,
+ * the child's history) then counted it as that child's. Asked of every row a
+ * browser writes that names a child.
+ */
+create or replace function kid_in_caller_family(p_kid_id uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select p_kid_id is null
+      or exists (select 1 from kids where id = p_kid_id and family_id = current_family_id());
 $$;
 
 alter table families        enable row level security;
@@ -516,15 +628,17 @@ alter table events          enable row level security;
 -- the subscription columns, which only the Stripe webhook (service role) writes.
 drop policy if exists family_read on families;
 create policy family_read on families
-  for select using (id = current_family_id());
+  for select using (id = (select current_family_id()));
 drop policy if exists family_update on families;
 create policy family_update on families
-  for update using (id = current_family_id() and is_parent());
+  for update using (id = (select current_family_id()) and (select is_parent()));
 
 drop policy if exists parents_read on parents;
 create policy parents_read on parents
   -- Parents only. A child's device has no use for the adults' rows, which
   -- hold their email addresses.
+  -- Left calling the helpers bare (see above): in a subselect here they made
+  -- parents_write's own subselects on this table recurse.
   for select using (family_id = current_family_id() and is_parent());
 /*
  * An adult may edit their own row, and nobody else's.
@@ -551,31 +665,31 @@ drop policy if exists kids_read on kids;
 create policy kids_read on kids
   -- A parent sees every child; a child sees only themselves. A brother's row
   -- holds his accessibility notes, which are for his parents and nobody else.
-  for select using (family_id = current_family_id() and (is_parent() or id = current_kid_id()));
+  for select using (family_id = (select current_family_id()) and ((select is_parent()) or id = (select current_kid_id())));
 drop policy if exists kids_parent_write on kids;
 create policy kids_parent_write on kids
-  for all using (family_id = current_family_id() and is_parent())
-  with check (family_id = current_family_id() and is_parent());
+  for all using (family_id = (select current_family_id()) and (select is_parent()))
+  with check (family_id = (select current_family_id()) and (select is_parent()));
 
 -- Quests: a kid can read their own; only a parent can create or edit one.
 -- This is the rule that keeps the game honest — a kid cannot raise a quest's XP.
 drop policy if exists quests_read on quests;
 create policy quests_read on quests
   for select using (
-    family_id = current_family_id()
-    and (is_parent() or kid_id = current_kid_id())
+    family_id = (select current_family_id())
+    and ((select is_parent()) or kid_id = (select current_kid_id()))
   );
 drop policy if exists quests_parent_write on quests;
 create policy quests_parent_write on quests
-  for all using (family_id = current_family_id() and is_parent())
-  with check (family_id = current_family_id() and is_parent());
+  for all using (family_id = (select current_family_id()) and (select is_parent()))
+  with check (family_id = (select current_family_id()) and (select is_parent()) and kid_in_caller_family(kid_id));
 
 -- Submissions: a kid creates their own; only a parent decides one.
 drop policy if exists submissions_read on submissions;
 create policy submissions_read on submissions
   for select using (
-    family_id = current_family_id()
-    and (is_parent() or kid_id = current_kid_id())
+    family_id = (select current_family_id())
+    and ((select is_parent()) or kid_id = (select current_kid_id()))
   );
 -- No insert policy: a submission is made by submit_quest. A direct insert
 -- named any quest, including a sibling's or another family's, and was paid
@@ -583,31 +697,33 @@ create policy submissions_read on submissions
 drop policy if exists submissions_kid_insert on submissions;
 drop policy if exists submissions_parent_update on submissions;
 create policy submissions_parent_update on submissions
-  for update using (family_id = current_family_id() and is_parent());
+  for update using (family_id = (select current_family_id()) and (select is_parent()))
+  with check (family_id = (select current_family_id()) and (select is_parent()) and kid_in_caller_family(kid_id));
 
 drop policy if exists rewards_read on rewards;
 create policy rewards_read on rewards
-  for select using (family_id = current_family_id());
+  for select using (family_id = (select current_family_id()));
 drop policy if exists rewards_parent_write on rewards;
 create policy rewards_parent_write on rewards
-  for all using (family_id = current_family_id() and is_parent())
-  with check (family_id = current_family_id() and is_parent());
+  for all using (family_id = (select current_family_id()) and (select is_parent()))
+  with check (family_id = (select current_family_id()) and (select is_parent()));
 
 drop policy if exists redemptions_read on redemptions;
 create policy redemptions_read on redemptions
-  for select using (family_id = current_family_id());
+  for select using (family_id = (select current_family_id()));
 -- No insert policy: a redemption is made by redeem_reward, which charges for
 -- it. A direct insert let a child take any reward at a cost of nothing.
 drop policy if exists redemptions_kid_insert on redemptions;
 drop policy if exists redemptions_parent_update on redemptions;
 create policy redemptions_parent_update on redemptions
-  for update using (family_id = current_family_id() and is_parent());
+  for update using (family_id = (select current_family_id()) and (select is_parent()))
+  with check (family_id = (select current_family_id()) and (select is_parent()) and kid_in_caller_family(kid_id));
 
 drop policy if exists notes_read on notes;
 create policy notes_read on notes
   for select using (
-    family_id = current_family_id()
-    and (is_parent() or kid_id = current_kid_id())
+    family_id = (select current_family_id())
+    and ((select is_parent()) or kid_id = (select current_kid_id()))
   );
 -- A parent writes as a parent; a child writes only as themselves. The check
 -- used to be the family alone, so a child could post "you are grounded - Mum"
@@ -615,33 +731,36 @@ create policy notes_read on notes
 drop policy if exists notes_insert on notes;
 create policy notes_insert on notes
   for insert with check (
-    family_id = current_family_id()
-    and ((is_parent() and author = 'parent')
-         or (author = 'kid' and kid_id = current_kid_id())));
+    family_id = (select current_family_id())
+    and kid_in_caller_family(kid_id)
+    and (((select is_parent()) and author = 'parent')
+         or (author = 'kid' and kid_id = (select current_kid_id()))));
 drop policy if exists notes_update on notes;
 create policy notes_update on notes
-  for update using (family_id = current_family_id() and (is_parent() or kid_id = current_kid_id()));
+  for update using (family_id = (select current_family_id()) and ((select is_parent()) or kid_id = (select current_kid_id())))
+  with check (family_id = (select current_family_id()) and ((select is_parent()) or kid_id = (select current_kid_id()))
+              and kid_in_caller_family(kid_id));
 
 drop policy if exists goals_read on family_goals;
 create policy goals_read on family_goals
-  for select using (family_id = current_family_id());
+  for select using (family_id = (select current_family_id()));
 drop policy if exists goals_parent_write on family_goals;
 create policy goals_parent_write on family_goals
-  for all using (family_id = current_family_id() and is_parent())
-  with check (family_id = current_family_id() and is_parent());
+  for all using (family_id = (select current_family_id()) and (select is_parent()))
+  with check (family_id = (select current_family_id()) and (select is_parent()));
 
 -- Overrides: a kid can see one applied to them (they are told the reason), but
 -- obviously cannot create or lift one.
 drop policy if exists overrides_read on overrides;
 create policy overrides_read on overrides
   for select using (
-    family_id = current_family_id()
-    and (is_parent() or kid_id = current_kid_id())
+    family_id = (select current_family_id())
+    and ((select is_parent()) or kid_id = (select current_kid_id()))
   );
 drop policy if exists overrides_parent_write on overrides;
 create policy overrides_parent_write on overrides
-  for all using (family_id = current_family_id() and is_parent())
-  with check (family_id = current_family_id() and is_parent());
+  for all using (family_id = (select current_family_id()) and (select is_parent()))
+  with check (family_id = (select current_family_id()) and (select is_parent()) and kid_in_caller_family(kid_id));
 
 -- Guilds: visible only to members of that guild.
 drop policy if exists guilds_read on guilds;
@@ -739,7 +858,7 @@ drop policy if exists events_insert on events;
 create or replace function credit_allowance(p_submission_id uuid)
 returns void language sql immutable as $$ select $$;
 
-revoke execute on function credit_allowance(uuid) from public;
+revoke execute on function credit_allowance(uuid) from public, anon, authenticated;
 
 /*
  * A stub, replaced by the real thing in referrals.sql.
@@ -752,7 +871,7 @@ revoke execute on function credit_allowance(uuid) from public;
 create or replace function qualify_referral(p_family_id uuid)
 returns void language sql immutable as $$ select $$;
 
-revoke execute on function qualify_referral(uuid) from public;
+revoke execute on function qualify_referral(uuid) from public, anon, authenticated;
 
 /**
  * What an approved chore is actually worth.
@@ -774,7 +893,10 @@ revoke execute on function qualify_referral(uuid) from public;
  * numeric rounds half away from zero, which is what Math.round does — double
  * precision would round half to even and the two would drift apart on .5.
  */
-create or replace function award_for_submission(p_submission_id uuid)
+-- Gained p_tz, so it can tell whether the streak is still alive on the
+-- family's day. The one-argument version has to go or both would exist.
+drop function if exists award_for_submission(uuid);
+create or replace function award_for_submission(p_submission_id uuid, p_tz text default null)
 returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 declare
@@ -787,6 +909,7 @@ declare
   v_coins  int;
   v_streak numeric;
   v_bonus  int;
+  v_base_xp int;
 begin
   select * into v_sub from submissions where id = p_submission_id;
   if not found then return null; end if;
@@ -806,13 +929,30 @@ begin
   end if;
 
   -- Streaks add up to +25%, and it is the streak BEFORE this approval bumps it.
+  -- A streak that has lapsed (nothing approved today or yesterday) is not a
+  -- streak: the count only resets at this approval, and paying a bonus for
+  -- it rewarded the week off. MIRRORS liveStreak in src/lib/xp.js.
+  --
+  -- One missed day with a streak freeze in hand is still a live streak: the
+  -- approval this is for spends the freeze and carries the run on (see
+  -- approve_submission). MIRRORED in liveStreak in src/lib/xp.js.
   v_streak := case
     when coalesce(v_kid.streak_count, 0) < 3 then 0
-    else least(0.25, floor(v_kid.streak_count / 3.0) * 0.05)
+    when v_kid.streak_last_day is null then 0
+    when v_kid.streak_last_day >= family_today(v_sub.family_id, p_tz) - 1 then
+      least(0.25, floor(v_kid.streak_count / 3.0) * 0.05)
+    when v_kid.streak_last_day = family_today(v_sub.family_id, p_tz) - 2
+      and coalesce(v_kid.streak_freezes, 0) >= 1 then
+      least(0.25, floor(v_kid.streak_count / 3.0) * 0.05)
+    else 0
   end;
   if v_streak > 0 then
     v_xp := v_xp + round(v_xp * v_streak);
   end if;
+
+  -- What it is worth without the Elite boost: the leaderboards rank on this
+  -- (supabase/leaderboards.sql), so a plan cannot buy a place on them.
+  v_base_xp := v_xp;
 
   if v_tier = 'elite' then
     v_xp := v_xp + round(v_xp * 0.5::numeric);
@@ -831,14 +971,59 @@ begin
     end;
     if v_bonus > 0 then
       v_xp    := v_xp + v_bonus;
+      v_base_xp := v_base_xp + v_bonus;
       v_coins := v_coins + greatest(1, round(v_bonus / 5.0));
     end if;
   end if;
 
-  return jsonb_build_object('xp', v_xp, 'coins', v_coins);
+  return jsonb_build_object('xp', v_xp, 'coins', v_coins, 'base_xp', v_base_xp);
 end $$;
 
-revoke execute on function award_for_submission(uuid) from public;
+revoke execute on function award_for_submission(uuid, text) from public, anon, authenticated;
+
+/*
+ * Where a family lives. Also added by digests.sql; here as well because
+ * family_today needs it and schema.sql has to work on its own.
+ */
+alter table families add column if not exists timezone text not null default 'UTC';
+
+/**
+ * "Today", for this family: the date their phones are showing.
+ *
+ * The phone decides whether the daily bonus can be claimed, whether the
+ * arcade's cap has reset and whether a streak carried on, all by its own local
+ * date. This used to be current_date, which is UTC, so for a family west of
+ * UTC every evening (east of it every morning) the two were a day apart: a
+ * claimed bonus came back dated tomorrow and the phone offered it again, and a
+ * child doing a chore every evening lost their streak when one approval fell
+ * either side of UTC midnight.
+ *
+ * The calling phone may say which zone it is in, which is best: that is the
+ * very zone its own date comes from. Otherwise the family's saved zone, then
+ * UTC. Any real zone is within a day of UTC, so a changed or tampered zone can
+ * move a day by one at most, never mint a second one in the same place.
+ */
+create or replace function family_today(p_family_id uuid, p_tz text default null)
+returns date
+language plpgsql stable security definer set search_path = public as $$
+declare v_saved text;
+begin
+  select timezone into v_saved from families where id = p_family_id;
+  if nullif(trim(p_tz), '') is not null then
+    begin
+      return (now() at time zone trim(p_tz))::date;
+    exception when others then
+      null;  -- not a zone Postgres knows; fall through to the saved one
+    end;
+  end if;
+  begin
+    return (now() at time zone coalesce(nullif(v_saved, ''), 'UTC'))::date;
+  exception when others then
+    return (now() at time zone 'UTC')::date;
+  end;
+end $$;
+
+revoke execute on function family_today(uuid, text) from public, anon, authenticated;
 
 -- The signature gained p_sticker, and `create or replace` only replaces an
 -- EXACT match — so on a database that already has the four-argument version,
@@ -847,13 +1032,17 @@ revoke execute on function award_for_submission(uuid) from public;
 -- caller's p_xp. Dropping it explicitly is what makes this file safe to re-run
 -- over a live deployment.
 drop function if exists approve_submission(uuid, int, int, text);
+-- And again when it gained p_tz, for the same reason.
+drop function if exists approve_submission(uuid, int, int, text, text);
 
 create or replace function approve_submission(
   p_submission_id uuid,
   p_xp int,
   p_coins int,
   p_note text default '',
-  p_sticker text default null
+  p_sticker text default null,
+  -- The approving phone's time zone, so the streak counts the family's days.
+  p_tz text default null
 ) returns void
 language plpgsql security definer set search_path = public as $$
 declare
@@ -862,16 +1051,26 @@ declare
   v_award jsonb;
   v_xp int;
   v_coins int;
+  v_today date;
+  v_freeze boolean;
 begin
   -- Locked, as reject_submission does: two approvals of the same chore at the
   -- same moment both read it as pending without this, and paid twice.
   select * into v_sub from submissions where id = p_submission_id for update;
   if not found then raise exception 'submission not found'; end if;
-  if v_sub.status <> 'pending' then raise exception 'submission already decided'; end if;
 
   -- A parent, not a supporter: approving pays the child.
   select id into v_parent from parents
    where user_id = auth.uid() and family_id = v_sub.family_id and role = 'parent';
+
+  -- Sent again because the phone never heard back (a server down for an
+  -- hour, an answer lost on the way): this parent's approval is already here.
+  -- Answered quietly and paid nothing more. Raising made the phone say
+  -- "accepted on another device", and drop the child's "Accepted!" notice.
+  if v_sub.status = 'approved' and v_parent is not null and v_sub.decided_by = v_parent then
+    return;
+  end if;
+  if v_sub.status <> 'pending' then raise exception 'submission already decided'; end if;
   if v_parent is null then raise exception 'only a parent in this family can approve'; end if;
 
   -- The chore must be this child's, in this family. Without this a submission
@@ -889,14 +1088,11 @@ begin
   -- so one HTTP request could mint any number. The parameters stay so that a
   -- phone running older code still works; they are ignored. See
   -- award_for_submission.
-  v_award := award_for_submission(p_submission_id);
+  v_award := award_for_submission(p_submission_id, p_tz);
+  v_today := family_today(v_sub.family_id, p_tz);
   v_xp    := coalesce((v_award->>'xp')::int, 0);
   v_coins := coalesce((v_award->>'coins')::int, 0);
 
-  -- The photo is destroyed at the moment of the decision, not kept and tidied
-  -- up later. A parent has just looked at it; that was its whole job. Holding a
-  -- library of photographs of children's bedrooms is the one thing here that
-  -- turns a breach into a catastrophe, so we simply do not hold one.
   update submissions
      set status = 'approved',
          decided_at = now(),
@@ -910,11 +1106,24 @@ begin
                    then p_sticker else null end,
          awarded_xp = v_xp,
          awarded_coins = v_coins,
-         photo_data = null,
-         photo_deleted_at = now()
+         base_xp = coalesce((v_award->>'base_xp')::int, v_xp)
    where id = p_submission_id;
 
   update quests set status = 'approved', completed_at = now() where id = v_sub.quest_id;
+
+  /*
+   * The streak freeze.
+   *
+   * Every child starts with one, and it "covers a single missed day" — but
+   * nothing ever spent it: the only way in was a reducer action no screen
+   * dispatched, so a child who missed one day lost their run with the freeze
+   * still in hand. It is spent here, at the approval that follows exactly one
+   * missed day, counted on the family's day (the approving phone's zone), so
+   * it is used on the day it covers wherever the family is.
+   * MIRRORED in bumpStreak in src/state/reducer.js.
+   */
+  select (streak_count > 0 and streak_last_day = v_today - 2 and streak_freezes >= 1)
+    into v_freeze from kids where id = v_sub.kid_id for update;
 
   update kids
      set xp = xp + v_xp,
@@ -922,16 +1131,26 @@ begin
          -- One arcade token per approved chore, capped so they cannot be hoarded.
          play_tokens = least(play_tokens + 1, 5),
          streak_count = case
-           when streak_last_day = current_date then streak_count
-           when streak_last_day = current_date - 1 then streak_count + 1
+           -- Later than today happens once, when a zone changes (or for a
+           -- day recorded in UTC by an older version): not a broken streak.
+           when streak_last_day >= v_today then streak_count
+           when streak_last_day = v_today - 1 then streak_count + 1
+           when coalesce(v_freeze, false) then streak_count + 1
            else 1
          end,
-         streak_last_day = current_date
+         streak_freezes = streak_freezes - case when coalesce(v_freeze, false) then 1 else 0 end,
+         streak_last_day = v_today
    where id = v_sub.kid_id;
+
+  if coalesce(v_freeze, false) then
+    insert into events (family_id, kid_id, type, meta)
+    values (v_sub.family_id, v_sub.kid_id, 'streak_freeze', jsonb_build_object('covered', v_today - 1));
+  end if;
 
   insert into events (family_id, kid_id, type, meta)
   values (v_sub.family_id, v_sub.kid_id, 'quest_approved',
-          jsonb_build_object('questId', v_sub.quest_id, 'xp', v_xp, 'coins', v_coins));
+          jsonb_build_object('questId', v_sub.quest_id, 'xp', v_xp, 'coins', v_coins,
+                             'base_xp', coalesce((v_award->>'base_xp')::int, v_xp)));
 
   -- The chore's cash value, if it has one. Same tap as the XP, so the two can
   -- never disagree about whether it was approved. Cannot fail an approval;
@@ -944,18 +1163,6 @@ begin
   perform qualify_referral(v_sub.family_id);
 end;
 $$;
-
--- ---------------------------------------------------------------------------
--- Storage
---
--- Create a bucket named `proof-photos` in the Supabase dashboard and leave it
--- PRIVATE. Serve images through signed URLs; a public bucket would put photos
--- of children's bedrooms on the open internet.
---
--- Also decide a retention policy before launch. Deleting a photo once the
--- parent has reviewed it removes most of the risk in this whole system.
--- See docs/LEGAL.md.
--- ---------------------------------------------------------------------------
 
 -- ---------------------------------------------------------------------------
 -- Device pairing
@@ -1179,6 +1386,12 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'not_found');
   end if;
   if v_row.claimed_at is not null then
+    -- Typed in again by the family that already linked it (the confirmation
+    -- missed, a second parent doing the same thing): say that, rather than
+    -- telling a parent their own child's phone belongs to someone else.
+    if v_row.claimed_by_family_id = p_family_id then
+      return jsonb_build_object('ok', false, 'reason', 'already_linked');
+    end if;
     return jsonb_build_object('ok', false, 'reason', 'claimed');
   end if;
   if v_row.revoked_at is not null then
@@ -1335,6 +1548,32 @@ alter table submissions drop constraint if exists submissions_sticker_values;
 alter table submissions add constraint submissions_sticker_values
   check (sticker in ('proud','spotless','fast','effort','kind','above','funny','thanks'));
 
+-- How many times one child may take a reward in any seven days, set by a
+-- parent. Null is no limit. Enforced by redeem_reward (sync.sql), which counts
+-- the child's own redemptions of it over the last seven days, so purchases
+-- queued on a phone with no signal cannot go over it when they arrive; the
+-- app checks the same thing first so a child is told before spending.
+alter table rewards add column if not exists weekly_limit int;
+alter table rewards drop constraint if exists rewards_weekly_limit_range;
+alter table rewards add constraint rewards_weekly_limit_range
+  check (weekly_limit between 1 and 50);
+-- What that count reads: one child's redemptions of one reward, newest first.
+create index if not exists redemptions_kid_reward_idx on redemptions (kid_id, reward_id, created_at desc);
+
+-- A parent's note on a chore in its history (set_history_note, sync.sql). The
+-- one thing about a past chore that can change; see that function for why.
+alter table submissions add column if not exists history_note text not null default '';
+alter table submissions drop constraint if exists submissions_history_note_size;
+alter table submissions add constraint submissions_history_note_size check (length(history_note) <= 300);
+
+/*
+ * The leaderboards (supabase/leaderboards.sql, 0.13.0). What an accepted chore
+ * was worth before the Elite boost, written by approve_submission, so no
+ * leaderboard can be bought; and the longest streak a child has had.
+ */
+alter table submissions add column if not exists base_xp int;
+alter table kids add column if not exists streak_best int not null default 0;
+
 /*
  * A submission's verdict, and when it was given, belong to the functions that
  * give it: approve_submission and reject_submission, which stamp the time
@@ -1362,6 +1601,11 @@ begin
     new.decided_at    := old.decided_at;
     new.awarded_xp    := old.awarded_xp;
     new.awarded_coins := old.awarded_coins;
+    new.base_xp       := old.base_xp;
+    -- What the child sent.
+    new.note             := old.note;
+    new.elapsed_ms       := old.elapsed_ms;
+    new.on_time          := old.on_time;
   end if;
   return new;
 end $$;
@@ -1394,7 +1638,9 @@ begin
     new.streak_count := 0; new.streak_last_day := null; new.streak_freezes := 1;
     new.play_tokens := 0; new.game_day := null; new.game_coins_today := 0;
     new.best_scores := '{}'::jsonb; new.skins := '[]'::jsonb; new.last_login_bonus := null;
+    new.streak_best := 0;
   else
+    new.streak_best := old.streak_best;
     new.xp := old.xp; new.coins := old.coins;
     new.streak_count := old.streak_count; new.streak_last_day := old.streak_last_day;
     new.streak_freezes := old.streak_freezes;
@@ -1408,6 +1654,23 @@ end $$;
 drop trigger if exists kids_guard_balances on kids;
 create trigger kids_guard_balances before insert or update on kids
   for each row execute function guard_kid_balances();
+
+/*
+ * The longest streak a child has had, for the "Longest streak" leaderboard.
+ * Kept here, beside the streak, because nothing else remembers a streak once
+ * it resets. Runs after kids_guard_balances (triggers fire by name), so a
+ * browser's copy of either number has already been put back.
+ */
+create or replace function keep_streak_best() returns trigger
+language plpgsql as $$
+begin
+  new.streak_best := greatest(coalesce(new.streak_best, 0), coalesce(new.streak_count, 0));
+  return new;
+end $$;
+
+drop trigger if exists kids_streak_best on kids;
+create trigger kids_streak_best before insert or update on kids
+  for each row execute function keep_streak_best();
 
 /** A child may mark a parent's note read, and change nothing else about it. */
 create or replace function guard_note_edits() returns trigger
@@ -1424,3 +1687,48 @@ end $$;
 drop trigger if exists notes_guard_edits on notes;
 create trigger notes_guard_edits before update on notes
   for each row execute function guard_note_edits();
+
+/*
+ * How long the words a browser writes may be, and how large its numbers.
+ *
+ * A phone writes these columns straight to the table, and the functions copy
+ * the rest from what a caller sends, so nothing held them to any size: one
+ * request could store a 100,000-character chore title, and every phone in the
+ * family then downloaded it on every sync. Each limit is far beyond what any
+ * screen asks for. NOT VALID, so a row already longer is left alone; every
+ * new or changed row is held to it. supabase/test/33-inputs.sql tries them.
+ */
+do $$
+declare c record;
+begin
+  for c in select * from (values
+      ('families', 'families_text_sizes', 'length(name) <= 100 and length(parent_theme_id) <= 64'),
+      ('parents', 'parents_text_sizes', 'length(name) <= 100 and length(email) <= 320'),
+      ('kids', 'kids_text_sizes', 'length(name) <= 100 and length(theme_id) <= 64 and length(profile_frame) <= 64'
+         || ' and length(drop_selector) <= 64 and length(skin_id) <= 64 and length(lockout_reason) <= 500'
+         || ' and length(access_notes) <= 2000'),
+      ('quests', 'quests_text_sizes', 'length(title) <= 200 and length(description) <= 2000 and length(category) <= 64'
+         || ' and length(done_means) <= 1000 and length(why) <= 1000 and length(redo_note) <= 1000'),
+      ('submissions', 'submissions_text_sizes', 'length(note) <= 1000 and length(parent_note) <= 1000'),
+      ('rewards', 'rewards_text_sizes', 'length(name) <= 200 and length(description) <= 1000 and length(icon) <= 64'),
+      ('redemptions', 'redemptions_text_sizes', 'length(name) <= 200'),
+      ('notes', 'notes_text_sizes', 'length(body) <= 2000'),
+      ('family_goals', 'family_goals_text_sizes', 'length(name) <= 200'),
+      ('overrides', 'overrides_text_sizes', 'length(reason) <= 500 and length(consequence) <= 500'),
+      ('guilds', 'guilds_text_sizes', 'length(name) <= 100 and length(crest) <= 16 and length(motto) <= 200'),
+      -- And the numbers, to what each one means.
+      ('quests', 'quests_number_ranges', 'timer_seconds between 0 and 86400 and redo_count between 0 and 10000'),
+      ('submissions', 'submissions_number_ranges', 'elapsed_ms between 0 and 86400000'),
+      ('rewards', 'rewards_number_ranges', 'cost <= 1000000'),
+      ('redemptions', 'redemptions_number_ranges', 'cost between 0 and 1000000'),
+      ('kids', 'kids_number_ranges', 'avatar_hue between 0 and 360'),
+      ('overrides', 'overrides_number_ranges', 'percent between 0 and 100 and amount between 0 and 1000000'
+         || ' and minutes between 0 and 525600'),
+      ('family_goals', 'family_goals_number_ranges', 'target_xp <= 100000000'))
+    as v(tbl, name, expr)
+  loop
+    if not exists (select 1 from pg_constraint where conname = c.name and conrelid = c.tbl::regclass) then
+      execute format('alter table %I add constraint %I check (%s) not valid', c.tbl, c.name, c.expr);
+    end if;
+  end loop;
+end $$;

@@ -48,10 +48,29 @@ const send = (res, code, body) => {
  */
 const SERVICE_KEY = process.env.MOCK_SERVICE_ROLE_KEY || 'service-role-key'
 
+/*
+ * Passwords given at sign-up through this stand-in, so a wrong one is refused
+ * the way Supabase refuses it (the PIN reset depends on that). Held in memory
+ * and only for accounts made here: a fixture inserted straight into
+ * auth.users has none, and signs in with anything, as before.
+ */
+const PASSWORDS = new Map()
+
 function isServiceRole(req) {
   const auth = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
   return Boolean(auth) && auth === SERVICE_KEY
 }
+
+/**
+ * The project's own keys, the only things Supabase's gateway accepts in the
+ * `apikey` header: the public (anon) key the app is built with, and the
+ * service role key. Anything else is turned away before the database is
+ * asked, as it is on a real project. This stand-in used to ignore the header,
+ * and four server functions sent a person's sign-in token there: every test
+ * passed, and every push and checkout would have been refused in production.
+ */
+const ANON_KEY = process.env.MOCK_ANON_KEY || 'local-anon-key'
+const apiKeyAccepted = (req) => [ANON_KEY, SERVICE_KEY].includes(String(req.headers.apikey || ''))
 
 /** The bearer token here is just a user id — enough to exercise auth.uid(). */
 function userIdFrom(req) {
@@ -87,6 +106,21 @@ async function withUser(userId, fn, { service = false } = {}) {
   }
 }
 
+/** The arguments of a database function that are arrays (text[] and the like), by name. */
+const arrayArgCache = new Map()
+async function arrayArgsOf(fn) {
+  if (arrayArgCache.has(fn)) return arrayArgCache.get(fn)
+  const { rows } = await pool.query(
+    `select u.name from pg_proc p
+       cross join lateral unnest(p.proargnames[1:coalesce(array_length(p.proargtypes::oid[], 1), 0)],
+                                 p.proargtypes::oid[]) as u(name, type)
+       join pg_type t on t.oid = u.type
+      where p.proname = $1 and t.typcategory = 'A'`, [fn])
+  const names = new Set(rows.map((r) => r.name))
+  arrayArgCache.set(fn, names)
+  return names
+}
+
 const readBody = (req) =>
   new Promise((resolve) => {
     const chunks = []
@@ -101,6 +135,9 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end() }
 
   const url = new URL(req.url, 'http://localhost')
+  if (!apiKeyAccepted(req)) {
+    return send(res, 401, { message: req.headers.apikey ? 'Invalid API key' : 'No API key found in request' })
+  }
   const userId = userIdFrom(req)
   const service = isServiceRole(req)
   if (process.env.MOCK_LOG) console.log(req.method, url.pathname, 'as', userId || '(anon)')
@@ -113,8 +150,13 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req)
       const names = Object.keys(body)
       const args = names.map((n, i) => `${n} => $${i + 1}`).join(', ')
+      // PostgREST turns a JSON array into a Postgres array for a text[] (or
+      // any array) argument, and into JSON for a jsonb one. So does this: an
+      // array goes as an array only where the function says it takes one.
+      const arrays = await arrayArgsOf(fn)
       const values = names.map((n) => {
         const v = body[n]
+        if (Array.isArray(v) && arrays.has(n)) return v
         return v !== null && typeof v === 'object' ? JSON.stringify(v) : v
       })
 
@@ -220,7 +262,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     // --- accounts -----------------------------------------------------------
-    // Passwords are NOT checked here. This harness exists to exercise row level
+    // Passwords are checked only for accounts signed up here (PASSWORDS above),
+    // and are kept in plain memory. This harness exists to exercise row level
     // security, and a real auth server is what checks credentials. Never deploy it.
     if (url.pathname.startsWith('/auth/v1/')) {
       const body = await readBody(req)
@@ -236,6 +279,7 @@ const server = http.createServer(async (req, res) => {
         if (existing.rows.length) return send(res, 400, { message: 'User already registered' })
         const out = await pool.query('insert into auth.users (email) values ($1) returning id', [body.email])
         const id = out.rows[0].id
+        if (body.password) PASSWORDS.set(String(body.email), String(body.password))
         return send(res, 200, session(id, { id, email: body.email }))
       }
 
@@ -250,6 +294,10 @@ const server = http.createServer(async (req, res) => {
       if (url.pathname.startsWith('/auth/v1/token')) {
         const out = await pool.query('select id from auth.users where email = $1', [body.email])
         if (!out.rows.length) return send(res, 400, { message: 'Invalid login credentials' })
+        const known = PASSWORDS.get(String(body.email))
+        if (known !== undefined && known !== String(body.password ?? '')) {
+          return send(res, 400, { message: 'Invalid login credentials' })
+        }
         const id = out.rows[0].id
         return send(res, 200, session(id, { id, email: body.email }))
       }

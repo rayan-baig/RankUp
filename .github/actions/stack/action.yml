@@ -1,0 +1,31 @@
+# The local stack the app's tests talk to: the stand-in Supabase API over the
+# Postgres service, and either the dev server or the functions under workerd.
+# Background processes started here run until the job ends.
+name: Stack
+description: Start the mock API and the app (dev server) or the functions (workerd).
+inputs:
+  serve:
+    description: "dev: the app on :5173. functions: dist/ and /api under workerd on :8788."
+    default: dev
+runs:
+  using: composite
+  steps:
+    - name: Start the stack
+      shell: bash
+      run: |
+        printf 'VITE_SUPABASE_URL=http://localhost:54321\nVITE_SUPABASE_ANON_KEY=local-anon-key\nVITE_GUILDS_ENABLED=true\n' > .env.local
+        node supabase/test/mock-server.mjs > /tmp/rankup-mock.log 2>&1 &
+        if [ "${{ inputs.serve }}" = functions ]; then
+          npm run build > /tmp/rankup-build.log 2>&1 || { cat /tmp/rankup-build.log; exit 1; }
+          # The same settings up.sh --cf uses, from one place.
+          bash supabase/test/serve-functions.sh > /tmp/rankup-app.log 2>&1 &
+          url=http://localhost:8788/
+        else
+          npm run dev -- --port 5173 > /tmp/rankup-app.log 2>&1 &
+          url=http://localhost:5173/
+        fi
+        up() { curl -s -o /dev/null -m 2 "$1"; }
+        for _ in $(seq 1 120); do up http://localhost:54321/rest/v1/ && up "$url" && break; sleep 1; done
+        up http://localhost:54321/rest/v1/ || { cat /tmp/rankup-mock.log; echo "::error title=Stack::the mock API did not start"; exit 1; }
+        up "$url" || { cat /tmp/rankup-app.log; echo "::error title=Stack::$url did not start"; exit 1; }
+        echo "mock API and $url are up"

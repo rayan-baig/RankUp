@@ -1,21 +1,16 @@
 /**
  * Serverless function: throw away what nothing reads any more.
  *
- * Run it once a day; see docs/LAUNCH.md. It clears photographs from
- * submissions a parent never decided, and trims the activity log and the
- * spent pairing rows.
+ * Run it once a day; see docs/LAUNCH.md. It trims the activity log, crash
+ * reports and the spent pairing rows, and retries any deleted family's Stripe cancellation that has
+ * not gone through yet.
  *
- * WHY THIS IS NOT OPTIONAL. Four tables here grow forever and are only ever
- * read over a short recent window, so without this job the database's largest
+ * WHY THIS IS NOT OPTIONAL. These tables grow forever and are only ever read
+ * over a short recent window, so without this job the database's largest
  * contents are things the app cannot show anybody:
  *
- *   photos    ~60 KB each, base64, on every submission nobody decided
  *   events    ~10 rows per family per day, forever; the dashboard reads 8
  *   pairing   a six-digit code lives ten minutes; the row lived for ever
- *
- * The photos are the important one twice over. They are the bulk of the bytes,
- * and they are photographs of the inside of children's homes — keeping one
- * longer than it is needed is a liability, not just a bill.
  *
  * Like the other scheduled jobs this holds the service role key behind a
  * shared secret, and run_retention is revoked from `public`: it deletes across
@@ -23,10 +18,13 @@
  */
 
 import { recordRun } from './_shared/job.js'
+import { makeStripe } from './_shared/stripe.js'
+import { cancelPendingBilling } from './_shared/cancelBilling.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const CRON_SECRET = process.env.CRON_SECRET || ''
+const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
 
 /**
  * Days to keep. Generous by default: the job exists to bound growth, not to be
@@ -34,15 +32,14 @@ const CRON_SECRET = process.env.CRON_SECRET || ''
  *
  * Validated rather than coerced, because Number('90d') is NaN, NaN serialises
  * to JSON null, and the SQL floors then take over: greatest(1, null) is 1, so a
- * single typo in an environment variable would quietly cut photo retention from
- * fourteen days to one and start deleting proof a parent had not looked at yet.
+ * single typo in an environment variable would quietly cut event retention from
+ * ninety days to seven and empty the charts a parent reads.
  */
 function days(value, fallback) {
   const n = Number(value)
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback
 }
 
-const PHOTO_DAYS = days(process.env.RETENTION_PHOTO_DAYS, 14)
 const EVENT_DAYS = days(process.env.RETENTION_EVENT_DAYS, 90)
 const PAIRING_DAYS = days(process.env.RETENTION_PAIRING_DAYS, 2)
 
@@ -86,14 +83,24 @@ export default async function handler(req, res) {
 
   try {
     const result = await serviceRpc('run_retention', {
-      p_photo_days: PHOTO_DAYS,
       p_event_days: EVENT_DAYS,
       p_pairing_days: PAIRING_DAYS,
     })
+    /*
+     * Deleted families whose Stripe subscription is not yet confirmed
+     * cancelled: Stripe was down or refused when the account was deleted
+     * (api/delete-account.js), or the app that deleted it called the database
+     * directly. Tried again every day until Stripe confirms; a failure here
+     * stays queued, does not fail the clean-up above, and health_snapshot
+     * reports it once it is a day old.
+     */
+    const billing = STRIPE_SECRET
+      ? await cancelPendingBilling({ stripe: makeStripe(STRIPE_SECRET), serviceRpc, limit: 200 })
+      : { skipped: 'stripe_not_configured' }
     await recordRun(serviceRpc, 'run-retention', true)
-    return res.status(200).json(result || { ok: true })
+    return res.status(200).json({ ...(result || { ok: true }), billing_cancellations: billing })
   } catch (err) {
     await recordRun(serviceRpc, 'run-retention', false, err.message)
-    return res.status(502).json({ error: 'retention_failed', detail: err.message })
+    return res.status(502).json({ error: 'retention_failed' })
   }
 }

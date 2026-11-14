@@ -4,24 +4,41 @@ import { PARENT_THEMES } from '../../data/parentThemes.js'
 import { clearState, storageUsageBytes } from '../../lib/storage.js'
 import { relativeTime } from '../../lib/dates.js'
 import { canSyncAcrossDevices } from '../../lib/sync/index.js'
-import { isElite } from '../../state/reducer.js'
-import { billingLive, buyFlashTickets, FLASH_TICKET_PACKS, perTicket, packSaving } from '../../lib/billing.js'
+import { isElite, planSummary } from '../../state/reducer.js'
+import { billingLive, buyFlashTickets, billingError, FLASH_TICKET_PACKS, perTicket, packSaving } from '../../lib/billing.js'
 import { guildsEnabled } from '../../lib/guilds.js'
 import { saveReminderSchedule } from '../../lib/notifications.js'
 import { transport } from '../../lib/sync/transport.js'
 import { Screen, Card, Button, Section, SectionTitle, Field, TextInput, TextArea, Toggle, Banner, Modal, Select, Chip } from '../../components/ui.jsx'
 import NotificationSettings from '../../components/NotificationSettings.jsx'
 import DataRights from '../../components/DataRights.jsx'
+import { KidThemesSection } from '../../components/KidThemesParent.jsx'
 import InviteCard from '../../components/InviteCard.jsx'
+import GiftPlanCard from '../../components/GiftPlanCard.jsx'
 import AdultsCard from '../../components/AdultsCard.jsx'
 import { navigate } from '../../lib/router.js'
+import { APP_VERSION } from '../../lib/version.js'
+import { PRODUCT_OF } from '../../data/legalText.js'
+import { SUPPORT_EMAIL } from '../../lib/support.js'
 
 export default function ParentSettings() {
   const { state, dispatch } = useApp()
   const [reset, setReset] = useState(false)
+  // A pack being opened at Stripe: one tap opens one checkout, not two.
+  const [buying, setBuying] = useState(null)
+  const [buyError, setBuyError] = useState('')
+  const buyPack = async (pack) => {
+    if (buying) return
+    if (!billingLive()) { dispatch({ type: 'GRANT_FLASH_TICKETS', count: pack.tickets }); return }
+    setBuying(pack.id)
+    setBuyError('')
+    const result = await buyFlashTickets(pack.id)
+    // On success the page is already on its way to Stripe.
+    if (!result.ok) { setBuyError(billingError(result.reason)); setBuying(null) }
+  }
   const [note, setNote] = useState('')
   const [noteKid, setNoteKid] = useState(state.kids[0]?.id || '')
-  const [reward, setReward] = useState({ name: '', cost: 50, description: '', icon: '🎁' })
+  const [reward, setReward] = useState({ name: '', cost: 50, description: '', icon: '🎁', weeklyLimit: null })
   const [goal, setGoal] = useState(state.familyGoal || { name: '', targetXp: 2000 })
 
   const usageKb = Math.round(storageUsageBytes() / 1024)
@@ -35,6 +52,9 @@ export default function ParentSettings() {
 
       <AdultsCard />
       <InviteCard />
+      <GiftPlanCard />
+
+      <KidThemesSection />
 
       <Section title="Dashboard theme" icon="🎨"
         summary={PARENT_THEMES.find((t) => t.id === state.family.parentThemeId)?.name || 'Choose a look'}>
@@ -76,13 +96,22 @@ export default function ParentSettings() {
           What kids can spend their currency on. Real-world things work best.
         </p>
         {state.rewards.map((r) => (
-          <div key={r.id} className="flex items-center gap-2 py-2" style={{ borderBottom: '1px solid var(--line)' }}>
-            <span aria-hidden="true">{r.icon || '🎁'}</span>
-            <span className="flex-1 min-w-0 text-sm truncate">{r.name}</span>
-            <span className="text-sm font-semibold">{r.cost}</span>
-            <button type="button" className="text-muted px-2" onClick={() => dispatch({ type: 'DELETE_REWARD', rewardId: r.id })} aria-label={`Delete ${r.name}`}>
-              ✕
-            </button>
+          <div key={r.id} className="py-2" style={{ borderBottom: '1px solid var(--line)' }}>
+            <div className="flex items-center gap-2">
+              <span aria-hidden="true">{r.icon || '🎁'}</span>
+              <span className="flex-1 min-w-0 text-sm truncate">{r.name}</span>
+              <span className="text-sm font-semibold">{r.cost}</span>
+              <button type="button" className="text-muted px-2" onClick={() => dispatch({ type: 'DELETE_REWARD', rewardId: r.id })} aria-label={`Delete ${r.name}`}>
+                ✕
+              </button>
+            </div>
+            {/* How often each child may take it. Held by the database too,
+                so purchases queued offline cannot go over it. */}
+            <label className="flex items-center gap-2 mt-1.5 text-xs text-muted">
+              <span className="shrink-0">Each child can take it</span>
+              <WeeklyLimit value={r.weeklyLimit} name={r.name}
+                           onChange={(weeklyLimit) => dispatch({ type: 'UPDATE_REWARD', rewardId: r.id, patch: { weeklyLimit } })} />
+            </label>
           </div>
         ))}
         <div className="grid grid-cols-[1fr_88px] gap-2 mt-3">
@@ -94,13 +123,18 @@ export default function ParentSettings() {
             aria-label="Cost"
           />
         </div>
+        <label className="flex items-center gap-2 mt-2 text-xs text-muted">
+          <span className="shrink-0">Each child can take it</span>
+          <WeeklyLimit value={reward.weeklyLimit} name="the new reward"
+                       onChange={(weeklyLimit) => setReward({ ...reward, weeklyLimit })} />
+        </label>
         <Button
           variant="soft"
           className="w-full mt-2"
           disabled={!reward.name.trim()}
           onClick={() => {
             dispatch({ type: 'ADD_REWARD', reward: { ...reward, name: reward.name.trim() } })
-            setReward({ name: '', cost: 50, description: '', icon: '🎁' })
+            setReward({ name: '', cost: 50, description: '', icon: '🎁', weeklyLimit: null })
           }}
         >
           Add reward
@@ -128,7 +162,7 @@ export default function ParentSettings() {
       <Section title="Family goal" icon="🎯"
         summary={state.familyGoal ? state.familyGoal.name : 'Not set'}>
       <Card flat>
-        <p className="text-sm text-muted mb-3">Everyone's XP adds to one shared bar.</p>
+        <p className="text-sm text-muted mb-3">Everyone's XP from now on adds to one shared bar.</p>
         <Field label="Reward for hitting it">
           <TextInput value={goal.name} onChange={(e) => setGoal({ ...goal, name: e.target.value })} placeholder="e.g. Trip to the aquarium" />
         </Field>
@@ -140,7 +174,7 @@ export default function ParentSettings() {
           />
         </Field>
         <div className="flex gap-2">
-          <Button className="flex-1" disabled={!goal.name.trim()} onClick={() => dispatch({ type: 'SET_FAMILY_GOAL', goal })}>
+          <Button className="flex-1" disabled={!goal.name.trim() || !goal.targetXp} onClick={() => dispatch({ type: 'SET_FAMILY_GOAL', goal })}>
             Save goal
           </Button>
           {state.familyGoal && (
@@ -214,6 +248,23 @@ export default function ParentSettings() {
             <span className="block text-xs text-muted">
               Enter the six-digit code from their phone.
               {linkedCount > 0 && ` ${linkedCount} linked.`}
+            </span>
+          </span>
+          <span aria-hidden="true" className="text-muted">›</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate('/parent/leaderboards')}
+          data-testid="open-parent-leaderboards"
+          className="w-full flex items-center gap-3 text-left mt-3 pt-3"
+          style={{ borderTop: '1px solid var(--line)' }}
+        >
+          <span className="text-2xl" aria-hidden="true">🏆</span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold text-sm">Leaderboards: Adventure or Arena</span>
+            <span className="block text-xs text-muted">
+              Every child starts in Adventure. Switch on Arena to put them on the worldwide boards, by nickname.
             </span>
           </span>
           <span aria-hidden="true" className="text-muted">›</span>
@@ -307,7 +358,7 @@ export default function ParentSettings() {
       </Section>
 
       <Section title="Parent account" icon="👤"
-        summary={`${state.family.name || 'Your family'} · ${state.family.tier === 'elite' ? 'Elite Pass' : 'Standard'}`}>
+        summary={`${state.family.name || 'Your family'} · ${planSummary(state)}`}>
       <Card flat>
         <Field label="Family name">
           <TextInput
@@ -322,7 +373,18 @@ export default function ParentSettings() {
             inputMode="numeric"
           />
         </Field>
-        <Chip>Plan: {state.family.tier === 'elite' ? 'Elite Pass' : 'Standard'}</Chip>
+        <Field label="Weekly chores come back" hint="A chore set to repeat every week returns on this day.">
+          <Select
+            value={state.family.weekResetsOn ?? ''}
+            onChange={(e) => dispatch({ type: 'SET_WEEK_RESET_DAY', day: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">Seven days after it was done</option>
+            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((name, i) => (
+              <option key={name} value={i + 1}>Every {name}</option>
+            ))}
+          </Select>
+        </Field>
+        <Chip data-testid="plan-chip">Plan: {planSummary(state)}</Chip>
       </Card>
 
       </Section>
@@ -352,10 +414,10 @@ export default function ParentSettings() {
             <button
               key={pack.id}
               type="button"
-              onClick={() => (billingLive()
-                ? buyFlashTickets(pack.id)
-                : dispatch({ type: 'GRANT_FLASH_TICKETS', count: pack.tickets }))}
-              className="card-flat w-full flex items-center gap-3 p-3 mb-2 text-left"
+              onClick={() => buyPack(pack)}
+              disabled={Boolean(buying)}
+              aria-busy={buying === pack.id}
+              className="card-flat w-full flex items-center gap-3 p-3 mb-2 text-left disabled:opacity-60"
               style={pack.best ? { borderColor: 'var(--accent)' } : undefined}
             >
               <span className="text-xl" aria-hidden="true">🎟️</span>
@@ -371,12 +433,13 @@ export default function ParentSettings() {
                 <span className="block text-xs text-muted mt-0.5">{pack.note}</span>
               </span>
               <span className="font-display font-extrabold text-sm shrink-0">
-                {billingLive() ? `$${pack.price}` : 'Add (test)'}
+                {buying === pack.id ? 'Opening Stripe…' : billingLive() ? `$${pack.price}` : 'Add (test)'}
               </span>
             </button>
           )
         })}
 
+        {buyError && <p className="text-sm mt-1" style={{ color: 'var(--bad)' }} role="alert">{buyError}</p>}
         {!billingLive() && (
           <p className="text-xs text-muted mt-1">
             Stripe is not configured, so these add tickets locally without charging anything.
@@ -387,6 +450,57 @@ export default function ParentSettings() {
           left, but has no way to reach a payment screen.
         </p>
       </Card>
+      </Section>
+
+      <Section title="Help & about" icon="❓" summary={`Help, your plan · RankUp ${APP_VERSION}`}>
+        <Card flat>
+          <button
+            type="button"
+            onClick={() => navigate('/parent/help')}
+            className="w-full flex items-center gap-3 text-left"
+          >
+            <span className="text-2xl" aria-hidden="true">💬</span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold text-sm">Help</span>
+              <span className="block text-xs text-muted">
+                Linking a phone, PINs, XP, plans, the free trial, your data.
+              </span>
+            </span>
+            <span aria-hidden="true" className="text-muted">›</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/parent/plan')}
+            className="w-full flex items-center gap-3 text-left mt-3 pt-3"
+            style={{ borderTop: '1px solid var(--line)' }}
+          >
+            <span className="text-2xl" aria-hidden="true">💳</span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold text-sm">Your plan</span>
+              <span className="block text-xs text-muted" data-testid="about-plan">
+                {planSummary(state)}. Prices, changing plan and cancelling.
+              </span>
+            </span>
+            <span aria-hidden="true" className="text-muted">›</span>
+          </button>
+          {SUPPORT_EMAIL && (
+            <a
+              href={`mailto:${SUPPORT_EMAIL}`}
+              className="w-full flex items-center gap-3 text-left mt-3 pt-3"
+              style={{ borderTop: '1px solid var(--line)' }}
+              data-testid="about-support"
+            >
+              <span className="text-2xl" aria-hidden="true">✉️</span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold text-sm">Write to us</span>
+                <span className="block text-xs text-muted break-words">{SUPPORT_EMAIL}. A person reads it.</span>
+              </span>
+            </a>
+          )}
+          <p className="text-xs text-muted mt-3 pt-3" style={{ borderTop: '1px solid var(--line)' }} data-testid="app-version">
+            RankUp version {APP_VERSION}. {PRODUCT_OF}
+          </p>
+        </Card>
       </Section>
 
       <Section title="Your data" icon="🗂️" summary="Download it, or delete the account">
@@ -482,5 +596,22 @@ function ReminderList({ reminders, dispatch }) {
         ))}
       </div>
     </>
+  )
+}
+
+/** "No limit", or 1 to 7 times a week: how often each child may take a reward. */
+function WeeklyLimit({ value, name, onChange }) {
+  return (
+    <select
+      className="field appearance-none py-1 min-h-0 text-xs flex-1"
+      value={value || ''}
+      aria-label={`How often each child may take ${name} in a week`}
+      onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+    >
+      <option value="">as often as they like</option>
+      {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+        <option key={n} value={n}>{n === 1 ? 'once a week' : n === 2 ? 'twice a week' : `${n} times a week`}</option>
+      ))}
+    </select>
   )
 }

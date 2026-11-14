@@ -3,21 +3,25 @@
 --
 -- Run after schema.sql, sync.sql, guilds.sql and consent.sql.
 --
--- Four tables in this schema grow forever and are only ever read over a short
--- recent window. Left alone they become the largest thing in the database, and
--- the first one — photographs of children's bedrooms — is also the one where
--- keeping what you do not need is a liability rather than a bill.
+-- These tables grow forever and are only ever read over a short recent
+-- window. Left alone they become the largest thing in the database. (RankUp
+-- takes no photos any more, so there are none here to clear.)
 --
---   submissions.photo_data     already cleared on approve or send-back, but a
---                              submission a parent never decided keeps its
---                              photo indefinitely. purge_stale_photos handles
---                              these; it existed and nothing ever called it.
 --   events                     ~10 rows per family per day, forever. The
 --                              dashboard shows the last 8 and the Behaviour
 --                              Blueprint reads 7 days.
 --   pairing_codes              a six-digit code lives ten minutes. The row
 --                              outlived it by years.
 --   pairing_claim_attempts     rate-limit marks, read over a ten-minute window.
+--   theme_submissions          themes sent for a Season and declined or never
+--                              picked, after 90 days (the privacy policy says so).
+--   gift_* (billing.sql)       a gift's recipient, their email and the message
+--                              30 days after it was paid for; the buyer's
+--                              email once the code has run out (two years);
+--                              a gift never paid for after 14 days; codes
+--                              typed that did not work, and the per-address
+--                              count of gifts started, after 2 days. The
+--                              privacy policy says each.
 --
 -- Guild messages are deliberately NOT in this list. They are the record of what
 -- children said to each other, they can be reported, and a job that quietly
@@ -33,6 +37,10 @@ create index if not exists events_created_at_idx on events (created_at);
 /**
  * One call, so a scheduler has one thing to hit and the result says what went.
  *
+ * `p_photo_days` is ignored. It cleared photos RankUp no longer takes, and it
+ * stays in the signature only so that an older copy of api/run-retention.js,
+ * which still sends it, keeps working while the app is being updated.
+ *
  * Every limit is a parameter with a generous default: the point is to stop
  * unbounded growth, not to be clever about how little can be kept. Service-role
  * only — it deletes across every family, which is not a thing any signed-in
@@ -44,14 +52,13 @@ create or replace function run_retention(
   p_pairing_days int default 2)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  v_photos  int;
   v_events  int;
   v_codes   int;
   v_tries   int;
   v_crashes int;
+  v_themes  int;
+  v_gifts   int;
 begin
-  v_photos := purge_stale_photos(p_photo_days);
-
   with gone as (
     delete from events
      where created_at < now() - make_interval(days => greatest(7, p_event_days))
@@ -82,20 +89,75 @@ begin
     delete from rpc_receipts where created_at < now() - interval '30 days';
   end if;
 
+  -- What a deleted family leaves for its Stripe cancellation (consent.sql):
+  -- the marker after a week, a confirmed cancellation after 30 days. One still
+  -- waiting for Stripe is never deleted here; api/run-retention.js retries it.
+  if to_regclass('public.billing_cancellations') is not null then
+    delete from billing_cancellations
+     where done_at is not null
+       and (done_at < now() - interval '30 days'
+            or (stripe_customer_id is null and stripe_subscription_id is null
+                and queued_at < now() - interval '7 days'));
+  end if;
+
   if to_regclass('public.crash_reports') is not null then
     execute format(
       'with gone as (delete from crash_reports where created_at < now() - make_interval(days => %s) returning 1) select count(*) from gone',
       greatest(7, p_event_days)) into v_crashes;
   end if;
 
+  -- The server functions' errors (crashes.sql) are kept as long as the
+  -- crashes. What the error report remembers about them goes with them: which
+  -- kinds it has told you about, once quiet for as long, and its own sends
+  -- after two days (it counts only the last 24 hours).
+  if to_regclass('public.server_errors') is not null then
+    execute format('delete from server_errors where created_at < now() - make_interval(days => %s)',
+                   greatest(7, p_event_days));
+    execute format('delete from error_report_kinds where coalesce(last_reported_at, first_seen_at) < now() - make_interval(days => %s)',
+                   greatest(7, p_event_days));
+    delete from error_report_sends where claimed_at < now() - interval '2 days';
+  end if;
+
+  -- Themes sent to RankUp for a Season (sync.sql) that were declined, or never
+  -- picked: 90 days, then gone. A picked theme is official and stays.
+  if to_regclass('public.theme_submissions') is not null then
+    with gone as (
+      delete from theme_submissions
+       where status in ('new', 'declined') and created_at < now() - interval '90 days'
+      returning 1
+    ) select count(*) into v_themes from gone;
+  end if;
+
+  -- Gifts (billing.sql). The order itself stays: it is the record that a
+  -- code was sold, used or refunded. What is personal goes on its day: the
+  -- recipient's name and email and the message once the gift has had 30 days
+  -- to be sent, the buyer's email once the code can no longer be used, and a
+  -- checkout nobody paid for (with what was typed into it) after 14 days.
+  if to_regclass('public.gift_orders') is not null then
+    with gone as (
+      delete from gift_orders where paid_at is null and created_at < now() - interval '14 days' returning 1
+    ) select count(*) into v_gifts from gone;
+    delete from gift_recipients where keep_until < now();
+    delete from gift_buyers where keep_until < now();
+    delete from gift_redeem_attempts where tried_at < now() - interval '2 days';
+    delete from gift_checkout_attempts where tried_at < now() - interval '2 days';
+  end if;
+
+  -- The daily usage counts (health.sql): totals only, kept for 400 days, a
+  -- year and a bit, so this month can be set beside the same month last year.
+  if to_regclass('public.usage_daily') is not null then
+    execute 'delete from usage_daily where day < (now() at time zone ''utc'')::date - 400';
+  end if;
+
   return jsonb_build_object(
     'ok', true,
     'crashes_deleted', coalesce(v_crashes, 0),
-    'photos_cleared', v_photos,
     'events_deleted', v_events,
     'pairing_codes_deleted', v_codes,
-    'claim_attempts_deleted', v_tries
+    'claim_attempts_deleted', v_tries,
+    'theme_submissions_deleted', coalesce(v_themes, 0),
+    'unpaid_gifts_deleted', coalesce(v_gifts, 0)
   );
 end $$;
 
-revoke execute on function run_retention(int, int, int) from public;
+revoke execute on function run_retention(int, int, int) from public, anon, authenticated;

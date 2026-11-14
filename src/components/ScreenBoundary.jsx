@@ -1,6 +1,23 @@
 import { Component } from 'react'
-import { navigate } from '../lib/router.js'
+import { navigate, homeFor } from '../lib/router.js'
 import { reportCrash } from '../lib/crashReport.js'
+import { retryFailedLoads } from '../lib/lazy.js'
+
+/**
+ * A screen whose code could not be downloaded, rather than one that broke.
+ *
+ * Each screen arrives the first time it is opened (lib/lazy.js), and the
+ * service worker keeps it after that. A phone with no signal opening one it
+ * has never fetched gets this error, and "this screen broke, our fault" was
+ * the wrong thing to tell it: nothing broke, the phone needs the internet
+ * once. Browsers word it differently, so this matches all three, and a phone
+ * that says it is offline counts too.
+ */
+export function isOfflineLoadError(error, online = typeof navigator === 'undefined' ? true : navigator.onLine) {
+  const text = String(error?.message || error || '')
+  const loadFailed = /dynamically imported module|importing a module script failed|failed to fetch|load failed|networkerror/i.test(text)
+  return loadFailed || (online === false && /fetch|import|module|network|load/i.test(text))
+}
 
 /**
  * A crash barrier around ONE screen.
@@ -29,12 +46,45 @@ export default class ScreenBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
+    // Not a bug, and nothing to report: the phone had no internet.
+    if (isOfflineLoadError(error)) return
     console.error('[RankUp] Screen crashed:', this.props.route, error, info?.componentStack)
     reportCrash({ where: this.props.route, error, componentStack: info?.componentStack })
   }
 
   render() {
     if (!this.state.error) return this.props.children
+
+    if (isOfflineLoadError(this.state.error)) {
+      return (
+        <div className="shell px-4 py-10" data-testid="offline-screen">
+          <div className="card p-5 text-center">
+            <div className="text-4xl mb-2" aria-hidden="true">📡</div>
+            <h1 className="font-display text-xl font-extrabold mb-1">No internet right now</h1>
+            <p className="text-sm text-muted mb-4">
+              This part of RankUp needs the internet the first time it opens. Everything you have
+              done is saved on this phone. Connect, then tap Try again.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="btn btn-soft flex-1"
+                onClick={() => { retryFailedLoads(); this.setState({ error: null }); navigate(homeFor(this.props.route)) }}
+              >
+                Go home
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary flex-1"
+                onClick={() => { retryFailedLoads(); this.setState({ error: null }) }}
+              >
+                Try again
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
 
     return (
       <div className="shell px-4 py-10">
@@ -49,14 +99,14 @@ export default class ScreenBoundary extends Component {
             <button
               type="button"
               className="btn btn-soft flex-1"
-              onClick={() => this.setState({ error: null })}
+              onClick={() => { retryFailedLoads(); this.setState({ error: null }) }}
             >
               Try again
             </button>
             <button
               type="button"
               className="btn btn-primary flex-1"
-              onClick={() => { this.setState({ error: null }); navigate('/') }}
+              onClick={() => { retryFailedLoads(); this.setState({ error: null }); navigate(homeFor(this.props.route)) }}
             >
               Go home
             </button>

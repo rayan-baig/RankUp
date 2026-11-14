@@ -210,12 +210,27 @@ create or replace function school_code(p_len int)
 returns text language sql volatile as $$
   select string_agg(substr('ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
                            (floor(random() * 32) + 1)::int, 1), '')
-    from generate_series(1, p_len);
+    from generate_series(1, least(greatest(p_len, 1), 16));
 $$;
+-- Only the school functions here make codes. Callable by anyone, a single
+-- request for a code two billion letters long kept the database busy for as
+-- long as it took to build one.
+revoke execute on function school_code(int) from public, anon, authenticated;
 
 /** Below this many students a school's average is one family's average. */
 create or replace function school_min_students()
 returns int language sql immutable as $$ select 5 $$;
+
+/**
+ * Accepted chores a child can score in one day (UTC), at most. The School
+ * League counts no more than this, and so do the leaderboards
+ * (supabase/leaderboards.sql), so a parent tapping Accept two hundred times
+ * in an afternoon puts nobody top of anything. SCHOOL_DAILY_CHORES in
+ * src/lib/schools.js is the same number; tests/schoolhelp.mjs checks.
+ */
+create or replace function school_daily_chores()
+returns int language sql immutable as $$ select 8 $$;
+revoke execute on function school_daily_chores() from public, anon, authenticated;
 
 /** Paid up, or still in its trial. Anything else sits the league out. */
 create or replace function school_is_live(p_school uuid)
@@ -231,7 +246,8 @@ $$;
 -- ---------------------------------------------------------------------------
 
 /**
- * Each student's points for a month: approved quests, at most eight a day,
+ * Each student's points for a month: approved quests, at most eight a day
+ * (school_daily_chores),
  * counted from the day they joined this school. Joining date matters: without
  * it a family could move a child between schools mid-month and bring the
  * month's points with them.
@@ -242,7 +258,7 @@ language sql stable security definer set search_path = public as $$
   select m.kid_id,
          coalesce((
            select sum(d.n) from (
-             select least(count(*), 8) as n
+             select least(count(*), school_daily_chores()) as n
                from submissions s
               where s.kid_id = m.kid_id
                 and s.status = 'approved'
@@ -584,6 +600,11 @@ begin
       'trial_ends_at', v_s.trial_ends_at,
       'student_count', v_s.student_count,
       'has_customer', v_s.stripe_customer_id is not null,
+      -- What Stripe last said, for the portal's notice: a failed payment, a
+      -- plan ending, a refund. Read here at call time, so the columns added
+      -- further down this file are there by then.
+      'billing_status', v_s.billing_status,
+      'billing_ends_at', v_s.billing_ends_at,
       'price', school_price_quote(v_s.student_count),
       'join_code', v_s.join_code,
       -- Only the admin hands out the staff code.
@@ -839,7 +860,10 @@ begin
     select distinct on (r.district_key) r.district_key, r.id, r.score
       from ranked r join contested c using (district_key)
      where r.score > 0
-     order by r.district_key, r.score desc, r.students desc, r.created_at
+     -- Ties: the school with more children taking part, then the one that
+     -- signed up first, then by id, so the same month always crowns the same
+     -- school however often it is closed.
+     order by r.district_key, r.score desc, r.students desc, r.created_at, r.id
   ), inserted as (
     insert into school_awards (district_key, month_key, school_id, score)
     select district_key, v_key, id, score from winners
@@ -998,8 +1022,12 @@ begin
   select * into v_s from schools where id = v_me.school_id;
   if v_s.status = 'suspended' then return jsonb_build_object('ok', false, 'reason', 'suspended'); end if;
   -- Paying already: a second checkout would start a second subscription.
+  -- Which school is still said: the billing portal asks this too, and a
+  -- school that is paying is exactly the one that needs the portal (it was
+  -- refused it, so a paying school could not change its card or cancel).
   if v_s.status = 'active' and v_s.stripe_subscription_id is not null then
-    return jsonb_build_object('ok', false, 'reason', 'already_paying');
+    return jsonb_build_object('ok', false, 'reason', 'already_paying',
+                              'school_id', v_s.id, 'has_customer', v_s.stripe_customer_id is not null);
   end if;
   return jsonb_build_object('ok', true, 'school_id', v_s.id, 'name', v_s.name,
                             'band', v_s.size_band, 'status', v_s.status,
@@ -1028,6 +1056,37 @@ returns text language sql stable security definer set search_path = public as $$
 $$;
 
 /**
+ * The size band a school is priced at now. For the webhook, which checks the
+ * price on a new subscription against it: a checkout page opened before the
+ * school corrected its size still carries the old band's price.
+ */
+create or replace function school_band_of(p_school_id uuid)
+returns text language sql stable security definer set search_path = public as $$
+  select size_band from schools where id = p_school_id;
+$$;
+
+/*
+ * What Stripe last said about the school's plan, beside the league status the
+ * school plays under. A failing card keeps a school playing (status stays
+ * active) and the admin was told nothing at all; the portal reads this to say
+ * a payment failed, that a plan is ending, or that it was refunded.
+ *   billing_status     Stripe's own status, or 'refunded'
+ *   billing_event_at   when the newest event applied was created: Stripe does
+ *                      not deliver in order, and a late "active" used to put a
+ *                      school whose plan had ended back in the league
+ *   billing_period_end the end of the period being paid for
+ *   billing_ends_at    when a plan cancelled in the portal stops, or stopped
+ */
+alter table schools add column if not exists billing_status text;
+alter table schools add column if not exists billing_event_at timestamptz;
+alter table schools add column if not exists billing_period_end timestamptz;
+alter table schools add column if not exists billing_ends_at timestamptz;
+
+-- Gained p_event_created and p_period_end. The old six-argument version has
+-- to go, or both would exist and the webhook could reach the old one.
+drop function if exists apply_school_subscription(uuid, text, text, text, text, jsonb);
+
+/**
  * Apply what Stripe says about a school's subscription.
  *
  * Idempotent on the event id, because Stripe retries. A suspension is the
@@ -1040,7 +1099,9 @@ create or replace function apply_school_subscription(p_school_id uuid, p_status 
                                                      p_customer_id text default null,
                                                      p_subscription_id text default null,
                                                      p_stripe_event text default null,
-                                                     p_payload jsonb default '{}'::jsonb)
+                                                     p_payload jsonb default '{}'::jsonb,
+                                                     p_event_created timestamptz default null,
+                                                     p_period_end timestamptz default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_s   schools;
@@ -1068,6 +1129,26 @@ begin
      and p_status not in ('active', 'trialing') then
     return jsonb_build_object('ok', true, 'status', v_s.status, 'ignored', 'not_current_subscription');
   end if;
+  -- Older news than what has been applied is out of date. Without this, a
+  -- delayed "active" arriving after "deleted" put a school whose plan had
+  -- ended back in the league, for nothing, until the next event.
+  if p_event_created is not null and v_s.billing_event_at is not null
+     and p_event_created < v_s.billing_event_at then
+    return jsonb_build_object('ok', true, 'status', v_s.status, 'ignored', 'out_of_date');
+  end if;
+  -- A period refunded in full stays refunded (see apply_charge_refund for a
+  -- family's): the portal's "cancel at the end of the period" still says
+  -- active, and must not put the school back in the league for free.
+  if v_s.billing_status = 'refunded' and p_status in ('active', 'trialing', 'past_due')
+     and (p_subscription_id is null or p_subscription_id = v_s.stripe_subscription_id)
+     and (p_period_end is null
+          or (v_s.billing_period_end is not null and p_period_end <= v_s.billing_period_end)) then
+    update schools
+       set billing_event_at = greatest(billing_event_at, p_event_created),
+           billing_ends_at = nullif(p_payload->>'cancel_at', '')::timestamptz
+     where id = p_school_id;
+    return jsonb_build_object('ok', true, 'status', v_s.status, 'ignored', 'refunded_period');
+  end if;
 
   v_new := case
     when p_status in ('active', 'trialing', 'past_due') then 'active'
@@ -1087,9 +1168,73 @@ begin
          -- cancelled subscription for a paying one.
          stripe_subscription_id = case when v_new = 'active' then coalesce(p_subscription_id, stripe_subscription_id)
                                        when p_status in ('canceled', 'unpaid', 'incomplete_expired') then null
-                                       else stripe_subscription_id end
+                                       else stripe_subscription_id end,
+         billing_status = case when p_status in ('trialing','active','past_due','canceled','unpaid','incomplete',
+                                                 'incomplete_expired','paused')
+                               then p_status else 'unknown' end,
+         billing_event_at = greatest(billing_event_at, p_event_created),
+         billing_period_end = coalesce(p_period_end, billing_period_end),
+         billing_ends_at = case
+           when p_status in ('canceled', 'unpaid', 'incomplete_expired')
+             then coalesce(nullif(p_payload->>'ended_at', '')::timestamptz, now())
+           when p_status in ('active', 'trialing', 'past_due')
+             then nullif(p_payload->>'cancel_at', '')::timestamptz
+           else billing_ends_at end
    where id = p_school_id;
   return jsonb_build_object('ok', true, 'status', v_new);
+end $$;
+
+/**
+ * A school's payment handed back. Called only by the Stripe webhook, on
+ * charge.refunded. The webhook answered these and did nothing, so a school
+ * refunded in full stayed in the league as a paying school.
+ *
+ * The same rules as a family's (apply_charge_refund): a partial refund is
+ * goodwill and changes nothing; a refund of an earlier period, with a later
+ * invoice paid since, leaves the period paid for standing; a refund in full of
+ * the current one takes the school out of the league, back to whatever is left
+ * of its free trial. Once per charge however often the event arrives.
+ */
+create or replace function apply_school_refund(p_school_id uuid, p_charge_id text,
+                                               p_full boolean default false,
+                                               p_event_created timestamptz default null,
+                                               p_charge_created timestamptz default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_s schools;
+  v_new text;
+begin
+  if not coalesce(p_full, false) then
+    return jsonb_build_object('ok', true, 'ignored', 'partial_refund');
+  end if;
+  if p_charge_id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no_charge');
+  end if;
+  select * into v_s from schools where id = p_school_id for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_school'); end if;
+
+  insert into billing_events (school_id, stripe_event, type, payload)
+  values (p_school_id, 'refund:' || p_charge_id, 'school:refunded', '{}'::jsonb)
+  on conflict (stripe_event) do nothing;
+  if not found then return jsonb_build_object('ok', true, 'duplicate', true); end if;
+
+  if p_charge_created is not null and exists (
+       select 1 from billing_events
+        where school_id = p_school_id and stripe_event like 'invoice:%'
+          and received_at > p_charge_created + interval '7 days') then
+    return jsonb_build_object('ok', true, 'ignored', 'earlier_period');
+  end if;
+  if v_s.status = 'suspended' then
+    return jsonb_build_object('ok', true, 'status', 'suspended');
+  end if;
+
+  v_new := case when v_s.trial_ends_at > now() then 'trial' else 'lapsed' end;
+  update schools
+     set status = v_new,
+         billing_status = 'refunded',
+         billing_event_at = greatest(billing_event_at, p_event_created)
+   where id = p_school_id;
+  return jsonb_build_object('ok', true, 'status', v_new, 'kind', 'school');
 end $$;
 
 /** A school's invoice was paid: recorded with its amount, once. */
@@ -1106,8 +1251,10 @@ end $$;
 grant execute on function school_checkout_info() to authenticated;
 revoke execute on function attach_school_customer(uuid, text) from public, anon, authenticated;
 revoke execute on function school_for_customer(text) from public, anon, authenticated;
+revoke execute on function school_band_of(uuid) from public, anon, authenticated;
 revoke execute on function stripe_customer_for_school(uuid) from public, anon, authenticated;
-revoke execute on function apply_school_subscription(uuid, text, text, text, text, jsonb) from public, anon, authenticated;
+revoke execute on function apply_school_subscription(uuid, text, text, text, text, jsonb, timestamptz, timestamptz) from public, anon, authenticated;
+revoke execute on function apply_school_refund(uuid, text, boolean, timestamptz, timestamptz) from public, anon, authenticated;
 revoke execute on function record_school_payment(uuid, text, int, text) from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -1147,13 +1294,19 @@ create or replace function operator_schools()
 returns jsonb language sql stable security definer set search_path = public as $$
   select coalesce(jsonb_agg(jsonb_build_object(
            'id', s.id, 'name', s.name, 'district', s.district, 'city', s.city,
+           -- The district as the leagues group it, so the operator's checklist
+           -- can show the other schools in it, and any with the same name.
+           'district_key', s.district_key,
            'student_count', s.student_count, 'size_band', s.size_band,
            'status', s.status, 'verified', s.verified,
            'trial_ends_at', s.trial_ends_at, 'created_at', s.created_at,
            'paying', s.stripe_subscription_id is not null,
            'students_joined', (select count(*) from school_members m where m.school_id = s.id),
            'staff', (select coalesce(jsonb_agg(jsonb_build_object(
-                              'name', st.name, 'role', st.role, 'email', u.email)
+                              'name', st.name, 'role', st.role, 'email', u.email,
+                              -- Whether they clicked the link Supabase emailed:
+                              -- the address is really theirs.
+                              'email_confirmed', u.email_confirmed_at is not null)
                               order by st.role, st.name), '[]'::jsonb)
                        from school_staff st left join auth.users u on u.id = st.user_id
                       where st.school_id = s.id))
@@ -1292,3 +1445,168 @@ begin
 end $$;
 
 grant execute on function remove_school_staff(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- The month, by email, to each school's admin (api/settle-schools.js).
+--
+-- Settlement closed a school's month and told nobody: the result sat on the
+-- school's page for whoever opened it, and what the school had paid, and when
+-- it renews, were only in Stripe's receipts. Each month, after settlement,
+-- the admin gets one short email: the month's league result, what the school
+-- paid that month, and when the plan next renews (or ends).
+--
+-- Once per school per month: the primary key is the promise. The job claims
+-- a school's month before sending and marks it sent after; a send that fails
+-- gives the claim back for the next run, and a claim left by a run that died
+-- is taken again after an hour (the email provider's idempotency key stops
+-- that being a second email). Only the scheduled job, holding the service
+-- key, may claim: these name the admins' addresses.
+-- ---------------------------------------------------------------------------
+
+create table if not exists school_month_emails (
+  school_id  uuid not null references schools(id) on delete cascade,
+  month_key  text not null,
+  claimed_at timestamptz not null default now(),
+  sent_at    timestamptz,
+  primary key (school_id, month_key)
+);
+alter table school_month_emails enable row level security;
+revoke all on school_month_emails from public, anon, authenticated;
+
+/**
+ * What the email says about one school's month: its result, what it paid,
+ * and what happens next with its plan. Facts only; the words are the job's
+ * (api/_shared/email.js). No child is in it: the School Stars are not.
+ */
+create or replace function school_month_summary(p_school uuid, p_month_key text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  v_s      schools;
+  v_score  school_month_scores;
+  v_from   timestamptz := to_date(p_month_key || '-01', 'YYYY-MM-DD')::timestamptz;
+  v_rank   int;
+  v_of     int;
+  v_champ  boolean;
+  v_given  boolean;
+  v_paid   jsonb;
+  v_rivals jsonb;
+begin
+  select * into v_s from schools where id = p_school;
+  if not found then return null; end if;
+  select * into v_score from school_month_scores where school_id = p_school and month_key = p_month_key;
+
+  -- Its place among the district's ranked schools that month.
+  select r.rn, r.n into v_rank, v_of from (
+    select ms.school_id, count(*) over () as n,
+           row_number() over (order by ms.score desc, ms.students desc, s.created_at, s.id) as rn
+      from school_month_scores ms join schools s on s.id = ms.school_id
+     where ms.month_key = p_month_key and ms.ranked and s.district_key = v_s.district_key
+  ) r where r.school_id = p_school;
+
+  select true, a.applied_at is not null into v_champ, v_given
+    from school_awards a where a.month_key = p_month_key and a.school_id = p_school;
+
+  -- Payments recorded in the month, by currency (a school pays in one).
+  select coalesce(jsonb_agg(jsonb_build_object('currency', currency, 'minor', total) order by currency), '[]'::jsonb)
+    into v_paid
+    from (
+      select upper(coalesce(currency, 'USD')) as currency, sum(amount_pence)::bigint as total
+        from billing_events
+       where school_id = p_school and type = 'school:invoice_paid' and amount_pence is not null
+         and received_at >= v_from and received_at < v_from + interval '1 month'
+       group by 1
+    ) p;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'rival', case when r.challenger_id = p_school then rs.name else cs.name end,
+           'result', case when rr.winner_id is null then 'draw' when rr.winner_id = p_school then 'won' else 'lost' end)
+           order by r.created_at, r.id), '[]'::jsonb)
+    into v_rivals
+    from school_rivalry_results rr
+    join school_rivalries r on r.id = rr.rivalry_id
+    join schools cs on cs.id = r.challenger_id
+    join schools rs on rs.id = r.rival_id
+   where rr.month_key = p_month_key and p_school in (r.challenger_id, r.rival_id);
+
+  return jsonb_build_object(
+    'school_id', v_s.id,
+    'name', v_s.name,
+    'district', v_s.district,
+    'month_key', p_month_key,
+    'score', v_score.score,
+    'students', coalesce(v_score.students, 0),
+    'ranked', coalesce(v_score.ranked, false),
+    'verified', v_s.verified,
+    'min_students', school_min_students(),
+    'rank', v_rank,
+    'ranked_schools', v_of,
+    'champion', coalesce(v_champ, false),
+    'free_month_given', coalesce(v_given, false),
+    'rivalries', v_rivals,
+    'paid', v_paid,
+    'status', v_s.status,
+    -- What happens next: renews, ends, or the trial ends.
+    'renews_at', case when v_s.status = 'active' and v_s.billing_ends_at is null then v_s.billing_period_end end,
+    'ends_at', case when v_s.status = 'active' then v_s.billing_ends_at end,
+    'trial_ends_at', case when v_s.status = 'trial' then v_s.trial_ends_at end
+  );
+end $$;
+
+/**
+ * Claim up to `p_limit` schools' emails for a closed month, with what each
+ * says and who to send it to: every school whose month was settled, that is
+ * not suspended, has an admin with an address, and has not had this month's
+ * email. A claim more than an hour old that never became a send is taken
+ * again.
+ */
+create or replace function claim_school_month_emails(p_month date, p_limit int default 50)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_key text := to_char(date_trunc('month', p_month), 'YYYY-MM');
+  r     record;
+  v_out jsonb := '[]'::jsonb;
+  v_to  jsonb;
+begin
+  for r in
+    select ms.school_id
+      from school_month_scores ms join schools s on s.id = ms.school_id
+     where ms.month_key = v_key and s.status <> 'suspended'
+       and not exists (select 1 from school_month_emails e
+                        where e.school_id = ms.school_id and e.month_key = v_key
+                          and (e.sent_at is not null or e.claimed_at > now() - interval '1 hour'))
+     order by ms.school_id
+  loop
+    select coalesce(jsonb_agg(u.email order by st.joined_at), '[]'::jsonb) into v_to
+      from school_staff st join auth.users u on u.id = st.user_id
+     where st.school_id = r.school_id and st.role = 'admin' and u.email like '%@%';
+    -- Nobody to write to: not claimed, so an admin added later still gets it.
+    continue when jsonb_array_length(v_to) = 0;
+
+    insert into school_month_emails (school_id, month_key) values (r.school_id, v_key)
+    on conflict (school_id, month_key) do update set claimed_at = now()
+     where school_month_emails.sent_at is null and school_month_emails.claimed_at <= now() - interval '1 hour';
+    continue when not found;
+
+    v_out := v_out || (school_month_summary(r.school_id, v_key) || jsonb_build_object('recipients', v_to));
+    exit when jsonb_array_length(v_out) >= greatest(p_limit, 1);
+  end loop;
+  return jsonb_build_object('ok', true, 'month', v_key, 'emails', v_out);
+end $$;
+
+/** Sent, so never again; or not sent, so the claim is given back for the next run. */
+create or replace function finish_school_month_email(p_school uuid, p_month_key text, p_sent boolean)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if p_sent then
+    update school_month_emails set sent_at = coalesce(sent_at, now())
+     where school_id = p_school and month_key = p_month_key;
+  else
+    delete from school_month_emails
+     where school_id = p_school and month_key = p_month_key and sent_at is null;
+  end if;
+end $$;
+
+-- The scheduled job's alone: they list schools and their admins' addresses.
+revoke execute on function school_month_summary(uuid, text) from public, anon, authenticated;
+revoke execute on function claim_school_month_emails(date, int) from public, anon, authenticated;
+revoke execute on function finish_school_month_email(uuid, text, boolean) from public, anon, authenticated;

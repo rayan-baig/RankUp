@@ -17,12 +17,31 @@ const iso = (millis) => (millis ? new Date(millis).toISOString() : null)
 /* Kids                                                                */
 /* ------------------------------------------------------------------ */
 
+/**
+ * A kid as this phone keeps it, less `themeBefore`: once the server's row has
+ * arrived, the theme it names is the confirmed one (see SET_KID_THEME).
+ */
+const settledKid = (existing) => {
+  if (!existing || !('themeBefore' in existing)) return existing
+  const { themeBefore: _settled, ...kept } = existing
+  void _settled
+  return kept
+}
+
 export const kids = {
   fromRow: (row, existing = {}) => ({
-    ...existing,
+    ...settledKid(existing),
     id: row.id,
     name: row.name,
     themeId: row.theme_id,
+    /*
+     * When the server saw this theme chosen. The dragon fight starts no
+     * earlier than this, so every phone has to use the same moment: the
+     * server's, null included (the fight then starts at the chore that took
+     * the child to the dragon). Only a server too old to send the column
+     * leaves this phone's own.
+     */
+    themeChosenAt: row.theme_chosen_at !== undefined ? ms(row.theme_chosen_at) : existing.themeChosenAt ?? null,
     avatarHue: row.avatar_hue ?? existing.avatarHue ?? 200,
     xp: row.xp,
     coins: row.coins,
@@ -67,7 +86,16 @@ export const kids = {
     // Local-only, never sent: keep whatever this device already had.
     bestTimes: existing.bestTimes || {},
     storySeen: existing.storySeen || {},
-    pairedDeviceAt: existing.pairedDeviceAt ?? null,
+    /*
+     * Whether this child has a phone of their own is the server's to say:
+     * kids.user_id is that phone's sign-in, set when a parent claims its code
+     * and cleared when it is unlinked. Read from it, a co-parent's phone and
+     * the first-week checklist agree with the phone that did the pairing.
+     * A row without the column (an older snapshot) leaves what was here.
+     */
+    pairedDeviceAt: row.user_id
+      ? (existing.pairedDeviceAt || Date.now())
+      : row.user_id === null ? null : (existing.pairedDeviceAt ?? null),
     createdAt: ms(row.created_at) || existing.createdAt || Date.now(),
     rev: row.rev,
   }),
@@ -168,33 +196,17 @@ export const submissions = {
     id: row.id,
     questId: row.quest_id,
     kidId: row.kid_id,
-    photoId: existing.photoId || null,
-    /*
-     * The image itself no longer travels in the snapshot — it was 96% of the
-     * payload, delivered to every device including the one that took it. What
-     * arrives is a flag; AppContext fetches the picture once, only on a device
-     * that is going to draw it. See submission_photo in supabase/sync.sql.
-     *
-     * `photo_data` is still read because the submitting device's own row still
-     * carries it for the moment between capture and the photo store.
-     */
-    hasPhoto: row.has_photo ?? Boolean(row.photo_data),
-    photoData: row.photo_data || null,
-    // When the photo was destroyed, and why it is gone. Without this the review
-    // screen cannot tell a purged photo from a quest that never wanted one, and
-    // tells the parent their child submitted no proof.
-    photoDeletedAt: ms(row.photo_deleted_at),
-    photoUnavailable: existing.photoUnavailable ?? false,
-    hash: row.photo_hash || null,
-    captureSource: row.capture_source || 'none',
     note: row.note || '',
     testScore: row.test_score,
     elapsedMs: row.elapsed_ms,
     onTime: row.on_time,
-    report: row.ai_report || existing.report || null,
     status: row.status,
     decidedAt: ms(row.decided_at),
     parentNote: row.parent_note || '',
+    // Which adult accepted it or sent it back, and their note on it since:
+    // the Chore history screen shows both.
+    decidedBy: row.decided_by || null,
+    historyNote: row.history_note || '',
     sticker: row.sticker || null,
     awarded:
       row.awarded_xp != null
@@ -204,21 +216,15 @@ export const submissions = {
     rev: row.rev,
   }),
 
-  toRow: (s, familyId, photoData) => ({
+  toRow: (s, familyId) => ({
     id: s.id,
     family_id: familyId,
     quest_id: s.questId,
     kid_id: s.kidId,
-    photo_hash: s.hash || null,
-    photo_data: photoData ?? s.photoData ?? null,
-    capture_source: s.captureSource || 'none',
     note: s.note || '',
     test_score: typeof s.testScore === 'number' ? s.testScore : null,
     elapsed_ms: s.elapsedMs ?? null,
     on_time: s.onTime !== false,
-    ai_verdict: s.report?.verdict || null,
-    ai_score: s.report?.score ?? null,
-    ai_report: s.report || null,
     status: s.status || 'pending',
     parent_note: s.parentNote || '',
     submitted_at: iso(s.submittedAt),
@@ -233,11 +239,20 @@ export const rewards = {
   fromRow: (row) => ({
     id: row.id, name: row.name, description: row.description || '',
     icon: row.icon || '🎁', cost: row.cost, createdAt: ms(row.created_at), rev: row.rev,
+    // How often one child may take it in any seven days; null is no limit.
+    weeklyLimit: row.weekly_limit ?? null,
   }),
   toRow: (r, familyId) => ({
     id: r.id, family_id: familyId, name: r.name,
     description: r.description || '', icon: r.icon || '🎁', cost: r.cost,
+    weekly_limit: weeklyLimitOf(r.weeklyLimit),
   }),
+}
+
+/** A limit the database will hold: a whole number from 1 to 50, or none. */
+export function weeklyLimitOf(value) {
+  const n = Number(value)
+  return Number.isInteger(n) && n >= 1 && n <= 50 ? n : null
 }
 
 export const redemptions = {
@@ -278,6 +293,57 @@ export const overrides = {
   }),
 }
 
+/**
+ * The family goal: one per family, and not diffed like the rows above. It is
+ * set by set_family_goal, which decides where the bar starts, and it arrives
+ * with `progress` already added up, because a child's phone cannot see its
+ * brothers' and sisters' XP to add it up itself.
+ */
+export const familyGoals = {
+  fromRow: (row) => ({
+    name: row.name,
+    targetXp: row.target_xp,
+    startXp: row.start_xp ?? 0,
+    setAt: ms(row.created_at),
+    progress: row.progress ?? 0,
+    shared: true,
+    rev: row.rev,
+  }),
+}
+
+/**
+ * A child's own theme (Theme Genesis). The look and the names only: see
+ * src/data/themeGenesis.js. `sent_at` and `picked_season` are the server's
+ * (submit_kid_theme and the operator's pick write them), so they come down
+ * and never go up.
+ */
+export const kidThemes = {
+  fromRow: (row, existing = {}) => ({
+    ...existing,
+    id: row.id,
+    kidId: row.kid_id,
+    name: row.name,
+    design: row.design || {},
+    status: row.status || 'draft',
+    useAsk: Boolean(row.use_ask),
+    sendAsk: Boolean(row.send_ask),
+    sentAt: ms(row.sent_at),
+    pickedSeason: row.picked_season ?? null,
+    createdAt: ms(row.created_at) || existing.createdAt || Date.now(),
+    rev: row.rev,
+  }),
+  toRow: (t, familyId) => ({
+    id: t.id,
+    family_id: familyId,
+    kid_id: t.kidId,
+    name: t.name,
+    design: t.design,
+    status: t.status || 'draft',
+    use_ask: Boolean(t.useAsk),
+    send_ask: Boolean(t.sendAsk),
+  }),
+}
+
 /** Which app collection each snapshot key maps onto. */
 export const ENTITIES = {
   kids: { key: 'kids', mapper: kids, table: 'kids' },
@@ -287,4 +353,5 @@ export const ENTITIES = {
   redemptions: { key: 'redemptions', mapper: redemptions, table: 'redemptions' },
   notes: { key: 'notes', mapper: notes, table: 'notes' },
   overrides: { key: 'overrides', mapper: overrides, table: 'overrides' },
+  kid_themes: { key: 'kidThemes', mapper: kidThemes, table: 'kid_themes' },
 }

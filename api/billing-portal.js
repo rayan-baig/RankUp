@@ -7,39 +7,25 @@
  * current.
  */
 
-import { makeStripe } from './_shared/stripe.js'
+import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
+import { reportError, userHeaders } from './_shared/job.js'
+import { returnOrigin } from './_shared/site.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
-/**
- * Only our own site. Stripe sends the customer here when they close the billing
- * portal, on a page carrying RankUp's name, so an unvalidated origin from the
- * request body is an open redirect wearing our branding. PUBLIC_SITE_URL wins
- * when set; otherwise the browser's own Origin header, never the body alone.
- */
-function safeOrigin(candidate) {
-  const allowed = (process.env.PUBLIC_SITE_URL || '').replace(/\/+$/, '')
-  if (allowed) return allowed
-  try {
-    const url = new URL(candidate)
-    if (url.protocol !== 'https:' && url.hostname !== 'localhost') return ''
-    return url.origin
-  } catch {
-    return ''
-  }
-}
-
 async function schoolPortal(req, res, token) {
   try {
     const infoRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/school_checkout_info`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: token, Authorization: `Bearer ${token}` },
+      headers: userHeaders(token),
       body: '{}',
     })
     const info = await infoRes.json()
-    if (!info?.ok) return res.status(403).json({ error: info?.reason || 'not_school_admin' })
+    // "Already paying" is a refusal to start a second checkout, and the very
+    // school that should reach the portal: its card, invoices and cancelling.
+    if (!info?.ok && info?.reason !== 'already_paying') return res.status(403).json({ error: info?.reason || 'not_school_admin' })
     if (!info.has_customer) return res.status(400).json({ error: 'no_subscription' })
 
     const customerRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/stripe_customer_for_school`, {
@@ -50,7 +36,7 @@ async function schoolPortal(req, res, token) {
     const customerId = await customerRes.json()
     if (!customerId) return res.status(400).json({ error: 'no_customer' })
 
-    const origin = safeOrigin(req.headers.origin || '')
+    const origin = returnOrigin(req)
     if (!origin) {
       return res.status(503).json({
         error: 'not_configured',
@@ -63,8 +49,8 @@ async function schoolPortal(req, res, token) {
     })
     return res.status(200).json({ url: portal.url })
   } catch (err) {
-    console.error('[billing-portal:school]', err.message)
-    return res.status(502).json({ error: 'portal_failed' })
+    await reportError('billing-portal:school', err)
+    return res.status(stripeUnavailable(err) ? 503 : 502).json({ error: stripeUnavailable(err) ? 'stripe_unavailable' : 'portal_failed' })
   }
 }
 
@@ -91,7 +77,7 @@ export default async function handler(req, res) {
     // family — the customer id comes from the database, never from the request.
     const statusRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/billing_status`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: token, Authorization: `Bearer ${token}` },
+      headers: userHeaders(token),
       body: '{}',
     })
     const status = await statusRes.json()
@@ -113,7 +99,7 @@ export default async function handler(req, res) {
     const customerId = await customerRes.json()
     if (!customerId) return res.status(400).json({ error: 'no_customer' })
 
-    const origin = safeOrigin(req.headers.origin || '')
+    const origin = returnOrigin(req)
     // Same as create-checkout: with no origin there is no absolute URL to
     // return to, and Stripe's rejection of a relative one told the parent
     // nothing useful.
@@ -132,7 +118,7 @@ export default async function handler(req, res) {
     })
     return res.status(200).json({ url: portal.url })
   } catch (err) {
-    console.error('[billing-portal]', err.message)
-    return res.status(502).json({ error: 'portal_failed' })
+    await reportError('billing-portal', err)
+    return res.status(stripeUnavailable(err) ? 503 : 502).json({ error: stripeUnavailable(err) ? 'stripe_unavailable' : 'portal_failed' })
   }
 }

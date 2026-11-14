@@ -1,19 +1,24 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
-import { levelFromXp, formatXp, xpToNext } from '../../lib/xp.js'
+import { levelFromXp, formatXp, xpToNext, liveStreak, DIFFICULTY } from '../../lib/xp.js'
 import { nextEvolution, storyChapters } from '../../data/kidThemes.js'
 import { storyProgress, dragonFight, DRAGON_HP, HERO_HP } from '../../lib/dragonFight.js'
 import { isMarketOpen } from '../../data/marketSkins.js'
-import { dayKey, lastSevenDays } from '../../lib/dates.js'
+import { dayKey } from '../../lib/dates.js'
 import Avatar, { avatarTier, nextTierLevel, tiersFor } from '../../components/Avatar.jsx'
 import QuestCard from '../../components/QuestCard.jsx'
 import { Screen, Card, Button, ProgressBar, Stat, SectionTitle, EmptyState, Banner, Chip } from '../../components/ui.jsx'
 import { Words, CountUp } from '../../components/Motion.jsx'
 import SyncBadge from '../../components/SyncBadge.jsx'
 import { navigate } from '../../lib/router.js'
-import InstallPrompt from '../../components/InstallPrompt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
-import { useKidSchool } from './KidSchool.jsx'
+import SeasonMoment from '../../components/SeasonMoment.jsx'
+import { PickedNotice } from '../../components/KidThemesParent.jsx'
+import { useKidSchool } from './useKidSchool.js'
+import { familyGoalProgress } from '../../state/reducer.js'
+import { CATEGORY_MAP } from '../../data/questTemplates.js'
+import ModeBadge, { useLeaderboardMe } from '../../components/ModeBadge.jsx'
+import ArenaMoment from '../../components/ArenaMoment.jsx'
 
 export default function KidHome() {
   const { state, dispatch } = useApp()
@@ -22,6 +27,7 @@ export default function KidHome() {
   const elite = useElite()
   const [levelPop, setLevelPop] = useState(false)
   const school = useKidSchool(kid)
+  const [me] = useLeaderboardMe(kid, Boolean(state.demo))
 
   if (!kid) return null
 
@@ -41,14 +47,28 @@ export default function KidHome() {
   const quests = state.quests.filter((q) => q.kidId === kid.id)
   const active = quests.filter((q) => q.status === 'assigned' || q.status === 'redo')
   const waiting = quests.filter((q) => q.status === 'submitted')
-  const bonusAvailable = kid.lastLoginBonus !== dayKey()
-
-  const weekXp = useMemo(() => {
-    const week = new Set(lastSevenDays())
-    return state.events
-      .filter((e) => e.kidId === kid.id && e.type === 'quest_approved' && week.has(e.day))
-      .reduce((sum, e) => sum + (e.meta?.xp || 0), 0)
-  }, [state.events, kid.id])
+  /*
+   * The way forward, said for where the child actually is, and the first
+   * thing under their name. It used to be a "Current quest" row with a
+   * "1 / 7" nobody could read, then three number cards, then "Ready for the
+   * next challenge?" — so a child opening a fresh phone saw their level
+   * three times before being told what to do. Now: the quest, what it pays,
+   * and one button. "Nothing left to do, spend a token in the arcade" was
+   * once shown to a child in a family that had just been set up: no chore
+   * ever assigned and no token to spend, so each case says its own thing.
+   */
+  const hasTokens = Boolean(state.demo) || (kid.playTokens || 0) > 0
+  // A chore sent back comes first: it is the one a parent is waiting on.
+  const nextQuest = active.find((q) => q.status === 'redo') || active[0] || null
+  const next = hasTokens
+    ? { icon: '🎮', to: '/kid/arcade', title: 'Nothing left to do', line: 'Spend a token in the arcade.' }
+    : waiting.length
+      ? { icon: '⏳', to: '/kid/quests', title: 'All sent', line: 'Your parent is checking what you did.' }
+      : quests.length
+        ? { icon: '✅', to: '/kid/quests', title: 'All done for now', line: 'New quests show up here when your parent adds them.' }
+        : { icon: '📜', to: '/kid/quests', title: 'No quests yet', line: 'Ask your parent to give you your first quest.' }
+  // A day later than today (the server's, after a zone change) counts as claimed.
+  const bonusAvailable = !kid.lastLoginBonus || kid.lastLoginBonus < dayKey()
 
   const unreadNotes = state.notes.filter((n) => n.kidId === kid.id && n.from === 'parent' && !n.read)
 
@@ -68,6 +88,9 @@ export default function KidHome() {
       <AppHeader theme={theme} />
 
       <SyncBadge />
+      <SeasonMoment />
+      <ArenaMoment kidId={kid.id} me={me} />
+      <PickedNotice who="kid" />
 
       {/* The header card: who you are and how far along you are. */}
       <Card className="mb-3 fx-hero">
@@ -106,13 +129,14 @@ export default function KidHome() {
           >
             <div className="text-lg leading-none" aria-hidden="true">🔥</div>
             <div className="font-display font-extrabold text-lg leading-none mt-0.5">
-              <CountUp value={kid.streak.count} />
+              <CountUp value={liveStreak(kid.streak)} />
             </div>
             <div className="text-[9px] uppercase tracking-wider text-muted">Day streak</div>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-1.5 mt-3">
+            <ModeBadge mode={me?.mode || 'adventure'} onClick={() => navigate('/kid/leaderboards')} />
             <Chip tone="var(--accent)">Form {tier} / {tiersFor(theme).length}</Chip>
             {nextTier && <Chip>Next form at level {nextTier}</Chip>}
             {/* When, never what: a world nobody has reached is a secret. */}
@@ -130,6 +154,43 @@ export default function KidHome() {
           </p>
         )}
       </Card>
+
+      <SectionTitle>Do this next</SectionTitle>
+      {nextQuest ? (
+        <Card className="mb-3" data-testid="next-up" style={{ borderColor: nextQuest.status === 'redo' ? 'var(--warn)' : 'var(--accent)' }}>
+          <div className="flex items-center gap-3">
+            <span className="text-3xl shrink-0" aria-hidden="true">{CATEGORY_MAP[nextQuest.category]?.icon || '🎯'}</span>
+            <div className="min-w-0 flex-1">
+              <div className="font-display font-bold truncate">{nextQuest.title}</div>
+              <div className="text-xs text-muted">
+                {nextQuest.status === 'redo'
+                  ? 'Sent back. Have another go.'
+                  : `+${nextQuest.xp ?? DIFFICULTY[nextQuest.difficulty]?.xp ?? 0} XP · ${theme.currency.icon} +${Math.max(1, Math.round((nextQuest.xp ?? DIFFICULTY[nextQuest.difficulty]?.xp ?? 0) / 5))}`}
+              </div>
+            </div>
+          </div>
+          <Button className="w-full mt-3" onClick={() => navigate(`/kid/quest/${nextQuest.id}`)}>
+            Start this quest
+          </Button>
+          <p className="text-[11px] text-muted mt-2 text-center">
+            {active.length === 1 ? 'Your last one for now.' : `${active.length - 1} more after this one.`}
+          </p>
+        </Card>
+      ) : (
+        <Card
+          className="mb-3 flex items-center gap-3"
+          data-testid="next-up"
+          onClick={() => navigate(next.to)}
+          style={{ cursor: 'pointer', borderColor: 'color-mix(in srgb, var(--accent) 45%, var(--line))' }}
+        >
+          <span className="text-2xl shrink-0" aria-hidden="true">{next.icon}</span>
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-sm">{next.title}</div>
+            <div className="text-xs text-muted">{next.line}</div>
+          </div>
+          <span className="text-muted shrink-0" aria-hidden="true">›</span>
+        </Card>
+      )}
 
       {/* The story: a new chapter to watch, or the fight that is on. */}
       {newChapter && (
@@ -189,6 +250,23 @@ export default function KidHome() {
         </button>
       )}
 
+      <button
+        type="button"
+        onClick={() => navigate('/kid/leaderboards')}
+        data-testid="open-leaderboards"
+        className="card w-full mb-3 p-3 flex items-center gap-3 text-left transition-transform active:scale-[0.98]"
+        style={{ borderColor: me?.mode === 'arena' ? '#f05a28' : 'color-mix(in srgb, var(--accent) 45%, var(--line))' }}
+      >
+        <span className="text-2xl shrink-0" aria-hidden="true">🏆</span>
+        <span className="flex-1 min-w-0">
+          <span className="block font-semibold text-sm">Leaderboards</span>
+          <span className="block text-xs text-muted truncate">
+            {me?.mode === 'arena' ? `Racing the world as ${me.nickname}` : 'Chores, XP, streaks, arcade scores and more'}
+          </span>
+        </span>
+        <span aria-hidden="true" className="text-muted">›</span>
+      </button>
+
       {school && (
         <button
           type="button"
@@ -210,42 +288,6 @@ export default function KidHome() {
         </button>
       )}
 
-      {/* The one you are on, with how far through it you are. */}
-      {active.length > 0 && (
-        <>
-          <SectionTitle>Current quest</SectionTitle>
-          <Card
-            className="mb-3"
-            onClick={() => navigate(`/kid/quest/${active[0].id}`)}
-            style={{ cursor: 'pointer' }}
-          >
-            <div className="flex items-center gap-3">
-              <span className="text-2xl shrink-0" aria-hidden="true">{active[0].icon || '🎯'}</span>
-              <div className="min-w-0 flex-1">
-                <div className="font-semibold text-sm truncate">{active[0].title}</div>
-                <div className="text-xs text-muted">
-                  {active.length === 1 ? 'The only one left today.' : `${active.length} to do today.`}
-                </div>
-              </div>
-              <span
-                className="font-display font-extrabold text-sm shrink-0"
-                style={{ color: 'var(--accent)' }}
-              >
-                {waiting.length + 1} / {active.length + waiting.length}
-              </span>
-            </div>
-            <div className="mt-2">
-              <ProgressBar
-                value={waiting.length}
-                max={active.length + waiting.length}
-                height={8}
-                label="Quests done today"
-              />
-            </div>
-          </Card>
-        </>
-      )}
-
       {/* Three small cards, as in the design. */}
       <div className="flex gap-2 mb-3 anim-stagger">
         {/*
@@ -264,7 +306,7 @@ export default function KidHome() {
         />
         <Stat
           icon="🎯"
-          value={`${waiting.length}/${active.length + waiting.length || 1}`}
+          value={active.length + waiting.length ? `${waiting.length}/${active.length + waiting.length}` : '—'}
           label="Weekly goal"
           tone="var(--accent-2)"
         />
@@ -277,24 +319,6 @@ export default function KidHome() {
           label={nextReward ? nextReward.name : 'No rewards set'}
         />
       </div>
-
-      {/* The way forward, which the design puts right under the numbers. */}
-      <Card
-        className="mb-3 flex items-center gap-3"
-        onClick={() => navigate(active.length ? '/kid/quests' : '/kid/arcade')}
-        style={{ cursor: 'pointer', borderColor: 'color-mix(in srgb, var(--accent) 45%, var(--line))' }}
-      >
-        <span className="text-2xl shrink-0" aria-hidden="true">{active.length ? '⚔️' : '🎮'}</span>
-        <div className="min-w-0 flex-1">
-          <div className="font-semibold text-sm">
-            {active.length ? 'Ready for the next challenge?' : 'Nothing left to do'}
-          </div>
-          <div className="text-xs text-muted">
-            {active.length ? "Keep going, you're doing great." : 'Spend a token in the arcade.'}
-          </div>
-        </div>
-        <span className="text-muted shrink-0" aria-hidden="true">›</span>
-      </Card>
 
       {bonusAvailable && (
         <Card className="mb-3 flex items-center gap-3" style={{ borderColor: 'var(--accent)' }}>
@@ -321,6 +345,19 @@ export default function KidHome() {
         </Card>
       )}
 
+      {state.familyGoal && (
+        <Card className="mb-3">
+          <SectionTitle>Family goal</SectionTitle>
+          <div className="flex justify-between text-sm mb-2">
+            <span className="font-semibold">{state.familyGoal.name}</span>
+            <span className="text-muted">
+              {formatXp(familyGoalProgress(state))} / {formatXp(state.familyGoal.targetXp)} XP
+            </span>
+          </div>
+          <ProgressBar value={familyGoalProgress(state)} max={state.familyGoal.targetXp} height={9} label="Family goal progress" />
+        </Card>
+      )}
+
       {/*
         Only while the market is actually open. A card counting down to it would
         be the exact pressure the market is written to avoid putting on a child
@@ -341,8 +378,6 @@ export default function KidHome() {
           <span aria-hidden="true" className="text-muted">›</span>
         </button>
       )}
-
-      <InstallPrompt />
 
       <SectionTitle action={<button type="button" className="text-xs text-muted underline" onClick={() => navigate('/kid/quests')}>See all</button>}>
         Today's quests

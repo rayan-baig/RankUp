@@ -27,14 +27,36 @@ function walk(dir, out = []) {
   return out
 }
 
-const sources = ['src', 'api', 'functions'].flatMap((d) => walk(d))
+// vite.config.js runs at build time and reads the same settings (the
+// Supabase address goes into the Content-Security-Policy), through loadEnv.
+const sources = [...['src', 'api', 'functions'].flatMap((d) => walk(d)), 'vite.config.js']
 const used = new Set()
+/** Reads by a name worked out at run time, which no list here can check. */
+const dynamic = []
 for (const file of sources) {
   const text = readFileSync(file, 'utf8')
   for (const m of text.matchAll(/process\.env\.([A-Z][A-Z_0-9]*)/g)) used.add(m[1])
-  for (const m of text.matchAll(/import\.meta\.env\?\.([A-Z][A-Z_0-9]*)/g)) used.add(m[1])
+  // With or without ?. — `import.meta.env.VITE_X` was missed before.
+  for (const m of text.matchAll(/import\.meta\.env(?:\?\.|\.)([A-Z][A-Z_0-9]*)/g)) used.add(m[1])
   for (const m of text.matchAll(/read\('(VITE_[A-Z_0-9]*)'\)/g)) used.add(m[1])
+  if (file === 'vite.config.js') for (const m of text.matchAll(/\benv\.([A-Z][A-Z_0-9]*)/g)) used.add(m[1])
+  // A setting's name kept in a string and looked up later (the school prices
+  // in api/_shared/schoolBilling.js are read this way).
+  if (!file.startsWith('src')) {
+    for (const m of text.matchAll(/'((?:STRIPE|VAPID|SUPABASE|CRON|OPERATOR|STATS|RETENTION|REMINDER|DIGEST|PUBLIC_SITE)_[A-Z_0-9]*)'/g)) used.add(m[1])
+  }
+  text.split('\n').forEach((line, i) => {
+    if (/process\.env\[|import\.meta\.env\[/.test(line)) dynamic.push(`${file}:${i + 1}`)
+  })
 }
+
+console.log('\n=== No setting is read by a name made up at run time ===')
+// src/lib/env.js walks every VITE_ setting the build has, looking for a
+// secret pasted into a public name: that loop reads names it cannot know.
+const DYNAMIC_ALLOWED = ['src/lib/env.js']
+const strayDynamic = dynamic.filter((at) => !DYNAMIC_ALLOWED.includes(at.split(':')[0]))
+ok('every setting is read by its own name, so the list below is complete', strayDynamic.length === 0,
+  `read by a computed name at ${strayDynamic.join(', ')}: name it, or this test cannot check it is documented`)
 
 // Vite's own, and the two the test harness sets. Not ours to document.
 const BUILT_IN = new Set(['DEV', 'PROD', 'MODE', 'SSR', 'BASE_URL', 'NODE_ENV'])
@@ -56,9 +78,52 @@ ok('no settings listed that do nothing', stale.length === 0, `unused: ${stale.jo
 
 console.log('\n=== No secret is named so it would be shipped to every phone ===')
 const publicNames = [...documented].filter((v) => v.startsWith('VITE_'))
-const SECRET_WORDS = /SERVICE_ROLE|SECRET|PRIVATE|ANTHROPIC_API_KEY/
+const SECRET_WORDS = /SERVICE_ROLE|SECRET|PRIVATE|API_KEY/
 const leaked = publicNames.filter((v) => SECRET_WORDS.test(v))
 ok('nothing secret-shaped carries a VITE_ name', leaked.length === 0, leaked.join(', '))
+
+console.log('\n=== Guilds stay off unless the setting is exactly "true" ===')
+// Guilds are the one feature that puts a child in touch with children in
+// other families. Nearly-right settings must leave them off, not on.
+const { guildsSwitchedOn, guildsEnabled } = await import('../src/lib/guilds.js')
+ok('VITE_GUILDS_ENABLED=true switches them on', guildsSwitchedOn('true') === true)
+const nearly = [undefined, null, '', 'TRUE', 'True', ' true', 'true ', '1', 'yes', 'on', 'false', true, 1]
+const wronglyOn = nearly.filter((v) => guildsSwitchedOn(v))
+ok('anything else leaves them off (TRUE, 1, yes, " true", a boolean...)', wronglyOn.length === 0,
+  `switched on by: ${wronglyOn.map((v) => JSON.stringify(v)).join(', ')}`)
+ok('and with the setting absent, as at launch, they are off', guildsEnabled() === false)
+const guildSource = readFileSync('src/lib/guilds.js', 'utf8')
+ok('the app reads the switch through that one test',
+  /const GUILDS_ENABLED = guildsSwitchedOn\(import\.meta\.env\?\.VITE_GUILDS_ENABLED\)/.test(guildSource))
+const appSource = readFileSync('src/App.jsx', 'utf8')
+ok('and every guild screen in the app is behind it',
+  (appSource.match(/<(KidGuild|ParentGuilds) \/>/g) || []).length === 2
+  && /guildsEnabled\(\) && guildsAllowedByPlan\(state\) \? <KidGuild \/>/.test(appSource)
+  && /guildsEnabled\(\) \? <ParentGuilds \/>/.test(appSource))
+
+console.log('\n=== The company is MTRX Horizyn, everywhere a person reads it ===')
+{
+  // The legal text, the screens, the notices and emails the server sends, the
+  // host headers, the docs and the company page. Spelled "Horizyn" so it is
+  // not mistaken for other companies; the old spelling must not come back.
+  const { OPERATOR, PRODUCT_OF } = await import('../src/data/legalText.js')
+  ok('the operator in the privacy policy and terms is MTRX Horizyn',
+    OPERATOR.name === 'MTRX Horizyn' && PRODUCT_OF === 'RankUp is a product of MTRX Horizyn.')
+  const SKIP = new Set(['node_modules', 'dist', 'dist-demo', 'preview', '.git', '.wrangler', 'screenshots'])
+  const TEXT = /\.(js|jsx|mjs|json|html|md|sql|css|svg|txt|toml|sh)$|^_headers$|^_redirects$|^\.env\.example$/
+  const OLD = /MTRX\s+HORIZON\b|MTRX\s+Horizon\b/i
+  const found = []
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      if (SKIP.has(name)) continue
+      const path = join(dir, name)
+      if (statSync(path).isDirectory()) walk(path)
+      else if (TEXT.test(name) && OLD.test(readFileSync(path, 'utf8')) && path !== join('tests', 'config.mjs')) found.push(path)
+    }
+  }
+  walk('.')
+  ok('no file anyone reads spells it the old way', found.length === 0, found.join(', '))
+}
 
 console.log(fails === 0 ? '\nALL CHECKS PASSED' : `\n${fails} FAILED`)
 process.exit(fails === 0 ? 0 : 1)

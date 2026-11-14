@@ -1,3 +1,5 @@
+import { dayKey, daysBetween } from './dates.js'
+
 /**
  * Levelling, XP and currency rules — the numbers that make the game a game.
  *
@@ -68,12 +70,63 @@ export function calcReward(quest, { elite = false, streak = 0, onTime = true } =
   }
   if (elite) {
     const bonus = Math.round(xp * (ELITE_XP_MULTIPLIER - 1))
-    lines.push({ label: 'Elite Pass 1.5× boost', value: bonus })
+    lines.push({ label: `Elite Pass ${ELITE_XP_MULTIPLIER}× boost`, value: bonus })
     xp += bonus
   }
 
   const coins = Math.max(1, Math.round(xp / 5))
   return { xp, coins, lines }
+}
+
+/**
+ * What accepting this submission pays: the quest's reward plus, for a
+ * test-score quest, the bonus for the score reported.
+ *
+ * One function for the reducer that pays it and the review screen that shows
+ * it. The screen used calcReward alone, so a parent was told "+30 XP" for a
+ * test-score chore that then paid 60.
+ */
+export function submissionReward(quest, submission, { elite = false, streak = 0 } = {}) {
+  const reward = calcReward(quest, { elite, streak, onTime: submission?.onTime !== false })
+  let { xp, coins } = reward
+  const lines = [...reward.lines]
+  if (quest.testScore && typeof submission?.testScore === 'number') {
+    const bonus = testScoreBonus(submission.testScore, quest.xp || 30)
+    if (bonus > 0) {
+      lines.push({ label: `Scored ${submission.testScore}%`, value: bonus })
+      xp += bonus
+      coins += Math.max(1, Math.round(bonus / 5))
+    }
+  }
+  return { xp, coins, lines }
+}
+
+/**
+ * The streak as it stands today: its count while it is alive (a chore was
+ * approved today or yesterday), nothing once it has lapsed.
+ *
+ * The stored count only resets at the next approval, so a child who stopped a
+ * week ago still saw their old number, and the first chore back was paid a
+ * streak bonus. MIRRORED in award_for_submission in supabase/schema.sql.
+ */
+export function liveStreak(streak, today = dayKey()) {
+  if (!streak?.count || !streak.lastDay) return 0
+  const gap = daysBetween(streak.lastDay, today)
+  if (gap <= 1) return streak.count
+  // One missed day with a streak freeze in hand: the next approval spends the
+  // freeze and carries the run on, so it is still alive. See bumpStreak.
+  if (gap === 2 && (streak.freezeTokens || 0) >= 1) return streak.count
+  return 0
+}
+
+/**
+ * A timed chore is on time if it was finished within its time, the deadline
+ * itself included: a child who stops the clock at exactly 5:00 on a
+ * five-minute chore beat it.
+ */
+export function finishedOnTime(timerSeconds, elapsedMs) {
+  if (!timerSeconds) return true
+  return elapsedMs > 0 && elapsedMs <= timerSeconds * 1000
 }
 
 /** Streaks add up to +25%, capped so they never dwarf the quest itself. */

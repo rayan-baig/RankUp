@@ -1,45 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { navigate } from '../../lib/router.js'
-import { schools, demoMySchools, DEMO_LEAGUE } from '../../lib/schools.js'
+import { schools, DEMO_LEAGUE } from '../../lib/schools.js'
 import { Screen, Card } from '../../components/ui.jsx'
 import { SchoolHeadline, LeagueTable, RivalryList, StarList } from '../../components/SchoolParts.jsx'
+import { useKidSchool } from './useKidSchool.js'
 
 /*
  * A child's own school page. They see their school's place in the district,
  * its rivals, and whether they are a School Star. They cannot join or leave:
  * that is a parent's decision, made on the parent's side.
  */
-
-// One answer per child per visit to the app, rather than a request every time
-// the home screen draws.
-const cache = new Map()
-
-/** This child's school card, or null if they are not in one. */
-export function useKidSchool(kid) {
-  const { state } = useApp()
-  const demo = Boolean(state.demo)
-  const key = kid ? `${demo ? 'demo' : 'live'}:${kid.id}` : null
-  const [school, setSchool] = useState(() => (key ? cache.get(key) : undefined))
-
-  useEffect(() => {
-    if (!kid || cache.has(key)) { setSchool(cache.get(key)); return undefined }
-    let live = true
-    const get = demo
-      ? Promise.resolve(demoMySchools(state.kids, kid.id))
-      : schools.mine()
-    get.then((res) => {
-      const mine = res.ok ? (res.children || []).find((c) => c.kid_id === kid.id) : null
-      const value = mine?.school || null
-      // A failed request is not remembered, so the next visit tries again.
-      if (res.ok) cache.set(key, value)
-      if (live) setSchool(value)
-    })
-    return () => { live = false }
-  }, [key])
-
-  return school
-}
 
 export default function KidSchool() {
   const { state } = useApp()

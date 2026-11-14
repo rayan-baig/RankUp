@@ -71,7 +71,7 @@ do $$
 declare res jsonb;
 begin
   perform become('e3a33333-3333-3333-3333-333333333333');
-  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'memory', 999999999);
+  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'memory', 999999999, p_elapsed_ms => 90000);
   perform ok('an absurd score is clamped to 100', (res->>'score')::int = 100);
   perform ok('so the very best a game can pay is five', (res->>'coins')::int = 5);
   perform ok('the token was spent', (res->>'tokens_left')::int = 0);
@@ -92,7 +92,7 @@ begin
 
   perform become('e3a33333-3333-3333-3333-333333333333');
   for i in 1..20 loop
-    res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'stack', 100);
+    res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'stack', 100, p_elapsed_ms => 60000);
   end loop;
 
   select coins into v_total from kids where id = 'e4a44444-0000-0000-0000-000000000001';
@@ -114,7 +114,7 @@ begin
   set local role app_user;
 
   perform become('e3a33333-3333-3333-3333-333333333333');
-  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'memory', 100);
+  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'memory', 100, p_elapsed_ms => 90000);
   perform ok('tomorrow the arcade pays again', (res->>'coins')::int = 5);
   perform ok('and the tally restarted from zero', (res->>'earned_today')::int = 5);
 end $$;
@@ -164,6 +164,63 @@ begin
     if sqlerrm like 'FAIL%' then raise; end if;
     raise notice '  PASS one family CANNOT play for another''s child (%)', left(sqlerrm, 30);
   end;
+end $$;
+
+-- ---------- no score higher than the game allows in the time played ----------
+--
+-- Every game's floor (minigame_floor_ms) is how long a perfect round takes at
+-- the very least. A score sent from a phone is held to what that game allows
+-- in the time it says was played, game by game, and with no time at all
+-- (a request made by hand, or a phone too old to send one) to 50.
+do $$
+declare res jsonb; g text; v_games text[] := array[
+    'stack', 'memory', 'chain', 'lights', 'catch', 'snake', 'merge', 'bricks', 'sweeper', 'sky',
+    'four', 'slide', 'sports', 'blocks', 'sweets', 'impostor', 'turbo', 'track', 'wildfire',
+    'royal', 'tennis', 'holdem', 'blackjack', 'gofish'];
+begin
+  set local role postgres;
+  update kids set play_tokens = 200, game_coins_today = 0, game_day = current_date - 1,
+                  best_scores = '{}'::jsonb
+   where id = 'e4a44444-0000-0000-0000-000000000001';
+  set local role app_user;
+  perform become('e3a33333-3333-3333-3333-333333333333');
+
+  foreach g in array v_games loop
+    perform ok(g || ' has a floor', minigame_floor_ms(g) > 0);
+    res := play_minigame('e4a44444-0000-0000-0000-000000000001', g, 100, p_elapsed_ms => 500);
+    perform ok(g || ': 100 sent half a second in is held to what half a second allows',
+      (res->>'score')::int = minigame_possible_score(g, 500) and (res->>'score')::int < 100
+      and (res->>'held')::boolean, res::text);
+    res := play_minigame('e4a44444-0000-0000-0000-000000000001', g, 100, p_elapsed_ms => minigame_floor_ms(g));
+    perform ok(g || ': a perfect round played at the quickest real pace keeps its 100',
+      (res->>'score')::int = 100 and not (res->>'held')::boolean, res::text);
+  end loop;
+
+  -- Each game by its own clock: the time that is plenty for one is far too
+  -- little for another.
+  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'lights', 100, p_elapsed_ms => 3000);
+  perform ok('three seconds is enough for a perfect Lights Out', (res->>'score')::int = 100);
+  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'turbo', 100, p_elapsed_ms => 3000);
+  perform ok('but not for 75 seconds of Turbo Ball', (res->>'score')::int <= 5, res::text);
+  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'turbo', 40, p_elapsed_ms => 75000);
+  perform ok('an honest lower score is never touched', (res->>'score')::int = 40 and not (res->>'held')::boolean);
+
+  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'memory', 100);
+  perform ok('with no time at all, a score counts for at most 50',
+    (res->>'score')::int = 50 and (res->>'held')::boolean);
+  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'snake', 100, p_elapsed_ms => -5);
+  perform ok('a time before the game began allows nothing', (res->>'score')::int = 0);
+
+  set local role postgres;
+  update kids set best_scores = '{}'::jsonb where id = 'e4a44444-0000-0000-0000-000000000001';
+  set local role app_user;
+  perform become('e3a33333-3333-3333-3333-333333333333');
+  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'merge', 100, p_elapsed_ms => 6000);
+  perform ok('the best score kept is the held one, never the claim',
+    (select (best_scores->>'merge')::int from kids where id = 'e4a44444-0000-0000-0000-000000000001') = 10,
+    (select best_scores::text from kids where id = 'e4a44444-0000-0000-0000-000000000001'));
+  perform ok('every game the app ships has a floor, and nothing else does',
+    minigame_floor_ms('roulette') is null);
 end $$;
 
 -- ---------- a Streak Freeze is spent where it cannot be faked ----------

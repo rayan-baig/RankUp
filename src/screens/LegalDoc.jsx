@@ -1,11 +1,13 @@
-import { PRIVACY_POLICY, TERMS, OPERATOR } from '../data/legalText.js'
+import { PRIVACY_POLICY, TERMS, UNFILLED } from '../data/legalText.js'
 import { Screen, Card, Button, SectionTitle, Banner } from '../components/ui.jsx'
 import { navigate } from '../lib/router.js'
+
+const FIELD_NAMES = { name: 'name', email: 'contact email', address: 'postal address' }
 
 /** The privacy policy and terms, readable on a phone. */
 export default function LegalDoc({ which }) {
   const doc = which === 'terms' ? TERMS : PRIVACY_POLICY
-  const unfilled = OPERATOR.name.startsWith('[')
+  const unfilled = UNFILLED.length > 0
 
   return (
     <Screen>
@@ -17,8 +19,8 @@ export default function LegalDoc({ which }) {
 
       {unfilled && (
         <Banner tone="warn" icon="✏️" title="Not finished">
-          The operator name, contact email and address are still placeholders. Fill them in
-          (src/data/legalText.js) and have a lawyer read this before you publish it.
+          Still to fill in: the company&apos;s {UNFILLED.map((k) => FIELD_NAMES[k] || k).join(' and ')} (src/data/legalText.js).
+          Have a lawyer read this before you publish it.
         </Banner>
       )}
 

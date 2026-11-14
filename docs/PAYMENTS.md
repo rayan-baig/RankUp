@@ -33,12 +33,88 @@ progress does not.
 
 ### 1. Create the products
 
-In the Stripe dashboard, two recurring monthly prices:
+In the Stripe dashboard, two products, each with a monthly and a yearly
+recurring price (the plan screen offers both):
 
 | Product | Price | Note the price id |
 |---|---|---|
-| RankUp Standard | $9.99 / month | `price_...` → `STRIPE_PRICE_STANDARD` |
-| RankUp Elite Pass | $15.99 / month | `price_...` → `STRIPE_PRICE_ELITE` |
+| RankUp Standard | $5.99 / month | `price_...` → `STRIPE_PRICE_STANDARD` |
+| RankUp Standard | $49.99 / year | `price_...` → `STRIPE_PRICE_STANDARD_YEAR` |
+| RankUp Elite Pass | $9.99 / month | `price_...` → `STRIPE_PRICE_ELITE` |
+| RankUp Elite Pass | $79.99 / year | `price_...` → `STRIPE_PRICE_ELITE_YEAR` |
+
+A year saves $21.89 on Standard (30%) and $39.89 on Elite Pass (33%) against
+twelve monthly payments. Neither is a whole number of months, so the plan
+screen's Monthly / Yearly switch says "Save 30% or more" (the smaller of the
+two, so it never promises more than the plan a parent picks) and each card
+gives its own saving in dollars. All of it is worked out from `TIERS` by
+`annualSaving` and `yearlyNote` in `src/lib/plans.js`.
+
+Starter is free and has no Stripe price. `tests/plans.mjs` reads this table
+and fails if a price on the plan screen is not in it.
+
+And, for gifts (a year bought for another family, below), a product such as
+**RankUp gift** with two **one-time** prices, not recurring:
+
+| Product | Price | Note the price id |
+|---|---|---|
+| RankUp gift | $49.99 once (a year of Standard) | `price_...` → `STRIPE_PRICE_GIFT_STANDARD_YEAR` |
+| RankUp gift | $79.99 once (a year of Elite Pass) | `price_...` → `STRIPE_PRICE_GIFT_ELITE_YEAR` |
+
+They must be the yearly amounts in `TIERS`, exactly like the four above: the
+Give page shows `TIERS`, and Stripe charges the price. A price change follows
+"Changing a price" below for these two as well.
+
+### Changing a price
+
+The prices a parent reads (plan screen, banners, front door, help page, terms)
+all come from `TIERS` in `src/state/initialState.js`. What a card is charged
+comes from the Stripe price whose id is in `STRIPE_PRICE_*`. Nothing in the
+code compares the two: checkout only names a price id, and the webhook maps a
+price id to a plan without looking at the amount. So **the app shows what
+Stripe charges a new family only if each of the four ids is a Stripe price for
+exactly the amount in `TIERS`**, monthly and yearly. That is the guarantee, and
+it is kept by hand, in this order:
+
+1. In Stripe, on the existing products, add a new recurring price for each
+   new amount (a Stripe price's amount cannot be edited). Leave the old
+   prices where they are: families on them still renew through them.
+2. Put the four new price ids in `STRIPE_PRICE_STANDARD`,
+   `STRIPE_PRICE_STANDARD_YEAR`, `STRIPE_PRICE_ELITE` and
+   `STRIPE_PRICE_ELITE_YEAR` on the host, and deploy the version whose
+   `TIERS` has the same amounts, at the same time. Between the two, a new
+   family is shown one price and charged the other.
+3. Open the plan screen, start a checkout for each of the four, and check that
+   Stripe's page shows the same amount as the button. Cancel each one.
+
+**Families already subscribed stay on the price they signed up at** until
+they are moved. Stripe never changes an existing subscription's price by
+itself, and nothing in RankUp does either. Either of these is fine; pick one
+on purpose:
+
+- **Keep them as they are.** Nothing to do. They go on paying the old price
+  until they cancel or change plan. Their plan is unaffected: once
+  `STRIPE_PRICE_*` holds the new ids, the webhook no longer knows the old ones
+  and goes by the plan RankUp's checkout wrote on the subscription
+  (`metadata.tier`), which every subscription it made carries
+  (`tests/api.mjs` checks it). A subscription you made by hand in Stripe,
+  without that metadata, would fall to Starter: move it instead. The new
+  prices are lower, and a family will see them on the plan screen, so it is
+  worth telling them they can move.
+- **Move them in the Stripe dashboard.** Customers → the subscription →
+  Update subscription → replace the price with the new one for the same plan
+  and the same period, with no proration, so the new amount starts at the next
+  renewal. A yearly subscriber moves at the end of the year they have paid
+  for. The webhook sees the new price id and keeps the family on the same
+  plan.
+
+The plan screen only ever shows the current prices. A family still on an old
+price sees the new one there; its own amount is on its Stripe invoices and in
+"Manage billing".
+
+The referral free month and the Alliance prize are read from the family's own
+Stripe subscription, not from `TIERS`, so a family on an old price gets a
+month at the price it really pays.
 
 ### 2. Run the SQL
 
@@ -53,7 +129,12 @@ VITE_STRIPE_ENABLED=true          # turns on real checkout in the app
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_STANDARD=price_...
+STRIPE_PRICE_STANDARD_YEAR=price_...
 STRIPE_PRICE_ELITE=price_...
+STRIPE_PRICE_ELITE_YEAR=price_...
+STRIPE_PRICE_GIFT_STANDARD_YEAR=price_...   # one-time
+STRIPE_PRICE_GIFT_ELITE_YEAR=price_...      # one-time
+GIFT_CODE_SECRET=...                        # openssl rand -hex 32, set once
 SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
@@ -62,19 +143,25 @@ SUPABASE_SERVICE_ROLE_KEY=...
 Stripe dashboard → Developers → Webhooks → add an endpoint:
 
 ```
-https://your-domain.com/api/stripe-webhook
+https://rankup.mtrxhorizyn.com/api/stripe-webhook
 ```
 
 Subscribe it to:
 
-- `checkout.session.completed`
-- `checkout.session.async_payment_succeeded` (bank payments that clear later)
+- `checkout.session.completed` (a paid gift becomes its code here)
+- `checkout.session.async_payment_succeeded` (bank payments that clear later,
+  a gift's included)
 - `customer.subscription.created`
 - `customer.subscription.updated`
 - `customer.subscription.deleted`
 - `invoice.paid` and `invoice.payment_succeeded` (record each renewal's money)
 - `invoice.payment_failed` (received and deliberately ignored: the
   subscription's own status change is what moves the plan)
+- `charge.refunded` (a refund: see "Refunds and failed payments" below; a
+  gift's refund voids its code if unused)
+- `charge.dispute.created` (a chargeback: only takes back a referral's free
+  month, see "Bring a friend" below; the plan follows the subscription's
+  own events)
 
 Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
 
@@ -89,13 +176,334 @@ parser re-serialises, the bytes change, and the check fails, which people then
 Use Stripe's test mode and the CLI:
 
 ```bash
-stripe listen --forward-to localhost:5173/api/stripe-webhook
+# The functions run on :8788 (see supabase/test/serve-functions.sh; the dev
+# server on :5173 does not serve /api). Give them the STRIPE_WEBHOOK_SECRET
+# and STRIPE_SECRET_KEY that `stripe listen` and your test account use.
+stripe listen --forward-to localhost:8788/api/stripe-webhook
 stripe trigger checkout.session.completed
 ```
 
-Card `4242 4242 4242 4242` succeeds; `4000 0000 0000 0341` fails after
-attaching — use it to check that a failed payment really does drop the family
-to Standard.
+Card `4242 4242 4242 4242` succeeds; `4000 0000 0000 0341` attaches and then
+fails to charge. Put it on a test subscription and make it renew (a test
+clock) to check that a failed renewal really drops the family to Starter and
+the dashboard says "A payment failed" (the table below).
+
+---
+
+## Refunds and failed payments
+
+What the webhook does, and what the parent is told. The words are in
+`billingNotice` in `src/lib/billing.js`; they show on the plan screen and,
+for a payment problem, on the parent dashboard.
+
+| Stripe says | Plan | The parent sees |
+|---|---|---|
+| `past_due` (a renewal's card was declined; Stripe is retrying) | Starter at once | "A payment failed", naming the plan that stopped, and "Manage billing" to update the card |
+| `unpaid` / `incomplete_expired` (Stripe gave up) | Starter | "Your plan has stopped" |
+| `paused` (a trial ended with no card) | Starter | "Your plan is paused" |
+| `charge.refunded`, the plan's payment **in full** | Starter, status `refunded` | "Your payment was refunded" |
+| ... and then Stripe says `active` again for the **same period** (cancelling in the portal does this) | stays Starter, `refunded` | still "Your payment was refunded" |
+| ... and then a renewal into a **new period** | the plan they pay for | the notice goes |
+| `charge.refunded`, partly, or an earlier period's payment (a later invoice was paid since) | unchanged | nothing |
+| `charge.refunded`, a Flash Ticket pack in full | unchanged | the pack's tickets are taken back, as many as are left (never below zero) |
+| `active`, but cancelled in the portal (`cancel_at_period_end`) | unchanged until it ends | "Your plan is ending", with the date, on the plan screen only |
+| `customer.subscription.deleted` (the plan ended) | Starter, status `canceled` | "Your plan has ended", on the plan screen only |
+| back to `active` | the plan they pay for | the notice goes |
+
+Every status Stripe sends can be stored. The column used to accept only five
+of them, so `unpaid`, `incomplete`, `incomplete_expired` and `paused` made the
+webhook fail on every retry and left the family on the plan they had stopped
+paying for. Each of these, and a refund or a pack credited once however often
+it is replayed, is checked by `tests/api.mjs` through the real runtime.
+
+**A refund in full does not cancel the subscription in Stripe.** Cancel it
+there too, or the next renewal charges the card and puts the plan back. Until
+it is cancelled (or the parent cancels it from "Manage billing"), checkout
+refuses to start a second plan beside it (`refunded_plan_renews`): the plan
+screen says "choose a plan below", and both subscriptions would otherwise have
+charged the card every period. Until
+then Stripe goes on calling the subscription `active`, and cancelling it in the
+portal at the end of the period says `active` once more: the webhook used to
+take that as the plan coming back, so a refunded family had its plan again,
+free, until the period ended. A period refunded in full now stays refunded
+until a renewal starts a new one (`apply_subscription_change`).
+
+A plan that has ended says so as it is: the family is on Starter from the
+moment Stripe ends it. The plan screen used to say "It runs until" the end of
+the period for a plan cancelled at once, to a family already on Starter. A plan
+cancelled in the portal and still running says "Your plan is ending" and the
+date it stops.
+
+**All of it, one family's whole life in order:** `tests/billingwalk.mjs`
+subscribes a family monthly, renews, fails a payment, refunds, cancels and
+subscribes again for a year, through the real checkout, portal and signed
+webhook against a stand-in Stripe, delivering events twice and out of order at
+every step. After each step it checks the plan the database holds, the plan
+screen's and the dashboard's words, and what the child can use: the plan the
+child's own phone works out, the XP a chore pays (Elite's boost), and whether a
+second child can be added. It does the same for a school. The database's half
+on its own is `supabase/test/41-billing-walk.sql`.
+
+When Stripe itself is down, checkout and the billing portal answer
+`stripe_unavailable` within about twenty seconds, and the app says Stripe is
+not answering and that nothing about the plan has changed.
+---
+
+## Bring a friend: a free month
+
+When a family invites a friend's family (its code, in Settings → "Invite a
+family, get a free month") and that family **starts paying**, the inviting
+family gets **one free month of its plan**. The family who joins gets 30 days
+of Standard when its first chore is accepted, as before. The inviting family
+used to get 30 days too for that chore; that is replaced by the free month,
+so one friend is paid for once.
+
+**When it is earned.** On the invited family's first invoice that took money,
+monthly or yearly (`invoice.paid` / `invoice.payment_succeeded` with
+`amount_paid > 0`). A trial's $0 invoice, a failed payment
+(`invoice.payment_failed` never earns anything) and a payment already refunded
+in full or disputed when its invoice arrives do not count. The webhook asks
+`earn_referral_reward` (`supabase/referrals.sql`), which keeps the invoice on
+the referral, so it is decided **once**: Stripe's two events for one payment,
+its retries and the invited family's later invoices all answer `duplicate`.
+
+**How it is given: a customer balance credit.** One month at the price of the
+plan the inviting family pays for, read from its own Stripe subscription (a
+yearly plan gets a twelfth of its yearly price, so Elite Pass at $79.99 a year
+gives $6.67), in its currency, as a negative balance transaction on its customer
+(`api/_shared/referralReward.js`). Stripe takes it off the next invoice by
+itself. This is how the Alliance and School League prizes are already paid:
+
+- not a coupon, which takes a percentage off the next invoice, and for a yearly
+  plan would be a free year
+- not a pause or a longer trial on the subscription: subscriptions are made by
+  Checkout and changed only in Stripe's portal, and a credit touches neither
+- the credit carries the idempotency key `referral-reward:<invited family>`,
+  so a replay, a timeout retry or two deliveries at once give one credit. If
+  Stripe fails, the webhook answers 500 and Stripe's retry gives it.
+- nothing about the invited family goes to Stripe: the description is the same
+  words for everyone ("A free month: a family you invited started paying") and
+  there is no metadata
+
+**A family on Starter (or still on its in-app trial)** pays nothing, so there is
+nothing to take a month off. Its month is **banked**: the card says "1 free
+month banked. It comes off your first bill when you choose a plan.", and the
+moment the webhook records its first subscription (`active` or `trialing`), the
+banked month is credited at the price of the plan it chose. It is not turned
+into free Standard time: that is what the joining family gets, and twelve
+Standard months a year would be a free plan for never paying.
+
+**Limits**, all in the database:
+
+| Rule | How |
+|---|---|
+| No self-referral | Not the same family; not a family with a parent whose email is the same (case, spaces and a `+tag` ignored); not a family paying with the inviter's Stripe customer. Checked when the code is claimed (`same_household`) and again when the reward is decided (`blocked`, `same_email` / `same_customer`) |
+| One reward per invited family | The reward lives on the `referrals` row, whose key is the invited family |
+| At most 12 a year | `referral_reward_cap()`: free months earned in the last 365 days. The thirteenth is `blocked`, `cap`, and the card says the family has had the most there is |
+| Refunded within 14 days | `referral_refund_days()`. A full refund (`charge.refunded`) or a dispute (`charge.dispute.created`) of the invited family's first payment within 14 days of it withdraws the month if it is unused: a banked or not-yet-credited month at once; a credited one only if the inviting family's Stripe balance still holds at least that much credit (it is then reversed with a positive balance transaction, key `referral-withdraw:<invited family>`). Already used on an invoice, or refunded later than 14 days: it stays, and `reward_note` says what happened (`refund_within_14_days_credit_used`, `refund_after_14_days`) |
+
+The first payment is recognised by its charge or payment intent (read from the
+invoice, or from Stripe's invoice payments on API versions where the invoice no
+longer names them). A refund or dispute that arrives **before** its invoice is
+remembered, and that invoice then earns nothing. A Flash Ticket pack refund is
+never mistaken for it.
+
+**What families see.** The card in Settings, and a shorter copy on the plan
+screen: the code, how many families joined with it and how many pay, and the
+free months (earned, on the way, banked, taken back). Counts only:
+`my_referrals()` returns no other family's name, id, email or dates, and
+answers a child's phone and a supporter with nothing. "You earned a free
+month" shows once on the parent's dashboard; OK on one phone is seen for the
+family (`see_referral_rewards()`). No email, and nothing on a child's screen.
+"Download my data" includes the family's referrals: whether it joined with a
+code, how many joined with its own, and each free month it earned, never which
+families they were.
+
+**Tests.** `supabase/test/54-referral-rewards.sql` (every rule, the counts, the
+revokes), `tests/billingwalk.mjs` "Bring a friend" (the real webhook under
+workerd against a stand-in Stripe: a trial, a $0 and a failed invoice earn
+nothing; the first paid invoice credits the inviter once, through replays and
+out-of-order events; the same customer and the cap; a refund within 14 days
+reversing the credit; a dispute before its invoice; a Starter family's month
+banked and credited when it subscribes), and `tests/referrals.mjs` (the card,
+the notice once, and no child's screen mentioning it).
+
+Run `supabase/referrals.sql` again on the live database (after `billing.sql`,
+in the documented order), and `consent.sql` (the download), and add
+`charge.dispute.created` to the webhook's events.
+
+---
+
+## Gift subscriptions: "a year of RankUp"
+
+For the holidays: a grandparent, an aunt or an uncle buys a year of Standard
+or Elite Pass for a family. **The buyer needs no RankUp account.** The family
+redeems a code in Parent Mode and has that plan free for 12 months.
+
+No new webhook event is needed: a gift arrives on `checkout.session.completed`
+(or `checkout.session.async_payment_succeeded`) and is refunded on
+`charge.refunded`, which the webhook already takes.
+
+### Buying
+
+The Give page, `#/gift`, is linked from the front door, the plan screen and
+Settings (on a phone that is set up, only in Parent Mode; never on a child's
+phone). The buyer chooses Standard or Elite Pass for 1 year, gives their own
+email for the receipt, optionally the recipient's name and email, their own
+name and a message of at most 200 characters (plain text, the Theme Genesis
+rude-word list, no links or email addresses), and either **"Email it to them
+now"** or **"I'll give it myself"** (a printable card).
+
+`/api/gift-checkout` checks the form again, keeps it (`start_gift_order`,
+`supabase/billing.sql`, which checks it a third time and, since the page
+needs no account, allows at most 10 gifts started an hour from one address
+and 2,000 across everybody), and opens Stripe Checkout in **payment** mode:
+one payment, at the yearly price.
+
+**Why one-time Stripe prices of their own** (`STRIPE_PRICE_GIFT_*_YEAR`)
+rather than the yearly subscription prices or an amount worked out in code:
+
+- Checkout's one-off payments take only one-time prices; the yearly prices
+  are recurring and Stripe refuses them there.
+- An amount written in the code (`price_data`) would break the rule this file
+  starts from: the code names a price, Stripe holds the money, and the two
+  agree because the ids are kept matching by hand.
+- Separate prices keep gifts apart in Stripe's reports, and the receipt names
+  "RankUp gift: Elite Pass, 1 year".
+
+Nothing about who the gift is for is sent to Stripe: the session carries only
+`kind: gift`, the order id and the plan, and the buyer's email (Stripe asks
+for it). The recipient's details stay in RankUp's database and are deleted on
+schedule (below).
+
+### The code
+
+**Made only after Stripe confirms payment, by the webhook, never before.** An
+order that is never paid has no code (the database refuses a code on an
+unpaid order), so a code that never sold cannot exist; the order is deleted
+after 14 days. A checkout completed but not yet paid (a bank payment clearing)
+waits for `async_payment_succeeded`.
+
+- **Easy to type:** 12 characters, `XXXX-XXXX-XXXX`, from 31 capital letters
+  and digits without the ones that read as each other (0 and O, 1, I and L).
+  Case, spaces and dashes do not matter when it is typed.
+- **Unguessable:** worked out from the paid checkout session with HMAC-SHA256
+  under `GIFT_CODE_SECRET` (`api/_shared/gifts.js`), about 59 bits. Without
+  the secret nobody can make one; with the limits below nobody can find one.
+- **Stored hashed:** the database is handed only `sha256` of the code and
+  never holds the code (`fulfil_gift_order`). The code is in the two emails
+  and nowhere else.
+- **Idempotent:** the same session always gives the same code, and the order
+  is keyed on the session, so Stripe's two events for one payment, its
+  retries and a replay all answer `duplicate` and send nothing twice. If an
+  email fails the webhook answers 500, Stripe retries, and the retry sends the
+  same code. Each email has an idempotency key and is marked sent.
+- **Single use**, for **2 years** from purchase. The money is recorded once in
+  `billing_events` (`gift:<session>`), against no family.
+
+### Delivery
+
+Both emails go through the existing sender (`sendEmail`), with a plain-text
+part and the MTRX Horizyn footer; the words are in [EMAILS.md](EMAILS.md).
+
+- **The buyer**, always: a receipt with the code, the plan, how to redeem it,
+  the date it must be used by, and a link to the printable gift card
+  (`#/gift/card?...`). Everything on the card travels after the `#`, which a
+  browser never sends to a server. Stripe sends its own payment receipt too.
+- **The recipient**, only for "Email it to them now": "<name> gave your family
+  a year of RankUp", the message, the code and how to redeem it. It never
+  contains the buyer's email address (`tests/emails.mjs` and
+  `tests/billingwalk.mjs` check).
+
+### Redeeming
+
+A parent opens Parent Mode → Settings (or the plan screen) → **Redeem a
+gift** (`#/parent/redeem`) and types the code. `/api/redeem-gift` checks the
+caller is a parent of the family (not a supporter, not a child's phone) and
+calls `redeem_gift_code`, which only the server may call.
+
+- **How plans are stored:** a gift does not touch `tier` (Stripe's column).
+  It sets `families.gift_tier`, `gift_starts_at` and `gift_until`, and
+  `effective_tier()` (the one plan check every gate asks) takes the best of
+  the paid tier, an unexpired trial and a running gift. The app's
+  `effectiveTier` mirrors it (`tests/trials.mjs` runs both). When a gift ends
+  the family falls back to what it pays for, or Starter; nothing a child
+  earned is touched.
+- **12 months from redemption.**
+- **One gift per family at a time; more stack.** Another code adds 12 months
+  to the end, at the better of the two plans for the whole time.
+- **Settings** says "Gift plan: Elite Pass until <date>". The parent's
+  dashboard reminds them **30 days before it ends**, in the app only: no
+  email, and nothing on a child's screen. A family that has already lined up
+  a paid plan of at least the same size is not reminded.
+
+### A family that already pays
+
+The rule: **gift time never runs while the family is paying for the same
+days, so nobody is charged twice.**
+
+- **A paid plan that will renew:** the code is refused with
+  `subscription_renews` and **not spent**. The parent is told to turn renewal
+  off in "Manage billing" first. Their paid plan then runs to the end of what
+  they paid for.
+- **A paid plan already cancelled and running to its end:** the gift starts
+  the day it ends (`gift_starts_at`) and runs 12 months from then. Until then
+  the family keeps the plan it paid for.
+- **Choosing a plan during a gift:** checkout carries the gift's end as the
+  subscription's `trial_end`, so the card is first charged the day the gift
+  ends, never before. Stripe waits at most two years, so with more than two
+  years of stacked gift ahead checkout answers `gift_too_long` instead of
+  charging early.
+- If a parent turns renewal back on in the portal after redeeming, Stripe
+  charges as usual at renewal; the plan screen says to leave it off.
+
+This was chosen over pausing or extending the Stripe subscription from
+RankUp's side: subscriptions are made by Checkout and changed only in
+Stripe's portal, as everywhere else in this file.
+
+### Limits
+
+| Rule | How |
+|---|---|
+| Brute force | 5 codes that did not work in an hour per family, 20 per address (a keyed hash of it, never the address), then `too_many_tries` for the hour. A right code does not count |
+| The Give page, which needs no account | 10 gifts started an hour per address (`too_many_gifts`), 2,000 across everybody (`busy`) |
+| Children | Never see buying or redeeming: the gift pages open only in Parent Mode on a phone that is set up, never on a child's phone, and the endpoint answers only a parent's token |
+| Refunds | A refund **in full** (`charge.refunded`) of an unused code voids it (`refunded` when typed). A code already used **stays used**: the family keeps its year, and `refund_note = refunded_after_use` records the decision. A refund that arrives before Stripe's "paid" means no code is ever made. A partial refund changes nothing. Once per charge |
+
+### What is kept, and for how long
+
+| What | Kept |
+|---|---|
+| The buyer's email | For the receipt and help with the gift, until the code runs out (2 years) |
+| The recipient's name and email, the buyer's name and message | Only to send the gift: 30 days after it was paid for |
+| A checkout nobody paid for, with what was typed | 14 days |
+| Codes typed that did not work, and the count of gifts started from each address (a keyed hash) | 2 days |
+| The order (plan, paid, used, refunded, the code's hash) | Kept: the record of the sale |
+
+All deleted by the daily `/api/run-retention` (`run_retention`). The privacy
+policy says so in one sentence.
+
+### Tests
+
+`supabase/test/55-gifts.sql` (every rule, the limits, stacking, the paying
+family, refunds, nothing reachable from a browser), `34-scheduled-jobs.sql`
+(retention deletes exactly the gift rows above), `tests/billingwalk.mjs`
+"Gift" (the real gift checkout, webhook and redeem endpoint against the
+stand-in Stripe and email provider), `tests/emails.mjs` (both emails, every
+variant), `tests/trials.mjs` (the app and the database agree) and
+`tests/gifts.mjs` (the Give page, the card, redeeming, Settings, the
+reminder, and no child's screen).
+
+### To switch it on
+
+1. In Stripe, make the two one-time prices above.
+2. Set `STRIPE_PRICE_GIFT_STANDARD_YEAR`, `STRIPE_PRICE_GIFT_ELITE_YEAR` and
+   `GIFT_CODE_SECRET`, with email set up (`EMAIL_API_KEY`, `EMAIL_FROM`): the
+   code reaches people only by email.
+3. Run every SQL file again, in the documented order (`schema.sql` and
+   `billing.sql` changed; `retention.sql` too). No new file.
+4. Buy a gift in test mode with card 4242 4242 4242 4242, check both emails,
+   redeem the code on a test family, and refund it in Stripe.
 
 ---
 
@@ -109,14 +517,102 @@ Enable the portal once in Stripe: Settings → Billing → Customer portal.
 
 ---
 
+## When a family deletes its account
+
+Deleting the account (Settings → Delete my account) **cancels the family's
+Stripe subscription at once**, so the card is never charged again. Before
+this, the database removed the family and with it the only link to the
+subscription, which went on renewing every month for an account that no
+longer existed.
+
+How it works, and why it cannot lose one:
+
+- The app asks `/api/delete-account` (`api/delete-account.js`) with the
+  parent's own token. That calls `delete_family_account` as the parent (same
+  rules as ever: a parent, the typed DELETE), which removes the family and, **in
+  the same transaction**, writes its customer and subscription ids into
+  `billing_cancellations`. If the deletion fails nothing is queued; if it
+  succeeds the cancellation cannot be lost.
+- The endpoint then cancels with the secret key, on the server. Every live
+  subscription on the family's customer is cancelled (not only the one the
+  family row knew of: a checkout that had just completed is caught too), at
+  once, with `invoice_now=false` and `prorate=false`, so there is no final
+  invoice. A school's plan on the same customer is left alone.
+- **The account is deleted whatever Stripe does.** If Stripe is down or
+  refuses, the endpoint still answers `ok`, and the row stays queued with the
+  error. The daily `/api/run-retention` tries everything still queued, and so
+  does the webhook whenever Stripe sends news about that family, until Stripe
+  confirms. A row is marked done only on Stripe's confirmation, and a
+  subscription Stripe has already cancelled counts as done.
+- **It is never forgotten.** Retention never deletes a row still waiting, and
+  `/api/health` reports `billing_cancellations_overdue` (and is not ok) for any
+  that has waited more than a day: Stripe refusing, or `STRIPE_SECRET_KEY` not
+  set on the retention job.
+- **Idempotent.** Each cancel carries an idempotency key; running the queue
+  again, or two runs at once, cancels nothing twice.
+- **A checkout paid after the deletion** (a payment page left open) is caught
+  by the webhook: it recognises the deleted family and cancels the new
+  subscription before it renews. An app opened before this change, which asks
+  the database directly, still queues the cancellation; the daily job makes it.
+
+Webhook events about a deleted family (including the "subscription deleted"
+the cancellation itself causes) are answered `200` and dropped, rather than
+failing and being retried by Stripe for three days. A payment already taken is
+still recorded for the totals, against no family. Events for a family id this
+database never had are dropped too, and their subscriptions are **never**
+cancelled: only a family known to have deleted itself here is.
+
+**The Stripe customer is kept.** It holds the invoices and payments the family
+made, which you must keep for tax, and it is what a refund or a chargeback on
+those payments is handled against. Stripe keeps those records whatever happens
+to the customer. RankUp's database keeps only the queue row (the customer and
+subscription ids, under a one-way fingerprint of the family id rather than the
+id itself), until 30 days after Stripe confirmed the cancellation. Every
+deletion also leaves that fingerprint, with no Stripe ids, for a week, so a
+late checkout can be recognised. If a parent asks for the Stripe record to be
+erased too, delete the customer in the Stripe dashboard once you no longer
+need its payments for tax or disputes.
+
+No refund is given automatically for the rest of the period. If you want to
+give one, refund the last payment in Stripe; the webhook handles it.
+
+**Withdrawing consent is not deleting the account.** It removes the children
+and keeps the parent's account, so the subscription carries on until the
+parent cancels it in the billing portal or deletes the account; the
+withdrawal screen says so. **Schools** have no deletion of their own: the last
+member of staff cannot leave a school, and a school cancels from its School
+League page through the portal. Deleting a parent's account never touches a
+school's plan.
+
+`tests/api.mjs` drives all of this through the real runtime against a
+stand-in Stripe: deleting with Stripe up, down and not answering, an older app
+deleting through the database, a subscription already cancelled, a checkout
+paid after the deletion, and a family the database never had.
+`supabase/test/30-deleted-billing.sql` checks the queue itself.
+
+---
+
 ## What this costs you
 
-Stripe takes about 2.9% + 30¢ per transaction. On $9.99 that is roughly 59¢, so
-you keep about $9.40.
+Stripe takes about 2.9% + 30¢ per transaction. What that leaves you, before
+sales tax and Stripe Tax's own fee:
+
+| Plan | Price | Stripe takes | You keep |
+|---|---|---|---|
+| Standard, monthly | $5.99 | about 47¢ | about $5.52 |
+| Standard, yearly | $49.99 | about $1.75 | about $48.24 |
+| Elite Pass, monthly | $9.99 | about 59¢ | about $9.40 |
+| Elite Pass, yearly | $79.99 | about $2.62 | about $77.37 |
+
+The flat 30¢ is a bigger share of a smaller price: about 8% of $5.99, against
+under 4% of $49.99. A yearly plan pays it once instead of twelve times, so
+over a year Standard yearly keeps about $48.24 against about $66.20 for twelve
+monthly payments ($71.88 less twelve fees of about 47¢), and Elite Pass about
+$77.37 against about $112.80.
 
 If you ever ship native iOS or Android apps, Apple and Google **require** their
-own billing for digital subscriptions and take 15–30%. On $9.99 that is
-$1.50–$3.00 per family per month. It is a real argument for staying a web app
+own billing for digital subscriptions and take 15–30%. On $5.99 that is about
+$0.90–$1.80, and on $9.99 $1.50–$3.00, per family per month. It is a real argument for staying a web app
 longer than feels comfortable.
 
 ---
@@ -126,13 +622,15 @@ longer than feels comfortable.
 Parent Alliances are real: `supabase/alliances.sql` counts each member family's
 approved quests for the month, and `api/settle-alliances.js` gives the winner
 20% of one month's price as credit on their Stripe account (worked out from
-their own subscription, so a yearly plan gets 20% of a month, not of a year). **Nothing pays out until you schedule that endpoint**, so
+their own subscription, so a yearly plan gets 20% of a month, not of a year:
+Elite Pass monthly at $9.99 gets $2.00 off, and at $79.99 a year about
+$1.33). **Nothing pays out until you schedule that endpoint**, so
 until you do, families will see a leaderboard and never see a discount.
 
 Set `CRON_SECRET` to a long random string, then call it once a month:
 
 ```
-POST https://your-site/api/settle-alliances
+POST https://rankup.mtrxhorizyn.com/api/settle-alliances
 Authorization: Bearer <CRON_SECRET>
 ```
 
@@ -180,15 +678,29 @@ it in Stripe too.
 
 - **Checkout** is `api/school-checkout.js`. Only a school's admin can start it,
   and the price is picked from the school's own size, never from the request.
-  Days left on the 30-day free trial carry onto the card.
+  Days left on the 30-day free trial carry onto the card. A checkout page
+  opened before the school corrected its size still carries the old price, so
+  the webhook checks every live school subscription against the school's band
+  and moves it to the right price from the next invoice (no proration). A
+  price you set by hand in Stripe, outside the eight band prices, is left
+  alone.
 - **The webhook** you already have handles schools as well. A school's events
   carry `school_id`; they switch the school on and off and never touch a
-  family's plan. A failing card keeps the school playing while Stripe retries.
+  family's plan. A failing card keeps the school playing while Stripe retries,
+  and the school's page tells its admin "A payment failed" and where to change
+  the card. As for a family: events older than the school's latest are ignored
+  (a late "active" used to put a school whose plan had ended back in the
+  league); a refund in full of the current period takes the school out of the
+  league (it was answered and ignored, so a refunded school stayed in as a
+  paying one), and "active" for that same period does not put it back; a plan
+  cancelled in the portal says when it stops. A paying school's admin reaches
+  "Card, invoices and cancelling": the portal used to refuse exactly the
+  schools that were paying.
 - **Each month**, schedule `api/settle-schools.js` the same way as the alliance
   job (it is in `vercel.json`, a day after the month ends):
 
   ```
-  POST https://your-site/api/settle-schools
+  POST https://rankup.mtrxhorizyn.com/api/settle-schools
   Authorization: Bearer <CRON_SECRET>
   ```
 
@@ -197,7 +709,7 @@ it in Stripe too.
   Stripe account if it pays (so a yearly plan gets a month off, not a year),
   thirty more trial days if it is still on its trial. A free month that could not be
   given stays owed and is tried again next run. It never gives one twice.
-- **Checking schools are real**: open `https://your-site/#/operator` and type
+- **Checking schools are real**: open `https://rankup.mtrxhorizyn.com/#/operator` and type
   your `OPERATOR_SECRET`. New schools are listed first, with who signed each up
   and their email; verify, un-verify, suspend or lift a suspension there.
   Until a school is verified it is in no league and sees no child's name.

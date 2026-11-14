@@ -1,17 +1,37 @@
-import { uid } from '../lib/id.js'
+import { uid, now as clock } from '../lib/id.js'
 import { dayKey } from '../lib/dates.js'
 import { DEFAULT_KID_THEME, KID_THEMES } from '../data/kidThemes.js'
 import { DEFAULT_PARENT_THEME, PARENT_THEMES } from '../data/parentThemes.js'
 
 /**
+ * Days of Elite a new family gets free, with no card. The server grants the
+ * same in create_family (supabase/sync.sql); tests/lookaround.mjs fails if the
+ * two disagree, because the front door quotes this number.
+ */
+export const TRIAL_DAYS = 14
+
+/**
  * The three plans, cheapest first.
  *
- * `limits` is the machine-readable half — what the app actually enforces — and
- * `features` is the human half shown on the plan screen. They must agree: a
- * feature line that nothing enforces is a promise the app does not keep.
+ * `limits` (with `guildSize` and `xpMultiplier`) is what the app actually
+ * enforces. The words on the plan screen are worked out from it by
+ * lib/plans.js, never typed beside it: a feature line that nothing enforces
+ * is a promise the app does not keep. tests/planwords.mjs checks each limit
+ * against the code that enforces it.
  *
- * All three are billed monthly. There is no annual option and no trial charge.
+ * Standard and Elite are billed monthly or yearly (a year saves 30% to
+ * 33% against twelve months; lib/plans.js works the saving out). The trial
+ * is free and asks for no card.
  */
+/* What only Elite unlocks, each one gated by isElite() in the app. */
+const NO_ELITE_TOOLS = {
+  overdrive: false,
+  profileFrames: false,
+  consequenceEngine: false,
+  blueprints: false,
+  alliances: false,
+}
+
 export const TIERS = {
   /*
    * Free, and that is the whole growth strategy in one number.
@@ -32,21 +52,16 @@ export const TIERS = {
     order: 0,
     guildSize: 0,
     xpMultiplier: 1,
-    limits: { maxKids: 1, guilds: false },
-    features: [
-      'Free, for as long as you like',
-      'One child',
-      'Unlimited quests and rewards',
-      'You accept every finished chore',
-      'All 15 kid themes and 10 parent themes',
-    ],
+    limits: { maxKids: 1, guilds: false, ...NO_ELITE_TOOLS },
   },
   standard: {
     id: 'standard',
     name: 'Standard',
-    price: 9.99,
+    price: 5.99,
     /*
-     * Ten months' money for twelve months' app.
+     * A year for a little over eight months' money: $49.99 against twelve
+     * at $5.99. The saving, and the label on the Monthly / Yearly switch, are
+     * worked out from these two numbers in lib/plans.js, never typed.
      *
      * The saving is the smaller half of why this exists. The larger half is
      * that the decision to cancel then happens once a year instead of twelve
@@ -54,36 +69,29 @@ export const TIERS = {
      * a quiet month where nobody opened it and the charge looked like a good
      * thing to stop.
      */
-    yearPrice: 99.9,
+    yearPrice: 49.99,
     order: 1,
     guildSize: 5,
     xpMultiplier: 1,
-    limits: { maxKids: Infinity, guilds: true },
-    features: [
-      'Unlimited children',
-      '5-player guilds',
-      'Everything in Starter',
-    ],
+    limits: { maxKids: Infinity, guilds: true, ...NO_ELITE_TOOLS },
   },
   elite: {
     id: 'elite',
     name: 'Elite Pass',
-    price: 15.99,
-    yearPrice: 159.9,
+    price: 9.99,
+    yearPrice: 79.99,
     order: 2,
     guildSize: 10,
     xpMultiplier: 1.5,
-    limits: { maxKids: Infinity, guilds: true },
-    features: [
-      'Everything in Standard',
-      'Permanent 1.5× XP boost',
-      'Overdrive — the richer look, on every theme',
-      '10-player Megacluster guilds',
-      'Exclusive profile customisation',
-      'The Parental Consequence Engine',
-      'Advanced AI Behaviour Blueprints',
-      'The 20% Discount Tournament',
-    ],
+    limits: {
+      maxKids: Infinity,
+      guilds: true,
+      overdrive: true,
+      profileFrames: true,
+      consequenceEngine: true,
+      blueprints: true,
+      alliances: true,
+    },
   },
 }
 
@@ -121,26 +129,27 @@ export const PLAN_COMPARISON = [
     label: `${PARENT_THEMES.length} parent dashboard themes`,
     value: () => true,
   },
-  { label: 'Guilds', value: (t) => (t.guildSize ? `${t.guildSize}-player` : false) },
+  { label: 'Guilds', needs: 'guilds', value: (t) => (t.guildSize ? `${t.guildSize}-player` : false) },
   { label: 'XP rate', value: (t) => (t.xpMultiplier > 1 ? `${t.xpMultiplier}×` : 'Normal') },
   { label: 'Sunday Market', value: () => true },
-  { label: 'Overdrive visuals', value: (t) => t.id === 'elite' },
-  { label: 'Profile frames', value: (t) => t.id === 'elite' },
-  { label: 'Consequence Engine', value: (t) => t.id === 'elite' },
-  { label: 'Behaviour Blueprints', value: (t) => t.id === 'elite' },
-  { label: 'Discount Tournament', value: (t) => t.id === 'elite' },
+  { label: 'Arcade', value: () => true },
+  { label: 'Overdrive visuals', value: (t) => t.limits.overdrive },
+  { label: 'Profile frames', value: (t) => t.limits.profileFrames },
+  { label: 'Consequence Engine', value: (t) => t.limits.consequenceEngine },
+  { label: 'Behaviour Blueprints', value: (t) => t.limits.blueprints },
+  { label: 'Discount Tournament', value: (t) => t.limits.alliances },
 ]
 
 export const ELITE_KID_PERKS = [
   { id: 'overdrive', icon: '✨', title: 'Overdrive', body: 'A slow aurora behind every screen in your own theme\u2019s colours, light coming off the buttons, a highlight running along the XP bar, a turning ring around your avatar, and a proper burst when you level up.' },
-  { id: 'guilds', icon: '👥', title: '10-Player Megacluster Guilds', body: 'Doubles the standard clan from 5 slots to 10, so a squad leader can invite more real-world classmates.' },
-  { id: 'xp', icon: '⚡', title: 'Permanent 1.5× XP Boost', body: 'A constant multiplier on every daily checklist and habit, so Elite kids level faster than Standard kids.' },
+  { id: 'guilds', needs: 'guilds', icon: '👥', title: `${TIERS.elite.guildSize}-Player Megacluster Guilds`, body: `Guilds of up to ${TIERS.elite.guildSize} instead of ${TIERS.standard.guildSize}, so a squad leader can invite more real-world classmates.` },
+  { id: 'xp', icon: '⚡', title: `Permanent ${TIERS.elite.xpMultiplier}× XP Boost`, body: 'A constant multiplier on every accepted chore, so Elite kids level faster than Standard kids.' },
   { id: 'frames', icon: '🔮', title: 'Exclusive Profile Customisation', body: 'Unlocks animated profile card frames and rare item drop selectors Standard users cannot access.' },
 ]
 
 export const ELITE_PARENT_PERKS = [
   { id: 'override', icon: '🛡️', title: 'The Parental Consequence Engine', body: 'Unlocks the System Override Protocol: custom real-world consequences plus Currency Tax, Dimension Lockout and Red Security Lockdown.' },
-  { id: 'blueprint', icon: '📊', title: 'Advanced AI Behaviour Blueprints', body: 'Weekly chart breakdowns of focus patterns and chore-completion history, built from what actually happened in the app.' },
+  { id: 'blueprint', icon: '📊', title: 'Behaviour Blueprints', body: 'Weekly chart breakdowns of focus patterns and chore-completion history, built from what actually happened in the app.' },
   { id: 'alliance', icon: '🏆', title: 'The 20% Discount Tournament', body: 'Join a ten-family alliance and compete each month on quests approved. The winning family gets 20% off their next bill — earned, not bought.' },
 ]
 
@@ -172,7 +181,7 @@ export function makeKid({ name, themeId = DEFAULT_KID_THEME, accessibility = nul
     id: uid('kid'),
     name,
     themeId,
-    themeChosenAt: Date.now(),
+    themeChosenAt: clock(),
     avatarHue: Math.floor(Math.random() * 360),
     xp: 0,
     coins: 0,
@@ -190,14 +199,14 @@ export function makeKid({ name, themeId = DEFAULT_KID_THEME, accessibility = nul
     bestScores: {},
     lastLoginBonus: null,
     bestTimes: {},
-    createdAt: Date.now(),
+    createdAt: clock(),
   }
 }
 
 export function createInitialState() {
   return {
     version: 1,
-    createdAt: Date.now(),
+    createdAt: clock(),
     onboarded: false,
     /**
      * What this installation is.
@@ -232,12 +241,12 @@ export function createInitialState() {
        * Set here as well as by create_family so it is true with no backend at
        * all — somebody trying RankUp on one phone sees the whole product, not
        * the floor of it. Nobody buys a chore app on a feature list; they buy it
-       * the first time their child photographs a made bed and it lands on their
-       * phone, and that has to happen before a card is ever mentioned.
+       * the first time their child taps "I did it!" on a made bed and it lands
+       * on their phone, and that has to happen before a card is ever mentioned.
        */
       trialTier: 'elite',
-      trialEndsAt: Date.now() + 14 * 86400000,
-      subscription: { tier: 'starter', status: 'trial', startedAt: Date.now(), renewsAt: null },
+      trialEndsAt: clock() + TRIAL_DAYS * 86400000,
+      subscription: { tier: 'starter', status: 'trial', startedAt: clock(), renewsAt: null },
       /* Flash Tickets the family has left. Only a parent can buy more. */
       flashTickets: 0,
     },
@@ -271,6 +280,15 @@ export function createInitialState() {
     notes: [],
     events: [],
     familyGoal: null,
+    /*
+     * Theme Genesis. A child's own themes travel with the family (kid_themes);
+     * the official Season themes are the same for every family and arrive by
+     * live_seasons (supabase/sync.sql). `seen` is this phone's alone: which
+     * "New Season!" and "picked for a Season" moments it has already shown.
+     */
+    kidThemes: [],
+    seasons: [],
+    seen: {},
     settings: {
       reminders: [
         { id: uid('rem'), label: 'Morning quests', time: '07:30', on: true },

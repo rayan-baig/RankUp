@@ -45,7 +45,11 @@ export default function ParentalConsent({ onDone, onBack }) {
       if (!result?.ok) {
         setError(result?.reason === 'signature_required'
           ? 'Please type your full name.'
-          : 'That did not save. Please try again.')
+          // This app was opened before a newer notice was published, so the
+          // words above are not the ones in force. Nothing was recorded.
+          : result?.reason === 'outdated_version'
+            ? 'RankUp has updated this notice since the page was opened. Reload the page to read the current one, then sign.'
+            : 'That did not save. Please try again.')
         setBusy(false)
         return
       }

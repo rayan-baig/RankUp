@@ -19,7 +19,7 @@ export const RECURRENCES = [
   { id: 'once', label: 'Just once', blurb: 'Disappears when it is done.' },
   { id: 'daily', label: 'Every day', blurb: 'Back tomorrow morning, weekends included.' },
   { id: 'weekdays', label: 'School days', blurb: 'Back each morning, Monday to Friday.' },
-  { id: 'weekly', label: 'Every week', blurb: 'Back seven days after it was done.' },
+  { id: 'weekly', label: 'Every week', blurb: 'Back seven days after it was done, or on the day you choose in Settings.' },
 ]
 
 export const REPEATS = new Set(['daily', 'weekdays', 'weekly'])
@@ -53,21 +53,36 @@ function isoWeekday(ymd) {
  * A chore that is not finished is never due. The child still owes it, and
  * bringing it back would quietly wipe a send-back note a parent had just
  * written — which would read, to the child, as the parent changing their mind.
+ *
+ * It counts from the later of the day it was finished and the day it last
+ * came back. Counting from the day it came back alone meant a daily chore that
+ * came back on Monday and was done on Wednesday came straight back again on
+ * Wednesday, to be done and paid twice in one day.
+ *
+ * `weekDay` is the family's chosen day for weekly chores (Monday 1 to Sunday
+ * 7): a weekly chore comes back on the first such day after it was finished.
+ * Without one, seven days after. MIRRORED in recurring_quest_due.
  */
-export function recurrenceDue(quest, today = dayOf(new Date())) {
+export function recurrenceDue(quest, today = dayOf(new Date()), weekDay = null) {
   if (!quest || !REPEATS.has(quest.recurrence)) return false
   if (quest.status !== 'approved') return false
-  const last = quest.lastResetOn || dayOf(quest.completedAt)
+  const done = dayOf(quest.completedAt)
+  const reset = quest.lastResetOn || null
+  const last = done && reset ? (done > reset ? done : reset) : (done || reset)
   if (!last || !today) return false
 
   if (quest.recurrence === 'daily') return daysBetween(last, today) > 0
   if (quest.recurrence === 'weekdays') {
     return daysBetween(last, today) > 0 && isoWeekday(today) <= 5
   }
+  if (weekDay >= 1 && weekDay <= 7) {
+    const ahead = (weekDay - isoWeekday(last) + 7) % 7 || 7
+    return daysBetween(last, today) >= ahead
+  }
   return daysBetween(last, today) >= 7
 }
 
 /** Every quest in this state that should be back on the list today. */
-export function questsDueToReturn(quests, today = dayOf(new Date())) {
-  return (quests || []).filter((q) => recurrenceDue(q, today))
+export function questsDueToReturn(quests, today = dayOf(new Date()), weekDay = null) {
+  return (quests || []).filter((q) => recurrenceDue(q, today, weekDay))
 }

@@ -1,12 +1,17 @@
-import { uid } from '../lib/id.js'
-import { dayKey, daysBetween } from '../lib/dates.js'
-import { calcReward, levelFromXp, testScoreBonus } from '../lib/xp.js'
+import { uid, forAction, now as clock } from '../lib/id.js'
+import { dayKey, daysBetween, deviceZone } from '../lib/dates.js'
+import { submissionReward, levelFromXp, liveStreak } from '../lib/xp.js'
 import { createInitialState, TIERS, makeKid } from './initialState.js'
 import { findSkin, isMarketOpen, ticketCost } from '../data/marketSkins.js'
-import { DAILY_COIN_CAP, MAX_TOKENS } from '../data/minigames.js'
-import { ENTITIES } from '../lib/sync/mappers.js'
+import { DAILY_COIN_CAP, MAX_TOKENS, possibleScore, coinsForScore } from '../data/minigames.js'
+import { ENTITIES, familyGoals, weeklyLimitOf } from '../lib/sync/mappers.js'
+import { pendingRows } from '../lib/sync/shadow.js'
 import { questsDueToReturn, dayOf } from '../lib/recurrence.js'
 import { STICKER_MAP } from '../data/stickers.js'
+import { foldLevelUp, foldStreak } from '../lib/moments.js'
+import { applyPrune } from '../lib/prune.js'
+import { MAX_KID_THEMES, NAME_MAX, CREDIT_MAX, cleanDesign, themeProblem, seasonProblem, SEASON_BRAND_MESSAGE, customThemeId } from '../data/themeGenesis.js'
+import { plainName } from '../lib/kidWords.js'
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -25,12 +30,14 @@ function mapKid(state, kidId, fn) {
  * provider moves it into the outbox — which keeps this file free of side
  * effects while keeping the arguments where they are actually computed.
  */
-function queueRpc(state, fn, args) {
+function queueRpc(state, fn, args, foldKey = null) {
   // A call that moves a balance carries an id made now, when the thing
   // happened. If the phone sends it, never hears back and sends it again, the
   // server recognises the id and does not charge or pay a second time.
   const withId = RETRY_SAFE.has(fn) && !args?.p_request_id ? { ...args, p_request_id: uid('req') } : args
-  return { ...state, syncQueue: [...(state.syncQueue || []), { fn, args: withId }] }
+  // A fold key: a later call with the same key replaces one still waiting.
+  const item = foldKey ? { fn, args: withId, foldKey } : { fn, args: withId }
+  return { ...state, syncQueue: [...(state.syncQueue || []), item] }
 }
 
 /** Functions that take a request id. Mirrored by rpc_receipts in supabase/sync.sql. */
@@ -46,17 +53,22 @@ function queueNotice(state, notice) {
 }
 
 function logEvent(state, event) {
-  const entry = { id: uid('ev'), at: Date.now(), day: dayKey(), ...event }
+  const entry = { id: uid('ev'), at: clock(), day: dayKey(), ...event }
   return { ...state, events: [...state.events, entry].slice(-2000) }
 }
 
 /** Advance a kid's streak for a completion recorded today. */
-function bumpStreak(streak) {
-  const today = dayKey()
-  if (streak.lastDay === today) return streak
+export function bumpStreak(streak, today = dayKey()) {
+  // Later than today happens when a zone changes; it is not a broken streak.
+  if (streak.lastDay && streak.lastDay >= today) return streak
   if (!streak.lastDay) return { ...streak, count: 1, lastDay: today }
   const gap = daysBetween(streak.lastDay, today)
   if (gap === 1) return { ...streak, count: streak.count + 1, lastDay: today }
+  // Exactly one missed day, and a freeze to cover it: spent here, and the run
+  // carries on. MIRRORED in approve_submission.
+  if (gap === 2 && streak.count > 0 && (streak.freezeTokens || 0) >= 1) {
+    return { ...streak, count: streak.count + 1, lastDay: today, freezeTokens: streak.freezeTokens - 1 }
+  }
   return { ...streak, count: 1, lastDay: today }
 }
 
@@ -78,40 +90,75 @@ export function overdriveActive(state) {
 }
 
 /**
- * What this family is entitled to right now: the better of what they pay for
- * and an unexpired trial.
+ * What this family is entitled to right now: the best of what they pay for,
+ * an unexpired trial and a running gift plan.
  *
  * MIRRORS effective_tier() in supabase/schema.sql, which is the authority —
  * every gate in the database asks that one, and tests/trials.mjs runs the two
- * against each other so a trial can never be real on screen and refused by the
- * server, or the reverse.
+ * against each other so a trial or a gift can never be real on screen and
+ * refused by the server, or the reverse.
  */
 const TIER_RANK = { starter: 0, standard: 1, elite: 2 }
 
 export function effectiveTier(family) {
-  const paid = TIERS[family?.tier] ? family.tier : 'starter'
+  const now = clock()
+  let best = TIERS[family?.tier] ? family.tier : 'starter'
   const trial = family?.trialTier
   const until = family?.trialEndsAt
-  if (!trial || !until || until <= Date.now()) return paid
-  return (TIER_RANK[trial] ?? 0) > (TIER_RANK[paid] ?? 0) ? trial : paid
+  if (trial && until && until > now && (TIER_RANK[trial] ?? 0) > (TIER_RANK[best] ?? 0)) best = trial
+  // A gift redeemed while a paid plan runs to its end starts when that ends.
+  const gift = family?.giftTier
+  const giftUntil = family?.giftUntil
+  const giftStarts = family?.giftStartsAt ?? null
+  if (gift && giftUntil && giftUntil > now && (giftStarts == null || giftStarts <= now)
+      && (TIER_RANK[gift] ?? 0) > (TIER_RANK[best] ?? 0)) best = gift
+  return best
 }
 
 /** Days left on a running trial, or null when there is not one. */
 export function trialDaysLeft(family) {
   if (!family?.trialTier || !family?.trialEndsAt) return null
-  const ms = family.trialEndsAt - Date.now()
+  const ms = family.trialEndsAt - clock()
   if (ms <= 0) return null
   return Math.max(1, Math.ceil(ms / 86400000))
 }
 
-/** True while a trial is the reason they have what they have. */
+/**
+ * True while a gift plan is the reason they have what they have: it is
+ * running, better than what they pay for, and at least as good as a trial
+ * (a gift outlasts a trial, so it is the one a parent is told about).
+ */
+export function onGift(state) {
+  const f = state?.family
+  const paid = TIERS[f?.tier] ? f.tier : 'starter'
+  const running = effectiveTier({ tier: 'starter', giftTier: f?.giftTier, giftStartsAt: f?.giftStartsAt, giftUntil: f?.giftUntil })
+  return running !== 'starter' && TIER_RANK[running] > TIER_RANK[paid] && running === effectiveTier(f)
+}
+
+/** True while a trial is the reason they have what they have (and not a gift, which is said on its own). */
 export function onTrial(state) {
   return trialDaysLeft(state.family) !== null
     && effectiveTier(state.family) !== (state.family.tier || 'starter')
+    && !onGift(state)
 }
 
 export function planOf(state) {
   return TIERS[effectiveTier(state.family)] || TIERS.starter
+}
+
+/**
+ * The plan in words, for a parent: what they pay for, and the trial on top
+ * while one runs. "Starter", "Standard", "Starter · trying Elite Pass".
+ *
+ * Settings said "Standard" for every family that was not Elite, the free
+ * Starter ones included: it read `tier` as a yes/no for Elite. An unknown
+ * tier is Starter, the same as effectiveTier() and the database.
+ */
+export function planSummary(state) {
+  const paid = TIERS[state?.family?.tier] || TIERS.starter
+  if (onGift(state)) return `${paid.name} · gift of ${planOf(state).name}`
+  if (!onTrial(state)) return paid.name
+  return `${paid.name} · trying ${planOf(state).name}`
 }
 
 /**
@@ -138,18 +185,48 @@ export function guildCapacity(state) {
 /** A lockout that has run out of time is treated as lifted. */
 export function activeLockout(kid) {
   if (!kid?.lockout) return null
-  if (kid.lockout.type === 'dimension' && kid.lockout.until && Date.now() >= kid.lockout.until) return null
+  if (kid.lockout.type === 'dimension' && kid.lockout.until && clock() >= kid.lockout.until) return null
   return kid.lockout
 }
 
 /** True once a Dimension Lockout's timer has run out, even if nothing cleared it yet. */
 export function overrideHasExpired(override) {
-  return Boolean(override.kind === 'dimension' && override.until && Date.now() >= override.until)
+  return Boolean(override.kind === 'dimension' && override.until && clock() >= override.until)
 }
 
 /* ------------------------------------------------------------------ */
 /* Reducer                                                             */
 /* ------------------------------------------------------------------ */
+
+const WEEK_MS = 7 * 86400000
+
+/**
+ * A child's redemptions of one reward in the last seven days, newest last.
+ * The same count redeem_reward makes on the server (any seven days, not a
+ * calendar week, so there is no week boundary for a phone and the database
+ * to disagree about). Purchases still queued on this phone are in
+ * state.redemptions already, so they count.
+ */
+export function rewardRedemptionsThisWeek(state, kidId, rewardId, now = clock()) {
+  return (state.redemptions || [])
+    .filter((r) => r.kidId === kidId && r.rewardId === rewardId && (r.at || 0) > now - WEEK_MS)
+    .sort((a, b) => (a.at || 0) - (b.at || 0))
+}
+
+/** How many more times this child may take it in the next seven days; null when it has no limit. */
+export function rewardLeftThisWeek(state, kidId, reward, now = clock()) {
+  const limit = weeklyLimitOf(reward?.weeklyLimit)
+  if (!limit) return null
+  return Math.max(0, limit - rewardRedemptionsThisWeek(state, kidId, reward.id, now).length)
+}
+
+/** When the next one frees up, for a child who has used them all: a time, or null. */
+export function rewardFreesUpAt(state, kidId, reward, now = clock()) {
+  if (rewardLeftThisWeek(state, kidId, reward, now) !== 0) return null
+  const used = rewardRedemptionsThisWeek(state, kidId, reward.id, now)
+  const limit = weeklyLimitOf(reward.weeklyLimit)
+  return (used[used.length - limit]?.at || now) + WEEK_MS
+}
 
 /**
  * What a child is owed: the lines, added up.
@@ -181,7 +258,32 @@ export function potFor(state, kidId) {
     + local.filter((e) => e.at > since).reduce((total, e) => total + e.pence, 0)
 }
 
+/**
+ * XP earned towards the family goal since it was set.
+ *
+ * The bar used to add up everybody's lifetime XP, so a goal set after a month
+ * of play was full the day it was set. A goal saved by an older version has
+ * no starting point and counts from zero, as it always did.
+ */
+export function familyGoalProgress(state) {
+  if (!state.familyGoal) return 0
+  // A child's phone holds only its own child, so it cannot add everybody up:
+  // it shows the figure the server added up (see family_goal_since).
+  if (state.device?.role === 'kid') return Math.max(0, state.familyGoal.progress || 0)
+  const total = (state.kids || []).reduce((sum, k) => sum + (k.xp || 0), 0)
+  return Math.max(0, total - (state.familyGoal.startXp || 0))
+}
+
+/**
+ * The reducer. Each action is worked out with its own ids and its own time
+ * (see forAction in lib/id.js), so React running it twice for one tap, as it
+ * may, gives the same answer twice rather than a second purchase.
+ */
 export function reducer(state, action) {
+  return forAction(action, () => reduce(state, action))
+}
+
+function reduce(state, action) {
   switch (action.type) {
     /* ---------- lifecycle ---------- */
 
@@ -198,7 +300,7 @@ export function reducer(state, action) {
      *     device's own copy is a guess that may be behind.
      *   - Everything else merges field by field onto whatever is already here,
      *     which preserves the local-only bits the server does not store (a
-     *     kid's best times, a cached photo, an AI report's detail).
+     *     kid's best times).
      *   - Rows the server reports as deleted are removed.
      *
      * There is deliberately no "last write wins on the whole row": that is how
@@ -212,7 +314,18 @@ export function reducer(state, action) {
       // Rows with a change of this device's still waiting to go are left as
       // they are: the server's copy is older. They come back with the next
       // pull once the change has landed. See the engine's dispatch.
+      //
+      // The provider works that list out from the outbox, but a call the
+      // reducer has only just asked for (state.syncQueue) is not in the
+      // outbox yet: the provider moves it there after the next render. A pull
+      // landing in that gap, or dispatched in the same batch as the tap, put
+      // the coins of a purchase straight back on screen until the next pull.
+      // So the calls still waiting here hold their rows too.
       const pending = new Set(action.pending || [])
+      if (state.syncQueue?.length) {
+        const queued = state.syncQueue.map((item) => ({ type: 'rpc', fn: item.fn, args: item.args }))
+        for (const row of pendingRows(queued, state)) pending.add(row)
+      }
       for (const [snapshotKey, { key, mapper, table }] of Object.entries(ENTITIES)) {
         const incoming = snap[snapshotKey]
         if (!incoming?.length) continue
@@ -226,10 +339,30 @@ export function reducer(state, action) {
         next = { ...next, [key]: [...byId.values()] }
       }
 
+      // One pass per table, not one per tombstone: a first sync for a family
+      // with a year behind it carries thousands of each.
+      const gone = new Map()
       for (const deletion of snap.deletions || []) {
-        const entity = Object.values(ENTITIES).find((e) => e.table === deletion.table_name)
-        if (!entity) continue
-        next = { ...next, [entity.key]: (next[entity.key] || []).filter((i) => i.id !== deletion.row_id) }
+        if (!gone.has(deletion.table_name)) gone.set(deletion.table_name, new Set())
+        gone.get(deletion.table_name).add(deletion.row_id)
+      }
+      for (const entity of Object.values(ENTITIES)) {
+        const ids = gone.get(entity.table)
+        if (ids) next = { ...next, [entity.key]: (next[entity.key] || []).filter((i) => !ids.has(i.id)) }
+      }
+
+      // The family goal, set or cleared on another phone. A tombstone newer
+      // than the goal row (and than the goal this phone has) means cleared.
+      if (!pending.has('family_goals')) {
+        const goalRow = snap.family_goals?.[0]
+        const goneRev = (snap.deletions || [])
+          .filter((d) => d.table_name === 'family_goals')
+          .reduce((max, d) => Math.max(max, Number(d.rev) || 0), 0)
+        if (goalRow && Number(goalRow.rev) > goneRev) {
+          next = { ...next, familyGoal: familyGoals.fromRow(goalRow) }
+        } else if (goneRev && goneRev > (Number(next.familyGoal?.rev) || 0)) {
+          next = { ...next, familyGoal: null }
+        }
       }
 
       const family = snap.families?.[0]
@@ -246,32 +379,60 @@ export function reducer(state, action) {
             // has to leave whatever they actually pay for sitting untouched.
             trialTier: family.trial_tier || null,
             trialEndsAt: family.trial_ends_at ? Date.parse(family.trial_ends_at) : null,
+            // A gift plan (redeem_gift_code), beside the paid tier for the
+            // same reason: when it ends, what they pay for is still there.
+            giftTier: family.gift_tier || null,
+            giftStartsAt: family.gift_starts_at ? Date.parse(family.gift_starts_at) : null,
+            giftUntil: family.gift_until ? Date.parse(family.gift_until) : null,
             flashTickets: family.flash_tickets ?? next.family.flashTickets ?? 0,
+            // Why a paid plan stopped, if it has: the dashboard says so
+            // rather than simply showing fewer features. See billingNotice.
+            subscriptionStatus: family.subscription_status || null,
+            lastPaidTier: family.last_paid_tier || null,
+            subscriptionEndsAt: family.subscription_ends_at || null,
+            // The day weekly chores come back; see recurrenceDue.
+            weekResetsOn: family.week_resets_on ?? null,
           },
         }
       }
 
-      return { ...next, lastSyncedAt: Date.now() }
-    }
-
-    /**
-     * A photo taken on a kid's phone travels inside the submission row and
-     * arrives here as raw data. Once the device has written it to its own photo
-     * store it is addressed by id like any other, and the copy in state is
-     * dropped so the same image is not held twice.
-     */
-    case 'ATTACH_SYNCED_PHOTOS': {
-      const byId = new Map(action.photos.map((p) => [p.submissionId, p.photoId]))
-      return {
-        ...state,
-        submissions: (state.submissions || []).map((s) =>
-          byId.has(s.id) ? { ...s, photoId: byId.get(s.id), photoData: null } : s,
-        ),
+      /*
+       * A level reached by sync, celebrated on the child's own phone.
+       *
+       * The overlay was only ever raised by APPROVE_SUBMISSION, on the phone
+       * where the parent tapped Accept, so a child with their own phone never
+       * saw a single level-up. Only a row this phone had already been sent
+       * counts: the first pull after pairing brings every level the child
+       * already had, and that is not news.
+       */
+      const mine = state.device?.role === 'kid' ? state.device.linkedKidId : null
+      const was = mine && state.kids.find((k) => k.id === mine)
+      const now = mine && next.kids.find((k) => k.id === mine)
+      if (was && now && was.rev != null) {
+        // One moment however many levels the sync brought: see lib/moments.js.
+        const from = levelFromXp(was.xp).level
+        const to = levelFromXp(now.xp).level
+        if (to > from) next = { ...next, pendingLevelUp: foldLevelUp(state.pendingLevelUp, mine, from, to) }
+        const streakBefore = was.streak?.count || 0
+        const streakAfter = now.streak?.count || 0
+        if (streakAfter > streakBefore) {
+          next = { ...next, pendingStreak: foldStreak(state.pendingStreak, mine, streakBefore, streakAfter) }
+        }
       }
+
+      return { ...next, lastSyncedAt: clock() }
     }
 
     case 'RESET':
       return createInitialState()
+
+    /**
+     * This phone no longer belongs to a family and has been erased (see
+     * wipeDevice). A fresh start, with one sentence saying why, which names
+     * nobody: whoever picks the phone up next learns nothing from it.
+     */
+    case 'DEVICE_WIPED':
+      return { ...createInitialState(), deviceWiped: action.reason === 'removed' ? 'removed' : 'unlinked' }
 
     /* ---------- device pairing ---------- */
 
@@ -313,7 +474,7 @@ export function reducer(state, action) {
           role: 'kid',
           linkedKidId: linked.id,
           familyName: action.familyName || 'your family',
-          pairedAt: Date.now(),
+          pairedAt: clock(),
         },
         pendingPairing: null,
         // Deliberately does not touch family.id: a sync may already have landed
@@ -334,18 +495,21 @@ export function reducer(state, action) {
      */
     case 'ADOPT_PAIRED_KID': {
       const { kid: paired } = action
-      const existing = state.kids.find(
+      // byId: the server chose the profile, so only that profile is "this
+      // child". Matching by name as well marked a different, older profile
+      // as the one with the phone.
+      const existing = state.kids.find((k) => k.id === paired.id) || (action.byId ? null : state.kids.find(
         (k) => k.name.trim().toLowerCase() === paired.name.trim().toLowerCase(),
-      )
+      ))
       if (existing) {
         const next = mapKid(state, existing.id, (k) => ({
           ...k,
-          pairedDeviceAt: Date.now(),
+          pairedDeviceAt: clock(),
           pairedCodeId: paired.id,
         }))
         return logEvent(next, { type: 'device_linked', kidId: existing.id, meta: { merged: true } })
       }
-      const kid = { ...makeKid({ name: paired.name, themeId: paired.themeId }), id: paired.id, pairedDeviceAt: Date.now() }
+      const kid = { ...makeKid({ name: paired.name, themeId: paired.themeId }), id: paired.id, pairedDeviceAt: clock() }
       const next = { ...state, kids: [...state.kids, kid] }
       return logEvent(next, { type: 'device_linked', kidId: kid.id, meta: { merged: false } })
     }
@@ -460,23 +624,152 @@ export function reducer(state, action) {
     case 'REMOVE_KID':
       return {
         ...state,
+        // Their XP leaves the total, so it leaves where the goal started too
+        // (as goal_without_kid does on the server), or the bar would drop.
+        familyGoal: state.familyGoal
+          ? {
+              ...state.familyGoal,
+              startXp: Math.max(0, (state.familyGoal.startXp || 0)
+                - (state.kids.find((k) => k.id === action.kidId)?.xp || 0)),
+            }
+          : state.familyGoal,
         kids: state.kids.filter((k) => k.id !== action.kidId),
         quests: state.quests.filter((q) => q.kidId !== action.kidId),
         submissions: state.submissions.filter((s) => s.kidId !== action.kidId),
         redemptions: state.redemptions.filter((r) => r.kidId !== action.kidId),
         notes: state.notes.filter((n) => n.kidId !== action.kidId),
         overrides: state.overrides.filter((o) => o.kidId !== action.kidId),
+        kidThemes: (state.kidThemes || []).filter((t) => t.kidId !== action.kidId),
         session: {
           ...state.session,
           kidId: state.session.kidId === action.kidId ? (state.kids.find((k) => k.id !== action.kidId)?.id ?? null) : state.session.kidId,
         },
       }
 
-    case 'SET_KID_THEME':
+    /*
+     * A theme is a look: XP, coins, levels, streaks, tokens, skins and the
+     * stories already watched all stay exactly as they were.
+     *
+     * The one thing tied to the moment a theme was chosen is Block Craft's
+     * dragon fight, which starts no earlier than that moment (the server
+     * stamps it, see stamp_theme_chosen). Flicking to another theme and
+     * straight back, before the change has even left the phone, must not
+     * restart a fight: so the theme as the server last confirmed it is kept
+     * aside (`themeBefore`), and going back to it puts its moment back. The
+     * folded set_kid_look or row change then tells the server nothing moved,
+     * and it keeps its own moment too.
+     */
+    case 'SET_KID_THEME': {
+      const kid = state.kids.find((k) => k.id === action.kidId)
+      if (!kid || kid.themeId === action.themeId) return state
+      const before = kid.themeBefore || { id: kid.themeId, chosenAt: kid.themeChosenAt ?? null }
+      const back = before.id === action.themeId
       return logEvent(
-        mapKid(state, action.kidId, (k) => ({ ...k, themeId: action.themeId, themeChosenAt: Date.now() })),
+        mapKid(state, action.kidId, (k) => {
+          if (!back) return { ...k, themeId: action.themeId, themeChosenAt: clock(), themeBefore: before }
+          const { themeBefore: _back, ...rest } = k
+          void _back
+          return { ...rest, themeId: action.themeId, themeChosenAt: before.chosenAt }
+        }),
         { type: 'theme_changed', kidId: action.kidId, meta: { themeId: action.themeId } },
       )
+    }
+
+    /*
+     * Theme Genesis: a child's own theme, made, changed or removed.
+     *
+     * A look and some names over a built-in theme's structure, never a rule
+     * (src/data/themeGenesis.js). Held to MAX_KID_THEMES per child and to
+     * the word list here, and again by the database, so a phone that skips
+     * these checks still cannot store more or worse.
+     */
+    case 'SAVE_KID_THEME': {
+      const t = action.theme || {}
+      const name = plainName(t.name, NAME_MAX)
+      const design = cleanDesign(t.design)
+      if (themeProblem(name, design)) return state
+      const existing = t.id && (state.kidThemes || []).find((x) => x.id === t.id)
+      if (existing) {
+        return {
+          ...state,
+          kidThemes: (state.kidThemes || []).map((x) => (x.id === t.id
+            ? { ...x, name, design, status: t.status === 'ready' || x.status === 'ready' ? 'ready' : 'draft' }
+            : x)),
+        }
+      }
+      if (!state.kids.some((k) => k.id === t.kidId)) return state
+      if ((state.kidThemes || []).filter((x) => x.kidId === t.kidId).length >= MAX_KID_THEMES) return state
+      return {
+        ...state,
+        kidThemes: [...(state.kidThemes || []), {
+          id: t.id || uid('theme'), kidId: t.kidId, name, design, status: t.status === 'ready' ? 'ready' : 'draft',
+          useAsk: false, sendAsk: false, sentAt: null, pickedSeason: null, createdAt: clock(),
+        }],
+      }
+    }
+
+    /** Renamed by a parent from Settings: the name alone, held to the same words. */
+    case 'RENAME_KID_THEME': {
+      const name = plainName(action.name, NAME_MAX)
+      const theme = (state.kidThemes || []).find((x) => x.id === action.id)
+      if (!theme || themeProblem(name, theme.design)) return state
+      return { ...state, kidThemes: (state.kidThemes || []).map((x) => (x.id === action.id ? { ...x, name } : x)) }
+    }
+
+    /*
+     * Removed, by the child or a parent. A child wearing it goes back to the
+     * built-in theme it was made from: the same levels and the same worlds at
+     * the same places, so nothing about their progress moves.
+     */
+    case 'DELETE_KID_THEME': {
+      const theme = (state.kidThemes || []).find((x) => x.id === action.id)
+      if (!theme) return state
+      let next = { ...state, kidThemes: (state.kidThemes || []).filter((x) => x.id !== action.id) }
+      const wearing = next.kids.filter((k) => k.themeId === customThemeId(theme.id))
+      for (const k of wearing) {
+        next = reduce(next, { type: 'SET_KID_THEME', kidId: k.id, themeId: cleanDesign(theme.design).base })
+      }
+      return next
+    }
+
+    /*
+     * A child asking a grown-up for something about their theme: to wear it
+     * (`use`, on their own phone, where the theme lock means a parent has to
+     * switch it on) or to send it to RankUp for a Season (`send`). A parent
+     * saying "not now" clears it the same way.
+     */
+    case 'ASK_KID_THEME': {
+      const key = action.ask === 'send' ? 'sendAsk' : 'useAsk'
+      const theme = (state.kidThemes || []).find((x) => x.id === action.id)
+      if (!theme) return state
+      // Asking to send one with another company's name in it is not offered (seasonProblem).
+      if (key === 'sendAsk' && action.on && (theme.status !== 'ready' || theme.sentAt || seasonProblem(theme.name, theme.design))) return state
+      return { ...state, kidThemes: (state.kidThemes || []).map((x) => (x.id === action.id ? { ...x, [key]: Boolean(action.on) } : x)) }
+    }
+
+    /*
+     * A parent says yes to sending a child's theme to RankUp. The server
+     * builds what is sent from the theme itself (its name, colours, pattern,
+     * mascot and world names) and the credit line, checks the words again and
+     * holds a child to one a month: submit_kid_theme in supabase/sync.sql.
+     */
+    case 'SEND_KID_THEME': {
+      const theme = (state.kidThemes || []).find((x) => x.id === action.id)
+      if (!theme || theme.sentAt || theme.status !== 'ready') return state
+      // No other company's or game's name in a Season theme; the server asks again (kid_brands_ok).
+      if (seasonProblem(theme.name, theme.design)) return state
+      const credit = plainName(action.credit, CREDIT_MAX)
+      const next = { ...state, kidThemes: (state.kidThemes || []).map((x) => (x.id === action.id ? { ...x, sendAsk: false, sentAt: clock() } : x)) }
+      return queueRpc(next, 'submit_kid_theme', { p_theme_id: theme.id, p_credit: credit || null })
+    }
+
+    /** The Seasons that have started, as the server sent them (live_seasons). */
+    case 'SET_SEASONS':
+      return Array.isArray(action.seasons) ? { ...state, seasons: action.seasons, seasonsAt: clock() } : state
+
+    /** A one-time moment (a new Season, a theme picked) has been shown on this phone. */
+    case 'SEE_MOMENT':
+      return state.seen?.[action.key] ? state : { ...state, seen: { ...(state.seen || {}), [action.key]: clock() } }
 
     /*
      * A chapter of the theme's story has been watched on this device. Local
@@ -486,7 +779,7 @@ export function reducer(state, action) {
     case 'SEE_STORY':
       return mapKid(state, action.kidId, (k) => ({
         ...k,
-        storySeen: { ...(k.storySeen || {}), [action.chapter]: action.at ?? Date.now() },
+        storySeen: { ...(k.storySeen || {}), [action.chapter]: action.at ?? clock() },
       }))
 
     case 'SET_KID_COSMETIC':
@@ -503,6 +796,17 @@ export function reducer(state, action) {
 
     case 'UPDATE_FAMILY':
       return { ...state, family: { ...state.family, ...action.patch } }
+
+    /**
+     * The day a family's weekly chores come back (Monday 1 to Sunday 7), or
+     * null for "seven days after it was done". The database decides which
+     * chores reopen, so it has to know the day too.
+     */
+    case 'SET_WEEK_RESET_DAY': {
+      const day = action.day >= 1 && action.day <= 7 ? Math.round(action.day) : null
+      return queueRpc({ ...state, family: { ...state.family, weekResetsOn: day } },
+        'set_week_reset_day', { p_day: day }, 'set_week_reset_day')
+    }
 
     /**
      * Buy a Sunday Market skin with the child's own currency.
@@ -594,19 +898,25 @@ export function reducer(state, action) {
       const unlimited = Boolean(state.demo)
       if (!kid || (!unlimited && (kid.playTokens || 0) < 1)) return state
       const today = dayKey()
-      const earned = kid.gameDay === today ? kid.gameCoinsToday || 0 : 0
-      const coins = Math.max(0, Math.min(action.coins || 0, DAILY_COIN_CAP - earned))
-      const score = Math.max(0, Math.min(100, Math.round(action.score || 0)))
+      // A day later than today (a zone change) is still today's tally.
+      const earned = kid.gameDay && kid.gameDay >= today ? kid.gameCoinsToday || 0 : 0
+      // Held to what the game allows in the time played, as the server does.
+      const timed = typeof action.elapsedMs === 'number' && Number.isFinite(action.elapsedMs)
+      const elapsedMs = timed ? Math.max(0, Math.min(2 ** 31 - 1, Math.round(action.elapsedMs))) : null
+      const claimed = Math.max(0, Math.min(100, Math.round(action.score || 0)))
+      const score = timed ? Math.min(claimed, possibleScore(action.game, elapsedMs)) : claimed
+      const coins = Math.max(0, Math.min(action.coins || 0, coinsForScore(score), DAILY_COIN_CAP - earned))
       const next = mapKid(state, kid.id, (k) => ({
         ...k,
         playTokens: unlimited ? k.playTokens : k.playTokens - 1,
         coins: k.coins + coins,
-        gameDay: today,
+        gameDay: kid.gameDay && kid.gameDay > today ? kid.gameDay : today,
         gameCoinsToday: earned + coins,
         bestScores: { ...(k.bestScores || {}), [action.game]: Math.max((k.bestScores || {})[action.game] || 0, score) },
       }))
       return logEvent(queueRpc(next, 'play_minigame', {
-        p_kid_id: kid.id, p_game: action.game, p_score: score,
+        p_kid_id: kid.id, p_game: action.game, p_score: score, p_tz: deviceZone(),
+        ...(timed ? { p_elapsed_ms: elapsedMs } : {}),
       }), { type: 'minigame_played', kidId: kid.id, meta: { game: action.game, score, coins } })
     }
 
@@ -629,8 +939,8 @@ export function reducer(state, action) {
             ...state.family.subscription,
             tier: action.tier,
             status: 'active',
-            startedAt: Date.now(),
-            renewsAt: Date.now() + 30 * 86400000,
+            startedAt: clock(),
+            renewsAt: clock() + 30 * 86400000,
           },
         },
       }
@@ -643,7 +953,7 @@ export function reducer(state, action) {
       const quests = action.quests.map((q) => ({
         id: uid('q'),
         status: 'assigned',
-        createdAt: Date.now(),
+        createdAt: clock(),
         difficulty: 'medium',
         requiresPhoto: true,
         adaptive: false,
@@ -674,7 +984,7 @@ export function reducer(state, action) {
      */
     case 'RETURN_RECURRING': {
       const today = action.today || dayOf(new Date())
-      const due = questsDueToReturn(state.quests, today)
+      const due = questsDueToReturn(state.quests, today, state.family?.weekResetsOn ?? null)
       if (!due.length) return state
       const ids = new Set(due.map((q) => q.id))
       const next = {
@@ -702,7 +1012,7 @@ export function reducer(state, action) {
 
     case 'SUBMIT_QUEST': {
       // One pending submission per quest, ever. Without this a kid can open an
-      // already-submitted quest, send a second photo, and have a parent approve
+      // already-submitted quest, send it again, and have a parent approve
       // both — awarding the XP twice for one chore.
       const alreadyPending = state.submissions.some(
         (s) => s.questId === action.submission.questId && s.status === 'pending',
@@ -711,13 +1021,22 @@ export function reducer(state, action) {
       if (alreadyPending || !quest || quest.status === 'approved') return state
 
       // No photo, ever: RankUp does not take or keep pictures. A parent who
-      // wants proof gets it from the child's own camera app, by message.
-      const { photoData: _ignored, ...fields } = action.submission
-      void _ignored
+      // wants proof gets it from the child's own camera app, by message. Only
+      // what a submission is made of is kept from what the screen sent.
+      const fields = Object.fromEntries(
+        ['questId', 'kidId', 'note', 'testScore', 'elapsedMs', 'onTime']
+          .filter((key) => action.submission[key] !== undefined)
+          .map((key) => [key, action.submission[key]]),
+      )
+      // A score is a percentage: 999 typed by mistake paid the top bonus here
+      // and was refused by the server, bouncing the chore.
+      if (typeof fields.testScore === 'number') {
+        fields.testScore = Math.max(0, Math.min(100, Math.round(fields.testScore)))
+      }
       const submission = {
         id: uid('sub'),
         status: 'pending',
-        submittedAt: Date.now(),
+        submittedAt: clock(),
         ...fields,
       }
       const next = {
@@ -730,16 +1049,10 @@ export function reducer(state, action) {
         p_quest_id: submission.questId,
         p_kid_id: submission.kidId,
         p_payload: {
-          photo_data: null,
-          photo_hash: null,
-          capture_source: submission.captureSource || 'none',
           note: submission.note || '',
           test_score: submission.testScore ?? null,
           elapsed_ms: submission.elapsedMs ?? null,
           on_time: submission.onTime !== false,
-          ai_verdict: submission.report?.verdict || null,
-          ai_score: submission.report?.score ?? null,
-          ai_report: submission.report || null,
         },
       })
       const questForNotice = state.quests.find((q) => q.id === submission.questId)
@@ -747,17 +1060,16 @@ export function reducer(state, action) {
       const notified = queueNotice(withRpc, {
         role: 'parent',
         kind: 'submission',
+        // Which submission it is about: a notice is not sent for one the
+        // server turned down (see the sync engine).
+        ref: submission.id,
         args: [kidForNotice?.name || 'Your kid', questForNotice?.title || 'a quest'],
       })
 
       return logEvent(notified, {
         type: 'quest_submitted',
         kidId: submission.kidId,
-        meta: {
-          questId: submission.questId,
-          verdict: submission.report?.verdict || null,
-          score: submission.report?.score ?? null,
-        },
+        meta: { questId: submission.questId },
       })
     }
 
@@ -770,23 +1082,11 @@ export function reducer(state, action) {
       // exists, a quest can only ever pay out once.
       if (!quest || !kid || quest.status === 'approved') return state
 
-      const reward = calcReward(quest, {
+      const { xp, coins, lines } = submissionReward(quest, submission, {
         elite: isElite(state),
-        streak: kid.streak.count,
-        onTime: submission.onTime !== false,
+        // A lapsed streak pays nothing; see liveStreak.
+        streak: liveStreak(kid.streak),
       })
-
-      let { xp, coins } = reward
-      const lines = [...reward.lines]
-
-      if (quest.testScore && typeof submission.testScore === 'number') {
-        const bonus = testScoreBonus(submission.testScore, quest.xp || 30)
-        if (bonus > 0) {
-          lines.push({ label: `Scored ${submission.testScore}%`, value: bonus })
-          xp += bonus
-          coins += Math.max(1, Math.round(bonus / 5))
-        }
-      }
 
       const beforeLevel = levelFromXp(kid.xp).level
       const afterLevel = levelFromXp(kid.xp + xp).level
@@ -798,19 +1098,14 @@ export function reducer(state, action) {
             ? {
                 ...s,
                 status: 'approved',
-                decidedAt: Date.now(),
+                decidedAt: clock(),
                 parentNote: action.note || '',
                 sticker: STICKER_MAP[action.sticker] ? action.sticker : null,
                 awarded: { xp, coins, lines },
-                // Dropping photoId is what actually deletes the image: the
-                // provider's purge sweeps any photo no submission points at.
-                photoId: null,
-                photoData: null,
-                photoDeletedAt: Date.now(),
               }
             : s,
         ),
-        quests: state.quests.map((q) => (q.id === quest.id ? { ...q, status: 'approved', completedAt: Date.now() } : q)),
+        quests: state.quests.map((q) => (q.id === quest.id ? { ...q, status: 'approved', completedAt: clock() } : q)),
       }
 
       next = mapKid(next, kid.id, (k) => ({
@@ -854,7 +1149,7 @@ export function reducer(state, action) {
               kind: 'earned',
               submissionId: submission.id,
               note: quest.title,
-              at: Date.now(),
+              at: clock(),
             },
           ],
         }
@@ -866,41 +1161,22 @@ export function reducer(state, action) {
         p_coins: coins,
         p_note: action.note || '',
         p_sticker: STICKER_MAP[action.sticker] ? action.sticker : null,
+        // The streak moves on the family's day, not the server's.
+        p_tz: deviceZone(),
       })
 
       next = queueNotice(next, {
         role: 'kid',
         kidId: kid.id,
         kind: 'approved',
+        ref: action.submissionId,
         args: [quest.title, xp],
       })
 
-      /*
-       * The parent disagreed with the check.
-       *
-       * Synthetic images can show the rules are not obviously wrong; only
-       * real families can show how often they are wrong in practice, and
-       * nothing in the app was recording it. A parent who looks at a flagged
-       * photo and approves it anyway has just told us, for free and with no
-       * survey, that the check got this one wrong.
-       *
-       * Recorded as an ordinary event, so it stays on the device and in the
-       * family's own history like everything else here. What it is for is
-       * tuning a threshold against reality instead of against six pictures
-       * drawn in a test.
-       */
-      if (submission.report?.flags?.length) {
-        next = logEvent(next, {
-          type: 'ai_overruled',
-          kidId: kid.id,
-          meta: {
-            questId: quest.id,
-            score: submission.report.score,
-            verdict: submission.report.verdict,
-            flags: submission.report.flags.map((f) => f.id),
-          },
-        })
-      }
+
+      // The approval spent a streak freeze to cover yesterday; see bumpStreak.
+      const spent = (kid.streak.freezeTokens || 0) - (next.kids.find((k) => k.id === kid.id)?.streak.freezeTokens || 0)
+      if (spent > 0) next = logEvent(next, { type: 'streak_freeze', kidId: kid.id })
 
       next = logEvent(next, {
         type: 'quest_approved',
@@ -910,7 +1186,12 @@ export function reducer(state, action) {
 
       if (afterLevel > beforeLevel) {
         next = logEvent(next, { type: 'level_up', kidId: kid.id, meta: { from: beforeLevel, to: afterLevel } })
-        next = { ...next, pendingLevelUp: { kidId: kid.id, from: beforeLevel, to: afterLevel } }
+        // Accepting several in a row folds into one moment, never a queue.
+        next = { ...next, pendingLevelUp: foldLevelUp(state.pendingLevelUp, kid.id, beforeLevel, afterLevel) }
+      }
+      const streakAfter = next.kids.find((k) => k.id === kid.id)?.streak?.count || 0
+      if (streakAfter > (kid.streak?.count || 0)) {
+        next = { ...next, pendingStreak: foldStreak(state.pendingStreak, kid.id, kid.streak?.count || 0, streakAfter) }
       }
       return next
     }
@@ -925,11 +1206,8 @@ export function reducer(state, action) {
             ? {
                 ...s,
                 status: 'rejected',
-                decidedAt: Date.now(),
+                decidedAt: clock(),
                 parentNote: action.note || '',
-                photoId: null,
-                photoData: null,
-                photoDeletedAt: Date.now(),
               }
             : s,
         ),
@@ -943,6 +1221,7 @@ export function reducer(state, action) {
         role: 'kid',
         kidId: submission.kidId,
         kind: 'rejected',
+        ref: submission.id,
         args: [questRejected?.title || 'a quest'],
       })
       const rejected = queueRpc(next, 'reject_submission', {
@@ -952,8 +1231,28 @@ export function reducer(state, action) {
       return logEvent(rejected, { type: 'quest_rejected', kidId: submission.kidId, meta: { questId: submission.questId, reason: action.note || '' } })
     }
 
+    // A parent's note on a past chore, from Chore history. Nothing else about
+    // it changes: see set_history_note in supabase/sync.sql.
+    case 'SET_HISTORY_NOTE': {
+      const note = String(action.note || '').trim().slice(0, 300)
+      if (!state.submissions.some((s) => s.id === action.submissionId)) return state
+      return queueRpc({
+        ...state,
+        submissions: state.submissions.map((s) => (s.id === action.submissionId ? { ...s, historyNote: note } : s)),
+      }, 'set_history_note', { p_submission_id: action.submissionId, p_note: note }, `set_history_note:${action.submissionId}`)
+    }
+
+    // A level-up carries the streak inside it, so closing it closes both.
     case 'CLEAR_LEVEL_UP':
-      return { ...state, pendingLevelUp: null }
+      return { ...state, pendingLevelUp: null, pendingStreak: null }
+
+    case 'CLEAR_STREAK':
+      return { ...state, pendingStreak: null }
+
+    // Old, finished, already on the server: let go of on this phone. The
+    // provider worked out which (lib/prune.js) and forgot them in the shadow.
+    case 'PRUNE_HISTORY':
+      return applyPrune(state, action.dropped)
 
     /** The provider has moved these into the outbox; `keep` are the ones it could not. */
     case 'DRAIN_SYNC_QUEUE': {
@@ -984,9 +1283,11 @@ export function reducer(state, action) {
       // first try whose answer was lost. The fresh pull shows it.
       if (['already_claimed', 'already_safe', 'already_pending', 'repeat'].includes(reason)) return state
       let next = state
-      let message = 'Something you did was not accepted by the server, so this phone is being brought up to date.'
-      if (reason === 'decided') {
-        message = 'That submission had already been decided on another device.'
+      let message = 'Something you did didn’t go through, so this phone is catching up.'
+      // reject_submission answers 'decided'; approve_submission raises, and its
+      // words arrive as the reason. Both mean another phone got there first.
+      if (reason === 'decided' || /already decided/.test(reason || '')) {
+        message = 'That chore was already accepted or sent back on another device.'
       } else if (fn === 'submit_quest') {
         const quest = state.quests.find((q) => q.id === args.p_quest_id)
         next = {
@@ -994,19 +1295,43 @@ export function reducer(state, action) {
           submissions: next.submissions.filter((sub) => !(sub.id === args.p_submission_id && sub.status === 'pending')),
           quests: next.quests.map((q) => (q.id === args.p_quest_id && q.status === 'submitted' ? { ...q, status: 'assigned' } : q)),
         }
-        message = `"${quest?.title || 'A quest'}" was not sent: it was not open on the server. Check it and try again.`
+        message = `"${quest?.title || 'A quest'}" didn’t send: it isn’t open any more. Check it and try again.`
       } else if (fn === 'redeem_reward') {
         const redemption = state.redemptions.find((r) => r.id === args.p_redemption_id)
         next = { ...next, redemptions: next.redemptions.filter((r) => r.id !== args.p_redemption_id) }
         if (redemption) next = mapKid(next, redemption.kidId, (k) => ({ ...k, coins: (k.coins || 0) + (redemption.cost || 0) }))
-        message = `"${redemption?.name || 'A reward'}" could not be claimed, so the coins are back.`
+        const name = `"${redemption?.name || 'A reward'}"`
+        // Said as it is: a parent took the reward off the list while this
+        // purchase was on its way, or the coins had gone on something else
+        // (another phone, a tax) by the time it arrived.
+        message = reason === 'reward_gone'
+          ? `${name} was taken off the rewards list before your purchase arrived. Nothing was spent: the coins are back.`
+          : reason === 'weekly_limit'
+            // Another phone (a parent's, say) had already used this week's.
+            ? `${name} has been claimed as often as it can be this week. Nothing was spent: the coins are back.`
+          : reason === 'insufficient'
+            ? `${name} couldn’t be bought: there were not enough coins left by the time it arrived. Nothing was spent.`
+            : `${name} couldn’t be claimed, so the coins are back.`
+      } else if (fn === 'submit_kid_theme') {
+        const theme = (state.kidThemes || []).find((t) => t.id === args.p_theme_id)
+        next = { ...next, kidThemes: (next.kidThemes || []).map((t) => (t.id === args.p_theme_id ? { ...t, sentAt: null } : t)) }
+        const name = `"${theme?.name || 'That theme'}"`
+        message = reason === 'limit'
+          ? `${name} wasn’t sent: one theme a month can go to RankUp from each child. Try again next month.`
+          : reason === 'words'
+            ? `${name} wasn’t sent: a name in it, or the credit, has a word RankUp does not allow.`
+          : reason === 'brand'
+            ? `${name} wasn’t sent. ${SEASON_BRAND_MESSAGE}`
+            : reason === 'bad_credit'
+              ? `${name} wasn’t sent: the credit can be a first name or a nickname, in letters only.`
+              : `${name} couldn’t be sent to RankUp just now.`
       } else if (fn === 'mark_redemption_given') {
         next = {
           ...next,
           redemptions: next.redemptions.map((r) => (r.id === args.p_redemption_id ? { ...r, status: 'requested', givenAt: null } : r)),
         }
       }
-      return { ...next, syncNotice: { message, at: Date.now() } }
+      return { ...next, syncNotice: { message, at: clock() } }
     }
 
     case 'CLEAR_SYNC_NOTICE':
@@ -1014,6 +1339,24 @@ export function reducer(state, action) {
 
     case 'DRAIN_NOTICE_QUEUE':
       return { ...state, noticeQueue: [] }
+
+    /**
+     * A child's request to join a guild reached the server. Their parents,
+     * and the parents of the family whose guild it is, have to say yes: tell
+     * them. The server decides who they are and what the notice says (see
+     * api/send-push.js); the name here is only for this phone's own copy.
+     */
+    case 'GUILD_JOIN_REQUESTED': {
+      if (!action.guildId || !action.kidId) return state
+      const asking = state.kids.find((k) => k.id === action.kidId)
+      return queueNotice(state, {
+        role: 'parent',
+        kidId: action.kidId,
+        guildId: action.guildId,
+        kind: 'guildRequest',
+        args: [asking?.name || 'Your child', action.guildName || 'a guild'],
+      })
+    }
 
     /* ---------- rewards ---------- */
 
@@ -1046,7 +1389,7 @@ export function reducer(state, action) {
         ...state,
         allowance: [
           ...state.allowance,
-          { id: uid('al'), kidId, pence: signed, kind, note: note || '', at: Date.now() },
+          { id: uid('al'), kidId, pence: signed, kind, note: note || '', at: clock() },
         ],
       }
       return queueRpc(next, kind === 'paid' ? 'record_payout' : 'record_gift', {
@@ -1069,13 +1412,30 @@ export function reducer(state, action) {
         ...state,
         allowance: action.entries,
         allowancePots: action.pots,
+        // Earned, added and paid over every line, per child: the record's totals.
+        allowanceTotals: action.totals || null,
         // The moment the answer describes, not the moment it arrived: a line
         // written while the request was in flight is still in flight.
         allowanceAt: action.at,
       }
 
     case 'ADD_REWARD':
-      return { ...state, rewards: [...state.rewards, { id: uid('rw'), createdAt: Date.now(), ...action.reward }] }
+      return {
+        ...state,
+        rewards: [...state.rewards, {
+          id: uid('rw'), createdAt: clock(), ...action.reward, weeklyLimit: weeklyLimitOf(action.reward?.weeklyLimit),
+        }],
+      }
+
+    // A parent changing a reward's weekly limit (or anything else about it).
+    // The row syncs like any other reward; redeem_reward reads the limit.
+    case 'UPDATE_REWARD':
+      return {
+        ...state,
+        rewards: state.rewards.map((r) => (r.id === action.rewardId
+          ? { ...r, ...action.patch, ...('weeklyLimit' in (action.patch || {}) ? { weeklyLimit: weeklyLimitOf(action.patch.weeklyLimit) } : {}) }
+          : r)),
+      }
 
     case 'DELETE_REWARD':
       return { ...state, rewards: state.rewards.filter((r) => r.id !== action.rewardId) }
@@ -1084,13 +1444,17 @@ export function reducer(state, action) {
       const reward = state.rewards.find((r) => r.id === action.rewardId)
       const kid = state.kids.find((k) => k.id === action.kidId)
       if (!reward || !kid || kid.coins < reward.cost) return state
+      // The parent's weekly limit, counted the way redeem_reward counts it,
+      // purchases still queued on this phone included: a child with no
+      // signal cannot queue past it either.
+      if (rewardLeftThisWeek(state, kid.id, reward) === 0) return state
       let next = mapKid(state, kid.id, (k) => ({ ...k, coins: k.coins - reward.cost }))
       const redemptionId = uid('rd')
       next = {
         ...next,
         redemptions: [
           ...next.redemptions,
-          { id: redemptionId, rewardId: reward.id, kidId: kid.id, name: reward.name, cost: reward.cost, at: Date.now(), status: 'requested' },
+          { id: redemptionId, rewardId: reward.id, kidId: kid.id, name: reward.name, cost: reward.cost, at: clock(), status: 'requested' },
         ],
       }
       next = queueRpc(next, 'redeem_reward', {
@@ -1104,15 +1468,18 @@ export function reducer(state, action) {
     // Reaches the server now. It used to change this phone only, so the next
     // pull put the reward back to "owed" and every other phone said the same.
     case 'FULFIL_REDEMPTION':
+      // Already given (a second tap, or another parent's tap that synced in):
+      // nothing to send again.
+      if (!state.redemptions.some((r) => r.id === action.redemptionId && r.status !== 'given')) return state
       return queueRpc({
         ...state,
-        redemptions: state.redemptions.map((r) => (r.id === action.redemptionId ? { ...r, status: 'given', givenAt: Date.now() } : r)),
+        redemptions: state.redemptions.map((r) => (r.id === action.redemptionId ? { ...r, status: 'given', givenAt: clock() } : r)),
       }, 'mark_redemption_given', { p_redemption_id: action.redemptionId })
 
     /* ---------- notes ---------- */
 
     case 'ADD_NOTE':
-      return { ...state, notes: [...state.notes, { id: uid('note'), at: Date.now(), read: false, ...action.note }] }
+      return { ...state, notes: [...state.notes, { id: uid('note'), at: clock(), read: false, ...action.note }] }
 
     case 'MARK_NOTES_READ':
       return {
@@ -1133,7 +1500,7 @@ export function reducer(state, action) {
         kind,
         reason: reason || '',
         consequence: consequence || '',
-        createdAt: Date.now(),
+        createdAt: clock(),
         liftedAt: null,
       }
       let next = state
@@ -1145,11 +1512,11 @@ export function reducer(state, action) {
         override.amount = taken
         next = mapKid(next, kidId, (k) => ({ ...k, coins: k.coins - taken }))
         next = queueRpc(next, 'apply_currency_tax', { p_kid_id: kidId, p_percent: percent })
-        override.liftedAt = Date.now() // a tax is instantaneous, not an ongoing state
+        override.liftedAt = clock() // a tax is instantaneous, not an ongoing state
       } else if (kind === 'dimension') {
         const minutes = Math.max(5, action.minutes || 60)
         override.minutes = minutes
-        override.until = Date.now() + minutes * 60000
+        override.until = clock() + minutes * 60000
         next = mapKid(next, kidId, (k) => ({ ...k, lockout: { type: 'dimension', until: override.until, reason: override.reason, consequence: override.consequence, overrideId: override.id } }))
       } else if (kind === 'red') {
         next = mapKid(next, kidId, (k) => ({ ...k, lockout: { type: 'red', until: null, reason: override.reason, consequence: override.consequence, overrideId: override.id } }))
@@ -1166,7 +1533,7 @@ export function reducer(state, action) {
      * app on load and on a timer.
      */
     case 'EXPIRE_LOCKOUTS': {
-      const now = Date.now()
+      const now = clock()
       const expired = state.overrides.filter(
         (o) => !o.liftedAt && o.kind === 'dimension' && o.until && now >= o.until,
       )
@@ -1190,7 +1557,7 @@ export function reducer(state, action) {
       let next = {
         ...state,
         overrides: state.overrides.map((o) =>
-          o.id === action.overrideId ? { ...o, liftedAt: Date.now(), endedBy: 'parent' } : o,
+          o.id === action.overrideId ? { ...o, liftedAt: clock(), endedBy: 'parent' } : o,
         ),
       }
       next = mapKid(next, override.kidId, (k) =>
@@ -1214,7 +1581,7 @@ export function reducer(state, action) {
           ...state.guild,
           invitedMates: [
             ...state.guild.invitedMates,
-            { id: uid('mate'), name: action.name, invitedAt: Date.now(), status: 'invited', demo: true },
+            { id: uid('mate'), name: action.name, invitedAt: clock(), status: 'invited', demo: true },
           ],
         },
       }
@@ -1228,22 +1595,63 @@ export function reducer(state, action) {
         ...state,
         guild: {
           ...state.guild,
-          chat: [...state.guild.chat, { id: uid('msg'), at: Date.now(), ...action.message }].slice(-200),
+          chat: [...state.guild.chat, { id: uid('msg'), at: clock(), ...action.message }].slice(-200),
         },
       }
 
     /* ---------- misc ---------- */
 
-    case 'SET_FAMILY_GOAL':
-      return { ...state, familyGoal: action.goal }
+    /*
+     * The family goal is the family's: it goes to the server, which every
+     * other phone pulls it from. It used to stay on the phone that set it, so
+     * the other parent and the children never saw it. The server decides
+     * where the bar starts by the same rule as here; this is the instant copy.
+     */
+    case 'SET_FAMILY_GOAL': {
+      if (!action.goal) {
+        return queueRpc({ ...state, familyGoal: null }, 'set_family_goal', { p_name: null, p_target_xp: null }, 'set_family_goal')
+      }
+      const name = action.goal.name.trim()
+      const targetXp = action.goal.targetXp
+      // The same goal edited (a new target, say) keeps what was earned; a new
+      // goal starts from where everybody is now.
+      const same = state.familyGoal && state.familyGoal.name.trim() === name
+      const startXp = same
+        ? state.familyGoal.startXp || 0
+        : state.kids.reduce((sum, k) => sum + (k.xp || 0), 0)
+      const familyGoal = {
+        name, targetXp, startXp,
+        setAt: same ? state.familyGoal.setAt : clock(),
+        progress: same ? state.familyGoal.progress || 0 : 0,
+        shared: true,
+      }
+      return queueRpc({ ...state, familyGoal }, 'set_family_goal', { p_name: name, p_target_xp: targetXp }, 'set_family_goal')
+    }
+
+    /*
+     * A goal set on this phone before goals were shared lives only here. It
+     * goes up once, with where it started, and the server takes it only if
+     * the family has no goal yet: one set on another phone since stands.
+     */
+    case 'SHARE_FAMILY_GOAL': {
+      const goal = state.familyGoal
+      if (!goal || goal.shared || goal.rev != null) return state
+      return queueRpc({ ...state, familyGoal: { ...goal, shared: true } }, 'set_family_goal', {
+        p_name: goal.name.trim(), p_target_xp: goal.targetXp, p_start_xp: goal.startXp || 0,
+      }, 'set_family_goal')
+    }
 
     case 'CLAIM_LOGIN_BONUS': {
       const kid = state.kids.find((k) => k.id === action.kidId)
       const today = dayKey()
-      if (!kid || kid.lastLoginBonus === today) return state
+      // A day later than today (a zone change) still counts as claimed.
+      if (!kid || (kid.lastLoginBonus && kid.lastLoginBonus >= today)) return state
       const coins = 5
       let next = mapKid(state, kid.id, (k) => ({ ...k, coins: k.coins + coins, lastLoginBonus: today }))
-      next = queueRpc(next, 'claim_login_bonus', { p_kid_id: kid.id, p_coins: coins })
+      // The zone, so the server stamps the claim with this phone's day rather
+      // than UTC's. With UTC, a bonus claimed on a US evening came back dated
+      // tomorrow and the phone offered it again.
+      next = queueRpc(next, 'claim_login_bonus', { p_kid_id: kid.id, p_coins: coins, p_tz: deviceZone() })
       return logEvent(next, { type: 'login_bonus', kidId: kid.id, meta: { coins } })
     }
 
@@ -1260,12 +1668,12 @@ export function reducer(state, action) {
     case 'USE_STREAK_FREEZE': {
       const kid = state.kids.find((k) => k.id === action.kidId)
       if (!kid || kid.streak.freezeTokens < 1) return state
-      if (kid.streak.lastDay === dayKey()) return state
+      if (kid.streak.lastDay && kid.streak.lastDay >= dayKey()) return state
       const next = mapKid(state, kid.id, (k) => ({
         ...k,
         streak: { ...k.streak, freezeTokens: k.streak.freezeTokens - 1, lastDay: dayKey() },
       }))
-      return logEvent(queueRpc(next, 'use_streak_freeze', { p_kid_id: kid.id }),
+      return logEvent(queueRpc(next, 'use_streak_freeze', { p_kid_id: kid.id, p_tz: deviceZone() }),
         { type: 'streak_freeze', kidId: kid.id })
     }
 

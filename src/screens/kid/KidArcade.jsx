@@ -1,39 +1,46 @@
-import { useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import {
   MINIGAMES, CATEGORIES, findGame, featuredGame,
-  MAX_TOKENS, DAILY_COIN_CAP, payout,
+  MAX_TOKENS, DAILY_COIN_CAP, payout, possibleScore,
 } from '../../data/minigames.js'
 import { dayKey } from '../../lib/dates.js'
-import Stacker from '../../components/games/Stacker.jsx'
-import MemoryMatch from '../../components/games/MemoryMatch.jsx'
-import ColourChain from '../../components/games/ColourChain.jsx'
-import LightsOut from '../../components/games/LightsOut.jsx'
-import Catcher from '../../components/games/Catcher.jsx'
-import Snake from '../../components/games/Snake.jsx'
-import Merge from '../../components/games/Merge.jsx'
-import Bricks from '../../components/games/Bricks.jsx'
-import Sweeper from '../../components/games/Sweeper.jsx'
-import SkyHop from '../../components/games/SkyHop.jsx'
-import FourInARow from '../../components/games/FourInARow.jsx'
-import SlidePuzzle from '../../components/games/SlidePuzzle.jsx'
-import SportsMania from '../../components/games/SportsMania.jsx'
-import TurboBall from '../../components/games/TurboBall.jsx'
-import BlockDrop from '../../components/games/BlockDrop.jsx'
-import SweetSwap from '../../components/games/SweetSwap.jsx'
-import Impostor from '../../components/games/Impostor.jsx'
-import Trackstar from '../../components/games/Trackstar.jsx'
-import TennisTour from '../../components/games/TennisTour.jsx'
-import Wildfire from '../../components/games/Wildfire.jsx'
-import RoyalDraw from '../../components/games/RoyalDraw.jsx'
-import HoldEm from '../../components/games/HoldEm.jsx'
-import Blackjack from '../../components/games/Blackjack.jsx'
-import GoFish from '../../components/games/GoFish.jsx'
-import { Screen, Card, Button, SectionTitle, Banner, Stat, EmptyState, PageTitle, Segmented } from '../../components/ui.jsx'
+import { arcadeLimits } from '../../lib/arcadeWords.js'
+import { Screen, Card, Button, SectionTitle, Stat, EmptyState, Segmented, Loading } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
 import HeroArt from '../../components/HeroArt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
 import { art } from '../../data/art.js'
+import { lazyLoad } from '../../lib/lazy.js'
+
+/*
+ * Each game downloads when a child first starts it, not with the arcade: the
+ * shelf is twenty-four cards, and most visits play one of them.
+ */
+const Stacker = lazyLoad(() => import('../../components/games/Stacker.jsx'))
+const MemoryMatch = lazyLoad(() => import('../../components/games/MemoryMatch.jsx'))
+const ColourChain = lazyLoad(() => import('../../components/games/ColourChain.jsx'))
+const LightsOut = lazyLoad(() => import('../../components/games/LightsOut.jsx'))
+const Catcher = lazyLoad(() => import('../../components/games/Catcher.jsx'))
+const Snake = lazyLoad(() => import('../../components/games/Snake.jsx'))
+const Merge = lazyLoad(() => import('../../components/games/Merge.jsx'))
+const Bricks = lazyLoad(() => import('../../components/games/Bricks.jsx'))
+const Sweeper = lazyLoad(() => import('../../components/games/Sweeper.jsx'))
+const SkyHop = lazyLoad(() => import('../../components/games/SkyHop.jsx'))
+const FourInARow = lazyLoad(() => import('../../components/games/FourInARow.jsx'))
+const SlidePuzzle = lazyLoad(() => import('../../components/games/SlidePuzzle.jsx'))
+const SportsMania = lazyLoad(() => import('../../components/games/SportsMania.jsx'))
+const TurboBall = lazyLoad(() => import('../../components/games/TurboBall.jsx'))
+const BlockDrop = lazyLoad(() => import('../../components/games/BlockDrop.jsx'))
+const SweetSwap = lazyLoad(() => import('../../components/games/SweetSwap.jsx'))
+const Impostor = lazyLoad(() => import('../../components/games/Impostor.jsx'))
+const Trackstar = lazyLoad(() => import('../../components/games/Trackstar.jsx'))
+const TennisTour = lazyLoad(() => import('../../components/games/TennisTour.jsx'))
+const Wildfire = lazyLoad(() => import('../../components/games/Wildfire.jsx'))
+const RoyalDraw = lazyLoad(() => import('../../components/games/RoyalDraw.jsx'))
+const HoldEm = lazyLoad(() => import('../../components/games/HoldEm.jsx'))
+const Blackjack = lazyLoad(() => import('../../components/games/Blackjack.jsx'))
+const GoFish = lazyLoad(() => import('../../components/games/GoFish.jsx'))
 
 /** One colour per shelf, so the grid is scannable without artwork. */
 const TILE_TINT = {
@@ -91,18 +98,26 @@ export default function KidArcade() {
   const [playing, setPlaying] = useState(null)
   const [result, setResult] = useState(null)
   const [shelf, setShelf] = useState('all')
+  // When the open game started: the server holds a score to what the game
+  // allows in the time played (minigame_possible_score), and so does this.
+  const startedAt = useRef(0)
+  useEffect(() => { if (playing) startedAt.current = Date.now() }, [playing])
   if (!kid) return null
 
   // The demo is a shop window: it should not run out of tokens two games in.
   const unlimited = Boolean(state.demo)
   const tokens = unlimited ? Infinity : kid.playTokens || 0
-  const earnedToday = kid.gameDay === dayKey() ? kid.gameCoinsToday || 0 : 0
+  const earnedToday = kid.gameDay && kid.gameDay >= dayKey() ? kid.gameCoinsToday || 0 : 0
   const capped = earnedToday >= DAILY_COIN_CAP
+  // What is left today, and when it comes back, in a child's words.
+  const limits = arcadeLimits({ tokens: unlimited ? 0 : tokens, earnedToday, unlimited, currency: theme?.currency?.name })
   const bests = kid.bestScores || {}
 
-  const finish = (score) => {
+  const finish = (claimed) => {
+    const elapsedMs = Date.now() - startedAt.current
+    const score = Math.min(claimed, possibleScore(playing, elapsedMs))
     const coins = payout(score, earnedToday)
-    dispatch({ type: 'FINISH_MINIGAME', kidId: kid.id, game: playing, score, coins })
+    dispatch({ type: 'FINISH_MINIGAME', kidId: kid.id, game: playing, score, coins, elapsedMs })
     setResult({ game: playing, score, coins })
     setPlaying(null)
   }
@@ -118,8 +133,13 @@ export default function KidArcade() {
             Give up
           </Button>
         </div>
-        <p className="text-xs text-muted mb-3">{meta.howTo}</p>
-        <Game theme={theme} onDone={finish} />
+        {/* One line, before the first move: what to do in this game. */}
+        <p className="card-flat px-3 py-2 mb-3 text-sm" data-testid="how-to-play">
+          <span className="font-semibold">How to play:</span> {meta.howTo}
+        </p>
+        <Suspense fallback={<Loading inline />}>
+          <Game theme={theme} onDone={finish} />
+        </Suspense>
       </Screen>
     )
   }
@@ -140,9 +160,7 @@ export default function KidArcade() {
               +{result.coins} {theme.currency.name}
             </div>
             {result.coins === 0 && (
-              <p className="text-xs text-muted mt-1">
-                You have hit today&apos;s arcade limit. Play for the score — it resets tomorrow.
-              </p>
+              <p className="text-xs text-muted mt-1" data-testid="arcade-cap-words">{limits.coins}</p>
             )}
           </Card>
           <div className="flex gap-2">
@@ -291,19 +309,21 @@ export default function KidArcade() {
         <Stat icon="🏆" value={`${played}/${MINIGAMES.length}`} label="Tried" tone="var(--good)" />
       </div>
 
-      {tokens === 0 && !unlimited && (
+      {tokens === 0 && !unlimited ? (
         <EmptyState
           icon="🎮"
           title="No tokens yet"
-          body="Finish a chore and get it approved — that is where tokens come from."
+          body={limits.tokens}
           action={<Button onClick={() => navigate('/kid/quests')}>See my quests</Button>}
         />
-      )}
-
-      {capped && tokens > 0 && (
-        <Banner tone="info" icon="🏁" title="That is today's winnings">
-          You can still play as much as you like — it just will not pay out again until tomorrow.
-        </Banner>
+      ) : (
+        <Card flat className="mb-4" data-testid="arcade-limits">
+          <p className="text-[11px] uppercase tracking-wider text-muted mb-1">Today in the arcade</p>
+          <p className="text-sm mb-1.5"><span aria-hidden="true">🎮 </span>{limits.tokens}</p>
+          <p className="text-sm" style={capped ? { color: 'var(--accent-2)' } : undefined}>
+            <span aria-hidden="true">{capped ? '🏁 ' : `${theme.currency.icon} `}</span>{limits.coins}
+          </p>
+        </Card>
       )}
 
       <SectionTitle>Today&apos;s pick</SectionTitle>

@@ -6,6 +6,12 @@
  * market can change what a chore pays.
  */
 import { launch, reporter, setUpFamily, readState, finish, expireTrialInDatabase, SHOT_DIR } from './helpers.mjs'
+import { TIERS, TIER_LADDER } from '../src/state/initialState.js'
+import { planLines, annualSaving } from '../src/lib/plans.js'
+
+// The tests run with guilds switched on (supabase/test/up.sh), so the plan
+// screen mentions them; tests/planwords.mjs checks they vanish when off.
+const PLAN_OPTS = { guilds: true }
 
 const { browser, page, errors } = await launch()
 const { fails, pass, fail } = reporter()
@@ -16,9 +22,14 @@ console.log('\n=== Three plans, all billed monthly ===')
 await page.evaluate(() => { window.location.hash = '/parent/plan' })
 await page.waitForTimeout(900)
 const body = await page.evaluate(() => document.body.innerText)
-;['Free', '$9.99', '$15.99'].every((p) => body.includes(p))
-  ? pass('all three plans are priced on the plan screen, Starter free')
+// The prices the owner chose, typed here on purpose: the app reads them from
+// TIERS, and this is the check that TIERS says what was decided.
+;['Free', '$5.99', '$9.99'].every((p) => body.includes(p))
+  ? pass('all three plans are priced on the plan screen: Starter free, Standard $5.99, Elite $9.99')
   : fail('three prices shown', body.slice(0, 160))
+;['$15.99', '$159.9', '$99.9'].some((p) => body.includes(p))
+  ? fail('no old price on the plan screen', 'an old price is still shown')
+  : pass('and no old price is left on it')
 // A free plan must never render as "$0/mo", which reads as a bug.
 !body.includes('$0')
   ? pass('and free is written as Free, not as zero dollars')
@@ -33,14 +44,33 @@ body.includes('Billed monthly')
 // The question a parent actually asks is "why would I pay more".
 // Standard is measured against free, so it states its own price; Elite is
 // measured against Standard, so it states the difference.
-body.includes('$9.99 a month') && body.includes('more than Standard')
-  ? pass('each step up says what the extra money buys')
+body.includes('$5.99 a month') && body.includes('$4.00 more than Standard')
+  ? pass('each step up says what the extra money buys ($5.99 a month; $4.00 more than Standard)')
   : fail('upgrade reason shown', 'no price-difference line')
 // innerText returns text with CSS text-transform applied, so section headings
 // come back upper-cased.
 ;/side by side/i.test(body)
   ? pass('there is a side-by-side comparison')
   : fail('comparison table', 'missing')
+
+console.log('\n=== Each plan says what it adds, in the plan list\'s own words ===')
+for (const tier of TIER_LADDER) {
+  const shown = await page.locator(`[data-testid="plan-lines-${tier.id}"]`).innerText().catch(() => '')
+  const missing = planLines(tier, PLAN_OPTS).filter((line) => !shown.includes(line))
+  missing.length === 0 && shown
+    ? pass(`${tier.name}: every line from the limits is on its card (${planLines(tier, PLAN_OPTS).length})`)
+    : fail(`${tier.name} lines shown`, `missing: ${missing.join(' / ')}`)
+  const extra = shown.split('\n').map((x) => x.replace(/^✓\s*/, '').trim()).filter(Boolean)
+    .filter((x) => !planLines(tier, PLAN_OPTS).includes(x))
+  extra.length === 0
+    ? pass(`${tier.name}: and nothing on it that the limits do not say`)
+    : fail(`${tier.name} has no extra lines`, extra.join(' / '))
+}
+const sellsThemes = /every theme/.test(body)
+sellsThemes
+  ? fail('Standard is not sold on themes', 'the screen says Standard adds every theme, which Starter already has')
+  : pass('no plan is sold on themes every plan already has')
+await page.screenshot({ path: `${SHOT_DIR}/plans-monthly.png`, fullPage: true })
 
 console.log('\n=== Nothing claims to remove ads, because there are none ===')
 ;/ad removal|remove ads|advertis/i.test(body)
@@ -56,21 +86,58 @@ await page.waitForTimeout(700)
 await page.getByRole('tab', { name: /Yearly/ }).click()
 await page.waitForTimeout(500)
 const yearly = await page.evaluate(() => document.body.innerText)
-yearly.includes('$99.9') && yearly.includes('$159.9')
-  ? pass('yearly prices replace the monthly ones')
+yearly.includes('$49.99/yr') && yearly.includes('$79.99/yr')
+  ? pass('yearly prices replace the monthly ones ($49.99 and $79.99 a year)')
   : fail('yearly prices shown', yearly.slice(0, 200))
-yearly.includes('2 months free')
-  ? pass('and the control itself says what yearly buys')
-  : fail('2 months free stated', 'phrase missing')
+// $49.99 is not a whole number of $5.99 months, so the switch gives the
+// smaller of the two real savings as a percentage (30%, against Elite's 33%),
+// never "2 months free".
+yearly.includes('Save 30% or more') && !/months? free/.test(yearly)
+  ? pass('and the control itself says what yearly buys, honestly: "Save 30% or more"')
+  : fail('saving stated on the switch', 'phrase missing, or it still says months free')
+yearly.includes('A year saves 30%') && yearly.includes('A year saves 33%')
+  ? pass('each card gives its own percentage: Standard 30%, Elite 33%')
+  : fail('per-plan percentage', yearly.slice(0, 300))
 // Assigned rather than written inline: a regex literal opening a line after a
 // closing paren is read as division, and the file stops parsing.
 const showsSaving = /\$\d+\.\d\d saved/.test(yearly)
 showsSaving
   ? pass('each plan shows the money saved in cash, not a percentage')
   : fail('saving in cash', yearly.slice(0, 200))
+const SAVES = { standard: '21.89', elite: '39.89' }
+for (const tier of TIER_LADDER.filter((t) => annualSaving(t))) {
+  const s = annualSaving(tier)
+  s.saved === SAVES[tier.id]
+    ? pass(`${tier.name}: the saving worked out is $${SAVES[tier.id]}`)
+    : fail(`${tier.name} saving worked out`, `$${s.saved}, should be $${SAVES[tier.id]}`)
+  const chip = await page.locator(`[data-testid="saving-${tier.id}"]`).innerText().catch(() => '')
+  chip.trim() === `$${s.saved} saved a year`
+    ? pass(`${tier.name}: saves $${s.saved}, twelve months at $${tier.price.toFixed(2)} less $${tier.yearPrice.toFixed(2)}`)
+    : fail(`${tier.name} saving`, `shows "${chip}", should be $${s.saved}`)
+}
+await page.screenshot({ path: `${SHOT_DIR}/plans-yearly.png`, fullPage: true })
 yearly.includes('Billed yearly')
   ? pass('and says plainly how it will be billed')
   : fail('billed yearly stated', 'phrase missing')
+
+// Every price the screen shows, monthly and yearly, is a price in the table in
+// docs/PAYMENTS.md, written the same way. "$79.9/yr" is not "$79.90 / year".
+{
+  const { readFileSync } = await import('node:fs')
+  const doc = readFileSync(new URL('../docs/PAYMENTS.md', import.meta.url), 'utf8')
+  const table = doc.slice(doc.indexOf('### 1. Create the products'), doc.indexOf('### 2.'))
+  const documented = new Set([...table.matchAll(/\$(\d+\.\d\d) \/ (month|year)/g)].map((m) => `${m[1]}/${m[2] === 'month' ? 'mo' : 'yr'}`))
+  const shownIn = (text) => [...text.matchAll(/\$(\d+(?:\.\d+)?)\s*\/(mo|yr)\b/g)].map((m) => `${m[1]}/${m[2]}`)
+  const shown = new Set([...shownIn(body), ...shownIn(yearly)])
+  const strays = [...shown].filter((p) => !documented.has(p))
+  shown.size >= 4 && strays.length === 0
+    ? pass(`every price on the plan screen is in docs/PAYMENTS.md (${[...shown].join(', ')})`)
+    : fail('plan prices match docs/PAYMENTS.md', `shown ${[...shown].join(', ')}; not in the doc: ${strays.join(', ')}`)
+  const missing = [...documented].filter((p) => !shown.has(p))
+  missing.length === 0
+    ? pass('and every documented price is on the plan screen')
+    : fail('documented prices shown', missing.join(', '))
+}
 
 // Defaulting somebody into the larger charge is what gets refunded.
 await page.reload({ waitUntil: 'domcontentloaded' })
@@ -84,7 +151,7 @@ await page.evaluate(() => { window.location.hash = '/parent/plan' })
 await page.waitForFunction(() => /\$\d/.test(document.body.innerText), null, { timeout: 15000 })
   .catch(() => {})
 const fresh = await page.evaluate(() => document.body.innerText)
-fresh.includes('$9.99') && !fresh.includes('$99.9')
+fresh.includes('$5.99/mo') && !fresh.includes('$49.99')
   ? pass('monthly is what a parent sees first')
   : fail('monthly is the default', fresh.slice(0, 200))
 
@@ -115,6 +182,23 @@ await page.getByRole('button', { name: '+ Add' }).isDisabled()
   ? pass('and the Add button is actually disabled')
   : fail('add disabled on Starter', 'still clickable')
 
+console.log('\n=== Settings names the plan they are really on ===')
+await page.evaluate(() => { window.location.hash = '/parent/settings' })
+await page.waitForTimeout(900)
+{
+  const summary = await page.getByRole('button', { name: /Parent account/ }).innerText().catch(() => '')
+  summary.includes(TIERS.starter.name) && !summary.includes(TIERS.standard.name)
+    ? pass(`a family on the free plan is shown as ${TIERS.starter.name}, not ${TIERS.standard.name}`)
+    : fail('Parent account names Starter', summary)
+  await page.getByRole('button', { name: /Parent account/ }).click().catch(() => {})
+  await page.waitForTimeout(300)
+  const chip = await page.locator('[data-testid="plan-chip"]').innerText().catch(() => '')
+  chip === `Plan: ${TIERS.starter.name}`
+    ? pass('and so does the plan line inside it')
+    : fail('plan chip names Starter', chip)
+  await page.screenshot({ path: `${SHOT_DIR}/plans-settings-starter.png` })
+}
+
 const before = (await readState(page)).kids.length
 await page.evaluate(() => {
   // Even reaching past the screen must not work: the reducer refuses too.
@@ -123,6 +207,45 @@ await page.evaluate(() => {
 ;(await readState(page)).kids.length === before
   ? pass('a second child cannot appear on Starter')
   : fail('kid limit enforced', 'a kid was added')
+
+console.log('\n=== A payment that fails is explained on the dashboard ===')
+{
+  // The webhook's write, made directly: the newest family is this test's.
+  const { default: pg } = await import('pg')
+  const db = new pg.Client({
+    host: process.env.PGHOST || '/tmp',
+    port: Number(process.env.PGPORT || 55432),
+    user: process.env.PGUSER || 'postgres',
+    database: process.env.PGDATABASE || 'rankup_test',
+  })
+  await db.connect()
+  const setStatus = (status) => db.query(
+    `update families set subscription_status = $1, last_paid_tier = 'elite'
+      where id = (select id from families order by created_at desc limit 1)`, [status])
+  // Waits for the sync to bring the family row over, rather than for a time.
+  const dashboardSays = async (pattern, present) => {
+    await page.evaluate(() => { window.location.hash = '/parent' })
+    for (let i = 0; i < 40; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+      // eslint-disable-next-line no-await-in-loop
+      const text = await page.evaluate(() => document.body.innerText)
+      if (pattern.test(text) === present) return true
+      // eslint-disable-next-line no-await-in-loop
+      await page.waitForTimeout(500)
+    }
+    return false
+  }
+  await setStatus('past_due')
+  ;(await dashboardSays(/A payment failed[\s\S]*Elite plan/, true))
+    ? pass('a declined renewal puts "A payment failed" on the dashboard, naming the plan')
+    : fail('payment failure explained', (await page.evaluate(() => document.body.innerText)).slice(0, 200))
+  await setStatus('active')
+  ;(await dashboardSays(/A payment failed/, false))
+    ? pass('and it goes once the payment is through')
+    : fail('notice cleared', 'still showing')
+  await db.end()
+}
 
 console.log('\n=== The Sunday Market ===')
 await page.evaluate(() => { window.location.hash = '/kid/market' })

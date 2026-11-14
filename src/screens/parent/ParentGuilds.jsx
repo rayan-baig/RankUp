@@ -4,6 +4,7 @@ import { guilds, guildError } from '../../lib/guilds.js'
 import { relativeTime } from '../../lib/dates.js'
 import { Screen, Card, Button, SectionTitle, Banner, TextInput, Select, Field, Chip, EmptyState } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
+import { quickChatText } from '../../data/quickChat.js'
 
 /**
  * The parent's side of guilds.
@@ -72,6 +73,16 @@ export default function ParentGuilds() {
   const approve = async (req) => {
     setBusy(true); setError('')
     const result = await guilds.approveMember(req.guild_id, req.kid_id)
+    setBusy(false)
+    if (!result.ok) setError(guildError(result.reason))
+    load()
+  }
+
+  // Acting on a report: take the child who wrote it out of your child's
+  // guild, or block them so asking again is refused too.
+  const moderate = async (m, action) => {
+    setBusy(true); setError('')
+    const result = action === 'block' ? await guilds.block(m.guild_id, m.kid_id) : await guilds.leave(m.guild_id, m.kid_id)
     setBusy(false)
     if (!result.ok) setError(guildError(result.reason))
     load()
@@ -161,12 +172,35 @@ export default function ParentGuilds() {
               <div className="text-xs text-muted mb-1">
                 {m.author} in {m.guild_name} · reported {relativeTime(Date.parse(m.reported_at))}
               </div>
-              <p className="text-sm">“{m.body}”</p>
+              {/* A quick chat message is an id, shown in the words every phone has;
+                  one typed before quick chat is shown as it was typed. */}
+              <p className="text-sm">“{m.quick_id ? quickChatText(m.quick_id) : m.body}”</p>
+              {!m.quick_id && <p className="text-[11px] text-muted">Typed before guild chat became tap-to-send.</p>}
+              {m.we_own_the_guild && !m.is_our_kid && (
+                m.author_blocked ? (
+                  <p className="text-xs text-muted mt-2">{m.author} is blocked from {m.guild_name}.</p>
+                ) : (
+                  <div className="flex gap-2 mt-3">
+                    {m.author_status === 'active' && (
+                      <Button variant="soft" className="flex-1 py-2 min-h-0 text-sm" disabled={busy}
+                              onClick={() => moderate(m, 'remove')}>
+                        Remove {m.author}
+                      </Button>
+                    )}
+                    <Button variant="soft" className="flex-1 py-2 min-h-0 text-sm" disabled={busy}
+                            onClick={() => moderate(m, 'block')}>
+                      Block {m.author}
+                    </Button>
+                  </div>
+                )
+              )}
             </Card>
           ))
         )}
         <p className="text-xs text-muted mt-1">
-          Reported messages are hidden from the children immediately and shown only here.
+          Reported messages are hidden from the children immediately and shown only here. In your
+          child's guild you can remove the child who wrote one, or block them so they cannot ask
+          to join again.
         </p>
       </div>
 

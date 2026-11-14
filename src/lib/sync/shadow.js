@@ -45,6 +45,23 @@ export function clearShadow() {
 }
 
 /**
+ * Forget rows this phone has let go of to save space (lib/prune.js), so their
+ * absence from the state is not read as a delete. The server keeps them.
+ */
+export function forgetRows(dropped) {
+  const shadow = readShadow()
+  let changed = false
+  for (const [table, ids] of Object.entries({ quests: dropped?.quests, notes: dropped?.notes })) {
+    for (const id of ids || []) {
+      if (`${table}:${id}` in shadow || `?${table}:${id}` in shadow) changed = true
+      delete shadow[`${table}:${id}`]
+      delete shadow[`?${table}:${id}`]
+    }
+  }
+  if (changed) writeShadow(shadow)
+}
+
+/**
  * XP, currency and streaks are NOT in this list on purpose.
  *
  * They move only through approve_submission and its siblings, which run inside
@@ -55,7 +72,9 @@ export function clearShadow() {
 const SERVER_OWNED = {
   // A family's tier is decided by Stripe's webhook. The database refuses a
   // direct write anyway, but pushing it would fill the outbox with rejections.
-  families: ['tier', 'subscription_status', 'stripe_customer_id', 'stripe_subscription_id'],
+  families: ['tier', 'subscription_status', 'stripe_customer_id', 'stripe_subscription_id',
+             // A gift plan is written by redeem_gift_code alone.
+             'gift_tier', 'gift_starts_at', 'gift_until'],
   kids: ['xp', 'coins', 'streak_count', 'streak_last_day', 'streak_freezes',
          // Arcade tokens and the day's winnings are balances too: play_minigame
          // and approve_submission are the only things allowed to move them.
@@ -107,13 +126,17 @@ function stripServerOwned(table, row) {
  * through submit_quest, so the row is already there by the time this runs and
  * the upsert would arrive as an update, which only a parent may do.
  */
-const KID_WRITABLE = new Set(['notes'])
+const KID_WRITABLE = new Set(['notes',
+  // Their own themes (Theme Genesis). Row level security holds a child to
+  // their own rows, and a guard trigger to the look and the names: the
+  // columns the server writes (sent_at, picked_season) are not theirs.
+  'kid_themes'])
 
 /**
  * Tables no device ever writes directly, whatever role it is in.
  *
  * A submission is created by submit_quest and a redemption by redeem_reward —
- * both carry the whole row, photo included — because the outcome has to be
+ * both carry the whole row — because the outcome has to be
  * decided by the server rather than by the phone claiming it. Pushing the same
  * row again afterwards can only be an update, which row level security allows
  * to a parent and refuses to a kid; either way it changes nothing. It matters
@@ -177,9 +200,8 @@ function queueKidLook(state, shadow, familyId) {
 
 /**
  * Compare state against the shadow and queue whatever changed.
- * `photoFor` supplies a submission's image, which lives outside the state object.
  */
-export function queueChanges(state, { photoFor, role } = {}) {
+export function queueChanges(state, { role } = {}) {
   if (!state.family?.id) return 0
   const shadow = readShadow()
   const familyId = state.family.id
@@ -196,9 +218,7 @@ export function queueChanges(state, { photoFor, role } = {}) {
     for (const item of rows) {
       const row = stripServerOwned(
         table,
-        table === 'submissions'
-          ? mapper.toRow(item, familyId, photoFor?.(item))
-          : mapper.toRow(item, familyId),
+        mapper.toRow(item, familyId),
       )
       const shadowId = `${table}:${item.id}`
       seen.add(shadowId)
@@ -229,7 +249,7 @@ export function queueChanges(state, { photoFor, role } = {}) {
       // Only remember it as sent if it was actually queued. enqueue returns
       // null when localStorage refused the write, and recording the shadow
       // anyway meant the change was skipped from then on — silently lost to a
-      // full quota, which this app hits routinely because photos live there.
+      // full quota.
       if (!enqueue(op)) continue
       shadow[shadowId] = serialised
       if (op.type === 'upsert') shadow[`?${shadowId}`] = true
@@ -262,8 +282,13 @@ export function queueChanges(state, { photoFor, role } = {}) {
  * play or are approved. A parent tapping "Lift now" a moment before such a
  * pull landed saw the lockdown come straight back, and it stayed back.
  */
-export function pendingRows(ops) {
+/** Database functions that move a child's coins (or the arcade balances beside them). */
+const BALANCE_CALLS = new Set(['redeem_reward', 'apply_currency_tax', 'buy_market_skin', 'play_minigame',
+                               'claim_login_bonus', 'use_streak_freeze'])
+
+export function pendingRows(ops, state = null) {
   const pending = new Set()
+  const submission = (id) => (state?.submissions || []).find((s) => s.id === id)
   for (const op of ops) {
     if ((op.type === 'upsert' || op.type === 'patch') && op.row?.id) pending.add(`${op.table}:${op.row.id}`)
     // A delete is marked twice: as a row with a change waiting, and as a
@@ -271,6 +296,47 @@ export function pendingRows(ops) {
     else if (op.type === 'delete') { pending.add(`${op.table}:${op.id}`); pending.add(`delete:${op.table}:${op.id}`) }
     // A child's own look travels by function rather than as a row.
     else if (op.type === 'rpc' && op.fn === 'set_kid_look' && op.args?.p_kid_id) pending.add(`kids:${op.args.p_kid_id}`)
+    // A goal this phone has just set must not be put back by an older copy.
+    else if (op.type === 'rpc' && op.fn === 'set_family_goal') pending.add('family_goals')
+    // A parent sending a child's theme to RankUp: an older pull would show
+    // the request as still waiting, and invite a second tap.
+    else if (op.type === 'rpc' && op.fn === 'submit_kid_theme' && op.args?.p_theme_id) pending.add(`kid_themes:${op.args.p_theme_id}`)
+    // A note added in Chore history: an older pull must not wipe it on screen.
+    else if (op.type === 'rpc' && op.fn === 'set_history_note' && op.args?.p_submission_id) pending.add(`submissions:${op.args.p_submission_id}`)
+    /*
+     * A chore sent, accepted or sent back, still on its way. A pull already in
+     * flight carries the rows as they were a moment before, and merging it
+     * put an accepted chore back in the review queue with the child's XP
+     * undone, where a second tap on Accept paid it again on this phone and
+     * sent a second "Approved!". Only rows the call itself writes are held,
+     * so each comes back with the pull after it lands.
+     */
+    else if (op.type === 'rpc' && op.fn === 'submit_quest' && op.args?.p_submission_id) {
+      pending.add(`submissions:${op.args.p_submission_id}`)
+      if (op.args.p_quest_id) pending.add(`quests:${op.args.p_quest_id}`)
+    } else if (op.type === 'rpc' && (op.fn === 'approve_submission' || op.fn === 'reject_submission') && op.args?.p_submission_id) {
+      pending.add(`submissions:${op.args.p_submission_id}`)
+      const decided = submission(op.args.p_submission_id)
+      if (decided?.questId) pending.add(`quests:${decided.questId}`)
+      // Only an approval writes the child's row (XP, coins, streak).
+      if (op.fn === 'approve_submission' && decided?.kidId) pending.add(`kids:${decided.kidId}`)
+    } else if (op.type === 'rpc' && BALANCE_CALLS.has(op.fn) && op.args?.p_kid_id) {
+      /*
+       * A call that moves the child's coins, still on its way. A pull carries
+       * the row as it was before the call landed, and merging it put the
+       * coins back: a child who had just bought a reward watched their
+       * balance jump up again, and could spend the same coins a second time
+       * on this phone, to be refused (and refunded on screen) once the second
+       * purchase reached the server. The row comes back with the pull after
+       * the call lands.
+       */
+      pending.add(`kids:${op.args.p_kid_id}`)
+      if (op.fn === 'redeem_reward' && op.args.p_redemption_id) pending.add(`redemptions:${op.args.p_redemption_id}`)
+    } else if (op.type === 'rpc' && op.fn === 'mark_redemption_given' && op.args?.p_redemption_id) {
+      // "Mark given" on its way: an older pull would show the reward as owed
+      // again, and invite a second tap.
+      pending.add(`redemptions:${op.args.p_redemption_id}`)
+    }
   }
   return pending
 }
@@ -288,11 +354,20 @@ export function pendingRows(ops) {
  * Rows in `skip` have a change of the device's own still waiting to go; their
  * shadow already describes that change and is left alone.
  */
-export function recordDelivered(state, snapshot, { photoFor, skip = new Set() } = {}) {
+export function recordDelivered(state, snapshot, { skip = new Set() } = {}) {
   if (!state.family?.id || !snapshot) return
   const shadow = readShadow()
   const familyId = state.family.id
   for (const [snapshotKey, { key: stateKey, mapper, table }] of Object.entries(ENTITIES)) {
+    // A device never writes these (see FUNCTION_OWNED), so nothing ever reads
+    // their shadow. Keeping one anyway doubled what a family with a year of
+    // chores held in the phone's storage, and pushed it towards full.
+    if (FUNCTION_OWNED.has(table)) {
+      for (const id of Object.keys(shadow)) {
+        if (id.startsWith(`${table}:`) || id.startsWith(`?${table}:`)) delete shadow[id]
+      }
+      continue
+    }
     const rows = snapshot[snapshotKey]
     if (!Array.isArray(rows) || !rows.length) continue
     const local = new Map((state[stateKey] || []).map((item) => [item.id, item]))
@@ -301,9 +376,7 @@ export function recordDelivered(state, snapshot, { photoFor, skip = new Set() } 
       const item = mapper.fromRow(delivered, local.get(delivered.id) || {})
       const row = stripServerOwned(
         table,
-        table === 'submissions'
-          ? mapper.toRow(item, familyId, photoFor?.(item))
-          : mapper.toRow(item, familyId),
+        mapper.toRow(item, familyId),
       )
       shadow[`${table}:${item.id}`] = JSON.stringify(row)
       delete shadow[`?${table}:${item.id}`]   // the server has it
@@ -323,7 +396,7 @@ export function recordDelivered(state, snapshot, { photoFor, skip = new Set() } 
 }
 
 /** After a pull, record what the server now holds so we do not echo it back. */
-export function recordServerState(state, { photoFor, only } = {}) {
+export function recordServerState(state, { only } = {}) {
   if (!state.family?.id) return
   const shadow = readShadow()
   const familyId = state.family.id
@@ -339,9 +412,7 @@ export function recordServerState(state, { photoFor, only } = {}) {
       if (only && !only.has(`${table}:${item.id}`)) continue
       const row = stripServerOwned(
         table,
-        table === 'submissions'
-          ? mapper.toRow(item, familyId, photoFor?.(item))
-          : mapper.toRow(item, familyId),
+        mapper.toRow(item, familyId),
       )
       shadow[`${table}:${item.id}`] = JSON.stringify(row)
       // The look is tracked separately because it is pushed separately. Without

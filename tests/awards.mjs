@@ -67,7 +67,9 @@ console.log(`\n=== ${CASES.length} ways a chore can pay out ===`)
 let mismatches = []
 for (const c of CASES) {
   await db.query('update families set tier = $1 where id = $2', [c.tier, FAMILY])
-  await db.query('update kids set streak_count = $1 where id = $2', [c.streak, KID])
+  // A streak kept today, so it is alive; a lapsed one pays nothing, which
+  // supabase/test/27-family-day.sql checks.
+  await db.query(`update kids set streak_count = $1, streak_last_day = (now() at time zone 'UTC')::date where id = $2`, [c.streak, KID])
   const quest = (await db.query(
     `insert into quests (family_id, kid_id, title, xp, difficulty, timer_seconds, test_score, double_xp, status)
      values ($1, $2, 'Awarded quest', $3, 'medium', $4, $5, $6, 'submitted') returning id`,

@@ -57,17 +57,31 @@ Supabase, which is why their steps differ from a plain restore). Follow
 that guide rather than improvising. If in doubt, Supabase support can do
 it with you.
 
+**Then, after any restore from your own copy, run the SQL files again**, in
+the order in [LAUNCH.md](LAUNCH.md) section 2, before the app talks to it.
+A copy taken as in section 2 leaves out who may run what
+(`--no-privileges`), so a restored database lets anybody with the app's
+public key call every database function — including the ones that read or
+delete across every family, which are meant for the server alone. Running
+the files puts those rules back; they are safe to run over a database that
+already has families in it. (Found by the drill below, not by reading.)
+
 ## 4. Practise once, before you need it
 
 A backup nobody has restored is a guess. `supabase/test/backup-drill.sh`
 does the whole thing against the local test database: takes a copy the way
-section 2 says, restores it into an empty database, and checks every
-table came back with the same number of rows.
+section 2 says, restores it into an empty database, runs the SQL files over
+it as section 3 says, and checks that every table there is today (read from
+the database, so a new table is included without anyone remembering to)
+came back row for row, with its rules: the policies, functions, triggers,
+row level security, and exactly what the public key and a signed-in account
+may run.
 
 ```bash
 supabase/test/up.sh                 # the local database, once
 supabase/test/backup-drill.sh
 ```
 
-It last passed on 2026-11-01: 109 accounts, 66 families, 72 children and
-every chore, reward and allowance line restored exactly.
+It last passed on 2026-11-02: all 45 tables (224 accounts, 116 families,
+115 children, every chore, reward, allowance line, guild and school row)
+restored identically, with all 193 functions and the same access rules.

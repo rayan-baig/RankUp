@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { STICKER_MAP } from '../../data/stickers.js'
-import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
-import { DIFFICULTY, calcReward } from '../../lib/xp.js'
+import { useApp, useKid, useKidTheme, useElite, useSync } from '../../state/AppContext.jsx'
+import { readOutbox } from '../../lib/sync/outbox.js'
+import { DIFFICULTY, calcReward, liveStreak, finishedOnTime } from '../../lib/xp.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
 import { formatDuration } from '../../lib/dates.js'
 import { Screen, Card, Button, Banner, Chip, TextInput, Field, SectionTitle } from '../../components/ui.jsx'
@@ -24,6 +25,7 @@ export default function QuestDetail({ questId }) {
   const elite = useElite()
 
   const quest = state.quests.find((q) => q.id === questId)
+  const { configured, pending } = useSync()
 
   const [mode, setMode] = useState('detail') // detail | review
   const [note, setNote] = useState('')
@@ -65,8 +67,8 @@ export default function QuestDetail({ questId }) {
   // Only 'assigned' and 'redo' quests can be worked on. Anything else is either
   // sitting with the parent or already paid out.
   const isOpen = quest.status === 'assigned' || quest.status === 'redo'
-  const onTime = quest.timerSeconds ? elapsed > 0 && elapsed <= quest.timerSeconds * 1000 : true
-  const preview = calcReward(quest, { elite, streak: kid.streak.count, onTime })
+  const onTime = finishedOnTime(quest.timerSeconds, elapsed)
+  const preview = calcReward(quest, { elite, streak: liveStreak(kid.streak), onTime })
 
   const submit = () => {
     dispatch({
@@ -75,14 +77,17 @@ export default function QuestDetail({ questId }) {
         questId: quest.id,
         kidId: kid.id,
         note: note.trim(),
-        testScore: quest.testScore ? Number(score) || 0 : null,
+        testScore: quest.testScore ? Math.min(100, Number(score) || 0) : null,
         elapsedMs: quest.timerSeconds ? elapsed : null,
         onTime,
-        captureSource: 'none',
       },
     })
     navigate('/kid/quests')
   }
+
+  // A test-score chore needs a score, and a score is a percentage.
+  const scoreMissing = Boolean(quest.testScore) && score === ''
+  const scoreTooHigh = Boolean(quest.testScore) && Number(score) > 100
 
   /* ---------- review before sending ---------- */
   if (mode === 'review' && isOpen) {
@@ -93,7 +98,7 @@ export default function QuestDetail({ questId }) {
         {quest.requiresPhoto && <ShowYourParent />}
 
         {quest.testScore && (
-          <Field label="Your score (%)" hint="80% or higher earns a bonus.">
+          <Field label="Your score (%)" hint={scoreTooHigh ? 'A score is 0 to 100.' : '80% or higher earns a bonus.'}>
             <TextInput value={score} onChange={(e) => setScore(e.target.value.replace(/\D/g, '').slice(0, 3))} inputMode="numeric" placeholder="e.g. 86" />
           </Field>
         )}
@@ -106,7 +111,7 @@ export default function QuestDetail({ questId }) {
           <Button variant="soft" className="flex-1" onClick={() => setMode('detail')}>
             Back
           </Button>
-          <Button className="flex-1" onClick={submit}>Send to parent</Button>
+          <Button className="flex-1" onClick={submit} disabled={scoreMissing || scoreTooHigh}>Send to parent</Button>
         </div>
       </Screen>
     )
@@ -190,7 +195,10 @@ export default function QuestDetail({ questId }) {
           <Button
             variant={timerStart ? 'soft' : 'primary'}
             className="w-full mt-3"
-            onClick={() => (timerStart ? setTimerStart(null) : setTimerStart(Date.now()))}
+            onClick={() => {
+              // Stopping records the time at the tap, not the last 200ms tick.
+              if (timerStart) { setElapsed(Date.now() - timerStart); setTimerStart(null) } else setTimerStart(Date.now())
+            }}
           >
             {timerStart ? 'Stop timer' : 'Start timer'}
           </Button>
@@ -203,10 +211,14 @@ export default function QuestDetail({ questId }) {
           <Button className="w-full" onClick={() => setMode('review')}>✅ I did it!</Button>
           <p className="text-xs text-muted text-center mt-2">Your parent accepts it before XP is awarded.</p>
         </>
+      ) : quest.status === 'submitted' && configured && pending > 0 && stillOnThisPhone(quest.id, state.syncQueue) ? (
+        <Banner tone="info" icon="📱" title="Saved on your phone">
+          It goes to your parent next time RankUp is open with internet. You get your XP when they
+          accept it.
+        </Banner>
       ) : quest.status === 'submitted' ? (
         <Banner tone="info" icon="⏳" title="Sent to your parent">
-          You have already sent this one in. You will get your XP when they approve it — there is
-          nothing else to do here.
+          You get your XP when they accept it. Nothing else to do here.
         </Banner>
       ) : (
         <>
@@ -236,6 +248,18 @@ export default function QuestDetail({ questId }) {
       )}
     </Screen>
   )
+}
+
+/**
+ * Is this quest's "I did it!" still waiting on this phone to be sent?
+ *
+ * Saying "Sent to your parent" while it sits in the outbox with no signal is
+ * not true yet. The outbox sends it, in order, the next time the app is open
+ * and online (lib/sync/outbox.js); until then the child is told just that.
+ */
+function stillOnThisPhone(questId, syncQueue = []) {
+  const waiting = (op) => op?.fn === 'submit_quest' && op.args?.p_quest_id === questId
+  return (syncQueue || []).some(waiting) || readOutbox().some((op) => op.type === 'rpc' && waiting(op))
 }
 
 /** What to do when a parent wants to see the result. */

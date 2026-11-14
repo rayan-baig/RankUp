@@ -34,7 +34,9 @@ const blankQuest = (kidId, adaptive) => ({
 export default function ParentAssign({ initialKidId }) {
   const { state, dispatch } = useApp()
   const [kidId, setKidId] = useState(initialKidId || state.kids[0]?.id || '')
-  const [tab, setTab] = useState('custom')
+  // A family with no chores yet starts on the ready-made packs: one tap fills
+  // a child's list, where the blank form asks a new parent a dozen questions.
+  const [tab, setTab] = useState(() => (state.quests.length ? 'custom' : 'packs'))
   const kid = state.kids.find((k) => k.id === kidId)
   const [quest, setQuest] = useState(() => blankQuest(kidId, Boolean(kid?.accessibility?.hasNeeds)))
   const [saved, setSaved] = useState('')

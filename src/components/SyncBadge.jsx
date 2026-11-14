@@ -3,6 +3,7 @@ import { useApp, useSync } from '../state/AppContext.jsx'
 import { transport, getSession, setSession } from '../lib/sync/transport.js'
 import SignIn from '../screens/SignIn.jsx'
 import { SYNC_STATUS } from '../lib/sync/syncEngine.js'
+import { syncWords } from '../lib/sync/words.js'
 
 /**
  * A one-line answer to "is what I'm looking at up to date?"
@@ -13,7 +14,7 @@ import { SYNC_STATUS } from '../lib/sync/syncEngine.js'
  * mystery into a fact.
  */
 export default function SyncBadge({ className = '' }) {
-  const { status, pending, error, syncNow, configured } = useSync()
+  const { status, pending, error, downSince, backAt, syncNow, configured } = useSync()
   const { state, dispatch } = useApp()
   const notice = state.syncNotice
   const [signingIn, setSigningIn] = useState(false)
@@ -69,15 +70,23 @@ export default function SyncBadge({ className = '' }) {
     )
   }
 
+  /*
+   * Short, and true to the outbox (lib/sync/outbox.js): a change is saved on
+   * this phone the moment it is made and sent, in order, whenever RankUp is
+   * open and can reach the server. With no signal it waits, for as long as
+   * it takes; nothing is dropped for being offline. A server that is down is
+   * tried again by itself, and the line says so, since when, and that it is
+   * back once it is (lib/sync/words.js).
+   */
+  const words = syncWords({
+    status, pending, error, downSince, backAt,
+    online: typeof navigator === 'undefined' || navigator.onLine !== false,
+  })
   const look = {
-    [SYNC_STATUS.IDLE]: { dot: 'var(--good)', text: pending ? `${pending} waiting to send` : 'Up to date' },
-    [SYNC_STATUS.SYNCING]: { dot: 'var(--accent)', text: 'Syncing…' },
-    [SYNC_STATUS.OFFLINE]: { dot: 'var(--warn)', text: pending ? `Offline · ${pending} waiting` : 'Offline' },
-    [SYNC_STATUS.ERROR]: {
-      dot: 'var(--bad)',
-      text: /sign in again/i.test(error || '') ? 'Sign in again to sync' : 'Sync problem',
-    },
-  }[status] || { dot: 'var(--ink-muted)', text: '' }
+    text: words.text,
+    hint: words.hint,
+    dot: { good: 'var(--good)', accent: 'var(--accent)', warn: 'var(--warn)', bad: 'var(--bad)' }[words.tone] || 'var(--ink-muted)',
+  }
 
   // Something already shown as done was turned down by the server. Say what,
   // once; tapping it clears it.
@@ -101,9 +110,9 @@ export default function SyncBadge({ className = '' }) {
     <button
       type="button"
       onClick={needsSignIn && state.device?.role !== 'kid' && transport.isConfigured() ? () => setSigningIn(true) : syncNow}
-      className={`inline-flex items-center gap-1.5 text-[11px] ${className}`}
+      className={`inline-flex items-center gap-1.5 text-[11px] text-left ${className}`}
       style={{ color: 'var(--ink-muted)' }}
-      title={error || 'Tap to sync now'}
+      title={look.hint || error || 'Tap to sync now'}
     >
       <span
         className={`w-1.5 h-1.5 rounded-full ${status === SYNC_STATUS.SYNCING ? 'anim-pulse' : ''}`}

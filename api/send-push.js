@@ -16,6 +16,8 @@
 
 import webpush from 'web-push'
 import { sendPush, failureFor } from './_shared/push.js'
+import { reportError, userHeaders } from './_shared/job.js'
+import { NOTICES, PUSH_KINDS, VALUE_MAX, reminderPush } from '../src/data/noticeWords.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -26,7 +28,7 @@ const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:support@example.com'
 const ALLOWED_ROLES = new Set(['parent', 'kid'])
 
 /**
- * The wording lives here, not in the request.
+ * The wording is the server's, not the request's.
  *
  * This endpoint used to take a title and body straight from the caller and push
  * them to every phone in the family. Membership was checked; the CONTENT was
@@ -35,44 +37,11 @@ const ALLOWED_ROLES = new Set(['parent', 'kid'])
  * under the app's name. For a children's app that is the wrong side of a line.
  *
  * So a caller names a notice and supplies at most two short values to slot into
- * it. Everything a phone finally displays is written here, and the values are
+ * it. Everything a phone finally displays is written in src/data/noticeWords.js
+ * (the app shows the same words when it notifies locally), and the values are
  * clipped and stripped of newlines so they cannot forge a second line.
- *
- * Mirrors NOTICES in src/lib/notifications.js, which still renders the local
- * copy on the device that already has the data.
  */
-const NOTICES = {
-  submission: (who, what) => ({
-    title: `${who} finished a quest`,
-    body: `"${what}" is waiting for you to review.`,
-    tag: 'submission',
-    url: '/#/parent/approvals',
-  }),
-  approved: (what, xp) => ({
-    title: 'Approved! 🎉',
-    body: `"${what}" earned you ${xp} XP.`,
-    tag: 'decision',
-    url: '/#/kid',
-  }),
-  rejected: (what) => ({
-    title: 'Sent back to redo',
-    body: `"${what}" needs another go. Tap to see why.`,
-    tag: 'decision',
-    url: '/#/kid/quests',
-  }),
-  guildRequest: (who, what) => ({
-    title: 'A guild request needs you',
-    body: `${who} wants to join ${what}. Nobody joins without you.`,
-    tag: 'guild',
-    url: '/#/parent/guilds',
-  }),
-  reminder: () => ({
-    title: 'RankUp',
-    body: 'Time to check in on today\u2019s quests.',
-    tag: 'reminder',
-    url: '/#/kid/quests',
-  }),
-}
+const noticeFor = (kind, role, args) => (kind === 'reminder' ? reminderPush(args[0], role) : NOTICES[kind](...args))
 
 /**
  * One line, bounded. A name or a quest title, never a paragraph, and never a
@@ -85,10 +54,25 @@ const clean = (value) => String(value ?? '')
   .replace(/[+()\d][\d\s().-]{6,}\d/g, '')
   .replace(/\s{2,}/g, ' ')
   .trim()
-  .slice(0, 40)
+  .slice(0, VALUE_MAX)
 
 /** Telling a child their work was approved or sent back is a parent's to do. */
 const PARENT_ONLY = new Set(['approved', 'rejected'])
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * One notice against a family's hourly ceiling (claim_push_send). Not being
+ * able to count is not a reason to stop a real notice.
+ */
+async function claimSend(familyId) {
+  try {
+    return (await rpc('claim_push_send', { p_family_id: familyId }, SERVICE_KEY)) !== false
+  } catch (err) {
+    await reportError('send-push', `could not count sends: ${err.message}`)
+    return true
+  }
+}
 
 function configured() {
   return Boolean(SUPABASE_URL && SERVICE_KEY && VAPID_PUBLIC && VAPID_PRIVATE)
@@ -97,11 +81,11 @@ function configured() {
 async function rpc(fn, args, token) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: token,
-      Authorization: `Bearer ${token}`,
-    },
+    // The service key speaks for itself; a person's token goes with the
+    // project's public key (see userHeaders).
+    headers: token === SERVICE_KEY
+      ? { 'Content-Type': 'application/json', apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` }
+      : userHeaders(token),
     body: JSON.stringify(args),
   })
   if (!res.ok) throw new Error(`${fn} failed: ${res.status}`)
@@ -146,11 +130,14 @@ export default async function handler(req, res) {
   if (typeof body === 'string') {
     try { body = JSON.parse(body) } catch { body = null }
   }
-  const { familyId, role, kidId, kind, args } = body || {}
-  if (!familyId || !ALLOWED_ROLES.has(role) || !NOTICES[kind]) {
+  const { familyId, role, kidId, kind, args, guildId } = body || {}
+  if (!familyId || !ALLOWED_ROLES.has(role) || !PUSH_KINDS.includes(kind)) {
     return res.status(400).json({ error: 'familyId, role and a known kind are required.' })
   }
-  const message = NOTICES[kind](...(Array.isArray(args) ? args.slice(0, 2).map(clean) : []))
+  if (kind === 'guildRequest' && !(UUID.test(String(guildId)) && UUID.test(String(kidId)))) {
+    return res.status(400).json({ error: 'A guild request names the guild and the child.' })
+  }
+  const notice = noticeFor(kind, role, Array.isArray(args) ? args.slice(0, 2).map(clean) : [])
 
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
   if (!token) return res.status(401).json({ error: 'Sign in first.' })
@@ -166,38 +153,36 @@ export default async function handler(req, res) {
     if (!parent) return res.status(403).json({ error: 'Only a parent can send that.' })
   }
 
+  if (kind === 'guildRequest') return sendGuildRequest(res, token, { familyId, kidId, guildId })
+
   // A ceiling per family per hour, kept in the database so every instance
   // shares it. A stuck loop, or a child who has found the button, would
   // otherwise put hundreds of notices on a parent's phone.
-  let allowed = true
-  try {
-    allowed = await rpc('claim_push_send', { p_family_id: familyId }, SERVICE_KEY)
-  } catch (err) {
-    // Not able to count is not a reason to stop a real notice.
-    console.error('[send-push] could not count sends:', err.message)
-  }
-  if (allowed === false) return res.status(429).json({ error: 'too_many_notices' })
-
-  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
+  if (!(await claimSend(familyId))) return res.status(429).json({ error: 'too_many_notices' })
 
   let targets
   try {
     targets = await rpc('push_targets', { p_family_id: familyId, p_role: role, p_kid_id: kidId || null }, SERVICE_KEY)
   } catch (err) {
-    console.error('[send-push] could not read targets:', err.message)
+    await reportError('send-push', `could not read targets: ${err.message}`)
     return res.status(502).json({ error: 'lookup_failed' })
   }
 
+  return res.status(200).json(await deliver(targets || [], notice))
+}
+
+/**
+ * One notice to these phones. A 404 or 410 means that phone is gone for good:
+ * it is dropped rather than tried for ever.
+ */
+async function deliver(targets, message) {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
   const wire = JSON.stringify(message)
 
   const results = await Promise.allSettled(
-    (targets || []).map((t) =>
-      sendPush({ endpoint: t.endpoint, keys: t.keys }, wire),
-    ),
+    targets.map((t) => sendPush({ endpoint: t.endpoint, keys: t.keys }, wire)),
   )
 
-  // A 404 or 410 means that phone is gone for good — drop it rather than
-  // retrying forever.
   await Promise.allSettled(
     results.map((result, i) => {
       if (result.status === 'fulfilled') return null
@@ -207,8 +192,57 @@ export default async function handler(req, res) {
     }),
   )
 
-  return res.status(200).json({
+  return {
     sent: results.filter((r) => r.status === 'fulfilled').length,
     failed: results.filter((r) => r.status === 'rejected').length,
-  })
+  }
+}
+
+/**
+ * "A guild request needs you", to the parents who have to say yes.
+ *
+ * A guild spans families: a child asking to join needs a parent of their own
+ * AND a parent of the family whose guild it is. The asking phone is in only
+ * one of them, so it cannot name the other family, the parents, or the words.
+ * It names the guild and the child; the database says whether that child's
+ * request is really waiting, whose yes is still missing, and what the child
+ * and the guild are called. It also marks the request as told, so asking for
+ * the notice again buzzes nobody.
+ *
+ * Counted against the asking family's hourly ceiling, like any notice it
+ * sends; and the guild's family is told only while that family is under its
+ * own, so no family's phones get more than the ceiling in an hour.
+ */
+async function sendGuildRequest(res, token, { familyId, kidId, guildId }) {
+  // A parent, or the child themselves; not a supporter, and not another child.
+  let mayAct = false
+  try { mayAct = Boolean(await rpc('may_act_for_kid', { p_kid_id: kidId }, token)) } catch { mayAct = false }
+  if (!mayAct) return res.status(403).json({ error: 'Not your child.' })
+
+  if (!(await claimSend(familyId))) return res.status(429).json({ error: 'too_many_notices' })
+
+  let claim
+  try {
+    claim = await rpc('claim_guild_request_notice',
+      { p_guild_id: guildId, p_kid_id: kidId, p_family_id: familyId }, SERVICE_KEY)
+  } catch (err) {
+    await reportError('send-push', `could not read the guild request: ${err.message}`)
+    return res.status(502).json({ error: 'lookup_failed' })
+  }
+  // Nothing waiting, or already told: an answer, not a failure to retry.
+  if (!claim?.ok) return res.status(200).json({ sent: 0, failed: 0, skipped: claim?.reason || 'no_request' })
+
+  const message = NOTICES.guildRequest(clean(claim.kid_name), clean(claim.guild_name))
+  const approvers = new Set(claim.approvers || [])
+  const targets = []
+  for (const family of claim.families || []) {
+    if (family !== familyId && !(await claimSend(family))) continue
+    try {
+      const phones = await rpc('push_targets', { p_family_id: family, p_role: 'parent', p_kid_id: null }, SERVICE_KEY)
+      targets.push(...(phones || []).filter((t) => approvers.has(t.user_id)))
+    } catch (err) {
+      await reportError('send-push', `could not read targets: ${err.message}`)
+    }
+  }
+  return res.status(200).json(await deliver(targets, message))
 }

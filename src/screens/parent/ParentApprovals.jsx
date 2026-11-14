@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useApp, pendingSubmissions } from '../../state/AppContext.jsx'
-import { calcReward } from '../../lib/xp.js'
+import { submissionReward, liveStreak } from '../../lib/xp.js'
 import { relativeTime, formatDuration } from '../../lib/dates.js'
 import { resolveKidTheme } from '../../data/kidThemes.js'
 import { storyProgress } from '../../lib/dragonFight.js'
@@ -8,6 +8,7 @@ import { levelFromXp } from '../../lib/xp.js'
 import { isElite } from '../../state/reducer.js'
 import { Screen, Card, Button, SectionTitle, EmptyState, Banner, Chip, TextInput, Modal } from '../../components/ui.jsx'
 import { STICKERS, STICKER_MAP } from '../../data/stickers.js'
+import { ThemeRequests } from '../../components/KidThemesParent.jsx'
 
 /**
  * The approval queue.
@@ -19,6 +20,7 @@ import { STICKERS, STICKER_MAP } from '../../data/stickers.js'
 export default function ParentApprovals() {
   const { state, dispatch } = useApp()
   const pending = pendingSubmissions(state)
+  const themeAsks = (state.kidThemes || []).filter((t) => t.useAsk || (t.sendAsk && !t.sentAt)).length
   const [rejecting, setRejecting] = useState(null)
   const [rejectNote, setRejectNote] = useState('')
   /**
@@ -34,7 +36,8 @@ export default function ParentApprovals() {
     return (
       <Screen>
         <h1 className="font-display text-2xl font-extrabold mb-3">Review</h1>
-        <EmptyState icon="✨" title="Nothing to review" body="Chores your kids finish land here for you to accept." />
+        <ThemeRequests />
+        <EmptyState icon="✨" title={themeAsks ? 'No chores to review' : 'Nothing to review'} body="Chores your kids finish land here for you to accept." />
       </Screen>
     )
   }
@@ -43,13 +46,15 @@ export default function ParentApprovals() {
     <Screen>
       <h1 className="font-display text-2xl font-extrabold mb-1">Review</h1>
       <p className="text-sm text-muted mb-3">{pending.length} waiting for you to accept.</p>
+      <ThemeRequests />
 
       {pending.map((sub) => {
         const quest = state.quests.find((q) => q.id === sub.questId)
         const kid = state.kids.find((k) => k.id === sub.kidId)
         if (!quest || !kid) return null
         const theme = resolveKidTheme(kid.themeId, levelFromXp(kid.xp).level, storyProgress(state, kid))
-        const reward = calcReward(quest, { elite: isElite(state), streak: kid.streak.count, onTime: sub.onTime !== false })
+        // What accepting actually pays, test-score bonus included.
+        const reward = submissionReward(quest, sub, { elite: isElite(state), streak: liveStreak(kid.streak) })
 
         return (
           <Card key={sub.id} className="mb-4">

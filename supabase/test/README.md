@@ -22,6 +22,132 @@ quest linger on the other device forever.
 
 `04-accounts.sql` — a new account can create its family, and only its own.
 
+The files from `31-` on are generated from the database rather than written
+out table by table, so a table or function added later is covered the day
+it exists:
+
+`31-every-table.sql` — for every table, one family's parent, child, a
+signed-in stranger and the anon key cannot read, insert, update or delete any
+other family's rows, nor attach a row of their own to another family's child.
+
+`32-definer-functions.sql` — every security definer function a browser may
+call that takes an id asks who is calling, and none lets one family change or
+see another's rows, tried three ways each; the server's own functions are not
+callable from a browser.
+
+`33-inputs.sql` — every browser-callable function and every directly written
+column, given 100,000-character text and the largest and smallest numbers:
+nothing over-long or extreme is stored, no call writes rows without limit,
+and none keeps the database busy.
+
+`34-scheduled-jobs.sql` — retention deletes exactly what docs/LAUNCH.md lists
+and not one other row; reminders across both clock changes; the weekly
+digest in each family's own Sunday evening, once; dead push subscriptions
+deleted; the family's hourly push cap.
+
+`35-leagues-and-guilds.sql` — Alliance and District Champion ties and
+reruns, what a school can see, and guild consent, report, remove and block.
+
+`36-hot-queries.sql` — the sync pull and the per-family and per-child
+queries, EXPLAINed on a generated large family, use their indexes.
+
+`37-games.sql` — the moment a child chose their theme (where the dragon fight
+starts) is stamped by the database alone and sent to every phone.
+
+`38-refusals.sql` — every refusal no other file reached: a child who is not
+there, an account in no family, a name left blank, a guild or an alliance with
+no seat left, a family with six adults, a school with three rivals already.
+
+`41-billing-walk.sql` — a family's plan and a school's, one Stripe event at a
+time: a period refunded in full stays refunded when Stripe goes on saying
+"active" for it (cancelling in the portal does), a plan cancelled in the
+portal keeps the date it stops, an ended plan ended when Stripe ended it, and a
+school is protected from late news and refunds as a family is.
+`tests/billingwalk.mjs` walks the same through the real webhook.
+
+`42-reward-limits.sql` — a reward's weekly limit per child: redeem_reward
+counts the child's own redemptions of it over the last seven days, so a
+purchase queued offline cannot go over it; a retried purchase is not counted
+twice; only a parent sets it, from 1 to 50.
+
+`43-history-and-money.sql` — the one thing a parent may change about a past
+chore is a note on it, and that moves nothing else; who sent a chore back is
+recorded; the pocket money record holds each child's own latest lines however
+busy a brother's ledger, with totals that add up to the pot.
+
+`44-coparent-walk.sql` — a co-parent from invitation to removal: invite,
+accept, the same code again (by somebody else, and by them), what a parent and
+a supporter can do, removal cutting them off at once and taking their unused
+invitations with them, being invited back, and an invitation past its seven
+days.
+
+`48-error-report.sql` — a server function's error is stored with emails,
+tokens, ids and quoted values taken out, 60 an hour from one function at
+most; the error report never carries a child's or an adult's name, an email,
+a family id or a token, even when the message had them; each error at most
+once an hour, at most 20 reports a day; a report not sent, or claimed by a
+run that died, gives its errors back; only the scheduled job can call it.
+
+`49-usage-counts.sql` — the six daily usage totals each go up by one for the
+thing they count, through the app's own functions, and for nothing else; a
+count holds a day, a name and a number, nothing that could point at a
+family; the last 30 days come back whole, to the server only; anybody can
+count a help page view and do nothing else; kept 400 days.
+
+`51-leaderboards.sql` — every child starts in Adventure and only a parent
+switches on Arena; a child who is not in Arena is in no stored ranking and in
+nothing any caller is sent, however much they did; boards rank by period and
+scope on a fixed clock and empty at Monday 00:00 and the 1st (UTC), with ties
+sharing a place; 200 chores in a day count 8 and a 9,999 XP chore counts 200;
+the Elite boost buys nothing; nicknames only from the word lists (every pair
+through the rude-word filter), once a week; the country only from its list;
+a guild is on a public board only by a made-up team name and only while all
+its children are in Arena; back to Adventure, deleting a child and
+withdrawing consent each take a child off at once.
+
+`52-quick-chat.sql` — guild chat: only ids on the list are accepted, stored
+with no words; a lost answer sent again is one message; one every three
+seconds and eight a minute; messages typed before quick chat are not shown
+to children.
+
+`53-leaderboard-load.sql` — 2,000 families and 4,000 children: the job ranks
+them in well under its limit (about a second on a laptop), no Adventure child
+is ranked, and opening a worldwide board reads one stored page.
+
+`54-referral-rewards.sql` — bring a friend: the inviting family's free month is
+earned on the invited family's first paid invoice only (not a $0 one), once,
+never for the same family, parent email or Stripe customer, at most 12 a year;
+a Starter family's month is banked until it subscribes; a refund or dispute of
+that first payment within 14 days withdraws an unused month (and one arriving
+before its invoice blocks it); a parent sees counts only, a child nothing; the
+download holds no other family; every function that gives or takes a month
+is the server's alone.
+
+`55-gifts.sql` — gift subscriptions: what a buyer types is checked and no
+code exists until Stripe's "paid", which makes one code, once, keeping only
+its hash; a code works once, for two years, not after a refund in full (a
+used one stays used, the decision recorded); 5 wrong codes an hour per family
+and 20 per address; redeeming gives 12 months and effective_tier honours it;
+a second gift stacks; a family whose paid plan renews is told to turn renewal
+off first, and one whose plan is ending gets the gift from that end; nothing
+of it is reachable from a browser.
+
+`refusals.mjs` (`npm run test:refusals`) — reads every
+`jsonb_build_object('ok', false, 'reason', ...)` out of the SQL files, applies
+them to a scratch database with each one marked so it raises a notice naming
+the function and the reason (the answer itself unchanged), runs the whole
+suite, and fails for any refusal that never came out. A new refusal needs a
+test the day it is written.
+
+`upgrade-snapshot.sql` — run by `run.sh` after each of its two applications
+of the SQL files. It records every function (with its result, security,
+settings and grants), trigger, policy and table; `18-upgrade.sql` then requires
+the two records to be identical. Nothing is listed by hand, so a function added
+tomorrow is covered.
+
+`backup-drill.sh` — takes a copy as docs/BACKUPS.md says, restores it, runs
+the SQL files over it, and compares every table and every access rule.
+
 ## Running them
 
 You need a Postgres server. On Debian/Ubuntu:
@@ -40,6 +166,8 @@ Then:
 ```
 
 It drops and recreates a scratch database each run, so it never accumulates state.
+`DB=name` picks the database's name. The last line says whether everything
+passed and, if not, which files failed.
 
 `00-shim.sql` recreates just enough of Supabase — the `auth` schema, `auth.uid()`,
 and the `anon`/`authenticated` roles — for a bare Postgres to run the same SQL.
@@ -56,6 +184,10 @@ end to end.
 export PGHOST=/tmp PGPORT=55432 PGUSER=postgres
 node supabase/test/mock-server.mjs        # listens on :54321
 ```
+
+Like Supabase's own gateway, it answers only requests whose `apikey` header is
+one of the project's keys (`local-anon-key`, or the service role key the
+server functions use); anything else is a 401.
 
 Point the app at it with a `.env.local`:
 

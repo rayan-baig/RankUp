@@ -1,0 +1,37 @@
+# What every job does first: Node, the packages, and whatever else it asks for.
+# One copy, so the jobs cannot drift apart the way two copies of the functions
+# server's settings once did (see supabase/test/serve-functions.sh).
+name: Prepare
+description: Node and the packages; optionally the database and the browser.
+inputs:
+  database:
+    description: Apply every SQL file to the Postgres service and run the SQL suite (run.sh), which the app's tests then run against.
+    default: 'false'
+  browser:
+    description: Install Chromium for the browser suites.
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+    - name: Packages
+      shell: bash
+      run: npm ci --no-audit --no-fund
+    - name: The database, every SQL file applied twice and checked
+      if: inputs.database == 'true'
+      shell: bash
+      run: |
+        command -v psql >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client; }
+        ./supabase/test/run.sh > /tmp/rankup-sql.log 2>&1 || {
+          cat /tmp/rankup-sql.log
+          echo "::error title=SQL suite failed::$(tail -1 /tmp/rankup-sql.log)"
+          exit 1
+        }
+        tail -1 /tmp/rankup-sql.log
+    - name: The browser
+      if: inputs.browser == 'true'
+      shell: bash
+      run: npx playwright install --with-deps chromium

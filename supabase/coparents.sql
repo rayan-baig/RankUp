@@ -65,7 +65,7 @@ returns boolean language sql stable security definer set search_path = public as
    where user_id = auth.uid() and tried_at > now() - interval '10 minutes';
 $$;
 
-revoke execute on function adult_invite_attempts_exhausted() from public;
+revoke execute on function adult_invite_attempts_exhausted() from public, anon, authenticated;
 
 /*
  * How many grown-ups one family may have.
@@ -78,7 +78,7 @@ revoke execute on function adult_invite_attempts_exhausted() from public;
 create or replace function max_adults_per_family()
 returns int language sql immutable as $$ select 6 $$;
 
-revoke execute on function max_adults_per_family() from public;
+revoke execute on function max_adults_per_family() from public, anon, authenticated;
 
 -- A six-character code from the readable alphabet, unique among live ones.
 create or replace function new_invite_code()
@@ -101,7 +101,7 @@ begin
   return v_code;
 end $$;
 
-revoke execute on function new_invite_code() from public;
+revoke execute on function new_invite_code() from public, anon, authenticated;
 
 /**
  * Invite another adult.
@@ -220,7 +220,7 @@ begin
 
   insert into parents (user_id, family_id, name, is_owner, role)
   values (auth.uid(), v_row.family_id,
-          coalesce(nullif(trim(p_name), ''), 'Parent'), false, v_row.role)
+          coalesce(nullif(left(trim(p_name), 100), ''), 'Parent'), false, v_row.role)
   returning id into v_parent;
 
   update parent_invites
@@ -319,6 +319,14 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'cannot_remove_owner');
   end if;
 
+  -- The invitations they sent and nobody has used yet go with them. They
+  -- stayed live: an adult removed from the family (a separation, a falling
+  -- out) could still hand a code to somebody else, who then joined the family
+  -- the owner had just taken them out of.
+  update parent_invites set revoked_at = now()
+   where family_id = v_family and invited_by = p_parent_id
+     and claimed_at is null and revoked_at is null;
+
   delete from parents where id = p_parent_id;
   return jsonb_build_object('ok', true);
 end $$;
@@ -336,7 +344,7 @@ grant execute on function remove_adult(uuid) to authenticated;
 --
 -- What a supporter can do is deliberately tiny. They see how the children are
 -- getting on and they can put something in a pot. They cannot approve a
--- chore, cannot see a proof photo, cannot read a private note, cannot change
+-- chore, cannot see what a child sent in, cannot read a private note, cannot change
 -- anything. Everything about that is enforced by them having no table access
 -- whatsoever — see current_family_id() in schema.sql — rather than by a list
 -- of screens that remember to check.
@@ -349,7 +357,7 @@ returns uuid language sql stable security definer set search_path = public as $$
    where user_id = auth.uid() and role = 'supporter';
 $$;
 
-revoke execute on function supporter_family_id() from public;
+revoke execute on function supporter_family_id() from public, anon, authenticated;
 
 /**
  * Everything a supporter sees, in one call.

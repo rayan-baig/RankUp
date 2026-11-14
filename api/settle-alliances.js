@@ -22,7 +22,7 @@
  *    after a half-finished run.
  */
 
-import { recordRun } from './_shared/job.js'
+import { recordRun, reportError } from './_shared/job.js'
 import { makeStripe } from './_shared/stripe.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -93,7 +93,7 @@ export default async function handler(req, res) {
     settled = await serviceRpc('settle_alliances', { p_month: month })
   } catch (err) {
     await recordRun(serviceRpc, 'settle-alliances', false, err.message)
-    return res.status(502).json({ error: 'settle_failed', detail: err.message })
+    return res.status(502).json({ error: 'settle_failed' })
   }
 
   // Every prize still owed, not just this run's: one that failed last time
@@ -104,7 +104,7 @@ export default async function handler(req, res) {
     owed = await serviceRpc('unapplied_alliance_awards', {})
   } catch (err) {
     await recordRun(serviceRpc, 'settle-alliances', false, err.message)
-    return res.status(502).json({ error: 'settle_failed', detail: err.message })
+    return res.status(502).json({ error: 'settle_failed' })
   }
   const awards = owed || []
   const stripe = makeStripe(STRIPE_SECRET)
@@ -158,7 +158,8 @@ export default async function handler(req, res) {
     } catch (err) {
       // Left unapplied on purpose, so the next run tries it again rather than
       // it silently looking paid.
-      failed.push({ alliance_id: award.alliance_id, reason: err.message })
+      await reportError('settle-alliances', `credit not applied: ${err.message}`)
+      failed.push({ alliance_id: award.alliance_id, reason: 'stripe_error' })
     }
   }
 

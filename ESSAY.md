@@ -1,5 +1,9 @@
 # RankUp, explained from the beginning
 
+> **A snapshot from 25 October 2026.** Since then RankUp stopped taking photos
+> altogether: the camera, the photo check and the AI review described below are
+> gone. For what is true now, read [docs/STATUS.md](docs/STATUS.md) and the rest of `docs/`.
+
 *A long plain-English essay about the whole project — what it is, why every
 part of it is the way it is, what works, what does not, and what it cost to
 learn. Written to be pasted into a new Claude account, or read by a person who
@@ -305,9 +309,10 @@ If you work on this project, treat that rule as fixed. Do not make the checker
 auto-reject, however confident it becomes. If a future version is ninety-nine
 per cent accurate, the one per cent is a child in tears.
 
-The checks are also rationed per family and require a signed-in caller, with a
-`refund_photo_check` function that returns the quota when a call fails — because
-a failed call that still consumed the allowance is a bug the user pays for.
+The checks were also rationed per family and required a signed-in caller, with a
+function that returned the quota when a call failed — because a failed call that
+still consumed the allowance is a bug the user pays for. (All of it, the photo
+check included, has since been removed: RankUp takes no photos.)
 
 ## Approving
 
@@ -893,9 +898,9 @@ two-year-old household is not a new signup.
 
 Three tiers.
 
-**Starter** is free and supports one child. **Standard** is 9.99 a month or 99.90
+**Starter** is free and supports one child. **Standard** is 5.99 a month or 49.99
 a year and adds unlimited children, the AI photo check and five-player guilds.
-**Elite Pass** is 15.99 a month or 159.90 a year and adds a permanent 1.5×
+**Elite Pass** is 9.99 a month or 79.99 a year and adds a permanent 1.5×
 experience multiplier, ten-player guilds, the richer visual tier called
 Overdrive, profile frames and rare-drop selectors, the Consequence Engine, the
 behaviour charts, and entry into the monthly family contest.
@@ -909,8 +914,9 @@ experience, themes, streaks, the arcade. What somebody loses by not paying is a
 smaller app, not a locked one. That is what makes upgrading a choice rather than
 a ransom, and it is the difference between a free tier and a trial.
 
-The annual price is ten months' money for twelve months' app. The saving is the
-smaller half of why it exists. The larger half is that the decision to cancel
+The annual price saves 30 to 33 percent against paying monthly (it was ten
+months' money for twelve months' app until the prices came down). The saving is
+the smaller half of why it exists. The larger half is that the decision to cancel
 then happens once a year instead of twelve times, and in a family app most churn
 is not a decision to leave — it is a quiet month where nobody opened it and the
 charge looked like a good thing to stop.
@@ -1015,7 +1021,7 @@ The camera needs https. That is worth repeating because it is the most common
 
 # Part thirteen — the things around the app
 
-**MTRX Horizon** is the parent company's website: a two-screen page where RankUp
+**MTRX Horizyn** is the parent company's website: a two-screen page where RankUp
 sits alongside two other products, CyberLogix and OmniArmor, neither of which is
 built. The page is supplied artwork shown full-bleed with clickable hot spots
 laid over it in percentages, so they stay on target at any width. The RankUp card
@@ -1028,7 +1034,7 @@ it finished elsewhere, which is the correct outcome — his version is the real
 one. The supplied file is stored with squared copies at 512, 192 and 64 pixels,
 because the original is not square and every place a logo actually goes is. There
 is also a tight crop, where the sphere fills the frame rather than floating in
-padding, used in the Horizon page at small sizes.
+padding, used in the Horizyn page at small sizes.
 
 **The notebook.** There is an ongoing effort to print the logo on a custom
 hardcover journal. The current cover design has exactly the right aspect ratio

@@ -10,7 +10,7 @@
  * the child sees an apology card where their chores should be. That is the kind
  * of thing nobody notices until a real person hits it on a Saturday morning.
  */
-import { launch, reporter, setUpFamily, asParent, asKid, submitPhotoProof, finish, setPlanInDatabase, SHOT_DIR } from './helpers.mjs'
+import { launch, reporter, setUpFamily, asParent, asKid, sendToParent, finish, setPlanInDatabase, SHOT_DIR } from './helpers.mjs'
 
 const { browser, page, errors } = await launch()
 const { fails, pass, fail } = reporter()
@@ -18,7 +18,7 @@ const { fails, pass, fail } = reporter()
 const PARENT_ROUTES = [
   '/parent', '/parent/approvals', '/parent/assign', '/parent/kids', '/parent/blueprint',
   '/parent/override', '/parent/guilds', '/parent/alliance', '/parent/plan',
-  '/parent/settings', '/parent/pair',
+  '/parent/settings', '/parent/pair', '/parent/history', '/parent/money',
 ]
 const KID_ROUTES = [
   '/kid', '/kid/quests', '/kid/shop', '/kid/market', '/kid/arcade', '/kid/guild', '/kid/profile',
@@ -57,7 +57,7 @@ await page.evaluate(() => { window.location.hash = '/kid/quests' })
 await page.waitForTimeout(600)
 await page.locator('button.card').first().click()
 await page.waitForTimeout(400)
-await submitPhotoProof(page)
+await sendToParent(page)
 
 console.log('\n=== Every parent screen ===')
 await asParent(page)

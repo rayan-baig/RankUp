@@ -1,36 +1,43 @@
 {
   "name": "rankup",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.16.0",
   "type": "module",
-  "description": "RankUp \u2014 chores turned into a game. Mobile-first React web app.",
+  "description": "RankUp — chores turned into a game. Mobile-first React web app.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint src tests --ext .js,.jsx,.mjs",
-    "test:smoke": "node tests/config.mjs && node tests/mappers.mjs && node tests/badges.mjs && node tests/trialbanner.mjs && node tests/cursor.mjs && node tests/outbox.mjs && node tests/syncfixes.mjs && node tests/screens.mjs && node tests/lookaround.mjs && node tests/motion.mjs && node tests/themes.mjs && node tests/integrity.mjs && node tests/flows.mjs && node tests/pairing.mjs && node tests/notifications.mjs && node tests/plans.mjs && node tests/arcade.mjs && node tests/arcade2.mjs && node tests/arcade3.mjs && node tests/arcade4.mjs && node tests/embedded.mjs && node tests/cardgames.mjs && node tests/crash.mjs && node tests/erase.mjs",
-    "test:sync": "node tests/sync.mjs && node tests/coparents.mjs && node tests/guilds.mjs && node tests/consent.mjs",
-    "test:api": "node tests/api.mjs && node tests/push.mjs",
-    "test:awards": "node tests/awards.mjs && node tests/recurrence.mjs && node tests/trials.mjs && node tests/merge.mjs && node tests/demotokens.mjs && node tests/gameids.mjs && node tests/forms.mjs && node tests/sweets.mjs && node tests/cards.mjs && node tests/money.mjs && node tests/charity.mjs && node tests/dragon.mjs && node tests/battles.mjs && node tests/schools.mjs",
-    "test:db": "./supabase/test/run.sh"
+    "lint": "eslint src tests",
+    "test:static": "node tests/run-suite.mjs static",
+    "test:smoke": "node tests/run-suite.mjs smoke",
+    "test:built": "node tests/run-suite.mjs built",
+    "test:sync": "node tests/run-suite.mjs sync",
+    "test:api": "node tests/run-suite.mjs api",
+    "test:awards": "node tests/run-suite.mjs awards",
+    "test:db": "./supabase/test/run.sh",
+    "test:refusals": "node supabase/test/refusals.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.120.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "stripe": "^22.6.0",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
-    "eslint": "^8.57.1",
+    "eslint": "^9.39.5",
     "eslint-plugin-react": "^7.37.2",
+    "globals": "^16.5.0",
     "pg": "^8.23.0",
     "playwright": "^1.62.1",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
-    "vite": "^5.4.11"
+    "vite": "^6.4.5"
+  },
+  "overrides": {
+    "minimatch": "11.0.3"
   }
 }

@@ -3,8 +3,9 @@
  *
  * Kept as content rather than a linked PDF so it ships with the app, is
  * versioned with the code, and can be read on a phone. `CONSENT_VERSION` must
- * match a row in the database's `consent_notices` table — if you change what
- * you collect, publish a new version in both places and ask every parent again.
+ * be the newest row in the database's `consent_notices` table, with the same
+ * words: the database refuses a new consent to any other version. Change the
+ * notice by publishing a new version in both places, never by editing one.
  *
  * THIS IS NOT LEGAL ADVICE AND HAS NOT BEEN REVIEWED BY A LAWYER. It is a
  * complete, honest starting draft written from what the app actually does, so
@@ -12,22 +13,74 @@
  * scratch. Do not launch on it unread.
  */
 
-export const CONSENT_VERSION = '2026-01'
-export const LAST_UPDATED = 'October 2026'
+import { TIERS } from '../state/initialState.js'
+import { priceWords } from '../lib/plans.js'
+import { SCHOOL_PRICES, SCHOOL_TRIAL_DAYS, SCHOOL_CHAMPION_TRIAL_DAYS, SCHOOL_YEAR_MONTHS, dollars } from '../lib/schools.js'
+import { GIFT_CODE_YEARS, GIFT_RECIPIENT_DAYS } from '../lib/giftRules.js'
+
+export const CONSENT_VERSION = '2026-11'
+export const LAST_UPDATED = 'November 2026'
 /*
- * The policy and terms were updated for the School League. The consent notice
- * itself is unchanged (still CONSENT_VERSION above): joining a school is a
+ * 2026-11 is the notice below, word for word as supabase/consent.sql stores
+ * it (tests/consent.mjs checks). 2026-01, the first version, still described
+ * photographs and an AI photo check that RankUp no longer has. Removing data
+ * collection does not need anyone to consent again, so parents who signed
+ * 2026-01 stay signed; only new parents see and sign 2026-11. A version that
+ * collects MORE would need every parent asked again; see docs/LEGAL.md.
+ *
+ * The policy was updated for Theme Genesis without a new consent version:
+ * a child's own themes stay in the family (the notice's "the theme they
+ * choose"), and sending one to RankUp is a separate, explicit yes a parent
+ * gives in Parent Mode for that one theme, which says there what is sent.
+ *
+ * The policy and terms were updated for the leaderboards (0.13.0) without a
+ * new consent version, on the same reasoning: every child starts in
+ * Adventure, on no public board, and Arena (a nickname built from word lists,
+ * a flag and numbers on the worldwide and country boards) is a separate,
+ * explicit choice a parent makes for each child in Parent Mode, which says
+ * there exactly what strangers see. Guild chat became ready-made messages
+ * only at the same time, which collects less, not more; the notice's guild
+ * section still holds ("exchange short messages"). docs/LEGAL.md asks the
+ * lawyer whether Arena should have a notice of its own.
+ *
+ * The policy and terms were updated for the School League without a new
+ * consent version: joining a school is a
  * separate, explicit choice a parent makes on the School League screen, which
  * says there exactly what the school will see, in the same way a guild needs
  * a parent's yes before a child joins one.
  */
 
-/** Fill these in before you publish anything. */
+/**
+ * Who runs RankUp. RankUp is a product of MTRX Horizyn, the company, and
+ * lives on a subdomain of its domain (rankup.mtrxhorizyn.com). The contact
+ * email and postal address are the company's, filled in once the domain and
+ * the registered address exist; the app shows a warning banner until then.
+ * The company's details only, never a person's.
+ *
+ * The consent notice below does not name the operator, so naming the company
+ * here needed no new consent version.
+ */
 export const OPERATOR = {
-  name: '[YOUR NAME OR COMPANY]',
+  name: 'MTRX Horizyn',
   email: '[YOUR CONTACT EMAIL]',
   address: '[YOUR POSTAL ADDRESS]',
 }
+
+/** One sentence, used wherever RankUp says who is behind it. */
+export const PRODUCT_OF = `RankUp is a product of ${OPERATOR.name}.`
+
+/** "$29 a month up to 300, $59 up to 800, … and $149 above that", from the school price list. */
+function schoolPriceList() {
+  const bands = SCHOOL_PRICES.map((p, i) => {
+    const price = dollars(p.monthlyCents)
+    if (i === SCHOOL_PRICES.length - 1) return `and ${price} above that`
+    return `${price}${i === 0 ? ' a month' : ''} up to ${p.upTo.toLocaleString('en-US')}`
+  })
+  return bands.join(', ')
+}
+
+/** The fields of OPERATOR still holding a placeholder. */
+export const UNFILLED = Object.entries(OPERATOR).filter(([, v]) => v.startsWith('[')).map(([k]) => k)
 
 export const CONSENT_NOTICE = {
   version: CONSENT_VERSION,
@@ -85,7 +138,7 @@ export const PRIVACY_POLICY = {
     {
       heading: 'Who we are',
       body: [
-        `RankUp is operated by ${OPERATOR.name}. You can reach us at ${OPERATOR.email}.`,
+        `${PRODUCT_OF} ${OPERATOR.name} operates it, and is who "we" means here. You can reach us at ${OPERATOR.email}.`,
       ],
     },
     {
@@ -94,6 +147,7 @@ export const PRIVACY_POLICY = {
         'Your email address, so you can sign in and we can reach you about your account.',
         'Your name, as you enter it.',
         'Payment details if you subscribe. These are handled entirely by Stripe — we never see or store your card number.',
+        'If your family joins with another family\'s invite code, or a family joins with yours, we record which family invited which, and use it only to give the reward it earns; neither family is shown the other\'s name or email.',
       ],
     },
     {
@@ -102,6 +156,41 @@ export const PRIVACY_POLICY = {
         'A first name, chosen by you. Chore and progress history. Nothing more. No photographs.',
         'Children do not have their own accounts, email addresses or passwords. A child\'s device joins your account with a six-digit code that you type in.',
         'We collect nothing at all about a child until you have given verifiable parental consent. This is enforced by our database, not just by the app.',
+      ],
+    },
+    {
+      heading: 'Themes your child makes',
+      body: [
+        'In Theme Genesis your child can make up to five themes of their own: a name, colours, a background pattern, a mascot chosen from a set of emoji, and names for the theme\'s worlds and coins. No photographs, and nothing typed is sent to any other company or to any AI service. The "What\'s it inspired by?" box works on the phone alone: what your child types there only picks a starting theme from a list built into the app, and is never saved or sent anywhere.',
+        'These themes stay in your family. Your children\'s phones and yours sync them through our database; nobody outside your family can see them. You can see, rename and remove every one in Settings → Kids\' own themes, and names with rude words are refused.',
+      ],
+    },
+    {
+      heading: 'Sending a theme to RankUp for a Season',
+      body: [
+        'Your child can ask to send a finished theme to RankUp. Nothing is sent unless a parent approves it in Parent Mode.',
+        'What is sent is the theme itself: its name, colours, pattern, mascot and the names of its worlds and coins. Because a Season theme can be shown to every family, it cannot use another company\'s game, league or brand name. If you wish, you add a credit line, a first name or a nickname; left blank it reads "by a RankUp family". Your child\'s name is never added for you. Each child can send one theme a month.',
+        'Each month we look at what was sent and may pick themes for the next Season. A picked theme, with its credit line, is shown to every RankUp family in their theme picker from the day the Season starts, and your family is told in the app. Themes we do not pick, and ones we decline, are deleted 90 days after they were sent.',
+        'If you delete your child or your account, everything you sent that was not picked is deleted with it. A theme already in a Season stays there for the families playing it, and its credit line is removed.',
+      ],
+    },
+    {
+      heading: 'Leaderboards: Adventure and Arena',
+      body: [
+        'Every child starts in Adventure. In Adventure your child sees leaderboards with their own family, and with their guild if they are in one, and is on no public leaderboard at all.',
+        'A parent can switch a child into Arena in Parent Mode. Only a parent can do this. In Arena your child appears on worldwide and country leaderboards that children in other families can see. What they see is a nickname, your country\'s flag and your child\'s numbers there: chores done, XP, level, streaks, badges, arcade scores and Season themes picked. Never your child\'s name, a photo, your family\'s name, their school or town, or anything anyone typed.',
+        'The nickname is built from two lists of words and a number, like SwiftComet42. Your child picks the pieces or shuffles them; nothing is typed. It can be changed once a week.',
+        'The country is the one you pick from a list. RankUp never asks for your location.',
+        'You, or your child, can switch back to Adventure at any time. They are taken off every public leaderboard at once. Deleting your child or your account removes them from every leaderboard at once.',
+        'Leaderboard numbers are worked out by our server from the chores you accepted, never from what a phone reports. They are counted fairly: at most eight chores a day, and XP without the Elite boost.',
+      ],
+    },
+    {
+      heading: 'Guilds, if you use them',
+      body: [
+        'A guild is a small team of children from different families. A child joins only once a parent on each side has agreed. Guild members see each other\'s first names, levels and weekly XP.',
+        'Guild chat is ready-made messages only, such as "Nice one!" or "Doing dishes now". Children tap a message; nobody can type, so no phone number, address or other detail can be shared through it. We store which message was sent, by whom and when.',
+        'Any child can report a message, which hides it at once and shows it to the parents on both sides. A child can also mute a guild-mate on their own phone. A parent can remove or block a child from a guild at any time.',
       ],
     },
     {
@@ -118,13 +207,18 @@ export const PRIVACY_POLICY = {
       heading: 'How long we keep it',
       body: [
         'Everything: until you delete your account, which removes it immediately and permanently.',
+        'A theme sent to RankUp for a Season that we decline or do not pick: 90 days from when it was sent.',
+        `If you buy a RankUp gift, we keep your email for the receipt and for help with the gift until its code runs out, ${GIFT_CODE_YEARS} years after you buy it, and we use the name and email of the person it is for, and your message, only to send the gift, deleting them ${GIFT_RECIPIENT_DAYS} days after you buy it.`,
+        'If you pay for a plan, deleting your account also cancels the subscription at once, so nothing more is charged. Stripe keeps its record of the payments you made (invoices and receipts), because payment records have to be kept for tax and are needed if a refund is due. We keep only Stripe\'s reference to your billing, and only until the cancellation is confirmed and 30 days have passed.',
       ],
     },
     {
       heading: 'Who we share it with',
       body: [
-        'Nobody, except the services that make the app work: Supabase (hosting and database), Stripe (payments, only if you subscribe), and a push notification service if you enable notifications.',
+        'Nobody, except the services that make the app work: Supabase (hosting and database), Stripe (payments, only if you subscribe), a push notification service if you enable notifications, and an email service that sends your account emails (your email address only, never anything about your children).',
         'If you add your child to a school\'s league, that school sees what is described under "The School League" above, and nothing more.',
+        'If you send one of your child\'s themes to RankUp and we pick it for a Season, every RankUp family sees that theme and its credit line, as described above, and nothing else about your family.',
+        'If you switch a child into Arena, other RankUp families see their nickname, your country\'s flag and their leaderboard numbers, as described under "Leaderboards" above, and nothing else.',
         'We do not sell data. We do not share it for advertising. We show children no advertising.',
       ],
     },
@@ -133,6 +227,7 @@ export const PRIVACY_POLICY = {
       body: [
         'RankUp is designed for children and is subject to COPPA in the United States, the UK\'s Age Appropriate Design Code, and GDPR where it applies.',
         'We ask for verifiable parental consent before collecting anything from a child, we collect the minimum needed for the app to work, and we give parents access, deletion and withdrawal rights.',
+        'To see how RankUp is used, we keep a few daily totals across all families together (such as how many chores were accepted that day) for 400 days, with no names, ids, times of day or cookies and no outside service, so a count can never be traced back to a family or a child.',
       ],
     },
     {
@@ -141,6 +236,7 @@ export const PRIVACY_POLICY = {
         'Download everything we hold: Settings → Download my data.',
         'Delete everything: Settings → Delete account.',
         'Turn off notifications or guilds independently. The app works without either.',
+        'Keep each child in Adventure, off public leaderboards, or switch them into Arena and back, in Settings → Leaderboards.',
         'Take your child out of a school\'s league, or stop their first name being shown to the school, from the School League screen.',
       ],
     },
@@ -162,7 +258,7 @@ export const PRIVACY_POLICY = {
 
 export const TERMS = {
   title: 'Terms of Use',
-  intro: `The rules for using RankUp. Last updated ${LAST_UPDATED}.`,
+  intro: `The rules for using RankUp. ${PRODUCT_OF} "We" means ${OPERATOR.name}. Last updated ${LAST_UPDATED}.`,
   sections: [
     {
       heading: 'Who may use RankUp',
@@ -174,9 +270,10 @@ export const TERMS = {
     {
       heading: 'Subscriptions',
       body: [
-        'Standard is $9.99 a month and Elite Pass is $15.99 a month, billed monthly until you cancel.',
+        `${TIERS.starter.name} is free. ${TIERS.standard.name} is ${priceWords(TIERS.standard)} or ${priceWords(TIERS.standard, 'year')}, and ${TIERS.elite.name} is ${priceWords(TIERS.elite)} or ${priceWords(TIERS.elite, 'year')}, billed monthly or yearly until you cancel.`,
         'You can cancel at any time from Settings. Your subscription runs to the end of the period you have paid for, and is not renewed.',
-        'If a payment fails we will retry, and your account moves to Standard features if it keeps failing. Nothing your child has earned is ever removed.',
+        'Deleting your account cancels your subscription straight away rather than at the end of the period, so you are not charged again.',
+        `If a payment fails we will retry, and your account moves to ${TIERS.starter.name} while it is failing. Nothing your child has earned is ever removed.`,
       ],
     },
     {
@@ -190,16 +287,17 @@ export const TERMS = {
       heading: 'Fair use',
       body: [
         'Do not use RankUp to harass, harm or deceive anyone, and do not attempt to access another family\'s data.',
-        'Guild chat is for children. We may remove content and suspend accounts that put children at risk.',
+        'Guild chat is for children, and is ready-made messages only: nobody can type in it. We may remove content and suspend accounts that put children at risk.',
+        'Leaderboards are for fun. We may remove a child from them, or correct numbers that were not earned fairly.',
       ],
     },
     {
       heading: 'Schools',
       body: [
         'Whoever signs a school up must work there and be allowed to sign it up. We check every school before it joins a league, and we may suspend one that is not genuine or that misuses the league.',
-        'A school\'s plan is priced by its number of students: $29 a month up to 300, $59 up to 800, $99 up to 1,500, and $149 above that. A year costs ten months. The first 30 days are free, and nothing is charged until they end.',
+        `A school's plan is priced by its number of students: ${schoolPriceList()}. A year costs ${SCHOOL_YEAR_MONTHS === 10 ? 'ten' : SCHOOL_YEAR_MONTHS} months. The first ${SCHOOL_TRIAL_DAYS} days are free, and nothing is charged until they end.`,
         'A school can cancel at any time from its School League page. Its plan runs to the end of the period paid for. If a payment keeps failing, or the plan ends, the school stops being ranked until it is renewed.',
-        'Each month the best school in each district is named District Champion and its next month is free (or, during the free trial, the trial is extended by 30 days). This needs at least two ranked schools in the district.',
+        `Each month the best school in each district is named District Champion and its next month is free (or, during the free trial, the trial is extended by ${SCHOOL_CHAMPION_TRIAL_DAYS} days). This needs at least two ranked schools in the district.`,
         'Any prize a school gives its students is the school\'s own. A school must not use the league to identify, contact or single out any child outside the school\'s normal care of its students.',
       ],
     },

@@ -47,6 +47,15 @@ export function setSession(session) {
  * does, so an hour-old token fails there too.
  */
 export async function freshAccessToken() {
+  /*
+   * Not while the network is paused for the look-around. The endpoints that
+   * take this token (deleting the account, checkout, a push to the family's
+   * phones) are reached with fetch, not through `request`, so the pause did
+   * not cover them: a visitor who had signed up, stepped back to the welcome
+   * screen and opened the look-around could delete their real account, or
+   * buzz their real family, from the demo's buttons.
+   */
+  if (paused) return null
   await refreshSession()
   return getSession()?.access_token || null
 }
@@ -202,6 +211,20 @@ export const transport = {
       ? Promise.resolve(null)
       : request(`/rest/v1/rpc/${fn}`, { method: 'POST', body: JSON.stringify(args) })),
 
+  /**
+   * Call a function as nobody: the public key only, never this phone's
+   * sign-in, so not even the request can say who asked. For counting a help
+   * page view (count_help_view, supabase/health.sql). Never throws.
+   */
+  anonymousRpc: (fn, args = {}) =>
+    (paused || !isConfigured()
+      ? Promise.resolve(null)
+      : fetch(`${BASE}/rest/v1/rpc/${fn}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: ANON, Authorization: `Bearer ${ANON}` },
+        body: JSON.stringify(args),
+      }).then(() => null, () => null)),
+
   /** Insert or replace a row. Row level security decides whether it is allowed. */
   upsert: (table, row) =>
     (paused
@@ -267,6 +290,29 @@ export const transport = {
     setSession(session)
     signInNeeded = false
     return session
+  },
+
+  /**
+   * Check an account's password without changing who this phone is signed
+   * in as. Answers the session the server would give, or throws (a wrong
+   * password is a 400). The caller decides whether to keep it: the PIN reset
+   * keeps it only when it is the same account already signed in here, so a
+   * correct password for some other account changes nothing.
+   */
+  checkPassword: (email, password) =>
+    request('/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      auth: false,
+      body: JSON.stringify({ email, password }),
+    }),
+
+  /** Keep a session checkPassword gave, once the caller has checked it is this phone's account. */
+  keepSession: (session) => { setSession(session); signInNeeded = false },
+
+  /** The signed-in account's email, if it has one. A child's phone signs in anonymously and has none. */
+  currentEmail: () => {
+    const user = getSession()?.user
+    return user && !user.is_anonymous && user.email ? user.email : null
   },
 
   /**

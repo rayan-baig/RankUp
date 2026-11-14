@@ -43,7 +43,8 @@ Penalties are per-child and large. This is not a "fix it later" area.
 | Feature | The question to ask |
 |---|---|
 | Photos | None. RankUp never takes, sends or keeps a photo. Say so in the privacy policy. |
-| Guild chat | Kid-to-kid messaging needs consent on **both** sides, plus moderation, reporting and blocking. Consider whether it is worth the risk at all. |
+| Guild chat | Kid-to-kid messaging needs consent on **both** sides, plus moderation, reporting and blocking. Since 0.13.0 it is ready-made messages only: a child taps one of a fixed list and nobody can type, which removes the free-text risk (contact details, grooming, bullying in a child's own words). Guilds still ship switched off. |
+| Leaderboards | Every child is in **Adventure** (on no public board) until a parent switches on **Arena** for them. In Arena, children in other families see a nickname built from word lists, a country flag the parent picked, and leaderboard numbers. That is a disclosure to strangers of a pseudonym and activity data. |
 | Guild rosters | A child's display name visible to children in other families is a disclosure. |
 | Accessibility notes | Notes a parent writes about a child's disability are **health-adjacent data** and are among the most sensitive fields in the app. They should never leave the parent's own account. |
 | Parent Alliance | Adults competing on a leaderboard using data derived from their children's behaviour. Think carefully about what is displayed. |
@@ -99,6 +100,65 @@ gets a picture from the child's own camera app, by message, and taps Accept in R
 
 ---
 
+## Consent notice versions
+
+The words a parent signs are kept in the database by version
+(`consent_notices` in `supabase/consent.sql`) and match `CONSENT_NOTICE` in
+`src/data/legalText.js`; `tests/consent.mjs` fails if they differ. A
+published version is never edited (the database refuses), because it is the
+record of what the parents who signed it agreed to. A change is a new
+version, and the newest is the only one a new parent can sign.
+
+- **2026-01**, the first, still describes photographs taken in the app and an
+  AI photo check. RankUp has neither now. It stays as it was.
+- **2026-11** is the same notice without them, and is what new parents sign.
+
+A new version does not undo the consents already given: a version that only
+collects **less** (as 2026-11 does) needs nobody to consent again, so families
+who signed 2026-01 carry on. A version that collects **more** would need every
+existing parent asked again before the new collection starts. That is not
+built: it needs `has_valid_consent` to require the new version and a screen
+that asks existing parents. Ask the lawyer whether any change you plan is of
+that kind.
+
+---
+
+## Leaderboards (Adventure and Arena): what was decided, and what to ask
+
+**No new consent version.** The leaderboards came in 0.13.0 under consent
+notice 2026-11, unchanged, following the precedent of the School League and of
+sending a theme for a Season: what is shown to people outside the family is
+off by default, and turned on by a separate, explicit choice a parent makes for
+one child, on a screen that says exactly what will be shown (Parent Mode →
+Settings → Leaderboards). Every existing and new child starts in Adventure, so
+nothing about any child became visible to anyone new by the update itself.
+Guild chat became ready-made messages only at the same time; that collects
+less, and the notice's guild section ("exchange short messages") still holds.
+
+What Arena shows strangers, and nothing else: a nickname made of two words from
+fixed lists and two digits (never typed; changed at most weekly; the lists are
+checked against the rude-word filter, all 640,000 combinations), a flag from a
+list the parent picks (RankUp asks for no location), and numbers worked out by
+the server. A parent or the child can switch back to Adventure at any time, and
+that removes them from every public board in the same request. Deleting a child
+or the account, or withdrawing consent, removes them from every board at once.
+"Download my data" includes each child's mode, nickname and the country. The
+privacy policy and terms say all of this (`src/data/legalText.js`).
+
+Ask specifically:
+
+- Is a parent's Arena switch enough consent for a child's pseudonym and
+  activity numbers on a public leaderboard under COPPA and the UK Children's
+  Code, or should the consent notice be reissued to describe it? A new version
+  is shown only to new parents; asking every existing parent again needs
+  building (see "Consent notice versions" above).
+- The Children's Code asks for high-privacy defaults and no nudges towards
+  weaker settings. Adventure is the default and the child is never prompted to
+  ask for Arena beyond one line on the leaderboard screen; confirm that is
+  enough.
+- Is a two-digit-number nickname plus a country "personal information" where
+  you launch (it is not linkable to the child by anything RankUp shows)?
+
 ## The School League: questions to add for the lawyer
 
 The School League shows a school some information about children whose parents
@@ -109,7 +169,8 @@ chose to join it. The in-app privacy policy and terms describe it (see
   child's first name only where the parent switched that on. Is the parent's
   explicit choice on the School League screen enough consent for that under
   COPPA, or should the main consent notice (`CONSENT_VERSION`) be reissued to
-  cover it? Changing that version asks every parent to consent again.
+  cover it? A new version on its own is only shown to new parents (see
+  below); asking every existing parent again needs building.
 - **FERPA and state student-privacy laws.** RankUp is not given records by the
   school; parents bring the data. Confirm that this keeps RankUp outside FERPA,
   and check states with their own student-data laws (for example California's
@@ -119,3 +180,29 @@ chose to join it. The in-app privacy policy and terms describe it (see
 - **Who may sign a school up.** The terms say the person must work there and be
   allowed to. You check each school by hand before it joins a league; decide
   what evidence you accept.
+
+## Gifts: what is collected from people who are not families
+
+"A year of RankUp" can be bought by somebody with no account, for another
+family (docs/PAYMENTS.md, "Gift subscriptions"). It collects personal data
+from two adults who never agreed to the family terms:
+
+- **The buyer:** their email, for the receipt and for help with the gift,
+  kept until the code runs out (two years); their name if they give one, and
+  their message, kept with the recipient's details below. Stripe holds the
+  payment as for any other.
+- **The recipient:** the name and email the buyer typed, used only to send
+  the gift and deleted 30 days after purchase. The form asks for a grown-up's
+  name or the family's, never a child's; nothing about a child is collected.
+
+The privacy policy says both in one sentence (`src/data/legalText.js`, "How
+long we keep it"), and the Give page says it beside the button. The consent
+notice is unchanged: no child's data is involved until the family redeems the
+code, as an ordinary family. Ask the lawyer:
+
+- Is a one-off email to somebody else's address, sent because a buyer asked,
+  fine under the email marketing rules where you sell (it is transactional:
+  one email, no list, nothing more is ever sent to them)?
+- Does a gift need its own short terms (what a refund means once a code is used, the two-year
+  life of a code, what happens if RankUp closes), or do the main terms cover a
+  buyer who never signs up?

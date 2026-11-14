@@ -10,6 +10,10 @@
  * Deploying to Cloudflare Pages therefore changes nothing about the handlers,
  * and Vercel keeps working untouched as a fallback.
  */
+// Imported statically, unlike the handlers below: it reads its settings when
+// it is called, not when it is loaded.
+import { reportError } from '../../api/_shared/job.js'
+
 /*
  * Imported lazily, and that is not a style choice.
  *
@@ -24,15 +28,21 @@
 const ROUTES = {
   'billing-portal': () => import('../../api/billing-portal.js'),
   'create-checkout': () => import('../../api/create-checkout.js'),
+  'delete-account': () => import('../../api/delete-account.js'),
+  'gift-checkout': () => import('../../api/gift-checkout.js'),
   health: () => import('../../api/health.js'),
+  'redeem-gift': () => import('../../api/redeem-gift.js'),
+  'refresh-leaderboards': () => import('../../api/refresh-leaderboards.js'),
   'run-retention': () => import('../../api/run-retention.js'),
   'send-push': () => import('../../api/send-push.js'),
   'send-digests': () => import('../../api/send-digests.js'),
   'send-reminders': () => import('../../api/send-reminders.js'),
+  'send-trial-emails': () => import('../../api/send-trial-emails.js'),
   'settle-alliances': () => import('../../api/settle-alliances.js'),
   'settle-schools': () => import('../../api/settle-schools.js'),
   stats: () => import('../../api/stats.js'),
   'operator-schools': () => import('../../api/operator-schools.js'),
+  'operator-themes': () => import('../../api/operator-themes.js'),
   'school-checkout': () => import('../../api/school-checkout.js'),
   'stripe-webhook': () => import('../../api/stripe-webhook.js'),
 }
@@ -67,14 +77,33 @@ function makeRes() {
   return { res, state, finished }
 }
 
+/**
+ * Every error this file answers itself is JSON with a code and nothing else:
+ * no message from the runtime, no stack, no file name. The handlers answer
+ * the same way (tests/api.mjs checks both); the reason, when there is one,
+ * goes to the log with console.error, where only the operator reads it.
+ */
+function jsonError(status, error) {
+  return new Response(JSON.stringify({ error }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
 export async function onRequest(context) {
   const { request, env, params } = context
   const name = Array.isArray(params.route) ? params.route.join('/') : String(params.route || '')
-  const load = ROUTES[name]
-  if (!load) return new Response('Not found', { status: 404 })
+  const load = Object.hasOwn(ROUTES, name) ? ROUTES[name] : null
+  if (!load) return jsonError(404, 'not_found')
 
   bridgeEnv(env)
-  const handler = (await load()).default
+  let handler
+  try {
+    handler = (await load()).default
+  } catch (err) {
+    console.error('[pages-adapter] could not load', name, err?.message)
+    return jsonError(500, 'server_error')
+  }
 
   // The Stripe webhook verifies a signature over the exact bytes it was sent,
   // so the body is read once as text and never re-serialised.
@@ -91,6 +120,9 @@ export async function onRequest(context) {
   }
 
   const url = new URL(request.url)
+  // Node's request always carries Host; api/_shared/site.js compares the
+  // Origin header against it, so it is filled in here if the runtime left it out.
+  if (!headers.host) headers.host = url.host
   const req = {
     method: request.method,
     headers,
@@ -108,8 +140,10 @@ export async function onRequest(context) {
   try {
     await Promise.race([Promise.resolve(handler(req, res)).then(() => finished), finished])
   } catch (err) {
-    console.error('[pages-adapter]', name, err?.message)
-    if (!state.body) { state.status = 500; state.body = JSON.stringify({ error: 'server_error' }) }
+    // A handler that threw before answering: the reason is logged (and goes
+    // in the error report), never sent.
+    await reportError(name, err)
+    if (!state.body) return jsonError(500, 'server_error')
   }
   return new Response(state.body, { status: state.status, headers: state.headers })
 }

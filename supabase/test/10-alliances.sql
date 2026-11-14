@@ -173,8 +173,19 @@ do $$
 declare
   v_first  jsonb;
   v_second jsonb;
-  v_month  date := date_trunc('month', now())::date;
+  v_month  date := (date_trunc('month', now()) - interval '1 month')::date;
 begin
+  -- The job settles a month that is over: last month. Everything above
+  -- happened this month, so it is moved back a month, members and all.
+  perform ok('a month that is not over yet is not settled',
+    (settle_alliances(date_trunc('month', now())::date)->>'reason') = 'month_not_over'
+    and not exists (select 1 from alliance_results where month_key = to_char(now(), 'YYYY-MM')));
+  update submissions set decided_at = decided_at - interval '1 month'
+   where family_id in ('1a222222-0000-0000-0000-000000000001', '1a222222-0000-0000-0000-000000000002')
+     and decided_at is not null;
+  update alliance_members set joined_at = joined_at - interval '1 month'
+   where family_id in ('1a222222-0000-0000-0000-000000000001', '1a222222-0000-0000-0000-000000000002');
+
   v_first := settle_alliances(v_month);
   perform ok('settling the month awards exactly one family', jsonb_array_length(v_first->'awards') = 1);
   perform ok('and it is the family that finished the most quests',

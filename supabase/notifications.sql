@@ -27,6 +27,14 @@ create table if not exists push_subscriptions (
 );
 
 create index if not exists push_subscriptions_family_idx on push_subscriptions (family_id, role);
+-- A push service's address and the phone's two keys are a few hundred
+-- characters between them. Anything far longer is not a subscription.
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'push_subscriptions_sizes') then
+    alter table push_subscriptions add constraint push_subscriptions_sizes
+      check (length(endpoint) <= 2048 and length(keys::text) <= 1024) not valid;
+  end if;
+end $$;
 
 alter table push_subscriptions enable row level security;
 -- No select, insert, update or delete policy on purpose. Everything goes
@@ -79,21 +87,57 @@ end $$;
 create or replace function push_targets(p_family_id uuid, p_role text, p_kid_id uuid default null)
 returns setof push_subscriptions
 language sql security definer set search_path = public as $$
-  select * from push_subscriptions
-   where family_id = p_family_id
-     and role = p_role
-     and (p_kid_id is null or kid_id = p_kid_id)
-     and failures < 5;
+  select s.* from push_subscriptions s
+   where s.family_id = p_family_id
+     and s.role = p_role
+     and (p_kid_id is null or s.kid_id = p_kid_id)
+     and s.failures < 5
+     -- Only a phone whose account still belongs here. A subscription keeps
+     -- the family it was saved under, so a co-parent who was removed, or a
+     -- child's phone that was unlinked, went on being told about the
+     -- family's chores on its lock screen.
+     and case s.role
+           when 'parent' then exists (select 1 from parents p
+                                       where p.user_id = s.user_id and p.family_id = s.family_id)
+           else exists (select 1 from kids k
+                         where k.id = s.kid_id and k.user_id = s.user_id and k.family_id = s.family_id)
+         end;
 $$;
 
-/** A push service reporting an endpoint is gone. Dead ones are dropped. */
+/**
+ * A push service reporting an endpoint is gone. Dead ones are dropped: at
+ * once when the service says so (404, 410), and on the fifth refusal
+ * otherwise. Five was already where push_targets stopped sending to one, but
+ * the row stayed for ever, holding a capability nothing would use again.
+ * Nothing is lost by deleting it: turning notifications back on saves the
+ * phone afresh, which was already the only way back after five.
+ */
 create or replace function record_push_failure(p_endpoint text, p_gone boolean default false)
 returns void
 language sql security definer set search_path = public as $$
-  delete from push_subscriptions where endpoint = p_endpoint and p_gone;
   update push_subscriptions set failures = failures + 1
    where endpoint = p_endpoint and not p_gone;
+  delete from push_subscriptions
+   where endpoint = p_endpoint and (p_gone or failures >= 5);
 $$;
+
+/**
+ * The same for a batch, in one call: [{ "endpoint": ..., "gone": true }, ...].
+ * The scheduled jobs send hundreds of pushes a run, and one call per failure
+ * spent the few hundred requests a Cloudflare Function may make on
+ * bookkeeping. Returns how many were recorded.
+ */
+create or replace function record_push_failures(p_failures jsonb)
+returns int language plpgsql security definer set search_path = public as $$
+declare f jsonb; v_n int := 0;
+begin
+  for f in select * from jsonb_array_elements(coalesce(p_failures, '[]'::jsonb)) loop
+    if nullif(f->>'endpoint', '') is null then continue; end if;
+    perform record_push_failure(f->>'endpoint', coalesce((f->>'gone')::boolean, false));
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end $$;
 
 grant execute on function save_push_subscription(text, jsonb) to anon, authenticated;
 grant execute on function delete_push_subscription(text) to anon, authenticated;
@@ -104,8 +148,9 @@ grant execute on function delete_push_subscription(text) to anon, authenticated;
 -- callable by anyone. These two return push endpoints, so they are revoked from
 -- PUBLIC and never re-granted: only the send endpoint, holding the service role
 -- key, may call them.
-revoke execute on function push_targets(uuid, text, uuid) from public;
-revoke execute on function record_push_failure(text, boolean) from public;
+revoke execute on function push_targets(uuid, text, uuid) from public, anon, authenticated;
+revoke execute on function record_push_failure(text, boolean) from public, anon, authenticated;
+revoke execute on function record_push_failures(jsonb) from public, anon, authenticated;
 
 /*
  * How many notices a family's devices may send through send-push in an hour.

@@ -1,17 +1,21 @@
 import { useMemo, useState } from 'react'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
-import { levelFromXp, formatXp } from '../../lib/xp.js'
-import { KID_THEME_MAP, nextEvolution } from '../../data/kidThemes.js'
+import { levelFromXp, formatXp, liveStreak } from '../../lib/xp.js'
+import { themeById, nextEvolution } from '../../data/kidThemes.js'
 import { storyProgress } from '../../lib/dragonFight.js'
 import { PROFILE_FRAMES, DROP_SELECTORS } from '../../state/initialState.js'
 import Avatar, { avatarTier, tiersFor } from '../../components/Avatar.jsx'
 import ThemePicker from '../../components/ThemePicker.jsx'
-import { Screen, Card, Button, SectionTitle, Stat, Modal, TextInput, Banner, Chip, DemoTag } from '../../components/ui.jsx'
+import { Screen, Card, Button, SectionTitle, Modal, TextInput, Banner, Chip, DemoTag } from '../../components/ui.jsx'
 import HeroArt from '../../components/HeroArt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
 import KidPot from '../../components/KidPot.jsx'
 import { navigate } from '../../lib/router.js'
 import BadgeShelf from '../../components/BadgeShelf.jsx'
+import { activityFeed } from '../../lib/activity.js'
+import { MAX_KID_THEMES } from '../../data/themeGenesis.js'
+import { choreCounts } from '../../lib/prune.js'
+import LeaderboardCard from '../../components/LeaderboardCard.jsx'
 
 export default function KidProfile() {
   const { state, dispatch } = useApp()
@@ -25,20 +29,23 @@ export default function KidProfile() {
   const [draftTheme, setDraftTheme] = useState(kid?.themeId)
 
   const stats = useMemo(() => {
-    const mine = state.events.filter((e) => e.kidId === kid?.id)
-    const approved = mine.filter((e) => e.type === 'quest_approved')
-    const rejected = mine.filter((e) => e.type === 'quest_rejected')
+    // From the synced submissions, not this phone's own log: on a child's
+    // phone the approvals all happen somewhere else.
+    const mine = activityFeed(state).filter((e) => e.kidId === kid?.id)
+    // Old chores let go of on this phone still count (lib/prune.js).
+    const { approved, rejected } = choreCounts(state, kid?.id, mine)
     return {
-      approved: approved.length,
-      rejected: rejected.length,
+      approved,
+      rejected,
       levelUps: mine.filter((e) => e.type === 'level_up').length,
     }
-  }, [state.events, kid?.id])
+  }, [state.events, state.submissions, state.quests, state.historyTally, kid?.id])
 
   if (!kid) return null
   const { level } = levelFromXp(kid.xp)
   const tier = avatarTier(level, theme)
   const evolution = nextEvolution(kid.themeId, level, storyProgress(state, kid))
+  const ownThemes = (state.kidThemes || []).filter((t) => t.kidId === kid.id).length
 
   // A kid's own device holds no PIN — the parent's PIN lives on the parent's
   // phone. Without this guard an empty box would match the empty stored value
@@ -104,7 +111,7 @@ export default function KidProfile() {
             }}
           >
             <div className="text-lg leading-none" aria-hidden="true">🔥</div>
-            <div className="font-display font-extrabold text-lg leading-none mt-0.5">{kid.streak.count}</div>
+            <div className="font-display font-extrabold text-lg leading-none mt-0.5">{liveStreak(kid.streak)}</div>
             <div className="text-[9px] uppercase tracking-wider text-muted">Day streak</div>
           </div>
         </div>
@@ -129,6 +136,8 @@ export default function KidProfile() {
           ))}
         </div>
       </Card>
+
+      <LeaderboardCard kid={kid} demo={Boolean(state.demo)} />
 
       {/* Above the avatar forms on purpose: this is the part with a next step
           in it, and the part a child will come back to look at. */}
@@ -164,7 +173,7 @@ export default function KidProfile() {
       */}
       <SectionTitle>Your story</SectionTitle>
       <Card className="mb-3">
-        <p className="text-sm">{KID_THEME_MAP[kid.themeId]?.story}</p>
+        <p className="text-sm">{themeById(kid.themeId)?.story}</p>
         {theme.evolution?.story && (
           <p className="text-sm mt-2 pt-2" style={{ borderTop: '1px solid var(--line)' }}>
             <strong style={{ color: 'var(--accent-2)' }}>{theme.evolution.label}.</strong>{' '}
@@ -182,7 +191,7 @@ export default function KidProfile() {
           <p className="text-sm">
             {evolution.requires === 'dragonDefeated'
               ? <>🔒 Something is waiting on the other side of this fight. Beat the dragon to find out what.</>
-              : <>🔒 Reach level <strong style={{ color: 'var(--accent-2)' }}>{evolution.level}</strong> and {KID_THEME_MAP[kid.themeId].name} changes into somewhere new. Where is a secret until you get there.</>}
+              : <>🔒 Reach level <strong style={{ color: 'var(--accent-2)' }}>{evolution.level}</strong> and {themeById(kid.themeId)?.name} changes into somewhere new. Where is a secret until you get there.</>}
           </p>
         </Card>
       )}
@@ -232,9 +241,18 @@ export default function KidProfile() {
       <SectionTitle>Theme</SectionTitle>
       <Card className="mb-3">
         <p className="text-sm mb-2">
-          You are playing <strong>{KID_THEME_MAP[kid.themeId]?.name}</strong>. Themes are locked once chosen —
+          You are playing <strong>{themeById(kid.themeId)?.name}</strong>. Themes are locked once chosen —
           a parent has to enter the PIN to change it.
         </p>
+        {/*
+          Making a theme changes nothing until it is worn, so it is not
+          behind the lock: any child can open Theme Genesis and build one.
+          Wearing it is the same as any other theme change.
+        */}
+        <Button variant="soft" className="w-full mb-2" onClick={() => navigate('/kid/genesis')} data-testid="open-genesis">
+          ✨ Make your own theme
+          {ownThemes > 0 && <span className="text-xs font-normal"> · {ownThemes} of {MAX_KID_THEMES} made</span>}
+        </Button>
         {!themeUnlocked ? (
           canUnlockHere ? (
             <Button variant="soft" className="w-full" onClick={() => setPinOpen(true)}>
@@ -247,7 +265,7 @@ export default function KidProfile() {
           )
         ) : (
           <div className="mt-3">
-            <ThemePicker value={draftTheme} onChange={setDraftTheme} previewLevel={level} />
+            <ThemePicker value={draftTheme} onChange={setDraftTheme} previewLevel={level} kidId={kid.id} onMake={() => navigate('/kid/genesis')} />
             <div className="flex gap-2 mt-3">
               <Button variant="ghost" className="flex-1" onClick={() => { setThemeUnlocked(false); setDraftTheme(kid.themeId) }}>
                 Cancel
@@ -283,7 +301,7 @@ export default function KidProfile() {
           </>
         }
       >
-        <p className="text-sm text-muted mb-3">Changing a theme resets the look of the whole app for this kid.</p>
+        <p className="text-sm text-muted mb-3">A new theme changes how the whole app looks for this kid. Their level, XP, coins and streak stay exactly as they are.</p>
         <TextInput
           value={pin}
           onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 8))}

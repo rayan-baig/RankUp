@@ -1,0 +1,215 @@
+# Changelog
+
+What changed in RankUp, newest first, in plain words. The version at the top
+is the one in `package.json`; the app shows it under Settings → Help & about, and
+`/api/health` reports it. `tests/release.mjs` fails if this file has no entry
+for that version.
+
+## 0.16.0 — 2026-11-14
+
+Gift subscriptions: "a year of RankUp", for grandparents, aunts and uncles.
+
+- **Give RankUp** (`#/gift`), linked from the front door, the plan screen and Settings. The buyer needs no account: they choose Standard or Elite Pass for 1 year, give their email for the receipt, optionally the name and email of the person it is for, their own name and a short message (200 characters, plain text, the rude-word list, no links), and "Email it to them now" or "I'll give it myself". One payment through Stripe Checkout at the yearly price ($49.99 or $79.99, from the plan list). Nothing renews.
+- **The code is made only after Stripe confirms the payment**, by the webhook: 12 characters (`XXXX-XXXX-XXXX`, no 0/O/1/I/L), worked out from the paid checkout with a server secret, so the same payment always gives the same code and a replay or retry never makes a second. Only its hash is stored. Single use, for 2 years from purchase. An unpaid checkout never has a code.
+- **Delivery**: the buyer gets a receipt with the code and a printable gift card (`#/gift/card`, everything on it kept after the `#`); if they chose it, the recipient gets "<name> gave your family a year of RankUp" with the message and how to redeem. Both through the existing email sender, with a plain-text part and the MTRX Horizyn footer. The recipient's email never contains the buyer's email address.
+- **Redeeming**, in Parent Mode: Settings or the plan screen, "Redeem a gift". The family gets that plan free for 12 months from that day, as a gift beside its paid plan (`families.gift_tier`, `gift_starts_at`, `gift_until`), which the one plan check (`effective_tier`, and the app's `effectiveTier`) honours with the paid plan and the trial. One gift at a time; another adds 12 months to the end, at the better plan. Settings says "Gift plan: Elite Pass until <date>"; the parent's dashboard reminds them 30 days before it ends, in the app only.
+- **A family that already pays is never charged twice**: a plan that renews must have renewal turned off first (the code is not spent until then), and the gift starts the day the paid plan ends. A plan chosen during a gift is first charged the day the gift ends.
+- **Limits**: 5 codes that did not work an hour per family and 20 per address (stored as a keyed hash), then wait an hour; 10 gifts started an hour per address on the Give page. Children never see buying, redeeming or the gift; the gift pages open only in Parent Mode on a phone that is set up. A refund in full voids an unused code; a used code stays used and the decision is recorded.
+- **Privacy**: the policy says in one sentence that the buyer's email is kept for the receipt and support until the code runs out (2 years), and the recipient's name and email and the message are used only to send the gift and deleted 30 days after purchase. The daily retention job deletes them, and an unpaid checkout after 14 days. The consent notice is unchanged.
+- **Stripe, before deploying:** make a product such as "RankUp gift" with two one-time prices, $49.99 and $79.99; set `STRIPE_PRICE_GIFT_STANDARD_YEAR`, `STRIPE_PRICE_GIFT_ELITE_YEAR` and a new secret `GIFT_CODE_SECRET`, with email set up. No new webhook event: `checkout.session.completed`, `checkout.session.async_payment_succeeded` and `charge.refunded` carry gifts. docs/PAYMENTS.md, "Gift subscriptions".
+- SQL: schema.sql (the three gift columns, `effective_tier`), billing.sql (the gift tables and functions, `billing_status`) and retention.sql. Run every file again on the live database, in the documented order; no new file.
+
+## 0.15.1 — 2026-11-14
+
+The real address: https://rankup.mtrxhorizyn.com.
+
+- LAUNCH.md, DEPLOY.md, STAGING.md, the email, payment, notification and if-something-breaks guides, the README and `.env.example` name `rankup.mtrxhorizyn.com` (and `mtrxhorizyn.com` for the company's DNS records) instead of a placeholder. `PUBLIC_SITE_URL=https://rankup.mtrxhorizyn.com` is the value to set on Cloudflare Pages; `help@rankup.mtrxhorizyn.com` is the suggested `SUPPORT_EMAIL` and `EMAIL_REPLY_TO`, and `RankUp <no-reply@rankup.mtrxhorizyn.com>` the suggested `EMAIL_FROM`.
+- Code comments and the `_headers` comment say the same. Nothing in the app changed: every address still comes from its setting, and the privacy policy and terms are as they were.
+- No SQL changes.
+
+## 0.15.0 — 2026-11-14
+
+New plan prices.
+
+- Standard is now $5.99 a month or $49.99 a year (was $9.99 / $99.90). Elite Pass is now $9.99 a month or $79.99 a year (was $15.99 / $159.90). Starter stays free, the 14-day trial, the Flash Ticket packs and the School League prices are unchanged.
+- A year now saves $21.89 on Standard (30%) and $39.89 on Elite Pass (33%). The new yearly prices are not a whole number of months, so the Monthly / Yearly switch no longer says "2 months free": it says "Save 30% or more", the smaller of the two, and each plan's card says what it saves in dollars and as a percentage. All worked out from the plan list, as before.
+- The plan screen, the banners, the front door, the help page and the terms show the new prices, read from the one plan list. The Alliance prize line now reads $7.99 instead of $9.99; a yearly Elite family's referral free month is $6.67.
+- **Stripe, before deploying:** make four new recurring prices ($5.99 and $49.99 on Standard, $9.99 and $79.99 on Elite Pass), put their ids in `STRIPE_PRICE_STANDARD`, `STRIPE_PRICE_STANDARD_YEAR`, `STRIPE_PRICE_ELITE` and `STRIPE_PRICE_ELITE_YEAR`, and deploy this version at the same time. The app shows what Stripe charges a new family only while those ids match the plan list. Families already subscribed stay on their old price and their plan until moved: keep them as they are, or move them in the Stripe dashboard. docs/PAYMENTS.md, "Changing a price", has the steps.
+- No SQL changes.
+
+## 0.14.0 — 2026-11-13
+
+Invite a family, get a free month.
+
+- When a family invites a friend's family and that family starts paying, the inviting family gets one free month of its plan. It is earned on the invited family's first paid invoice, monthly or yearly; a trial's $0 invoice, a failed payment and a payment refunded or disputed before its invoice is counted earn nothing. The family who joins still gets 30 days of Standard when its first chore is accepted; the inviting family no longer gets 30 days for that chore, since the free month replaces it.
+- The month is a credit on the inviting family's Stripe account worth one month of the plan it pays for (a yearly plan: a twelfth of the yearly price), taken off its next bill by Stripe. Given once, however often Stripe sends or retries the invoice, with an idempotency key; nothing about the other family is sent to Stripe.
+- A family on Starter (or still on its free trial) has its month banked. The card says so, and the month is credited the moment the family subscribes, at the price of the plan it picks.
+- Limits, held by the database: never for the same family, the same parent email (a "+tag" is the same email) or the same Stripe customer; one reward per invited family; at most 12 a year. If the invited family's first payment is refunded in full or disputed within 14 days, an unused free month is taken back (a credited one only if the account still holds it); otherwise it stays and what happened is recorded.
+- Settings has an "Invite a family, get a free month" card, and the plan screen a shorter copy: the code, how many families joined and how many pay, and the free months earned, on the way, banked or taken back. Counts only, never another family's name or email. "You earned a free month" shows once on the parent's dashboard (seen on one phone is seen for the family). No email, and children never see any of it.
+- The privacy policy says in one sentence that a referral records which family invited which, for the reward only. "Download my data" includes the family's referrals and free months, never which families they were. The consent notice is unchanged.
+- The webhook also takes `charge.dispute.created`; add it to the webhook's events in Stripe.
+- SQL: referrals.sql (new columns on `referrals`, and the functions that decide, bank, credit and withdraw the month) and consent.sql (the download). Run every file again on the live database, in the documented order.
+
+## 0.13.0 — 2026-11-13
+
+Leaderboards, in Adventure and Arena, and guild chat that is tap-to-send only.
+
+- Leaderboards, from a new card on the child's Home and from their Profile: chores done, XP earned, highest level, longest streak, current streak, badges, arcade high scores for every game, Season themes picked, top guilds, and rising stars (the biggest jump this week against last). Each by worldwide, my country, my guild and my family, and by this week, this month and all time where those make sense. A podium for the top three with medals, arrows for places gained or lost since the start of the day, the child's own row highlighted, and their own place shown even far below the top 50 ("#734 of 2,000"). Weeks reset on Monday and months on the 1st, at midnight UTC, and each board says so ("Resets Monday").
+- Two modes per child, Adventure and Arena. Every child, new and existing, starts in Adventure: they play at their own pace, are on no worldwide or country board and are shown none; their family's board, and their guild's, are among people the family already approved. Arena puts a child on the worldwide and country boards. Only a parent switches it on, in Parent Mode → Settings → Leaderboards, after reading what it shows; a parent or the child can go back to Adventure at any time, which takes them off every public board in the same moment. Each mode has its own badge and colour on Home and Profile, and the child sees "Enter the Arena" once when a parent switches it on.
+- What strangers see of an Arena child: a nickname and numbers, nothing else. The nickname is built from two lists of 80 words and a number from 00 to 99 ("Swift" + "Comet" + 42 → "SwiftComet42"): pick each piece or shuffle, no typing, once a week. All 640,000 nicknames pass the rude-word filter, and the server accepts only names made from the lists. The country is a parent's pick from a list (no location is ever asked for) and shows as a flag. Never a child's name, photo, family, school, town or anything typed. A guild on the public guild board is shown by a team name made from the same words, and only when every child in it is in Arena.
+- Fair: chores count at most 8 a day, the School League's own cap, so a parent tapping Accept 200 times tops nothing. XP counts what a chore was worth before the Elite boost (now stored with every accepted chore), at most 200 a chore, so no plan buys a place; the highest-level board uses the same XP and says why a child's board level can be a little lower than on their Home. Guilds rank on their members' average, so a ten-seat guild cannot win on size alone. The guild roster's weekly XP no longer counts the Elite boost either.
+- Fast: a new scheduled job, `/api/refresh-leaderboards`, every ten minutes, ranks everybody once and stores the result; opening a board reads one stored page. 4,000 children and 120,000 chores rank in about a second; opening a board of 2,000 takes a couple of milliseconds. It is in `/api/health`, `vercel.json` and docs/LAUNCH.md like the other jobs.
+- Guild chat is quick chat only. A child taps one of 101 ready-made messages in seven tabs (Cheers, Teamwork, Chore talk, Reactions, Thanks & sorry, Hello & bye, Goal moments), a row of big emoji, or their own row of recent and starred ones. What is sent and stored is the message's id, never words; the server accepts only ids on the list, at most one every three seconds and eight a minute. There is no text box in a child's guild any more, so no child types to a child in another family. Report and parents' view of reports stay; a child can also mute a guild-mate on their own phone. Messages typed before this version are no longer shown to children; a parent still sees any that were reported. Guilds stay off unless `VITE_GUILDS_ENABLED=true`.
+- The privacy policy and terms describe Arena and quick chat; "Download my data" includes each child's mode, nickname and the country. The consent notice is unchanged (Arena is a separate, explicit choice a parent makes for each child, as the School League is); see docs/LEGAL.md.
+- SQL: schema.sql, guilds.sql, consent.sql, schools.sql, health.sql, and the new leaderboards.sql after schools.sql. Run them again on the live database, in the documented order, and schedule `/api/refresh-leaderboards`.
+
+## 0.12.0 — 2026-11-07
+
+Theme Genesis: "What's it inspired by?", and Season themes in their own names.
+
+- Spark has a new box, "What's it inspired by?" ("e.g. racing, space, dinosaurs, a game you love"). A child types an idea, taps "Make it", and the whole starting theme is filled in: a name (with two more to pick from), the vibe, colours of its own, a pattern, a mascot, the four worlds and the coins, with a short line saying what it picked ("Racing vibes: checkered flags, red and black, 🏎️"). Everything can still be changed in Design and Build; the idea's colours are the first palette in Design.
+- It works on the phone alone: a library of 57 kid-friendly topics built into the app (racing, football, space, dinosaurs, City Nights, Blocky World, pirates, castles, unicorns, robots and more). No AI and no network; what is typed is never saved or sent. Games, leagues and brands are only aliases that lead to a generic topic ("f1" and "nascar" give Racing, "minecraft" Blocky World, "rocket league" Car Soccer, "fifa" Football, "pokemon" Creature Collectors), so the theme never carries the brand. Games for older players lead to a gentle topic with nothing about crime, weapons or fighting ("gta" gives City Nights: a neon city, cars and skyscrapers). An idea it does not know finds the closest topic, or "Something new" ("Here's a starting point. Make it yours!"). A rude idea gets the same gentle no as a rude name.
+- Four new background patterns (Checkers, Stripes, Snow, Hearts) and 32 more mascots to go with the topics. A stored theme is the same small design as before; the library is in the app, not in the data.
+- A theme sent to RankUp for a Season can't use another company's game, league or brand name (F1, NASCAR, GTA, Minecraft, Fortnite, Roblox, Pokémon, Mario, Rocket League, FIFA, NBA, NFL, Disney, Marvel, Lego and others), because it could become an official RankUp theme in every family's picker. A family's own theme may still be called what they like. The phone says "Season themes can't use other companies' names. Give it your own name to send it in." and the database checks the same list again when a theme is sent; whole words only, so "Marvellous Mountains" is fine.
+- The privacy policy says the box stays on the phone, and that Season themes carry no brand names; the consent notice is unchanged.
+- SQL (sync.sql): run it again on the live database.
+
+## 0.11.0 — 2026-11-07
+
+Theme Genesis: children make themes of their own, and the best become a Season.
+
+- Theme Genesis, a small version of Genesis from the MTRX Horizyn site. From the You tab's theme picker ("Make your own theme"), or from Settings for a chosen child, a theme goes through four short steps with a checklist and a progress bar: Spark (a name and a starting vibe: space, ocean, jungle, candy, robots or something new), Design (ten kid-friendly palettes or their own three colours, kept readable whatever they pick; eight background patterns drawn in SVG; a mascot from 24 emoji), Build (the four worlds and the coins, named already so it is quick) and Launch (their home screen in the new theme, then "Use this theme"). Drafts are saved, edited later and deleted; five themes a child.
+- A child's theme is a look and some names over a built-in theme's structure: the same five forms and four worlds at the same levels. XP, coins, streaks, rewards and unlocks are worked out exactly as before. Switching between their own theme and a built-in one is as quick as any theme switch and keeps all progress; the theme lock still holds (the PIN on a shared phone; on a child's own phone, "Use this theme" asks and a parent switches it on from Review). Deleting the theme a child wears puts them on the one it was made from.
+- Seen only by the family. Themes sync between the family's phones like the rest (a parent sees every one; a child only their own), and nobody outside the family can read them. A parent renames or removes any of them in Settings → Kids' own themes. Names are plain text with a rude-word filter, on the phone and again in the database; nothing a child types goes to any outside or AI service.
+- Seasons. A child can ask to send a finished theme to RankUp; nothing goes until a parent says yes in Review, with an optional credit line (a first name or nickname, never filled in for them). What is sent is the theme alone. One a child a month. The operator page (`#/operator`) has a Theme submissions tab: each theme as a live preview, grouped by month, with Pick for next Season, Decline and Remove, and the Seasons themselves (number, name, start day). On a Season's first day every family's theme picker shows its themes, marked "Season N" with the credit, and a child's home shows "New Season!" once; the family whose theme was picked is told in the app. No deploy is needed. Declined and unpicked themes are deleted after 90 days by the retention job.
+- The privacy policy says all of this in its own two sections; the consent notice is unchanged.
+- SQL (sync.sql, retention.sql, consent.sql): run them again on the live database.
+
+## 0.10.0 — 2026-11-03
+
+In line with the company's other apps: errors come to one inbox, usage is counted without counting anybody, and a staging copy.
+
+- Errors to one inbox. The server functions now write their errors down (a checkout that could not start, Stripe or the database not answering, a scheduled run that failed), as phones already did their crashes. Set `ERRORS_EMAIL` and the hourly email job sends one short report of what is new: each error at most once an hour, at most 20 reports a day. No child's or adult's name, no email, no family id, no request and no token is ever in it: they are taken out when an error is written down, every name RankUp knows is taken out again when the report is written, and the email is scrubbed once more. `/api/health` counts the server's errors beside the crashes.
+- Daily usage totals: families signed up, chores accepted, rewards bought, games played, schools signed up and help page views. Totals only, by day: no id, no name, no time of day, no cookie and no outside service; counted inside the database as each thing happens (a help page view is sent with the public key alone, so not even the request says who). The operator page shows the last 30 days, and `/api/stats` gives them to the MTRX Horizyn console. Kept 400 days. The privacy policy says so in one sentence.
+- Settings → Help & about shows the family's plan beside the version and Help, and the support address when there is one: the new optional `SUPPORT_EMAIL`, which both help pages and the emails use too.
+- docs/STAGING.md: a second copy at `staging.rankup.<your domain>` with its own Supabase project, Pages project, Stripe test mode and email sandbox, never sharing a key with live; the SQL files run there first; and how a tested commit is promoted to live.
+- Every email RankUp sends itself is checked in every variant (tests/emails.mjs): a plain-text part, no blank, the footer once, nothing wider than 600px, the same words and links in both parts. A trial reminder with no end date no longer says "on undefined".
+
+## 0.9.0 — 2026-11-03
+
+Ready for many families at once, older phones, and schools that hear from us.
+
+- The database was load-tested with 1,000 families' phones syncing at once (docs/LOAD-TEST.md, tools/loadtest.mjs). The first thing to break was the connection pool, at 1,600 phones going flat out. The pull is now a third faster and about half as much again gets through: the checks that decide what each phone may see are worked out once per request instead of once per row, the guild roster reads one child's week by an index made for it, and the Sunday digest no longer reads the whole time zone database for every family (9 seconds at 1,000 families, now a third of a second).
+- Reminders and the weekly digest go out in batches the server claims first, within what one run of a Cloudflare Function may do. 10,000 reminders due at the same minute are each sent once, over several short runs; a run cut off part-way is picked up five minutes later without anyone getting two. Each push is cheaper to sign, and a slow push service can no longer hold the job.
+- "Add to Home Screen" is offered after the family's first accepted chore, once, on the parent's dashboard; never on a first visit, never on a child's phone, never while a child plays. Android gets an Install button; an iPhone gets the two steps.
+- Built for iPhone Safari 15 and Chrome from about four years back. The chore history no longer breaks on iPhones before iOS 15.4, and cards and buttons keep their colours on phones without color-mix().
+- Each school's admin gets a short email when the month closes: the league result, what the school paid that month, and when the plan renews.
+
+## 0.8.1 — 2026-11-03
+
+- One tap on a reward is one purchase. A tap that landed while something else was about to be drawn (a level-up closing itself, a sync arriving) could leave two of the same reward on the child's phone, a few milliseconds apart: the one the server had, and a copy it never heard of. "Mark given" could then hand over the copy, so the real one stayed on the parent's dashboard. Every change on the phone now keeps its own ids and time however many times the app works it out, so the copy is the same purchase; the shop's button also ignores a second tap in the same frame. The coins were only ever taken once by the server. tests/oncetap.mjs taps as a level-up closes.
+
+## 0.8.0 — 2026-11-03
+
+Quick moments, a phone that does not fill up, and schools.
+
+- A level-up lasts about two and a half seconds, a tap anywhere skips it, and the tap still reaches what is under it. Several levels at once (a big sync, or chore after chore accepted) are one moment, not a queue. A streak going up gets a two-second moment of its own; badges earned together are one toast.
+- The arcade says, in a child's words, how many tokens they have, how many coins they can still win today, and when winnings come back.
+- Switching themes back and forth keeps everything, with chores still waiting to be sent; going back to the theme you started on does not restart Block Craft's dragon fight.
+- Old, finished chores and notes the server already has (over 60 days) are let go of on the phone, so a busy family's year no longer fills it. Nothing waiting to be sent is ever touched. Chore history says the phone keeps 60 days; Download my data has everything.
+- With the server down for a long time, the phone asks less often, says "Server down since …" with how many changes are saved on the phone, and sends everything within a minute of it coming back. An accept or a send-back sent again because its answer was lost is recognised as the same one.
+- A school signs up on one form (account and school together), and the number of students typed to see the price is kept: 9 steps to the first league table instead of 11.
+- The operator page has a checklist for checking a school is real, beside what RankUp knows about it; Verify waits until every check is ticked.
+- A help page for schools, with prices and numbers from the code.
+- docs/LAUNCH.md brought up to date: the six jobs, the trial emails and EMAIL_ settings, re-running every SQL file, checking the server-only functions are shut, the prices, the PIN reset and the help pages.
+
+## 0.7.1 — 2026-11-03
+
+Fixes from a review of 0.7.0.
+
+- The database functions only the server may run (the scheduled jobs, the Stripe webhook's) can no longer be called with the app's public key. Supabase grants new functions to the browser's roles by name, and they were only revoked from everyone in general; the trial-email list, with parents' email addresses, was one of them.
+- A free trial that ends just after midnight gets its last-day email (late the evening before, "ends tonight"). The hourly job never landed in its short last day.
+- A family whose payment was refunded, but whose plan is still set to renew in Stripe, is asked to cancel it before choosing a new plan, so the card is never charged for two.
+
+## 0.7.0 — 2026-11-03
+
+Payments end to end, and the records a parent keeps.
+
+- A plan's whole life is tested end to end against a stand-in Stripe: subscribe, renew, a failed payment, a refund, cancel, and subscribe again for a year, for a family and for a school.
+- A refunded plan stays refunded. Cancelling it in Stripe's portal no longer gives the plan back for free until the period ends.
+- A plan cancelled in the portal says "Your plan is ending" and the date. A plan that has ended says so, instead of "It runs until" a date already past for the family.
+- Schools: a failed payment is shown to the school's admin, a refund takes the school out of the league, late Stripe news is ignored, and a paying school can open "Card, invoices and cancelling" (it was refused).
+- Every notification's words are in one place, short, kind, and true to what happened ("Accepted!", "Back on your list"). A test checks their length and that every link goes to a real screen.
+- A link into Parent Mode (a notification, the weekly digest, the way back from Stripe) opens that screen after the PIN, not the dashboard.
+- Chore history: every chore each child sent in, accepted or sent back, by whom, and the XP, filterable by child. A parent can add a note to a past chore; what it paid cannot be changed.
+- Rewards can have a weekly limit per child, held by the database too, so purchases made offline cannot go over it.
+- A pocket money record per child: what was earned, added and paid, when, by whom, and the balance after each line.
+- Removing a co-parent asks first, and cancels the invitations they sent. Invitations show when they stop working.
+
+## 0.6.0 — 2026-11-03
+
+Getting ready for launch.
+
+- The version is shown in Settings → Help & about, and `/api/health` reports it.
+- A help page for parents answers the common questions, with prices from the plan list.
+- A link to a screen that does not exist shows "We can't find that page" and a way home.
+- A screen that cannot download with no internet says so, and Try again works once the signal is back.
+- With no internet, the app says "No internet" and how many things are saved on the phone. A chore sent offline says "Saved on your phone" until it has really gone.
+- The server's errors are short JSON codes, never internal details.
+- Every arcade game, and every sport in SportsMania, says how to play as it starts.
+- Link previews no longer mention photos, and their picture uses the site's full address.
+- `robots.txt` keeps search engines off `/api/`, and a sitemap lists the front door.
+- Settings names the plan a family is really on: a free family is on Starter, not "Standard".
+- Every price and trial length comes from the plan list, including the dashboard's Elite banner and the terms.
+- Two emails before a free trial ends, three days before and on the day, once each per family, from a new hourly job (`/api/send-trial-emails`). docs/EMAILS.md lists every email RankUp sends and what to set up in Supabase and Stripe.
+- A forgotten Parent Mode PIN can be reset: "Forgot your PIN?" asks for the account's password again, then a new PIN. Not on a child's phone.
+- "Download my data" also gives an easy-to-read summary (children, chores, history, rewards) beside the full JSON, and the JSON now includes what each child spent.
+- The plan screen says what each plan adds, in plain words, from the limits the app enforces, and what a year saves against twelve months.
+
+## 0.5.0 — 2026-11-02
+
+A new family's first ten minutes, and RankUp's own address.
+
+- One front door, fewer taps to the first accepted chore, and a first-week checklist.
+- RankUp lives at `rankup.<your domain>` and shares nothing with the company's other sites.
+- RankUp is a product of MTRX Horizyn.
+- Both parents in two families hear when a child asks to join a guild.
+- Up-to-date build tools; no known security advisories.
+
+## 0.4.0 — 2026-11-02
+
+Two phones, one family, and payments that hold up.
+
+- Chores, coins, rewards and the family goal stay right across every phone in a family.
+- Streaks, the daily bonus and the arcade limit count on the family's own day.
+- Stripe refunds, failed renewals and Stripe being down are all handled and explained.
+- Deleting the account cancels the subscription at once.
+- The first screen opens without downloading the whole app.
+- The arcade's framed games run in the real build.
+- No photos at all: the consent notice says so, and older consents still stand.
+
+## 0.3.0 — 2026-11-01
+
+Safer underneath.
+
+- RankUp no longer takes, keeps or sends photos.
+- Offline changes are kept and sent later, never lost or sent twice.
+- Notifications are proven end to end, at most sixty an hour per family.
+- A Content-Security-Policy for the built app.
+- A backups guide, and family counts for the owner's console.
+
+## 0.2.0 — 2026-10-30
+
+The School League.
+
+- Schools sign up by size, pay by size and compete for their district.
+- A page for checking that schools are real, and staff can leave a school.
+- Fixes from two reviews: who can do what, and payments.
+
+## 0.1.0 — 2026-10-26
+
+The first build.
+
+- Chores become quests. A child taps "I did it!", a parent accepts, and XP, levels and coins follow.
+- Kid and parent themes, rewards, streaks and the arcade.
+- Block Craft: a story told in battles, secret worlds and a chore-powered dragon fight.

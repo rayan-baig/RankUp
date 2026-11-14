@@ -26,6 +26,17 @@
 
 create sequence if not exists sync_rev;
 
+-- Where everybody's XP stood when the family goal was set; the bar counts from
+-- here. See set_family_goal below.
+alter table family_goals add column if not exists start_xp int not null default 0;
+-- Held to a sensible size like the rest of the goal (see the end of schema.sql).
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'family_goals_start_range') then
+    alter table family_goals add constraint family_goals_start_range
+      check (start_xp between 0 and 100000000) not valid;
+  end if;
+end $$;
+
 create or replace function bump_rev() returns trigger
 language plpgsql as $$
 begin
@@ -36,7 +47,7 @@ end $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['families','kids','quests','submissions','rewards','redemptions','notes','overrides']
+  foreach t in array array['families','kids','quests','submissions','rewards','redemptions','notes','overrides','family_goals']
   loop
     execute format(
       'alter table %I add column if not exists rev bigint not null default nextval(''sync_rev'')', t);
@@ -103,6 +114,214 @@ begin
 end $$;
 
 /**
+ * Two parents editing the same chore.
+ *
+ * Each phone sends only the columns it changed, so two edits to different
+ * fields both survive. Two edits to the SAME field: the one that reaches the
+ * server last wins — and the one it replaced used to vanish without a trace,
+ * the parent who typed it none the wiser. Every edit a parent's phone makes
+ * to a chore is now written into the family's history with what it replaced
+ * and who had written that, so a lost edit can always be found (it is in
+ * "Download my data", under activity). The functions that move a chore's
+ * status are not edits and are not recorded.
+ */
+alter table quests add column if not exists edited_by uuid;
+
+/** Writes the history line. Its own function so the trigger can run as the caller. */
+-- Callable from a browser (it has to be, for the trigger), so it writes only
+-- into the caller's own family, as a parent of it, and only about a child of
+-- that family: a direct call could otherwise name any family's child.
+create or replace function log_quest_edit(p_family uuid, p_kid uuid, p_meta jsonb) returns void
+language sql security definer set search_path = public as $$
+  insert into events (family_id, kid_id, type, meta)
+  select p_family, p_kid, 'quest_edited', p_meta
+   where exists (select 1 from parents where user_id = auth.uid() and family_id = p_family)
+     and (p_kid is null or exists (select 1 from kids where id = p_kid and family_id = p_family))
+     -- What the trigger sends is a chore's changed fields, which the limits on
+     -- quests keep to a few thousand characters; a direct call is held to that.
+     and octet_length(p_meta::text) <= 20000;
+$$;
+revoke all on function log_quest_edit(uuid, uuid, jsonb) from public, anon, authenticated;
+grant execute on function log_quest_edit(uuid, uuid, jsonb) to anon, authenticated;
+
+-- Not security definer, on purpose: it has to see who is writing. A database
+-- function (approve_submission and the rest) runs as the table's owner and is
+-- not an edit; a phone writing the table directly is. Same test as
+-- guard_kid_balances.
+create or replace function record_quest_edit() returns trigger
+language plpgsql set search_path = public as $$
+declare
+  v_changes jsonb := '{}'::jsonb;
+  v_old jsonb := to_jsonb(old);
+  v_new jsonb := to_jsonb(new);
+  v_key text;
+begin
+  if current_user = (select tableowner from pg_tables where schemaname = 'public' and tablename = 'quests')
+     or current_user = 'service_role'
+     or (select rolsuper from pg_roles where rolname = current_user) then
+    return new;
+  end if;
+  for v_key in select jsonb_object_keys(v_new) loop
+    if v_key in ('rev', 'edited_by', 'status', 'completed_at', 'redo_note', 'redo_count',
+                 'last_reset_on', 'created_at', 'created_by', 'family_id', 'id') then
+      continue;
+    end if;
+    if v_new -> v_key is distinct from v_old -> v_key then
+      v_changes := v_changes || jsonb_build_object(v_key,
+                     jsonb_build_object('from', v_old -> v_key, 'to', v_new -> v_key));
+    end if;
+  end loop;
+  if v_changes = '{}'::jsonb then return new; end if;
+
+  perform log_quest_edit(new.family_id, new.kid_id, jsonb_build_object(
+    'questId', new.id,
+    'title', new.title,
+    'by', auth.uid(),
+    'changes', v_changes,
+    -- Whose edit this one wrote over, when it was somebody else's.
+    'replaced_edit_by', case when old.edited_by is distinct from auth.uid() then old.edited_by end));
+  new.edited_by := auth.uid();
+  return new;
+end $$;
+
+drop trigger if exists quests_record_edit on quests;
+create trigger quests_record_edit before update on quests
+  for each row execute function record_quest_edit();
+
+/**
+ * The family goal used to live on the phone of the parent who set it. One row
+ * per family, keyed by the family, so a clear is told to the other devices as
+ * a tombstone whose row id is the family's own id.
+ */
+create or replace function record_goal_deletion() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if exists (select 1 from families where id = old.family_id) then
+    insert into deletions (family_id, table_name, row_id)
+    values (old.family_id, 'family_goals', old.family_id);
+  end if;
+  return old;
+end $$;
+drop trigger if exists family_goals_deleted on family_goals;
+create trigger family_goals_deleted after delete on family_goals
+  for each row execute function record_goal_deletion();
+
+/**
+ * A child removed takes their XP out of the total, so it comes out of where
+ * the goal started too. Otherwise the whole balance came off the top and the
+ * bar fell to nothing, though the others had earned XP since. What the child
+ * earned towards it before leaving stays counted.
+ */
+create or replace function goal_without_kid() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  update family_goals
+     set start_xp = greatest(0, start_xp - coalesce(old.xp, 0))
+   where family_id = old.family_id;
+  return old;
+end $$;
+drop trigger if exists kids_leave_goal on kids;
+create trigger kids_leave_goal after delete on kids
+  for each row execute function goal_without_kid();
+
+/**
+ * The family goal and how far along it is, for family_snapshot.
+ *
+ * Progress is everybody's XP now, less where it stood when the goal was set.
+ * A child's phone can read only its own child's row, so it cannot add that up
+ * itself; this does it for every device, with the rights to see every child
+ * in the caller's family and nobody else's.
+ *
+ * Progress moves whenever any child's XP does, which does not touch the goal's
+ * own row. So the goal is sent again whenever a child's row has changed since
+ * the device last looked (or a child was removed), not only when the goal did.
+ */
+create or replace function family_goal_since(p_since bigint default 0)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'family_id',  g.family_id,
+           'name',       g.name,
+           'target_xp',  g.target_xp,
+           'start_xp',   g.start_xp,
+           'created_at', g.created_at,
+           'rev',        g.rev,
+           'progress',   greatest(0, (select coalesce(sum(k.xp), 0) from kids k
+                                       where k.family_id = g.family_id) - g.start_xp))), '[]'::jsonb)
+    from family_goals g
+   where g.family_id = current_family_id()
+     and (g.rev > coalesce(p_since, 0)
+          or exists (select 1 from kids k
+                      where k.family_id = g.family_id and k.rev > coalesce(p_since, 0))
+          or exists (select 1 from deletions d
+                      where d.family_id = g.family_id and d.table_name = 'kids'
+                        and d.rev > coalesce(p_since, 0)));
+$$;
+revoke all on function family_goal_since(bigint) from public, anon, authenticated;
+grant execute on function family_goal_since(bigint) to authenticated;
+
+/**
+ * Set, change or clear the family goal. Parent only.
+ *
+ * Where the bar starts is decided here, from the children's XP as the server
+ * has it, not from a phone that may not have synced for a day (which would
+ * start the bar low and hand the family XP they earned before the goal).
+ * The same goal saved again (a new target, say) keeps what was earned; a goal
+ * with a different name starts again from where everybody is now.
+ *
+ * p_start_xp is only for a goal set before goals were shared, which a phone
+ * sends up once: it is taken only if the family has no goal yet, so it cannot
+ * overwrite one another parent has set since, and it is held to what the
+ * children actually have.
+ */
+create or replace function set_family_goal(p_name text, p_target_xp int, p_start_xp int default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_family uuid := current_family_id();
+  v_name   text := left(btrim(coalesce(p_name, '')), 80);
+  v_total  int;
+  v_goal   family_goals%rowtype;
+begin
+  if v_family is null or not is_parent() then
+    return jsonb_build_object('ok', false, 'reason', 'not_parent');
+  end if;
+
+  if v_name = '' then
+    delete from family_goals where family_id = v_family;
+    return jsonb_build_object('ok', true, 'cleared', true);
+  end if;
+  if p_target_xp is null or p_target_xp <= 0 or p_target_xp > 10000000 then
+    return jsonb_build_object('ok', false, 'reason', 'bad_target');
+  end if;
+
+  select coalesce(sum(xp), 0) into v_total from kids where family_id = v_family;
+  select * into v_goal from family_goals where family_id = v_family for update;
+
+  if p_start_xp is not null then
+    if found then
+      -- Theirs stands. Touch it so the phone that sent this is sent it back.
+      update family_goals set name = name where family_id = v_family;
+      return jsonb_build_object('ok', true, 'kept', true);
+    end if;
+    insert into family_goals (family_id, name, target_xp, start_xp)
+    values (v_family, v_name, p_target_xp, least(greatest(p_start_xp, 0), v_total));
+    return jsonb_build_object('ok', true);
+  end if;
+
+  if found and btrim(v_goal.name) = v_name then
+    update family_goals set target_xp = p_target_xp where family_id = v_family;
+  else
+    insert into family_goals (family_id, name, target_xp, start_xp, created_at)
+    values (v_family, v_name, p_target_xp, v_total, now())
+    on conflict (family_id) do update
+      set name = excluded.name, target_xp = excluded.target_xp,
+          start_xp = excluded.start_xp, created_at = excluded.created_at;
+  end if;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke all on function set_family_goal(text, int, int) from public, anon, authenticated;
+grant execute on function set_family_goal(text, int, int) to authenticated;
+
+/**
  * Everything this family's devices need, limited to what changed since `p_since`.
  *
  * Row level security still applies inside this function because it is NOT
@@ -145,29 +364,21 @@ begin
     'families',    coalesce((select jsonb_agg(to_jsonb(f)) from families f    where f.rev > cutoff), '[]'::jsonb),
     'kids',        coalesce((select jsonb_agg(to_jsonb(k)) from kids k        where k.rev > cutoff), '[]'::jsonb),
     'quests',      coalesce((select jsonb_agg(to_jsonb(q)) from quests q      where q.rev > cutoff), '[]'::jsonb),
-    /*
-     * WITHOUT the photograph, which is 96% of this payload when one is in it.
-     *
-     * A 720px proof photo is about 60KB, and 80KB once it is base64. Carrying
-     * it here sent it to every device on every delivery: to the parent, who
-     * needs it; to the CHILD'S OWN PHONE, which took it and already has it;
-     * and two or three times over, because the cursor deliberately lags so
-     * that nothing committed late is stepped over. One photo crossed the wire
-     * roughly five times to be looked at once.
-     *
-     * The flag is all a device needs to know it should go and fetch one. See
-     * submission_photo below, which hands over exactly one, to exactly the
-     * device that is going to draw it.
-     */
+    -- The family id is the device's already; the row is smaller without it.
     'submissions', coalesce((
-      select jsonb_agg(to_jsonb(s) - 'photo_data'
-                       || jsonb_build_object('has_photo', s.photo_data is not null))
+      select jsonb_agg(to_jsonb(s) - 'family_id')
         from submissions s where s.rev > cutoff), '[]'::jsonb),
     'rewards',     coalesce((select jsonb_agg(to_jsonb(r)) from rewards r     where r.rev > cutoff), '[]'::jsonb),
     'redemptions', coalesce((select jsonb_agg(to_jsonb(r)) from redemptions r where r.rev > cutoff), '[]'::jsonb),
     'notes',       coalesce((select jsonb_agg(to_jsonb(n)) from notes n       where n.rev > cutoff), '[]'::jsonb),
     'overrides',   coalesce((select jsonb_agg(to_jsonb(o)) from overrides o   where o.rev > cutoff), '[]'::jsonb),
-    'deletions',   coalesce((select jsonb_agg(to_jsonb(d)) from deletions d   where d.rev > cutoff), '[]'::jsonb)
+    'family_goals', family_goal_since(cutoff),
+    -- The children's own themes (Theme Genesis, below). A child sees their own.
+    'kid_themes',  coalesce((select jsonb_agg(to_jsonb(t) - 'family_id') from kid_themes t where t.rev > cutoff), '[]'::jsonb),
+    -- Only what a device reads from a tombstone.
+    'deletions',   coalesce((select jsonb_agg(jsonb_build_object('rev', d.rev, 'table_name', d.table_name,
+                                                                 'row_id', d.row_id))
+                               from deletions d where d.rev > cutoff), '[]'::jsonb)
   );
 end $$;
 
@@ -180,38 +391,9 @@ grant execute on function family_snapshot(bigint) to authenticated;
 -- photos included, to read a single field off the front.
 grant execute on function current_family_id() to authenticated;
 
--- Photo proof.
---
--- The photo travels as base64 in this column, which keeps the loop working
--- across devices without a second service to set up. It no longer bloats the
--- snapshot: family_snapshot returns a flag and submission_photo hands the
--- image over on its own, once, to the device that will draw it.
---
--- Supabase Storage is still the better long-term home — it would keep the
--- bytes out of Postgres entirely and let a CDN serve them — but the thing that
--- made it urgent was the bandwidth, and that is dealt with. See docs/SYNC.md.
-alter table submissions add column if not exists photo_data text;
-alter table submissions add column if not exists photo_deleted_at timestamptz;
-
-/**
- * One proof photograph, for the device that is about to show it.
- *
- * Not security definer: row level security decides. A parent can read their
- * own family's submissions and a child can read their own, and this function
- * inherits exactly that — there is no new way in here, only a narrower way to
- * ask for something the caller could already see.
- *
- * Returns null rather than raising for a photo that is gone. Approving or
- * sending back a chore destroys the image at that moment, so "no longer there"
- * is the normal end state for every photo in the system, not an error.
- */
-create or replace function submission_photo(p_submission_id uuid)
-returns text
-language sql stable as $$
-  select photo_data from submissions where id = p_submission_id;
-$$;
-
-grant execute on function submission_photo(uuid) to authenticated;
+-- RankUp takes no photos. submission_photo handed one proof photo to the
+-- device about to draw it; there are none, and nothing asks for one.
+drop function if exists submission_photo(uuid);
 
 
 -- ---------------------------------------------------------------------------
@@ -265,21 +447,22 @@ begin
   end if;
 
   insert into submissions (
-    id, family_id, quest_id, kid_id, photo_hash, photo_data, capture_source,
-    note, test_score, elapsed_ms, on_time, ai_verdict, ai_score, ai_report, status
+    id, family_id, quest_id, kid_id,
+    note, test_score, elapsed_ms, on_time, status
   ) values (
     p_submission_id, v_family, p_quest_id, p_kid_id,
-    -- No photograph is ever stored: RankUp takes none. A phone running an
-    -- older version may still send one, and it is dropped here.
-    null, null,
-    coalesce(p_payload->>'capture_source', 'none'),
+    -- Only what is read below is kept. A phone running an older version may
+    -- still send a photo, a capture source or a photo check in the payload;
+    -- RankUp takes no photos, and those keys are ignored.
     coalesce(p_payload->>'note', ''),
-    nullif(p_payload->>'test_score', '')::int,
-    nullif(p_payload->>'elapsed_ms', '')::int,
+    -- A score is a percentage. Held to 0..100 rather than refused, so a
+    -- typo like 999 from an older phone does not bounce the whole chore.
+    -- Read as a numeric first, so a number too big for an int is held to
+    -- the range too instead of failing the whole chore.
+    least(100, greatest(0, nullif(p_payload->>'test_score', '')::numeric))::int,
+    -- How long it took: a day at most, which is longer than any timer.
+    least(86400000, greatest(0, nullif(p_payload->>'elapsed_ms', '')::numeric))::int,
     coalesce((p_payload->>'on_time')::boolean, true),
-    p_payload->>'ai_verdict',
-    nullif(p_payload->>'ai_score', '')::int,
-    p_payload->'ai_report',
     'pending'
   ) on conflict (id) do nothing;
 
@@ -340,12 +523,82 @@ begin
 end $$;
 revoke execute on function keep_rpc_receipt(uuid, uuid, text, jsonb) from public, anon, authenticated;
 
+/*
+ * How long a round of each game takes at the very least, in milliseconds,
+ * to score 100: a full-length timed game, or the quickest a perfect round
+ * could physically be played (the moves it needs, and the pauses the game
+ * itself puts between them). Generous on purpose, well under any real
+ * player: what this stops is a score sent straight to the server, or a
+ * round "finished" seconds after it began, not a quick child.
+ *
+ * A score is only possible in proportion to the time played: half the time
+ * buys at most 50. Mirrored as `minMs` on each game in src/data/minigames.js;
+ * tests/gameids.mjs fails if the two disagree. Null is a game that does not
+ * exist.
+ */
+create or replace function minigame_floor_ms(p_game text) returns int
+language sql immutable as $$
+  select case p_game
+    -- Timed: the round ends when the clock does.
+    when 'turbo'     then 70000   -- 75 seconds of football
+    when 'catch'     then 28000   -- 30 seconds of catching
+    -- Long climbs.
+    when 'merge'     then 60000   -- hundreds of moves to reach 2048
+    when 'tennis'    then 30000   -- a match, best of three sets
+    when 'sky'       then 15000   -- every gate, at the game's own speed
+    -- Rounds the game paces itself, with pauses between hands or turns.
+    when 'holdem'    then 8000    -- five hands, two seconds between each
+    when 'blackjack' then 8000    -- six hands, over a second and a half apart
+    when 'chain'     then 8000    -- ten playbacks of a growing sequence
+    when 'blocks'    then 8000    -- ten lines is at least 25 pieces
+    when 'bricks'    then 8000    -- thirty-five bricks off one ball
+    when 'slide'     then 8000    -- a scrambled 4x4 puzzle put back
+    when 'snake'     then 6000    -- twenty-two apples, each a few moves away
+    when 'track'     then 10000
+    when 'sweets'    then 10000
+    when 'sports'    then 5000
+    when 'royal'     then 5000    -- five hands, deal and draw
+    when 'wildfire'  then 5000    -- seven cards played, with turns between
+    when 'gofish'    then 5000
+    when 'memory'    then 4000    -- sixteen flips
+    when 'stack'     then 3000    -- twelve rows
+    when 'impostor'  then 3000    -- three meetings
+    when 'four'      then 3000    -- four in a row needs four moves
+    when 'sweeper'   then 2000
+    when 'lights'    then 1500
+  end
+$$;
+
+/*
+ * The best score a round of this game could have reached in this long.
+ * Without a length of time (a phone too old to send one) at most 50: such a
+ * phone is still paid, just never the top of the scale on its word alone.
+ */
+create or replace function minigame_possible_score(p_game text, p_elapsed_ms int) returns int
+language sql immutable as $$
+  select case
+    when minigame_floor_ms(p_game) is null then 0
+    when p_elapsed_ms is null then 50
+    else least(100, floor(100.0 * greatest(0, p_elapsed_ms) / minigame_floor_ms(p_game)))::int
+  end
+$$;
+
 drop function if exists play_minigame(uuid, text, int);
+-- Gained p_tz; the old signature has to go or the two would sit side by side.
+drop function if exists play_minigame(uuid, text, int, uuid);
+-- Gained p_elapsed_ms, for the same reason.
+drop function if exists play_minigame(uuid, text, int, uuid, text);
 create or replace function play_minigame(
   p_kid_id uuid,
   p_game   text,
   p_score  int,
-  p_request_id uuid default null
+  p_request_id uuid default null,
+  -- The phone's time zone: the daily cap resets on the family's day, which
+  -- is the day the phone shows. See family_today.
+  p_tz text default null,
+  -- How long the round lasted on the phone. A score is held to what the game
+  -- allows in that time (minigame_possible_score).
+  p_elapsed_ms int default null
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -356,6 +609,8 @@ declare
   v_today  int;
   v_best   int;
   v_prior  jsonb;
+  v_day    date;
+  v_held   boolean;
 begin
   select * into v_kid from kids where id = p_kid_id for update;
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
@@ -394,11 +649,16 @@ begin
   end if;
 
   -- A score arriving from a phone is a claim, not a fact. Clamping it is what
-  -- stops "I scored 4 billion" from being worth anything.
+  -- stops "I scored 4 billion" from being worth anything; holding it to what
+  -- this game allows in the time played is what stops "100" sent a second
+  -- after the game opened, or sent with no game played at all.
   v_score := greatest(0, least(100, coalesce(p_score, 0)));
+  v_held  := v_score > minigame_possible_score(p_game, p_elapsed_ms);
+  if v_held then v_score := minigame_possible_score(p_game, p_elapsed_ms); end if;
 
-  -- Reset the day's tally when the date rolls over.
-  v_today := case when v_kid.game_day = current_date then v_kid.game_coins_today else 0 end;
+  -- Reset the day's tally when the family's date rolls over.
+  v_day   := family_today(v_kid.family_id, p_tz);
+  v_today := case when v_kid.game_day >= v_day then v_kid.game_coins_today else 0 end;
 
   v_wanted := greatest(1, least(5, round(v_score / 20.0)::int));
   v_paid   := greatest(0, least(v_wanted, 15 - v_today));
@@ -408,24 +668,28 @@ begin
   update kids
      set play_tokens      = play_tokens - 1,
          coins            = coins + v_paid,
-         game_day         = current_date,
+         game_day         = greatest(v_day, coalesce(v_kid.game_day, v_day)),
          game_coins_today = v_today + v_paid,
          best_scores      = coalesce(best_scores, '{}'::jsonb) || jsonb_build_object(p_game, v_best)
    where id = p_kid_id;
 
   insert into events (family_id, kid_id, type, meta)
   values (v_kid.family_id, p_kid_id, 'minigame_played',
-          jsonb_build_object('game', p_game, 'score', v_score, 'coins', v_paid));
+          jsonb_build_object('game', p_game, 'score', v_score, 'coins', v_paid, 'held', v_held));
 
   return keep_rpc_receipt(p_request_id, p_kid_id, 'play_minigame', jsonb_build_object(
     'ok', true, 'coins', v_paid, 'score', v_score, 'best', v_best,
     'capped', v_paid < v_wanted,
+    -- The score sent was more than this game allows in the time played.
+    'held', v_held,
     'tokens_left', v_kid.play_tokens - 1,
     'earned_today', v_today + v_paid
   ));
 end $$;
 
-grant execute on function play_minigame(uuid, text, int, uuid) to authenticated;
+grant execute on function play_minigame(uuid, text, int, uuid, text, int) to authenticated;
+grant execute on function minigame_floor_ms(text) to authenticated;
+grant execute on function minigame_possible_score(text, int) to authenticated;
 
 /** The parent sends work back to be redone. */
 create or replace function reject_submission(
@@ -437,6 +701,12 @@ declare v_sub submissions;
 begin
   select * into v_sub from submissions where id = p_submission_id for update;
   if not found then return jsonb_build_object('ok', false, 'reason', 'not_found'); end if;
+  -- Sent again because the phone never heard back: this parent already sent
+  -- it back. Not "decided on another device", and not a second redo.
+  if v_sub.status = 'rejected' and v_sub.decided_by is not null and v_sub.decided_by = (
+       select id from parents where user_id = auth.uid() and family_id = v_sub.family_id and role = 'parent') then
+    return jsonb_build_object('ok', true, 'repeat', true);
+  end if;
   if v_sub.status <> 'pending' then return jsonb_build_object('ok', false, 'reason', 'decided'); end if;
 
   if not exists (select 1 from parents where user_id = auth.uid() and family_id = v_sub.family_id
@@ -444,10 +714,11 @@ begin
     raise exception 'only a parent in this family can send work back';
   end if;
 
-  -- Same as approving: the photo goes the instant it has been looked at.
+  -- Who sent it back, as approve_submission records who accepted: the
+  -- parent's Chore history says which adult decided, and this was left empty.
   update submissions
      set status = 'rejected', decided_at = now(), parent_note = coalesce(p_note, ''),
-         photo_data = null, photo_deleted_at = now()
+         decided_by = (select id from parents where user_id = auth.uid() and family_id = v_sub.family_id)
    where id = p_submission_id;
 
   update quests
@@ -461,11 +732,43 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 
-/** The daily login bonus. Server-side so it genuinely cannot be claimed twice. */
-create or replace function claim_login_bonus(p_kid_id uuid, p_coins int default 5)
+/**
+ * A parent's note on a chore in its history: "did it without being asked",
+ * "we agreed to count this one". The only thing about a past chore that can
+ * be changed. What it paid, whether it was accepted, and when, are left alone:
+ * the XP has been spent, levelled and streaked on since, and the School
+ * League and Alliances have counted it, so changing them after the fact is
+ * not a correction but a second, hidden decision. The child can read the
+ * note, as they can read the rest of their own history.
+ */
+create or replace function set_history_note(p_submission_id uuid, p_note text)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_kid kids;
+declare v_sub submissions;
+begin
+  select * into v_sub from submissions where id = p_submission_id for update;
+  if not found or not exists (select 1 from parents where user_id = auth.uid()
+                                and family_id = v_sub.family_id and role = 'parent') then
+    -- Another family's chore says the same as one that does not exist.
+    return jsonb_build_object('ok', false, 'reason', 'not_found');
+  end if;
+  update submissions set history_note = left(trim(coalesce(p_note, '')), 300)
+   where id = p_submission_id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+revoke all on function set_history_note(uuid, text) from public, anon, authenticated;
+grant execute on function set_history_note(uuid, text) to authenticated;
+
+/** The daily login bonus. Server-side so it genuinely cannot be claimed twice. */
+-- Gained p_tz, the phone's time zone: see family_today.
+drop function if exists claim_login_bonus(uuid, int);
+create or replace function claim_login_bonus(p_kid_id uuid, p_coins int default 5, p_tz text default null)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_kid kids;
+  v_day date;
 begin
   select * into v_kid from kids where id = p_kid_id for update;
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
@@ -481,14 +784,17 @@ begin
     raise exception 'not allowed';
   end if;
 
-  if v_kid.last_login_bonus = current_date then
+  -- The family's day, which is the day the phone offers the bonus on. Later
+  -- than today only happens when a zone changes, and still counts as claimed.
+  v_day := family_today(v_kid.family_id, p_tz);
+  if v_kid.last_login_bonus >= v_day then
     return jsonb_build_object('ok', false, 'reason', 'already_claimed');
   end if;
 
   update kids
      -- Always five. The amount used to come from the request (capped at 50),
      -- so a child's device could ask for ten times the bonus.
-     set coins = coins + 5, last_login_bonus = current_date
+     set coins = coins + 5, last_login_bonus = v_day
    where id = p_kid_id;
   return jsonb_build_object('ok', true);
 end $$;
@@ -502,15 +808,25 @@ end $$;
  * runs this and the app's version over every combination and fails if they
  * ever disagree.
  *
- * `p_last` is the day the chore was last finished or last came back. A chore
- * that is not finished is never due: the child still owes it, and bringing it
- * back would quietly wipe a send-back a parent had just written.
+ * `p_last` is the day the chore was last finished or last came back, whichever
+ * is later. A chore that is not finished is never due: the child still owes
+ * it, and bringing it back would quietly wipe a send-back a parent had just
+ * written.
+ *
+ * `p_week_day` is the family's chosen day for weekly chores (ISO: Monday 1 to
+ * Sunday 7). A weekly chore comes back on the first such day after it was
+ * finished. Without one it comes back seven days after it was finished.
+ *
+ * Gained p_week_day: the four-argument version is dropped so the two cannot
+ * both exist.
  */
+drop function if exists recurring_quest_due(text, text, date, date);
 create or replace function recurring_quest_due(
   p_recurrence text,
   p_status text,
   p_last date,
-  p_today date
+  p_today date,
+  p_week_day int default null
 ) returns boolean
 language sql immutable set search_path = public as $$
   select case
@@ -521,10 +837,37 @@ language sql immutable set search_path = public as $$
     -- Monday is 1 and Friday is 5 in ISO terms. A chore set for weekdays does
     -- not reappear on a Saturday, which is the entire point of the option.
     when p_recurrence = 'weekdays' then p_today > p_last and extract(isodow from p_today) between 1 and 5
+    when p_recurrence = 'weekly' and p_week_day between 1 and 7 then
+      -- The first chosen weekday strictly after the day it was finished.
+      p_today >= p_last + (case when ((p_week_day - extract(isodow from p_last)::int + 7) % 7) = 0 then 7
+                                else (p_week_day - extract(isodow from p_last)::int + 7) % 7 end)
     when p_recurrence = 'weekly'   then p_today >= p_last + 7
     else false
   end;
 $$;
+
+/*
+ * The day a family's weekly chores come back. Null keeps "seven days after it
+ * was done". Set by a parent through set_week_reset_day below.
+ */
+alter table families add column if not exists week_resets_on smallint
+  check (week_resets_on between 1 and 7);
+
+create or replace function set_week_reset_day(p_day int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_family uuid := current_family_id();
+begin
+  if v_family is null or not is_parent() then
+    return jsonb_build_object('ok', false, 'reason', 'not_parent');
+  end if;
+  if p_day is not null and (p_day < 1 or p_day > 7) then
+    return jsonb_build_object('ok', false, 'reason', 'bad_day');
+  end if;
+  update families set week_resets_on = p_day where id = v_family;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke all on function set_week_reset_day(int) from public, anon, authenticated;
+grant execute on function set_week_reset_day(int) to authenticated;
 
 /**
  * Bring back every repeating chore in the caller's family that is due.
@@ -570,14 +913,26 @@ begin
   exception when others then
     -- Not a zone Postgres knows. (Looking it up in pg_timezone_names first
     -- read the whole time zone database on every call.)
+    v_tz := 'UTC';
     v_today := (now() at time zone 'UTC')::date;
   end;
 
+  /*
+   * The day it was finished is the family's day, not the server's. A bare
+   * completed_at::date is the UTC date, so a chore approved on a Los Angeles
+   * evening counted as done "tomorrow" and then skipped the next day.
+   *
+   * And it is the later of that and the day it last came back: a daily chore
+   * that came back on Monday but was only done on Wednesday came straight
+   * back again on Wednesday, so it could be done and paid twice in one day.
+   */
   with due as (
     select q.id from quests q
      where q.family_id = v_family
        and recurring_quest_due(q.recurrence, q.status,
-                               coalesce(q.last_reset_on, q.completed_at::date), v_today)
+                               greatest(q.last_reset_on, (q.completed_at at time zone v_tz)::date),
+                               v_today,
+                               (select week_resets_on from families where id = v_family))
      for update
   ), reopened as (
     update quests q
@@ -596,7 +951,45 @@ begin
 end $$;
 
 grant execute on function reset_due_recurring_quests(text) to authenticated;
-revoke execute on function recurring_quest_due(text, text, date, date) from public;
+revoke execute on function recurring_quest_due(text, text, date, date, int) from public, anon, authenticated;
+
+/*
+ * When the child chose the theme they are on, as the server saw it.
+ *
+ * Block Craft's dragon fight counts only the chores after the fight began, and
+ * a fight begins no earlier than the moment the child chose Block Craft
+ * (src/lib/dragonFight.js). That moment lived only on the phone that made the
+ * choice, so the parent's phone, or a second phone for the same child, started
+ * the fight somewhere else and showed the dragon on different health. Kept
+ * here, and stamped by the database alone, every phone counts from the same
+ * moment.
+ *
+ * Added without a default first, so children who already exist keep a null
+ * (their phones fall back to the chore that took them to the dragon, which
+ * every phone agrees on) rather than all being stamped with the moment this
+ * file ran, which would restart every fight under way. New children get now().
+ * Safe to re-run.
+ */
+alter table kids add column if not exists theme_chosen_at timestamptz;
+alter table kids alter column theme_chosen_at set default now();
+
+create or replace function stamp_theme_chosen() returns trigger
+language plpgsql as $$
+begin
+  if tg_op = 'INSERT' then
+    new.theme_chosen_at := now();
+  elsif new.theme_id is distinct from old.theme_id then
+    new.theme_chosen_at := now();
+  else
+    -- Nobody sets this but the database, whatever a phone sends.
+    new.theme_chosen_at := old.theme_chosen_at;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists kids_stamp_theme_chosen on kids;
+create trigger kids_stamp_theme_chosen before insert or update on kids
+  for each row execute function stamp_theme_chosen();
 
 /**
  * A child changing how their own app looks.
@@ -651,7 +1044,8 @@ begin
          drop_selector = coalesce(p_drop_selector, drop_selector),
          -- An empty string means "take it off", which coalesce alone cannot say.
          skin_id       = case when p_skin_id = '' then null else coalesce(p_skin_id, skin_id) end,
-         avatar_hue    = coalesce(p_avatar_hue, avatar_hue)
+         -- A hue is an angle on the colour wheel.
+         avatar_hue    = coalesce(((p_avatar_hue % 360) + 360) % 360, avatar_hue)
    where id = p_kid_id;
 
   return jsonb_build_object('ok', true);
@@ -668,10 +1062,14 @@ grant execute on function set_kid_look(uuid, text, text, text, text, int) to aut
  * and the streak broke on the next pull, about eight seconds after the child
  * thought they had saved it.
  */
-create or replace function use_streak_freeze(p_kid_id uuid)
+-- Gained p_tz, the phone's time zone: see family_today.
+drop function if exists use_streak_freeze(uuid);
+create or replace function use_streak_freeze(p_kid_id uuid, p_tz text default null)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_kid kids;
+declare
+  v_kid kids;
+  v_day date;
 begin
   select * into v_kid from kids where id = p_kid_id for update;
   if not found then return jsonb_build_object('ok', false, 'reason', 'no_kid'); end if;
@@ -687,19 +1085,20 @@ begin
   end if;
   -- Already counted for today. Spending a token would buy nothing, and two
   -- taps on a slow connection must not cost two.
-  if v_kid.streak_last_day = current_date then
+  v_day := family_today(v_kid.family_id, p_tz);
+  if v_kid.streak_last_day >= v_day then
     return jsonb_build_object('ok', false, 'reason', 'already_safe');
   end if;
 
   update kids
      set streak_freezes = streak_freezes - 1,
-         streak_last_day = current_date
+         streak_last_day = v_day
    where id = p_kid_id;
 
   return jsonb_build_object('ok', true, 'freezes_left', v_kid.streak_freezes - 1);
 end $$;
 
-grant execute on function use_streak_freeze(uuid) to authenticated;
+grant execute on function use_streak_freeze(uuid, text) to authenticated;
 
 /** Spending currency on a reward. Checks the balance where it cannot be faked. */
 create or replace function redeem_reward(p_redemption_id uuid, p_reward_id uuid, p_kid_id uuid)
@@ -709,13 +1108,11 @@ declare
   v_kid kids;
   v_reward rewards;
 begin
+  -- The child's row is locked first and held to the end, so two phones
+  -- spending the same coins at once take turns: the second sees what the
+  -- first left, and is refused if that is not enough.
   select * into v_kid from kids where id = p_kid_id for update;
-  select * into v_reward from rewards where id = p_reward_id;
-  if v_kid is null or v_reward is null then
-    return jsonb_build_object('ok', false, 'reason', 'not_found');
-  end if;
-  -- A reward from another family would otherwise set the price here.
-  if v_reward.family_id is distinct from v_kid.family_id then
+  if v_kid is null then
     return jsonb_build_object('ok', false, 'reason', 'not_found');
   end if;
 
@@ -732,14 +1129,42 @@ begin
   -- Sent again because the phone never heard back: the redemption id is the
   -- request id. Charging first and then inserting "on conflict do nothing"
   -- took the coins a second time and recorded one redemption.
+  --
+  -- Asked before whether the reward still exists. A purchase that landed,
+  -- whose answer was lost, and whose reward a parent then deleted, used to be
+  -- answered "not found" on the retry: the phone gave the child their coins
+  -- back on screen and said so, while the server had (rightly) kept them.
   if exists (select 1 from redemptions where id = p_redemption_id) then
     if exists (select 1 from redemptions where id = p_redemption_id and kid_id = p_kid_id) then
       return jsonb_build_object('ok', true, 'repeat', true);
     end if;
     return jsonb_build_object('ok', false, 'reason', 'not_found');
   end if;
+
+  select * into v_reward from rewards where id = p_reward_id;
+  -- Deleted by a parent while this purchase was on its way (a child buying
+  -- offline, say). Nothing is charged, and the phone is told why.
+  if v_reward is null then
+    return jsonb_build_object('ok', false, 'reason', 'reward_gone');
+  end if;
+  -- A reward from another family would otherwise set the price here.
+  if v_reward.family_id is distinct from v_kid.family_id then
+    return jsonb_build_object('ok', false, 'reason', 'not_found');
+  end if;
   if v_kid.coins < v_reward.cost then
     return jsonb_build_object('ok', false, 'reason', 'insufficient');
+  end if;
+  -- A parent's limit on how often one child may take this reward: at most
+  -- weekly_limit in any seven days. Counted here, under the child's row lock
+  -- taken above, so two phones' purchases (one queued with no signal, one
+  -- made on the parent's phone) take turns and the second is refused rather
+  -- than both landing. Counted from when each purchase reached the server,
+  -- which is the only clock a child cannot set.
+  if v_reward.weekly_limit is not null and (
+       select count(*) from redemptions
+        where kid_id = p_kid_id and reward_id = p_reward_id
+          and created_at > now() - interval '7 days') >= v_reward.weekly_limit then
+    return jsonb_build_object('ok', false, 'reason', 'weekly_limit', 'limit', v_reward.weekly_limit);
   end if;
 
   update kids set coins = coins - v_reward.cost where id = p_kid_id;
@@ -776,7 +1201,7 @@ end $$;
 
 grant execute on function submit_quest(uuid, uuid, uuid, jsonb) to anon, authenticated;
 grant execute on function reject_submission(uuid, text) to authenticated;
-grant execute on function claim_login_bonus(uuid, int) to anon, authenticated;
+grant execute on function claim_login_bonus(uuid, int, text) to anon, authenticated;
 grant execute on function redeem_reward(uuid, uuid, uuid) to anon, authenticated;
 grant execute on function apply_currency_tax(uuid, int, uuid) to authenticated;
 
@@ -810,22 +1235,24 @@ begin
       'family_id', (select family_id from parents where user_id = auth.uid()));
   end if;
 
-  insert into families (name) values (coalesce(nullif(trim(p_family_name), ''), 'My family'))
+  -- Held to the columns' limits (see the end of schema.sql) rather than
+  -- refused: a long name should not stop a family being made.
+  insert into families (name) values (coalesce(nullif(left(trim(p_family_name), 100), ''), 'My family'))
   returning * into v_family;
 
   insert into parents (user_id, family_id, name)
-  values (auth.uid(), v_family.id, coalesce(nullif(trim(p_parent_name), ''), 'Parent'));
+  values (auth.uid(), v_family.id, coalesce(nullif(left(trim(p_parent_name), 100), ''), 'Parent'));
 
   /*
    * A fortnight of the real thing, with no card asked for.
    *
    * Nobody buys a chore app on a feature list. They buy it the first time
-   * their child photographs a made bed and it lands on their phone. Asking for
+   * their child taps "I did it!" on a made bed and it lands on their phone. Asking for
    * a card before that moment is asking someone to pay for a promise, and
    * almost nobody does.
    *
    * Elite rather than Standard, and deliberately: the parts worth paying for —
-   * the AI check on the photo, a second child, the behaviour charts — are the
+   * a second child, guilds, the behaviour charts — are the
    * parts that have to be felt during the fortnight, not read about after it.
    * What they fall back to is Starter, which is free and still runs the whole
    * loop, so the end of a trial is a smaller app rather than a locked one.
@@ -886,3 +1313,506 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 grant execute on function unlink_kid_device(uuid) to authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- Theme Genesis: a child's own themes, and the Seasons.
+--
+-- A child makes a theme of their own: a name, three colours, a background
+-- pattern, a mascot from a set, and names for the four worlds and the coins,
+-- laid over the structure of a built-in theme (src/data/themeGenesis.js). It
+-- is a look and some names, never a rule: nothing here touches XP, coins,
+-- streaks, rewards or unlocks.
+--
+--   kid_themes         the family's own themes. Synced like any row (rev,
+--                      tombstones, family_snapshot). A parent reads and writes
+--                      every one in the family; a child only their own.
+--                      Nobody outside the family, ever.
+--   theme_submissions  a theme a parent has agreed to send to RankUp for a
+--                      Season. Made only by submit_kid_theme, from the theme
+--                      itself; read only by the operator's page (service role).
+--   seasons,           the official Season themes, picked by the operator.
+--   season_themes      Readable by any signed-in account once the Season has
+--                      started, and not a moment before. They hold the theme
+--                      and its optional credit line, nothing about a family.
+--
+-- The word list and the lists of what a design may hold are the same as the
+-- app's (src/lib/kidWords.js, src/data/themeGenesis.js); tests/genesiswords.mjs
+-- fails if they drift apart.
+-- ---------------------------------------------------------------------------
+
+/** True when the text has none of the rude words. Mirrors wordsOk in src/lib/kidWords.js. */
+create or replace function kid_words_ok(p_text text) returns boolean
+language plpgsql immutable set search_path = public as $$
+declare
+  v_words text[] := array['arse', 'arsehole', 'ass', 'asses', 'asshole', 'bastard', 'bollocks', 'boobs', 'bugger',
+    'cock', 'cocks', 'crap', 'damn', 'dick', 'dickhead', 'dicks', 'fag', 'fags', 'kys', 'naked', 'nazi', 'nazis',
+    'nude', 'piss', 'pissed', 'prick', 'retard', 'retarded', 'sex', 'sexy', 'tit', 'tits', 'titty', 'hitler'];
+  v_parts text[] := array['bitch', 'cunt', 'dildo', 'fagg', 'fuck', 'nigg', 'penis', 'porn', 'pussy', 'shit',
+    'slut', 'twat', 'vagina', 'wank', 'whore'];
+  v_norm text;
+  v_word text;
+  v_squashed text;
+  v_collapsed text;
+  v_part text;
+begin
+  if p_text is null or p_text = '' then return true; end if;
+  -- Numbers and symbols people use for letters, read back as letters.
+  v_norm := translate(lower(p_text), '013457@$!', 'oieastasi');
+  foreach v_word in array regexp_split_to_array(v_norm, '[^a-z]+') loop
+    continue when v_word = '';
+    if v_word = any (v_words) or regexp_replace(v_word, '(.)\1+', '\1', 'g') = any (v_words) then
+      return false;
+    end if;
+  end loop;
+  v_squashed := regexp_replace(v_norm, '[^a-z]', '', 'g');
+  v_collapsed := regexp_replace(v_squashed, '(.)\1+', '\1', 'g');
+  foreach v_part in array v_parts loop
+    if position(v_part in v_squashed) > 0 or position(v_part in v_collapsed) > 0 then return false; end if;
+  end loop;
+  return true;
+end $$;
+
+/** A short plain name: 1 to p_max characters, no control characters or angle brackets, no rude words. */
+create or replace function kid_theme_name_ok(p_text text, p_max int) returns boolean
+language sql immutable set search_path = public as $$
+  select p_text is not null and length(trim(p_text)) between 1 and p_max
+     and p_text !~ '[[:cntrl:]<>]' and kid_words_ok(p_text);
+$$;
+
+/**
+ * A design holds only what Theme Genesis makes, from the app's own lists.
+ * Mirrors cleanDesign in src/data/themeGenesis.js.
+ */
+create or replace function kid_theme_design_ok(p_design jsonb) returns boolean
+language plpgsql immutable set search_path = public as $$
+declare v_world jsonb;
+begin
+  if p_design is null or jsonb_typeof(p_design) <> 'object' or length(p_design::text) > 700 then return false; end if;
+  if exists (select 1 from jsonb_object_keys(p_design) k
+              where k not in ('v', 'vibe', 'base', 'bg', 'a', 'a2', 'pat', 'mascot', 'cur', 'worlds')) then
+    return false;
+  end if;
+  if coalesce(p_design->>'vibe', '') not in ('space', 'ocean', 'jungle', 'candy', 'robots', 'new')
+     or coalesce(p_design->>'base', '') not in ('matrixblocks', 'aura', 'campfire', 'sugarrush', 'cybergrid', 'pegasus')
+     or coalesce(p_design->>'pat', '') not in ('stars', 'waves', 'leaves', 'dots', 'circuits', 'confetti', 'zigzag', 'bubbles',
+                                               'checkers', 'stripes', 'snow', 'hearts')
+     or coalesce(p_design->>'mascot', '') not in ('🚀', '🐬', '🐒', '🍭', '🤖', '🦄', '🦖', '🐉', '🐱', '🐶', '🦊', '🐼',
+                                                  '🐸', '🐙', '🦈', '🦁', '🐧', '👾', '⚡', '🌈', '⭐', '🍩', '🎮', '🏰',
+                                                  '🏎️', '⚽', '🏀', '⚾', '🏈', '🛹', '🌃', '🧱', '🦸', '🎸', '🦜', '🌋',
+                                                  '⛄', '🐪', '🎨', '🧪', '👻', '🐮', '🛸', '🏆', '🧁', '🦋', '🐢', '🧚',
+                                                  '🚂', '🐝', '🦉', '🐴', '🍕', '🚜', '🦀', '🐳')
+     or coalesce(p_design->>'bg', '') !~ '^#[0-9a-f]{6}$'
+     or coalesce(p_design->>'a', '') !~ '^#[0-9a-f]{6}$'
+     or coalesce(p_design->>'a2', '') !~ '^#[0-9a-f]{6}$'
+     or not kid_theme_name_ok(p_design->>'cur', 16)
+     or jsonb_typeof(p_design->'worlds') is distinct from 'array'
+     or jsonb_array_length(p_design->'worlds') <> 4 then
+    return false;
+  end if;
+  for v_world in select value from jsonb_array_elements(p_design->'worlds') loop
+    if jsonb_typeof(v_world) <> 'string' or not kid_theme_name_ok(v_world #>> '{}', 20) then return false; end if;
+  end loop;
+  return true;
+end $$;
+
+/**
+ * True when the text names no other company's game, league or brand.
+ * Mirrors brandsOk in src/lib/kidWords.js, with the same list
+ * (tests/genesiswords.mjs fails if they drift apart).
+ *
+ * Asked only when a theme is sent to RankUp for a Season (submit_kid_theme),
+ * because a Season theme can become an official RankUp theme in every
+ * family's picker. A family's own theme may be called what the rude-word
+ * filter allows, so the guard on kid_themes never asks this.
+ *
+ * Whole words and phrases only: the text is lower-cased, accents dropped,
+ * '&' read as "and", apostrophes removed and anything else made a space;
+ * then every run of one to four words, read run together, is looked up, so
+ * "Mine Craft" is caught and "Marvellous" is not. The server's alone: the
+ * browser roles cannot call it.
+ */
+create or replace function kid_brands_ok(p_text text) returns boolean
+language plpgsql immutable set search_path = public as $$
+declare
+  v_brands text[] := array['minecraft', 'fortnite', 'roblox', 'pokemon', 'pikachu', 'mario', 'super mario', 'mario kart', 'luigi',
+    'zelda', 'nintendo', 'playstation', 'xbox', 'gta', 'grand theft auto', 'call of duty', 'among us',
+    'fall guys', 'rocket league', 'fifa', 'ea fc', 'ea sports', 'madden', 'apex legends', 'overwatch',
+    'valorant', 'league of legends', 'clash royale', 'clash of clans', 'candy crush', 'angry birds', 'pac man',
+    'tetris', 'splatoon', 'animal crossing', 'brawl stars', 'subway surfers', 'geometry dash',
+    'five nights at freddys', 'fnaf', 'the sims', 'terraria', 'stumble guys', 'pubg', 'free fire',
+    'genshin impact', 'mortal kombat', 'street fighter', 'skylanders', 'stardew valley', 'sea of thieves',
+    'rainbow six', 'counter strike', 'red dead', 'poppy playtime', 'hello neighbor', 'donkey kong', 'smash bros',
+    'need for speed', 'forza', 'gran turismo', 'sega', 'f1', 'formula 1', 'formula one', 'nascar', 'indycar',
+    'nba', 'wnba', 'nfl', 'nhl', 'mlb', 'mls', 'wwe', 'ufc', 'premier league', 'champions league', 'la liga',
+    'uefa', 'olympics', 'wimbledon', 'super bowl', 'disney', 'pixar', 'marvel', 'avengers', 'dc comics',
+    'star wars', 'lego', 'legos', 'barbie', 'hot wheels', 'nerf', 'hello kitty', 'sanrio', 'nike', 'adidas',
+    'coca cola', 'pepsi', 'mcdonalds', 'youtube', 'tiktok', 'netflix', 'spongebob', 'paw patrol', 'peppa pig',
+    'bluey', 'harry potter', 'hogwarts', 'transformers', 'ferrari', 'lamborghini', 'red bull', 'mclaren',
+    'batman', 'spiderman', 'superman', 'shrek', 'my little pony', 'jurassic park', 'jurassic world', 'ninjago',
+    'scooby doo'];
+  v_joined text[];
+  v_norm text;
+  v_tokens text[];
+  v_n int;
+  v_i int;
+begin
+  if p_text is null or p_text = '' then return true; end if;
+  v_norm := translate(lower(p_text), 'àáâãäåèéêëìíîïòóôõöùúûüýÿñçÀÁÂÃÄÅÈÉÊËÌÍÎÏÒÓÔÕÖÙÚÛÜÝÑÇ',
+                      'aaaaaaeeeeiiiiooooouuuuyyncaaaaaaeeeeiiiiooooouuuuync');
+  v_norm := regexp_replace(replace(v_norm, '&', ' and '), '[''’]', '', 'g');
+  v_norm := trim(regexp_replace(v_norm, '[^a-z0-9]+', ' ', 'g'));
+  if v_norm = '' then return true; end if;
+  v_tokens := string_to_array(v_norm, ' ');
+  select array_agg(replace(b, ' ', '')) into v_joined from unnest(v_brands) b;
+  for v_n in 1..4 loop
+    for v_i in 1..(cardinality(v_tokens) - v_n + 1) loop
+      if array_to_string(v_tokens[v_i:v_i + v_n - 1], '') = any (v_joined) then return false; end if;
+    end loop;
+  end loop;
+  return true;
+end $$;
+revoke execute on function kid_brands_ok(text) from public, anon, authenticated;
+
+create table if not exists kid_themes (
+  id            uuid primary key default gen_random_uuid(),
+  family_id     uuid not null references families(id) on delete cascade,
+  kid_id        uuid not null references kids(id) on delete cascade,
+  name          text not null,
+  design        jsonb not null,
+  status        text not null default 'draft' check (status in ('draft', 'ready')),
+  -- The child asking a parent: to wear it (on their own phone, where the
+  -- theme lock needs a parent), or to send it to RankUp for a Season.
+  use_ask       boolean not null default false,
+  send_ask      boolean not null default false,
+  -- Written only by the server: when a parent sent it, and the Season it was
+  -- picked for. The guard below keeps a browser's copy of these out.
+  sent_at       timestamptz,
+  picked_season int,
+  created_at    timestamptz not null default now(),
+  rev           bigint not null default nextval('sync_rev')
+);
+create index if not exists kid_themes_sync_idx on kid_themes (family_id, rev);
+create index if not exists kid_themes_kid_idx on kid_themes (kid_id);
+alter table kid_themes enable row level security;
+
+drop policy if exists kid_themes_read on kid_themes;
+create policy kid_themes_read on kid_themes
+  for select using (family_id = (select current_family_id())
+                    and ((select is_parent()) or kid_id = (select current_kid_id())));
+drop policy if exists kid_themes_write on kid_themes;
+create policy kid_themes_write on kid_themes
+  for all using (family_id = (select current_family_id())
+                 and ((select is_parent()) or kid_id = (select current_kid_id())))
+  with check (family_id = (select current_family_id()) and kid_in_caller_family(kid_id)
+              and ((select is_parent()) or kid_id = (select current_kid_id())));
+
+drop trigger if exists kid_themes_rev on kid_themes;
+create trigger kid_themes_rev before update on kid_themes for each row execute function bump_rev();
+drop trigger if exists kid_themes_deleted on kid_themes;
+create trigger kid_themes_deleted after delete on kid_themes for each row execute function record_deletion();
+
+/*
+ * What a browser may write to a theme, and how many a child may keep.
+ *
+ * The look, the names, finished or not, and the two requests. Never when it
+ * was sent or what Season it was picked for (the server's), never moved to
+ * another child or family, never more than five a child, and never a name
+ * with a rude word in it. A refused write raises, so the phone that sent it
+ * drops it and fetches the family afresh.
+ */
+create or replace function guard_kid_theme() returns trigger
+language plpgsql as $$
+declare
+  v_trusted boolean := current_user = (select tableowner from pg_tables where schemaname = 'public' and tablename = 'kid_themes')
+                       or current_user = 'service_role'
+                       or (select rolsuper from pg_roles where rolname = current_user);
+begin
+  if not v_trusted then
+    if tg_op = 'INSERT' then
+      new.sent_at := null; new.picked_season := null;
+    else
+      new.sent_at := old.sent_at; new.picked_season := old.picked_season;
+      new.family_id := old.family_id; new.kid_id := old.kid_id; new.created_at := old.created_at;
+    end if;
+  end if;
+  new.name := regexp_replace(trim(new.name), '\s+', ' ', 'g');
+  if not kid_theme_name_ok(new.name, 24) then raise exception 'kid_theme_name'; end if;
+  if not kid_theme_design_ok(new.design) then raise exception 'kid_theme_design'; end if;
+  if tg_op = 'INSERT' then
+    -- One at a time per child, so two phones saving at once cannot make six.
+    perform pg_advisory_xact_lock(hashtext('kid_themes:' || new.kid_id::text));
+    if (select count(*) from kid_themes where kid_id = new.kid_id) >= 5 then
+      raise exception 'kid_theme_limit';
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists kid_themes_guard on kid_themes;
+create trigger kid_themes_guard before insert or update on kid_themes
+  for each row execute function guard_kid_theme();
+
+/*
+ * A theme removed while a child is wearing it: they go back to the built-in
+ * theme it was made from, on every phone, with nothing about their progress
+ * moved. Runs as the owner because a child (removing their own theme) cannot
+ * write the kids row.
+ */
+create or replace function kid_theme_gone() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if exists (select 1 from families where id = old.family_id) then
+    update kids set theme_id = coalesce(old.design->>'base', 'matrixblocks')
+     where family_id = old.family_id and theme_id = 'custom-' || old.id::text;
+  end if;
+  return old;
+end $$;
+revoke execute on function kid_theme_gone() from public, anon, authenticated;
+drop trigger if exists kid_themes_gone on kid_themes;
+create trigger kid_themes_gone after delete on kid_themes for each row execute function kid_theme_gone();
+
+/* ---------- the Seasons ---------- */
+
+create table if not exists seasons (
+  id         uuid primary key default gen_random_uuid(),
+  number     int not null unique check (number between 1 and 999),
+  name       text not null check (length(name) between 1 and 40),
+  starts_on  date not null,
+  created_at timestamptz not null default now()
+);
+alter table seasons enable row level security;
+-- Official, the same for every family, and secret until the day it starts.
+drop policy if exists seasons_read on seasons;
+create policy seasons_read on seasons
+  for select to authenticated using (starts_on <= (now() at time zone 'utc')::date);
+
+create table if not exists theme_submissions (
+  id              uuid primary key default gen_random_uuid(),
+  family_id       uuid not null references families(id) on delete cascade,
+  kid_id          uuid not null references kids(id) on delete cascade,
+  -- The theme it was sent from, to tell the family if it is picked. No
+  -- foreign key: the family may delete their copy, and what was sent stays.
+  source_theme_id uuid,
+  -- The theme itself, built by submit_kid_theme from the theme row: its
+  -- name and design, and nothing else.
+  payload         jsonb not null,
+  credit          text check (credit is null or length(credit) <= 20),
+  status          text not null default 'new' check (status in ('new', 'picked', 'declined')),
+  season_id       uuid references seasons(id) on delete set null,
+  created_at      timestamptz not null default now(),
+  decided_at      timestamptz
+);
+create index if not exists theme_submissions_kid_idx on theme_submissions (kid_id, created_at);
+alter table theme_submissions enable row level security;
+-- No policy at all: only the server reads or writes it.
+revoke all on theme_submissions from public, anon, authenticated;
+
+create table if not exists season_themes (
+  id            uuid primary key default gen_random_uuid(),
+  season_id     uuid not null references seasons(id) on delete cascade,
+  submission_id uuid references theme_submissions(id) on delete set null,
+  name          text not null check (length(name) between 1 and 24),
+  design        jsonb not null check (length(design::text) <= 700),
+  credit        text check (credit is null or length(credit) <= 20),
+  created_at    timestamptz not null default now()
+);
+alter table season_themes enable row level security;
+drop policy if exists season_themes_read on season_themes;
+create policy season_themes_read on season_themes
+  for select to authenticated using (
+    exists (select 1 from seasons s where s.id = season_id and s.starts_on <= (now() at time zone 'utc')::date));
+
+/*
+ * A family leaving (or a child deleted) takes everything they sent with it.
+ * A theme already in a Season stays there for the families playing it, but
+ * its credit line goes: it reads "by a RankUp family" from then on.
+ */
+create or replace function season_theme_uncredit() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  update season_themes set credit = null, submission_id = null where submission_id = old.id;
+  return old;
+end $$;
+revoke execute on function season_theme_uncredit() from public, anon, authenticated;
+drop trigger if exists theme_submissions_uncredit on theme_submissions;
+create trigger theme_submissions_uncredit before delete on theme_submissions
+  for each row execute function season_theme_uncredit();
+
+/*
+ * A parent sends a child's finished theme to RankUp for a Season.
+ *
+ * What is sent is built here, from the theme row, field by field: its name
+ * and the design's colours, pattern, mascot, vibe, base and the names of its
+ * worlds and coins. Nothing about the child or the family goes into it. The
+ * credit is the parent's to give, a first name or nickname in letters only,
+ * or nothing ("by a RankUp family"). The words are checked again here, no
+ * name in it may be another company's game, league or brand (kid_brands_ok;
+ * the credit is a person's name, so it is not held to that), and each child
+ * may send one theme a calendar month (UTC).
+ */
+create or replace function submit_kid_theme(p_theme_id uuid, p_credit text default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_theme  kid_themes;
+  v_credit text := nullif(regexp_replace(trim(coalesce(p_credit, '')), '\s+', ' ', 'g'), '');
+  v_design jsonb;
+begin
+  select * into v_theme from kid_themes where id = p_theme_id;
+  if not found or v_theme.family_id is distinct from current_family_id() or not is_parent() then
+    return jsonb_build_object('ok', false, 'reason', 'not_allowed');
+  end if;
+  if v_theme.status <> 'ready' then
+    return jsonb_build_object('ok', false, 'reason', 'not_ready');
+  end if;
+  if v_theme.sent_at is not null then
+    return jsonb_build_object('ok', false, 'reason', 'already_sent');
+  end if;
+  if v_credit is not null and (length(v_credit) > 20 or v_credit !~ '^[[:alpha:]][[:alpha:] .''-]*$') then
+    return jsonb_build_object('ok', false, 'reason', 'bad_credit');
+  end if;
+  if not kid_theme_name_ok(v_theme.name, 24) or not kid_theme_design_ok(v_theme.design) or not kid_words_ok(v_credit) then
+    return jsonb_build_object('ok', false, 'reason', 'words');
+  end if;
+  if not kid_brands_ok(v_theme.name) or not kid_brands_ok(v_theme.design->>'cur')
+     or exists (select 1 from jsonb_array_elements_text(v_theme.design->'worlds') w where not kid_brands_ok(w)) then
+    return jsonb_build_object('ok', false, 'reason', 'brand');
+  end if;
+  perform pg_advisory_xact_lock(hashtext('theme_submissions:' || v_theme.kid_id::text));
+  if exists (select 1 from theme_submissions
+              where kid_id = v_theme.kid_id
+                and created_at >= date_trunc('month', now() at time zone 'utc') at time zone 'utc') then
+    return jsonb_build_object('ok', false, 'reason', 'limit');
+  end if;
+  v_design := jsonb_build_object(
+    'v', 1, 'vibe', v_theme.design->'vibe', 'base', v_theme.design->'base', 'bg', v_theme.design->'bg',
+    'a', v_theme.design->'a', 'a2', v_theme.design->'a2', 'pat', v_theme.design->'pat',
+    'mascot', v_theme.design->'mascot', 'cur', v_theme.design->'cur', 'worlds', v_theme.design->'worlds');
+  insert into theme_submissions (family_id, kid_id, source_theme_id, payload, credit)
+  values (v_theme.family_id, v_theme.kid_id, v_theme.id,
+          jsonb_build_object('name', v_theme.name, 'design', v_design), v_credit);
+  update kid_themes set sent_at = now(), send_ask = false where id = v_theme.id;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke all on function submit_kid_theme(uuid, text) from public, anon, authenticated;
+grant execute on function submit_kid_theme(uuid, text) to authenticated;
+
+/**
+ * The Seasons that have started, with their themes, for every family. Not
+ * security definer: row level security decides, so a Season is invisible
+ * until its first day. The app asks once an hour.
+ */
+-- One pass over each table, grouped, rather than a query per Season: the
+-- planner priced the per-Season version high enough to compile it (JIT) on
+-- every call, 200 ms each for a handful of rows.
+create or replace function live_seasons() returns jsonb
+language sql stable set search_path = public as $$
+  with themes as (
+    select t.season_id,
+           jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name, 'design', t.design, 'credit', t.credit)
+                     order by t.created_at, t.id) as list
+      from season_themes t group by t.season_id)
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'number', s.number, 'name', s.name, 'starts_on', s.starts_on,
+           'themes', coalesce(themes.list, '[]'::jsonb)) order by s.number), '[]'::jsonb)
+    from seasons s left join themes on themes.season_id = s.id;
+$$;
+revoke all on function live_seasons() from public, anon, authenticated;
+grant execute on function live_seasons() to authenticated;
+
+/*
+ * The operator's inbox (api/operator-themes.js, with the service role,
+ * behind OPERATOR_SECRET). Each submission is its theme, its credit line,
+ * the month it came in and what was decided: no family, no child, no id
+ * that leads to either.
+ */
+create or replace function operator_theme_inbox() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'submissions', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', ts.id, 'month', to_char(ts.created_at at time zone 'utc', 'YYYY-MM'),
+               'name', ts.payload->>'name', 'design', ts.payload->'design', 'credit', ts.credit,
+               'status', ts.status, 'season', se.number, 'created_at', ts.created_at)
+             order by ts.created_at desc)
+        from theme_submissions ts left join seasons se on se.id = ts.season_id), '[]'::jsonb),
+    'seasons', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', s.id, 'number', s.number, 'name', s.name, 'starts_on', s.starts_on,
+               'live', s.starts_on <= (now() at time zone 'utc')::date,
+               'themes', (select count(*) from season_themes t where t.season_id = s.id))
+             order by s.number desc)
+        from seasons s), '[]'::jsonb));
+$$;
+revoke execute on function operator_theme_inbox() from public, anon, authenticated;
+
+/** The operator names the next Season and the day it starts. */
+create or replace function operator_create_season(p_number int, p_name text, p_starts_on date)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  if p_number is null or p_number not between 1 and 999 or p_starts_on is null
+     or length(trim(coalesce(p_name, ''))) not between 1 and 40 then
+    return jsonb_build_object('ok', false, 'reason', 'bad_season');
+  end if;
+  if exists (select 1 from seasons where number = p_number) then
+    return jsonb_build_object('ok', false, 'reason', 'season_exists');
+  end if;
+  insert into seasons (number, name, starts_on) values (p_number, trim(p_name), p_starts_on) returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end $$;
+revoke execute on function operator_create_season(int, text, date) from public, anon, authenticated;
+
+/*
+ * "Pick for next Season": the theme joins a Season that has not started yet,
+ * as official data every family's app reads on the first day (no deploy), and
+ * the family it came from is told in the app by their own theme row.
+ */
+create or replace function operator_pick_theme(p_submission_id uuid, p_season_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_sub theme_submissions; v_season seasons;
+begin
+  select * into v_sub from theme_submissions where id = p_submission_id for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_submission'); end if;
+  if v_sub.status = 'picked' then return jsonb_build_object('ok', false, 'reason', 'already_picked'); end if;
+  select * into v_season from seasons where id = p_season_id;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_season'); end if;
+  if v_season.starts_on <= (now() at time zone 'utc')::date then
+    return jsonb_build_object('ok', false, 'reason', 'season_started');
+  end if;
+  insert into season_themes (season_id, submission_id, name, design, credit)
+  values (v_season.id, v_sub.id, v_sub.payload->>'name', v_sub.payload->'design', v_sub.credit);
+  update theme_submissions set status = 'picked', season_id = v_season.id, decided_at = now() where id = v_sub.id;
+  update kid_themes set picked_season = v_season.number where id = v_sub.source_theme_id;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke execute on function operator_pick_theme(uuid, uuid) from public, anon, authenticated;
+
+/** "Decline": not this time. Kept 90 days, then deleted by run_retention. */
+create or replace function operator_decline_theme(p_submission_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_status text;
+begin
+  select status into v_status from theme_submissions where id = p_submission_id for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_submission'); end if;
+  if v_status = 'picked' then return jsonb_build_object('ok', false, 'reason', 'already_picked'); end if;
+  update theme_submissions set status = 'declined', decided_at = now() where id = p_submission_id;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke execute on function operator_decline_theme(uuid) from public, anon, authenticated;
+
+/** "Remove": gone now, and out of any Season it was picked for. */
+create or replace function operator_remove_theme(p_submission_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from theme_submissions where id = p_submission_id) then
+    return jsonb_build_object('ok', false, 'reason', 'no_submission');
+  end if;
+  delete from season_themes where submission_id = p_submission_id;
+  delete from theme_submissions where id = p_submission_id;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke execute on function operator_remove_theme(uuid) from public, anon, authenticated;
+
+-- kid_words_ok, kid_theme_name_ok and kid_theme_design_ok stay callable: the
+-- guard above runs as the browser that is writing, and asks them. They read
+-- nothing and write nothing, so there is nothing to keep from anybody.

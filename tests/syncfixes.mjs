@@ -241,6 +241,11 @@ ok('an already-claimed bonus changes nothing and says nothing',
   reducer(calm, { type: 'RPC_REFUSED', fn: 'claim_login_bonus', reason: 'already_claimed' }) === calm)
 ok('a decision made on another phone is described as that',
   /another device/.test(reducer(calm, { type: 'RPC_REFUSED', fn: 'approve_submission', reason: 'decided' }).syncNotice?.message || ''))
+// approve_submission raises rather than answering { ok: false }, so what
+// arrives is the database's own words. Two parents accepting the same chore
+// is the ordinary way to get here.
+ok('so is the error approve_submission actually raises',
+  /another device/.test(reducer(calm, { type: 'RPC_REFUSED', fn: 'approve_submission', reason: 'submission already decided' }).syncNotice?.message || ''))
 
 console.log('\n=== Second review: waiting for a sign-in never gives a write up ===')
 reset()
@@ -251,6 +256,72 @@ Date.now = () => realNow2() + 3 * 24 * 3600 * 1000
 const verdict = fail2(parked.id, { retryable: true, auth: true })
 Date.now = realNow2
 ok('three days of 401s and it is still queued', !verdict.dead && readOutbox().length === 1)
+
+/*
+ * The level-up celebration is "the moment the whole loop is built around", and
+ * it was only ever raised by APPROVE_SUBMISSION — on the phone where the parent
+ * tapped Accept. On the child's own phone the XP arrived by sync and nothing
+ * celebrated it: a paired child never saw a single level-up.
+ */
+console.log('\n=== A level reached by sync is celebrated on the child\'s own phone ===')
+{
+  const kidPhone = (xp) => {
+    const s = base()
+    return { ...s, device: { ...s.device, role: 'kid', linkedKidId: AVA },
+      kids: s.kids.map((k) => ({ ...k, xp, rev: 5 })), pendingLevelUp: null }
+  }
+  const after = reducer(kidPhone(70), { type: 'MERGE_SNAPSHOT', snapshot: { kids: [serverKid({ xp: 120, rev: 9 })] } })
+  ok('crossing a level on the child\'s phone shows the level-up',
+    after.pendingLevelUp?.kidId === AVA && after.pendingLevelUp.from === 1 && after.pendingLevelUp.to === 2,
+    JSON.stringify(after.pendingLevelUp))
+  const same = reducer(kidPhone(10), { type: 'MERGE_SNAPSHOT', snapshot: { kids: [serverKid({ xp: 40, rev: 9 })] } })
+  ok('XP inside the same level shows nothing', !same.pendingLevelUp)
+  const fresh = { ...kidPhone(0), kids: kidPhone(0).kids.map((k) => ({ ...k, rev: undefined })) }
+  const paired = reducer(fresh, { type: 'MERGE_SNAPSHOT', snapshot: { kids: [serverKid({ xp: 5000, rev: 9 })] } })
+  ok('the first pull after pairing is not mistaken for a level-up', !paired.pendingLevelUp, JSON.stringify(paired.pendingLevelUp))
+  const parentPhone = { ...base(), kids: base().kids.map((k) => ({ ...k, xp: 70, rev: 5 })), pendingLevelUp: null }
+  const onParent = reducer(parentPhone, { type: 'MERGE_SNAPSHOT', snapshot: { kids: [serverKid({ xp: 120, rev: 9 })] } })
+  ok('a parent\'s phone is not interrupted by a level reached elsewhere', !onParent.pendingLevelUp)
+}
+
+/*
+ * A pull that was already on its way when a parent tapped Accept.
+ *
+ * It carried the chore as it was a moment before — still waiting — and the
+ * merge put it back in the review queue, with the child's XP back where it
+ * was. A second tap on Accept then paid it again on this phone and sent the
+ * child a second "Approved!".
+ */
+console.log('\n=== An approval still on its way is not undone by a pull ===')
+reset()
+{
+  const Q = '00000000-0000-4000-8000-0000000000q1'.replace('q', 'a')
+  const S = '00000000-0000-4000-8000-0000000000s1'.replace('s', 'b')
+  const b0 = base()
+  let st = {
+    ...b0,
+    kids: [{ ...b0.kids[0], streak: { count: 0, lastDay: null, freezeTokens: 0 }, bestTimes: {}, playTokens: 0 }],
+    quests: [{ id: Q, kidId: AVA, title: 'Make the bed', xp: 30, status: 'submitted' }],
+    submissions: [{ id: S, questId: Q, kidId: AVA, status: 'pending', submittedAt: Date.now() }],
+  }
+  st = reducer(st, { type: 'APPROVE_SUBMISSION', submissionId: S })
+  const paid = st.kids[0].xp
+  for (const item of st.syncQueue) enqueue({ type: 'rpc', fn: item.fn, args: item.args })
+  const before = {
+    quests: [{ id: Q, family_id: FAMILY, kid_id: AVA, title: 'Make the bed', xp: 30, status: 'submitted', rev: 10 }],
+    submissions: [{ id: S, family_id: FAMILY, quest_id: Q, kid_id: AVA, status: 'pending', rev: 11 }],
+    kids: [serverKid({ rev: 12 })],
+  }
+  const waitingNow = pendingRows(readOutbox(), st)
+  const merged = reducer(st, { type: 'MERGE_SNAPSHOT', snapshot: before, pending: [...waitingNow] })
+  ok('the chore stays accepted', merged.submissions.find((x) => x.id === S)?.status === 'approved',
+    merged.submissions.find((x) => x.id === S)?.status)
+  ok('its quest stays done', merged.quests.find((x) => x.id === Q)?.status === 'approved')
+  ok('and the child keeps the XP on screen', merged.kids[0].xp === paid && paid > 0, `${merged.kids[0].xp} vs ${paid}`)
+  const again = reducer({ ...merged, syncQueue: [], noticeQueue: [] }, { type: 'APPROVE_SUBMISSION', submissionId: S })
+  ok('so it cannot be accepted twice', again.syncQueue.length === 0 && again.kids[0].xp === paid)
+  clearOutbox()
+}
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL CHECKS PASSED')
 process.exit(fails ? 1 : 0)

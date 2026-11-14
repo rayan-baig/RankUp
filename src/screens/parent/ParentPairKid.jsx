@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { syncAdapter, canSyncAcrossDevices } from '../../lib/sync/index.js'
-import { claimErrorMessage, isCompleteCode, MAX_ATTEMPTS } from '../../lib/pairing.js'
+import { claimErrorMessage, isCompleteCode, MAX_ATTEMPTS, CODE_TTL_MS } from '../../lib/pairing.js'
 import { Screen, Card, Button, Banner, SectionTitle, Chip } from '../../components/ui.jsx'
 import CodeInput from '../../components/CodeInput.jsx'
 import { navigate } from '../../lib/router.js'
@@ -39,14 +39,24 @@ export default function ParentPairKid() {
     // If this family already has a profile with that name, pairing joins it
     // rather than making a second one, and the kid's device needs to hear
     // which profile it landed on.
-    const existing = state.kids.find(
+    //
+    // With a server, the server has already decided, and its answer is the
+    // one the child's phone uses: it joins a same-name profile only if that
+    // profile has no phone yet. Swapping in a local name match here sent
+    // "Assign a quest" to a profile the new phone cannot see.
+    const existing = syncAdapter.isReal ? null : state.kids.find(
       (k) => k.name.trim().toLowerCase() === result.kid.name.trim().toLowerCase(),
     )
     const kid = { ...result.kid, id: existing?.id || result.kid.id }
     await syncAdapter.attachKid?.(value, kid.id)
 
-    dispatch({ type: 'ADOPT_PAIRED_KID', kid })
-    setLinked(kid)
+    // Another profile of the same name kept its own phone, so this phone got
+    // a profile of its own. Said on the confirmation, not discovered later.
+    const namesake = state.kids.find(
+      (k) => k.id !== kid.id && k.name.trim().toLowerCase() === kid.name.trim().toLowerCase(),
+    )
+    dispatch({ type: 'ADOPT_PAIRED_KID', kid, byId: syncAdapter.isReal })
+    setLinked({ ...kid, namesake: Boolean(namesake) })
     setCode('')
   }
 
@@ -60,6 +70,15 @@ export default function ParentPairKid() {
             Their device is now part of {state.family.name || 'your family'}. Quests you assign will
             show up there.
           </p>
+          {linked.namesake && (
+            <div className="text-left mb-6">
+              <Banner tone="warn" icon="📱" title={`This is a new profile for ${linked.name}`}>
+                {linked.name} already has a profile on another phone, which keeps its XP and
+                quests; this phone has a new one. To move a child to a new phone, unlink the old
+                phone on this screen first, then link the new one.
+              </Banner>
+            </div>
+          )}
           <div className="flex gap-2">
             <Button variant="soft" className="flex-1" onClick={() => setLinked(null)}>
               Link another
@@ -80,10 +99,22 @@ export default function ParentPairKid() {
       </button>
 
       <h1 className="font-display text-2xl font-extrabold mb-1">Link a kid's device</h1>
-      <p className="text-sm text-muted mb-4">
-        On their phone, they choose <strong>"I'm a kid"</strong> and get a six-digit code. Type it in
-        below.
-      </p>
+      {/*
+        * Three steps, each one thing to tap or type, in the words on the
+        * child's screen. It used to be one sentence, and a parent finding
+        * their child's name already on this phone had no way to know the
+        * new phone would join that profile rather than start a second one.
+        */}
+      <ol className="text-sm text-muted mb-4 space-y-1.5 list-decimal list-inside" data-testid="pair-steps">
+        <li>On your child's phone, open RankUp and tap <strong>“I'm a kid”</strong>.</li>
+        <li>
+          They type their first name, pick a world and tap <strong>“Get my code”</strong>.
+          {state.kids.some((k) => !k.pairedDeviceAt) && (
+            <> Use the name you gave them here, and the phone joins that profile, quests and XP included.</>
+          )}
+        </li>
+        <li>Type the six numbers on their screen below.</li>
+      </ol>
 
       <Card className="mb-3">
         <CodeInput
@@ -106,8 +137,8 @@ export default function ParentPairKid() {
       </Card>
 
       <Banner tone="info" icon="⏱️" title="Codes are short-lived on purpose">
-        A code lasts 10 minutes, stops working after {MAX_ATTEMPTS} wrong guesses, and can only be
-        used once. If it stops working, ask them to tap "New code".
+        A code lasts {CODE_TTL_MS / 60000} minutes, stops working after {MAX_ATTEMPTS} wrong guesses, and can
+        only be used once. If it stops working, tap “New code” on their phone.
       </Banner>
 
       {!canSyncAcrossDevices && (

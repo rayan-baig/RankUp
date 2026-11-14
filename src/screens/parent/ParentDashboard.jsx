@@ -6,40 +6,114 @@ import { resolveKidTheme } from '../../data/kidThemes.js'
 import { storyProgress } from '../../lib/dragonFight.js'
 import { findGame } from '../../data/minigames.js'
 import { MARKET_SKINS } from '../../data/marketSkins.js'
-import { activeLockout } from '../../state/reducer.js'
+import { activeLockout, familyGoalProgress } from '../../state/reducer.js'
+import { TIERS } from '../../state/initialState.js'
+import { priceTag } from '../../lib/plans.js'
+import { guildsEnabled } from '../../lib/guilds.js'
 import Avatar from '../../components/Avatar.jsx'
 import { Screen, Card, Button, SectionTitle, Stat, ProgressBar, EmptyState, Banner, Chip } from '../../components/ui.jsx'
 import SyncBadge from '../../components/SyncBadge.jsx'
-import { navigate } from '../../lib/router.js'
+import { navigate, navigateThen } from '../../lib/router.js'
 import TrialBanner from '../../components/TrialBanner.jsx'
+import { activityFeed } from '../../lib/activity.js'
 import CharityWeek from '../../components/CharityWeek.jsx'
 import InstallPrompt from '../../components/InstallPrompt.jsx'
+import { dashboardBillingNotice } from '../../lib/billing.js'
+import { giftNotice } from '../../lib/giftRules.js'
+import { PickedNotice } from '../../components/KidThemesParent.jsx'
+import { ReferralRewardNotice } from '../../components/InviteCard.jsx'
+import HowItWorks from '../../components/HowItWorks.jsx'
+import FirstWeek from '../../components/FirstWeek.jsx'
+import DemoTour from '../../components/DemoTour.jsx'
 
 export default function ParentDashboard() {
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
   const elite = useElite()
   const pending = pendingSubmissions(state)
+  // Rewards a child has spent their currency on and is waiting to be given.
+  // These were only listed inside the collapsed rewards panel in Settings, so
+  // a parent had no way of knowing a child was waiting.
+  const owed = (state.redemptions || []).filter((r) => r.status === 'requested')
+
+  // Chores come from the synced submissions, so a co-parent's approvals and a
+  // child's "I did it!" from their own phone are here too, not only what was
+  // tapped on this phone.
+  const feed = useMemo(() => activityFeed(state), [state.events, state.submissions, state.quests])
 
   const weekXp = useMemo(() => {
     const week = new Set(lastSevenDays())
     const per = {}
-    state.events.forEach((e) => {
+    feed.forEach((e) => {
       if (e.type === 'quest_approved' && week.has(e.day)) per[e.kidId] = (per[e.kidId] || 0) + (e.meta?.xp || 0)
     })
     return per
-  }, [state.events])
+  }, [feed])
 
   const totalWeekXp = Object.values(weekXp).reduce((a, b) => a + b, 0)
+
+  // A paid plan that stopped because of a payment, said where a parent looks
+  // every day. A plan they cancelled themselves is not news, so not here.
+  const stopped = dashboardBillingNotice(state.family, { demo: state.demo })
+  // A gift plan with 30 days or fewer left, and nothing paid lined up after it.
+  const giftEnding = giftNotice(state.family, { demo: state.demo })
+
+  // On a phone the family shares: out of Parent Mode, locked behind them.
+  const handOver = () => {
+    if (state.kids.length === 1) {
+      navigateThen('/kid', () => dispatch({ type: 'SET_ROLE', role: 'kid', kidId: state.kids[0].id }))
+    } else {
+      navigateThen('/switch', () => dispatch({ type: 'LOCK_PARENT' }))
+    }
+  }
 
   return (
     <Screen>
       <TrialBanner />
+      {stopped && (
+        <Banner tone={stopped.tone} icon={stopped.icon} title={stopped.title}>
+          {stopped.body}{' '}
+          <button type="button" className="underline font-semibold" onClick={() => navigate('/parent/plan')}>See your plan</button>
+        </Banner>
+      )}
+      {giftEnding && (
+        <div data-testid="gift-ending-notice">
+          <Banner tone={giftEnding.tone} icon={giftEnding.icon} title={giftEnding.title}>
+            {giftEnding.body}{' '}
+            <button type="button" className="underline font-semibold" onClick={() => navigate('/parent/plan')}>See plans</button>
+          </Banner>
+        </div>
+      )}
       <CharityWeek />
-      <header className="mb-3">
-        <p className="text-xs uppercase tracking-widest text-muted">Parent dashboard</p>
-        <h1 className="font-display text-2xl font-extrabold truncate">{state.family.name || 'Your family'}</h1>
-        <SyncBadge className="mt-0.5" />
+      <PickedNotice who="parent" />
+      <ReferralRewardNotice />
+      <header className="mb-3 flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs uppercase tracking-widest text-muted">Parent dashboard</p>
+          <h1 className="font-display text-2xl font-extrabold truncate">{state.family.name || 'Your family'}</h1>
+          <SyncBadge className="mt-0.5" />
+        </div>
+        {/*
+          * On a phone the family shares, the child's side is one tap away.
+          * There was no way out of Parent Mode at all: a parent who wanted to
+          * hand the phone over had nothing to tap.
+          */}
+        {state.kids.length > 0 && (
+          <Button
+            variant="soft"
+            className="shrink-0 px-3 py-2 min-h-0 text-xs mt-1"
+            style={{ maxWidth: 150 }}
+            onClick={handOver}
+          >
+            <span className="truncate">👋 {state.kids.length === 1 ? `Hand to ${state.kids[0].name}` : 'Hand to a kid'}</span>
+          </Button>
+        )}
       </header>
+
+      <DemoTour />
+      <HowItWorks />
+      <FirstWeek />
+      {/* After the first accepted chore, once; never on a child's phone. */}
+      <InstallPrompt />
 
       <div className="flex gap-2 mb-3">
         <Stat icon="📥" value={pending.length} label="To review" tone={pending.length ? 'var(--warn)' : undefined} />
@@ -61,6 +135,27 @@ export default function ParentDashboard() {
             </div>
             <Button className="px-3 py-2 min-h-0 text-sm" onClick={() => navigate('/parent/approvals')}>Review</Button>
           </div>
+        </Card>
+      )}
+
+      {owed.length > 0 && (
+        <Card className="mb-3" style={{ borderColor: 'var(--accent-2)' }}>
+          <div className="font-semibold text-sm mb-1">
+            🎁 {owed.length === 1 ? '1 reward' : `${owed.length} rewards`} to hand over
+          </div>
+          {owed.map((r) => (
+            <div key={r.id} className="flex items-center gap-2 py-1.5">
+              <span className="flex-1 min-w-0 text-sm truncate">
+                {state.kids.find((k) => k.id === r.kidId)?.name || 'Your kid'}: {r.name}
+              </span>
+              <Button
+                className="px-3 py-1.5 min-h-0 text-xs shrink-0"
+                onClick={() => dispatch({ type: 'FULFIL_REDEMPTION', redemptionId: r.id })}
+              >
+                Mark given
+              </Button>
+            </div>
+          ))}
         </Card>
       )}
 
@@ -117,11 +212,11 @@ export default function ParentDashboard() {
             <div className="flex justify-between text-sm mb-2">
               <span className="font-semibold">{state.familyGoal.name}</span>
               <span className="text-muted">
-                {formatXp(state.kids.reduce((s, k) => s + k.xp, 0))} / {formatXp(state.familyGoal.targetXp)} XP
+                {formatXp(familyGoalProgress(state))} / {formatXp(state.familyGoal.targetXp)} XP
               </span>
             </div>
             <ProgressBar
-              value={state.kids.reduce((s, k) => s + k.xp, 0)}
+              value={familyGoalProgress(state)}
               max={state.familyGoal.targetXp}
               height={12}
               label="Family goal progress"
@@ -167,20 +262,25 @@ export default function ParentDashboard() {
       </button>
 
       {!elite && (
-        <Banner tone="info" icon="⚡" title="Elite Pass — $15.99/mo" action={<Button className="px-3 py-2 min-h-0 text-xs shrink-0" onClick={() => navigate('/parent/plan')}>See it</Button>}>
-          Adds the Consequence Engine, Behaviour Blueprints, Parent Alliances, 10-player guilds and a permanent 1.5× XP boost for kids.
+        <Banner tone="info" icon="⚡" title={`${TIERS.elite.name} — ${priceTag(TIERS.elite)}`} action={<Button className="px-3 py-2 min-h-0 text-xs shrink-0" onClick={() => navigate('/parent/plan')}>See it</Button>}>
+          {elitePitch()}
         </Banner>
       )}
 
-      <InstallPrompt />
-
-      <SectionTitle>Recent activity</SectionTitle>
+      <div className="flex items-baseline justify-between">
+        <SectionTitle>Recent activity</SectionTitle>
+        {state.submissions.length > 0 && (
+          <button type="button" className="text-xs underline text-muted" onClick={() => navigate('/parent/history')}>
+            Chore history
+          </button>
+        )}
+      </div>
       <Card>
-        {state.events.length === 0 ? (
+        {feed.length === 0 ? (
           <p className="text-sm text-muted">Nothing yet.</p>
         ) : (
           <ul className="space-y-2">
-            {[...state.events].reverse().slice(0, 8).map((e) => {
+            {[...feed].reverse().slice(0, 8).map((e) => {
               const kid = state.kids.find((k) => k.id === e.kidId)
               return (
                 <li key={e.id} className="flex items-baseline justify-between gap-2 text-sm">
@@ -196,19 +296,33 @@ export default function ParentDashboard() {
   )
 }
 
+/**
+ * What Elite adds, for the banner, from the plan list: the guild size and the
+ * XP rate are its numbers, and guilds are only mentioned when they are on.
+ */
+function elitePitch() {
+  const parts = ['the Consequence Engine', 'Behaviour Blueprints', 'Parent Alliances']
+  if (guildsEnabled()) parts.push(`${TIERS.elite.guildSize}-player guilds`)
+  return `Adds ${parts.join(', ')} and a permanent ${TIERS.elite.xpMultiplier}× XP boost for kids.`
+}
+
+// The words for what the events store as ids: "Plan changed to elite" and
+// "Override (red)" were the database's words on a parent's screen.
+const OVERRIDE_NAMES = { tax: 'A Currency Tax', dimension: 'A Dimension Lockout', red: 'A Red Security Lockdown' }
+
 function describeEvent(e, kid) {
   const who = kid?.name || 'Someone'
   switch (e.type) {
     case 'quest_approved': return `✅ ${who} earned ${e.meta?.xp} XP`
     case 'quest_rejected': return `↩️ You sent a quest back to ${who}`
-    case 'quest_submitted': return `📸 ${who} submitted proof`
+    case 'quest_submitted': return `🙋 ${who} finished ${e.meta?.title ? `“${e.meta.title}”` : 'a quest'}`
     case 'quests_assigned': return `📋 ${e.meta?.count} quest(s) assigned to ${who}`
     case 'level_up': return `🎉 ${who} reached level ${e.meta?.to}`
     case 'reward_redeemed': return `🎁 ${who} redeemed ${e.meta?.name}`
-    case 'override_applied': return `🛡️ Override (${e.meta?.kind}) applied to ${who}`
+    case 'override_applied': return `🛡️ ${OVERRIDE_NAMES[e.meta?.kind] || 'An override'} applied to ${who}`
     case 'override_lifted': return `🔓 Override lifted for ${who}`
     case 'login_bonus': return `🎁 ${who} claimed the daily bonus`
-    case 'tier_changed': return `💳 Plan changed to ${e.meta?.tier}`
+    case 'tier_changed': return `💳 Plan changed to ${TIERS[e.meta?.tier]?.name || 'a new plan'}`
     case 'theme_changed': return `🎨 ${who} changed theme`
     case 'kid_added': return `👶 ${who} was added`
     case 'alliance_joined': return '🏆 Joined a Parent Alliance'

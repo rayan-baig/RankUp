@@ -18,9 +18,8 @@ const fails = []
 const pass = n => console.log('  PASS', n)
 const fail = (n,d) => { fails.push(n); console.log('  FAIL', n, '—', d) }
 
-const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--use-fake-ui-for-media-stream','--use-fake-device-for-media-stream'] })
-const ctx = await b.newContext({ viewport:{width:390,height:844}, deviceScaleFactor:2, permissions:['camera'] })
+const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined })
+const ctx = await b.newContext({ viewport:{width:390,height:844}, deviceScaleFactor:2 })
 const errors = []
 const track = (p, tag) => {
   p.on('pageerror', e => errors.push(`${tag}: ${e.message}`))
@@ -43,7 +42,6 @@ await parent.locator('input[type=password]').fill('correct-horse-battery')
 await parent.getByRole('button', { name:'Create account' }).click()
 await parent.waitForTimeout(1200)
 
-await parent.getByRole('button', { name:'Continue' }).click()
 await parent.locator('input').nth(0).fill('Sam')
 await parent.locator('input').nth(1).fill('The Riveras')
 await parent.locator('input').nth(2).fill('1234')
@@ -58,8 +56,6 @@ if (await parent.getByText('What RankUp collects about your child').count()) {
   await parent.waitForTimeout(1500)
 }
 await parent.locator('input[placeholder="e.g. Ava"]').fill('Jonah')
-await parent.getByRole('button', { name:'Continue' }).click()
-await parent.waitForTimeout(200)
 await parent.getByRole('button', { name:'Start playing' }).click()
 await parent.waitForTimeout(2500)
 
@@ -102,11 +98,26 @@ await parent.waitForTimeout(2000)
 await kid.waitForTimeout(4000)
 ;(await kState()).onboarded ? pass('the kid device knows it is linked') : fail('kid device linked','not onboarded')
 
+/*
+ * The family goal used to stay on the phone of the parent who set it: the
+ * child never saw it. Set here, before the chore, so the chore counts.
+ */
+console.log('\n=== The parent sets a family goal ===')
+await parent.evaluate(() => { window.location.hash = '/parent/settings' })
+await parent.waitForTimeout(800)
+await parent.getByRole('button', { name: /Family goal/ }).first().click()
+await parent.waitForTimeout(300)
+await parent.locator('input[placeholder="e.g. Trip to the aquarium"]').fill('Pizza night')
+await parent.getByRole('button', { name: 'Save goal' }).click()
+await parent.waitForTimeout(2500)
+
 console.log('\n=== A quest assigned on the parent phone reaches the kid phone ===')
 await parent.evaluate(() => { window.location.hash = '/parent/assign' })
 await parent.waitForTimeout(800)
 await parent.locator('select').first().selectOption({ label: 'Ava' })
 await parent.waitForTimeout(300)
+// A family with no chores yet opens on the packs.
+await parent.getByRole('tab', { name: 'Write one' }).click()
 await parent.locator('input[placeholder="e.g. Make your bed"]').fill('Tidy the bookshelf')
 await parent.getByRole('button', { name:/Assign to Ava/ }).click()
 await parent.waitForTimeout(3000)
@@ -161,6 +172,28 @@ if (visible) {
     const xp = (await kState()).kids[0].xp
     xp > 0 ? pass(`the XP reached the kid's phone (xp=${xp})`)
            : fail('XP reached the kid device', `xp=${xp}`)
+
+    const goal = (await kState()).familyGoal
+    goal?.name === 'Pizza night'
+      ? pass('the family goal set on the parent\'s phone reached the kid\'s')
+      : fail('family goal reached the kid device', JSON.stringify(goal))
+    goal?.progress === xp
+      ? pass(`and the chore approved since counts towards it on the kid's phone (${goal?.progress} XP)`)
+      : fail('family goal progress on the kid device', `progress=${goal?.progress}, xp=${xp}`)
+    ;(await kid.getByText('Pizza night').count()) > 0
+      ? pass('the child can see the family goal on their home screen')
+      : fail('family goal shown to the child', 'not on /kid')
+
+    // The profile's counts used to come from this phone's own activity log,
+    // and an approval happens on the PARENT's phone — so a paired child's
+    // profile said "Chores completed 0" for ever, however many they had done.
+    await kid.evaluate(() => { window.location.hash = '/kid/profile' })
+    await kid.waitForTimeout(1200)
+    const row = await kid.getByText('Chores completed', { exact: true }).first().locator('xpath=..').innerText()
+    const counted = /\b1\b/.test(row)
+    counted
+      ? pass('the kid\'s profile counts the chore approved on the parent\'s phone')
+      : fail('kid profile counts the approved chore', JSON.stringify(row))
   }
 } else {
   fail('kid could open the synced quest', 'quest not visible')
@@ -212,6 +245,21 @@ if (await frame.count()) {
 } else {
   fail('the frame picker is reachable on the kid phone', 'no Aurora Sweep chip on /kid/profile')
 }
+
+console.log('\n=== Clearing the family goal reaches the kid phone ===')
+await parent.bringToFront()
+await parent.evaluate(() => { window.location.hash = '/parent/settings' })
+await parent.waitForTimeout(800)
+await parent.getByRole('button', { name: /Family goal/ }).first().click()
+await parent.waitForTimeout(300)
+await parent.getByRole('button', { name: 'Clear' }).click()
+await parent.waitForTimeout(3000)
+await kid.bringToFront()
+await kid.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+await kid.waitForTimeout(8000)
+;(await kState()).familyGoal === null
+  ? pass('a goal cleared on the parent\'s phone is cleared on the kid\'s')
+  : fail('cleared goal reaches the kid device', JSON.stringify((await kState()).familyGoal))
 
 console.log('\nJS errors:', errors.length); errors.slice(0,10).forEach(e=>console.log('  ',e))
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nALL SYNC CHECKS PASSED')

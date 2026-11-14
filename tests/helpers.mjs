@@ -93,13 +93,10 @@ export async function expireTrialInDatabase(familyName = null) {
 export async function launch() {
   const browser = await chromium.launch({
     executablePath: process.env.CHROMIUM_PATH || undefined,
-    // Gives the page a synthetic camera so the photo flow can be driven headlessly.
-    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
   })
   const ctx = await browser.newContext({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
-    permissions: ['camera'],
   })
   const page = await ctx.newPage()
   const errors = []
@@ -135,8 +132,6 @@ export async function setUpFamily(page) {
   await page.locator('input[type=password]').fill('correct-horse-battery')
   await page.getByRole('button', { name: 'Create account' }).click()
   await page.waitForTimeout(1600)
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.waitForTimeout(400)
   await page.locator('input').nth(0).fill('Sam')
   await page.locator('input').nth(2).fill('1234')
   await page.getByRole('button', { name: 'Continue' }).click()
@@ -150,8 +145,6 @@ export async function setUpFamily(page) {
     await page.waitForTimeout(1500)
   }
   await page.locator('input[placeholder="e.g. Ava"]').fill('Ava')
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.waitForTimeout(200)
   await page.getByRole('button', { name: 'Start playing' }).click()
   await page.waitForTimeout(1000)
   await page.evaluate(() => { window.location.hash = '/parent/assign' })
@@ -165,9 +158,9 @@ export async function setUpFamily(page) {
 export async function asParent(page) {
   await page.evaluate(() => { window.location.hash = '/switch' })
   await page.waitForTimeout(300)
-  await page.getByRole('button', { name: 'Enter PIN' }).click()
-  await page.locator('input[type=password]').fill('1234')
-  await page.getByRole('button', { name: 'Unlock' }).click()
+  // The PIN box is on the screen, and the right PIN opens Parent Mode as its
+  // last digit goes in.
+  await page.getByLabel('Parent PIN').fill('1234')
   await page.waitForTimeout(600)
 }
 
@@ -182,7 +175,7 @@ export async function asKid(page) {
  * Mark a quest done and send it to the parent. RankUp takes no photos: proof,
  * if a parent wants it, travels by the family's own messages.
  */
-export async function submitPhotoProof(page) {
+export async function sendToParent(page) {
   await page.getByRole('button', { name: /I did it/ }).click()
   await page.waitForTimeout(500)
   await page.getByRole('button', { name: 'Send to parent' }).click()

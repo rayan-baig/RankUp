@@ -132,9 +132,11 @@ export const localAdapter = {
     }
 
     const status = pairingStatus(record)
-    if (status !== PAIRING_STATUS.ACTIVE) {
-      return { ok: false, reason: status === PAIRING_STATUS.CLAIMED ? 'claimed' : status }
+    if (status === PAIRING_STATUS.CLAIMED) {
+      // The same answer the server gives (claim_pairing_code).
+      return { ok: false, reason: record.claimedByFamilyId === familyId ? 'already_linked' : 'claimed' }
     }
+    if (status !== PAIRING_STATUS.ACTIVE) return { ok: false, reason: status }
 
     all[code] = {
       ...record,

@@ -1,141 +1,186 @@
-# What is real and what is a mockup
+# What is real and what is not
 
-Keep this file honest. A mockup that looks finished is worse than one that says what it
-is, because it turns into a promise you did not mean to make.
+Keep this file honest. A screen that looks finished but is not turns into a
+promise you did not mean to make. Read it before showing RankUp to anyone.
 
-Legend: ✅ genuinely works · 🟡 works but only on this device · ❌ looks real, is not
+Legend: ✅ works · 🟡 works, with a limit stated · ❌ not built
+
+"Needs a backend" means Supabase is connected; without it everything runs on
+one phone, with no account (see "On one phone only" below).
 
 ---
 
-## The core loop — ✅ real
+## The core loop
 
 | Thing | Status | Notes |
 |---|---|---|
-| Parent assigns a quest | ✅ | Custom quests and four bulk packs |
-| Adaptive / special tasks | ✅ | Own difficulty and own definition of "done", per kid |
-| Kid opens quest, sees rewards breakdown | ✅ | Every bonus is itemised before they start |
-| Kid taps "I did it!" | ✅ | No photo in the app. If the parent wants proof, the kid sends one from their own camera app, by message |
-| Parent accept / send back | ✅ | Sending back puts the quest straight back on the kid's list with your note |
-| XP, levels, currency | ✅ | Awarded only when a parent accepts |
-| Streaks and streak freeze | ✅ | |
-| 15 kid themes | ✅ | Background, currency and avatar all change |
-| 5-tier avatar that evolves | ✅ | Tap it — it reacts |
-| A world that changes as you level | ✅ | Every theme has four worlds at levels 10/25/50/100, each with its own palette, sky and line of story |
-| Block Craft level evolutions | ✅ | Nine forms, not five: Overworld, then The Nether Portal (125), Nether Rise (175), The End (250), The Dragon (399). Boarling companion from 125, Ender from 250 |
-| Block Craft story and battles | ✅ | A battle scene per chapter (raid, portal, Nether, End, dragon, Hero's Return). Glitch arrivals at the portal and the End. Worlds stay secret until reached |
-| Dragon boss fight | ✅ | Health bars for the child and the dragon. Approved chores hit by difficulty; chores sent back, 48 idle hours and random specials hit back. Worked out from synced chores, nothing stored. Hero's Return opens when it falls |
-| 10 parent dashboard themes | ✅ | Cosmetic only, by design |
-| Timer / "race the clock" quests | ✅ | Best times are recorded per quest |
-| Test-score quests | ✅ | 80%+ earns a bonus |
-| Surprise 2× XP quests | ✅ | Randomly flagged when adding a pack, or set by hand |
-| Rewards catalogue and redemption | ✅ | Parent marks a reward as given |
-| Family goal | ✅ | Combined XP toward one shared reward |
-| Daily login bonus | ✅ | |
-| Standard / Elite feature differences | ✅ | Both the features and the billing. The tier is written by Stripe's webhook and by nothing else |
-| Elite 1.5× XP boost | ✅ | Applied in the reward calculation |
-| Elite 10-slot guilds | ✅ | Real children in other families, once a parent on each side approves. Off unless `VITE_GUILDS_ENABLED=true` |
-| System Override Protocol | ✅ | Currency Tax, Dimension Lockout and Red Security Lockdown all genuinely work |
-| AI Behaviour Blueprints | ✅ | Charts are computed from this family's real activity log |
+| Parent assigns a chore | ✅ | Custom chores and three ready-made packs (ages 6–11, 12+, and adaptive), held to sensible sizes by `tests/packs.mjs` |
+| Repeating chores | ✅ | Daily, school days, or weekly on the family's chosen day; they come back once a day on the family's own clock, across clock changes |
+| Adaptive chores | ✅ | Their own difficulty and their own meaning of "done", per child |
+| Child opens a chore and sees what it pays | ✅ | Every bonus itemised before they start, the test-score bonus included |
+| Child taps **I did it!** | ✅ | No photo in the app. A parent who wants proof gets one from the child's own camera app, by message |
+| Parent accepts or sends back | ✅ | Sending back puts it straight back on the child's list with the note. Two parents accepting at once pay once ("already decided on another device") |
+| XP, levels, coins | ✅ | Paid only when a parent accepts, and decided by the server, not the phone |
+| Streaks and streak freezes | ✅ | Counted on the family's own day. A lapsed streak no longer shows or pays |
+| Level-up celebration | ✅ | On the child's own phone too, when the accept arrives by sync. About 2½ seconds, a tap anywhere skips it and still reaches what is under it; several levels at once are one moment. A streak going up gets its own two-second moment ([tests/moments.mjs](../tests/moments.mjs)) |
+| Timer ("race the clock") chores | ✅ | Best times kept per chore |
+| Test-score chores | ✅ | 80% or more earns a bonus; scores held to 0–100 |
+| Surprise 2× XP chores | ✅ | Flagged at random when adding a pack, or by hand |
+| Rewards shop | ✅ | Bought with coins. Rewards waiting to be given show on the parent's dashboard; "Mark given" counts once even from two phones |
+| Family goal | ✅ | Shared XP towards one reward, counted from when it was set. The same goal and bar on both parents' and every child's phone ([SYNC.md](SYNC.md#the-family-goal)) |
+| Daily login bonus | ✅ | Once a day, on the family's day |
+| Pocket money | ✅ | A chore can carry a real price; a ledger of what is owed, payouts and gifts. RankUp never holds money: the parent pays and records it |
+| System Override Protocol | ✅ | Currency Tax, Dimension Lockout, Red Security Lockdown. Never takes away XP, levels or streaks |
+| Behaviour Blueprints | ✅ | Charts from this family's real, synced chores |
+| A child's phone has no Parent Mode | ✅ | Not behind a PIN: not there at all |
+
+## The child's game
+
+| Thing | Status | Notes |
+|---|---|---|
+| 15 child themes | ✅ | Background, currency and avatar all change. Switching keeps every level, coin and streak, is on screen in well under half a second, and flicking back and forth with chores waiting to send sends one change. Leaving Block Craft for a while and coming back restarts the dragon fight |
+| Theme Genesis: a child's own themes | ✅ | Spark, Design, Build, Launch, from the theme picker or Settings. Up to 5 a child; drafts, edit, delete. A look and names over a built-in theme's levels, never a rule. Seen only by the family, synced like the rest; a parent renames or removes any in Settings. Rude-word filter on the phone and in the database ([SYNC.md](SYNC.md#a-childs-own-themes-theme-genesis)). "What's it inspired by?" fills in a starting theme from 57 topics on the phone (0.12.0); a Season theme can't carry a brand name |
+| Seasons | ✅ needs a backend | A parent can send a child's finished theme to RankUp (one a child a month, theme only, optional credit). The operator picks on `#/operator`; on the Season's first day every family's picker has it and a child sees "New Season!" once. Declined and unpicked go after 90 days |
+| Avatar with five forms | ✅ | Tap it and it reacts |
+| Worlds that change with level | ✅ | Four per theme at levels 10/25/50/100, each with its own colours, sky and line of story |
+| Block Craft's nine forms, story and battles | ✅ | Overworld to The Dragon (399). A battle scene per chapter; worlds stay secret until reached |
+| Dragon boss fight | ✅ | Accepted chores hit the dragon; chores sent back, 48 idle hours and specials hit back. Worked out from synced chores and held by the server |
+| Arcade | ✅ | 24 games. Tokens come only from finished chores (at most 5 held); at most 15 coins a day from games, counted on the family's day. The look-around family has unlimited tokens. The arcade tells a child, in plain words, how many tokens they have, how many coins they can still win today, and that winnings come back at midnight |
+| Sunday Market and Flash Tickets | ✅ | Cosmetic skins on Sundays only, no countdown, every skin comes back. Flash Tickets are bought by a parent; prices fixed on the server |
 | Elite cosmetics (frames, drop selectors) | ✅ | |
-| Kid-device pairing by 6-digit code | ✅ | Expiry, 5-attempt limit, one-time use — [docs/SYNC.md](SYNC.md). Between two phones it needs Supabase; without it, two tabs of one browser |
-| Cross-device sync | ✅ *with a backend* | Quests, submissions, approvals and XP travel between paired devices. Offline-first with an outbox. Needs Supabase — [docs/SYNC.md](SYNC.md) |
-| Real cross-family guilds | ✅ *built, off by default* | Invite codes, real rosters, real chat. **A child joins only once a parent on each side approves.** Needs Supabase |
-| Parental consent | ✅ | Required before any child exists — enforced by the database, not the app. Export, deletion and withdrawal all work — [docs/LEGAL.md](LEGAL.md) |
-| Subscriptions | ✅ *with Stripe connected* | Checkout, webhook, customer portal. Tier is server-owned and fails closed — [docs/PAYMENTS.md](PAYMENTS.md) |
-| Notifications | ✅ | Submissions, approvals, send-backs and daily reminders. Works with no server while the app is open; background delivery needs VAPID keys — [docs/NOTIFICATIONS.md](NOTIFICATIONS.md) |
-| A kid's device has no Parent Mode | ✅ | Not behind a PIN — not present at all |
+| 10 parent dashboard themes | ✅ | Colours only, by design |
 
-### No photos
-
-RankUp never takes, sends or keeps a photo, so it needs no camera permission and
-stores no pictures on any device or server.
-
----
-
-## Stored on one device only — 🟡
-
-Everything is saved in this browser's `localStorage`. It survives a refresh and a
-restart. It does **not** survive clearing browser data, and it is completely invisible
-to any other device or browser.
-
-Practically: **with no Supabase configured, a parent's phone and a kid's phone are two
-separate, unconnected copies of the app.** For a single-device family demo this is fine.
-
-With Supabase configured this no longer applies: pairing links the two devices and
-quests, submissions, approvals and XP all travel across, offline-first, through an
-outbox. → [docs/SYNC.md](SYNC.md)
-
----
-
-## Looks real, is not — ❌
-
-| Thing | What is fake | What it would take |
-|---|---|---|
-| **Guild roster** | ✅ real now — see the working list below | — |
-| **Guild chat** | ✅ real now, with a contact-detail guard and reporting | Human moderation at scale is still an open question |
-| **Weekend Challenge** | ✅ gone — the fake event was removed; the kid's home screen now shows the real Sunday Market, and only while it is open | — |
-| **Parent Alliance leaderboard** | ✅ real now — real families, real invite codes, scores counted server-side from approved submissions | — |
-| **Sync after pairing** | ✅ real now — quests, submissions, approvals and XP all travel the link | — |
-| **Reminders while the app is closed** | ✅ built — reminder times are saved to the account with the family's own time zone, and `api/send-reminders.js` delivers them. **You have to schedule it** — [docs/NOTIFICATIONS.md](NOTIFICATIONS.md) | — |
-| **Background push delivery** | ✅ proven end to end against a stand-in push service (`tests/push.mjs`): sent from the production build under workerd, VAPID signature verified, body decrypted with the phone's keys. A real phone's push service is the one step not exercised | Try it on one real phone |
-| **Subscriptions** | ✅ built — off until you connect your own Stripe account | [docs/PAYMENTS.md](PAYMENTS.md) |
-| **The 20% Discount Tournament** | ✅ built — `api/settle-alliances.js` decides each month's winner and gives a real Stripe account credit. **You have to schedule it**; nothing pays out until you do — [docs/PAYMENTS.md](PAYMENTS.md) | — |
-
-One row is left, and it is the honest one: background push has been written,
-wired and reviewed, but has never delivered a single message, because no push
-service is reachable from the sandbox this was built in. It needs two real
-phones. Everything else in this table is real.
-
----
-
-## The School League — ✅ built, charging once Stripe is connected
+## Family, accounts and money
 
 | Thing | Status | Notes |
 |---|---|---|
-| School sign-up, priced by size | ✅ | `/school`. Anyone can sign a school up; it starts on a 30-day trial |
+| Accounts | ✅ needs a backend | Parents sign in with email and password; a child's phone signs in anonymously and never has an account |
+| Linking a child's phone | ✅ needs a backend | Six-digit code: 10 minutes, 5 wrong guesses, once only ([SYNC.md](SYNC.md)). Without a backend, two tabs of one browser |
+| Sync between phones | ✅ needs a backend | Everything travels, offline first, through an outbox ([SYNC.md](SYNC.md)). Tested against real Postgres through a stand-in for Supabase's API; not yet against a live project. With the server down for an hour it backs off to a try a minute, says so plainly, and sends everything within a minute of it coming back, nothing twice |
+| Phone storage | ✅ needs a backend | Old, finished history the server already has (over 60 days) is let go of on the phone, never anything waiting to be sent. A busy family's year levels off at about 1.7 million characters instead of 6.2 million and growing. With no backend the phone keeps everything, as it holds the only copy |
+| Unlinking a phone | ✅ | The unlinked phone erases what RankUp kept on it |
+| Co-parents and supporters | ✅ needs a backend | Up to 6 adults. A second parent has the same rights; a supporter (a grandparent) sees how the children are doing and can give pocket money, nothing else |
+| Parental consent | ✅ | Required before any child exists, enforced by the database. Notice version 2026-11 (no photos, no AI check); consents to older versions stand ([LEGAL.md](LEGAL.md)) |
+| Download my data | ✅ | Everything the privacy policy lists, including the chore-edit history |
+| Withdraw consent, delete a child | ✅ | Gone from the database at once; their phone erases itself |
+| Delete my account | ✅ | Deletes the family and **cancels its Stripe subscription at once**; if Stripe is down, the daily job finishes it ([PAYMENTS.md](PAYMENTS.md#when-a-family-deletes-its-account)) |
+| Plans: Starter, Standard, Elite | ✅ with Stripe | Monthly and yearly. Checkout, the webhook, the customer portal. The plan is written by Stripe's webhook and nothing else |
+| Failed renewals and refunds | ✅ with Stripe | A failed renewal or a full refund drops the family to Starter and the dashboard says why ([PAYMENTS.md](PAYMENTS.md#refunds-and-failed-payments)) |
+| Free trial | ✅ | 14 days of Elite for a new family, no card. Ends as Starter, which still runs the whole loop |
+| Referrals: invite a family, get a free month | ✅ needs a backend and Stripe | The family who joins gets 30 days of Standard when its first chore is accepted. The family who invited gets **one free month of its plan** when the invited family's first invoice is paid (not a trial, a $0 or a failed invoice): Stripe credit worth a month of what it pays (a yearly plan: a twelfth), off its next bill. A family on Starter has its month banked until it subscribes. Never for the same family, parent email or Stripe customer; once per invited family; at most 12 a year; a full refund or dispute of that first payment within 14 days takes an unused month back. The card (Settings and the plan screen) shows counts only, never another family's details; "You earned a free month" shows once on the parent's dashboard; children never see any of it ([PAYMENTS.md](PAYMENTS.md#bring-a-friend-a-free-month)) |
+| Charity Week | 🟡 | The week's total is worked out from real payments. Handing it to a charity is a bank transfer you make |
+| Elite 1.5× XP | ✅ | In the reward calculation, on the server |
+| Look-around family (the demo) | ✅ | Opens without an account and cannot reach a real one. Opens on "Start here": accept a chore, see the child's world, the arcade |
+| The front door | ✅ | What RankUp is, the three prices and the 14-day trial on one phone screen, read from the same numbers as the plan screen |
+| A new family's first ten minutes | ✅ | Two setup screens; "How RankUp works" once; a first-week checklist (a child, a phone, three chores, one accepted) that ticks itself and goes when done; one tap hands a shared phone to the child. Sign-up to first accepted chore is 24 taps, held by `tests/firstten.mjs` |
+
+## Together with other families
+
+| Thing | Status | Notes |
+|---|---|---|
+| Guilds | ✅ built, **off by default** | Invite codes, rosters, a weekly goal, and chat that is **quick chat only**: a child taps one of 101 ready-made messages (seven tabs) or a big emoji, and only its id is sent and stored. There is no text box, and the server refuses typed text and any id not on the list, so no child can type to a child in another family. At most one message every 3 seconds and 8 a minute, held by the server. Report (hides it, both families' parents see it), mute on the child's own phone, and parents' remove and block stay. Messages typed before 0.13.0 are not shown to children. **A child joins only once a parent on each side approves.** On only if `VITE_GUILDS_ENABLED=true`: much safer than before, and still the owner's decision |
+| Leaderboards | ✅ needs a backend | Chores, XP, highest level, longest and current streak, badges, arcade high scores per game, Season themes, rising stars, and top guilds; by worldwide, country, guild and family, and this week (resets Monday), this month (the 1st), all time, at midnight UTC. Podium, rank arrows, the child's own row and place even far down. Ranked every 10 minutes by `/api/refresh-leaderboards` and read from what it stored ([GAME-DESIGN.md](GAME-DESIGN.md#leaderboards)). Without a backend, a family board worked out on the phone |
+| Adventure and Arena | ✅ | Every child starts in **Adventure**: on no public board and shown none; family and guild boards only. A **parent** switches a child into **Arena** (Settings → Leaderboards); a parent or the child switches back, and they are off every public board at once. In Arena strangers see a nickname built from word lists (80 × 80 × 100, once a week, never typed), a flag from the parent's list, and numbers; never a name, family, school or town. Deleting a child removes them from every board at once. Guild boards need guilds on |
+| Parent Alliance and the 20% Discount Tournament | ✅ with Stripe | Real families, scores counted on the server. `api/settle-alliances.js` gives the winner a real Stripe credit monthly; **you have to schedule it** |
+| The School League | ✅ built, charging once Stripe is connected | See below |
+
+### The School League
+
+| Thing | Status | Notes |
+|---|---|---|
+| School sign-up, priced by size | ✅ | `/school`. Starts on a 30-day trial. One form for the account and the school: 9 steps from the front page to the first league table (was 11), held by `tests/schoolsignup.mjs` |
 | Join codes for parents and staff | ✅ | Only a parent can put a child in a school |
-| District league | ✅ | Average per student, at most 8 chores a day each, from approved chores only |
-| Rival schools | ✅ | Challenge, accept, decline, end; monthly results kept |
-| School Stars (top ten) | ✅ | The admin checks the list before families see it. First names only with a parent's yes |
-| Checking a school is real | ✅ | `/#/operator` with your `OPERATOR_SECRET`: verify, suspend, lift a suspension. Until verified a school is in no league and sees no names |
-| Charging schools | ✅ built, off until Stripe is connected | `api/school-checkout.js`, priced by the school's size. Needs the eight `STRIPE_PRICE_SCHOOL_*` prices — [PAYMENTS.md](PAYMENTS.md#the-school-league) |
-| Closing each month, and the Champion's free month | ✅ built — **you have to schedule it** | `api/settle-schools.js`, monthly. Safe to run twice; a free month that failed is retried next run |
+| District league | ✅ | Average per student, at most 8 chores a day each, accepted chores only |
+| Rival schools | ✅ | At most three at a time; monthly results kept |
+| School Stars (top ten) | ✅ | The admin checks the list before families see it; first names only with a parent's yes |
+| Checking a school is real | ✅ | `/#/operator` with your `OPERATOR_SECRET`, with a checklist per school beside what RankUp knows (email domain and confirmation, size and price, same-named schools, the district's spelling). Until verified, a school is in no league and sees no names |
+| Help for schools | ✅ | `/#/school/help`: eleven questions, prices and numbers read from the code |
+| Charging schools | ✅ with Stripe | `api/school-checkout.js`, priced by the school's size; needs the eight `STRIPE_PRICE_SCHOOL_*` prices |
+| Closing each month, the Champion's free month | ✅ | `api/settle-schools.js`, monthly. **You have to schedule it.** Safe to run twice |
 
-Known limits, decided rather than missed (from the October 2026 review):
+Known limits, decided rather than missed:
 
-- **Membership is counted when the month is closed**, not on its last day. A
-  family taking a child out on the 31st changes that school's average.
+- **Membership is counted when the month is closed**, not on its last day.
 - **Five students can be one family.** The minimum counts children, not
-  households. Requiring several families would stop one family making a
-  school rankable; it would also slow a new school's start.
-- **The 8-a-day cap is by approval day.** A parent who approves a week's
-  chores in one go counts at most 8 that day. Counting by when the child
-  submitted would fix that; it would also let a child's backlog count later.
+  households.
+- **The 8-a-day cap is by approval day.** A parent accepting a week's chores at
+  once counts at most 8 that day. The leaderboards use the same cap.
+
+## Scale, phones and schools
+
+| Thing | Status | Notes |
+|---|---|---|
+| 1,000 families syncing at once | 🟡 | Load-tested locally (docs/LOAD-TEST.md): the connection pool is the first limit, at 3,833 phones going flat out. Not yet measured on a Supabase project |
+| Older phones | ✅ | Built for iPhone Safari 15 and Chrome from about four years back; without `color-mix()` (iOS before 16.2) some small tints are missing |
+| "Add to Home Screen" | ✅ | After the first accepted chore, once, parent's dashboard only |
+| A school's monthly email | ✅ needs `EMAIL_*` | The league result, what it paid, the renewal, to each admin, once a month |
+
+## Notifications
+
+| Thing | Status | Notes |
+|---|---|---|
+| On this phone, while RankUp is open | ✅ | Parent Settings → Notifications |
+| Push to the family's other phones | ✅ needs VAPID keys | A chore done (to the parents), accepted or sent back (to the child), a guild request (to the parents on both sides), reminders and the weekly digest (to the parents). Exact words, limits and hold times: [NOTIFICATIONS.md](NOTIFICATIONS.md) |
+| Daily reminders with the app closed | ✅ | `api/send-reminders.js`, on each family's own clock. **You have to schedule it** |
+| Weekly digest | ✅ | `api/send-digests.js`, Sunday evening in each family's time zone. **You have to schedule it** |
+| 10,000 notices at once | ✅ | Sent in claimed batches within a Cloudflare Function's limits, each once, over several runs; a run cut off is picked up five minutes later ([NOTIFICATIONS.md](NOTIFICATIONS.md)). Past about 7,000 due at the same moment, the scheduler should call again while the job says `more` |
+| A real phone receiving a push | 🟡 | Proven end to end against a stand-in push service (`tests/push.mjs`); not yet on a real phone |
+| Notifications on a child's phone | ❌ | Only a parent's phone has the switch, so "Accepted!" and "Back on your list" reach no phone yet ([ROADMAP.md](ROADMAP.md)) |
+| Guild request notice | ✅ needs VAPID keys | When a child asks to join a guild, the parents whose yes is still missing are told, in the child's family and in the guild's. Once per request; counted against each family's hourly ceiling |
+
+## Not built
+
+| Thing | What happens instead |
+|---|---|
+| Forgot password | You send a reset link from the Supabase dashboard |
+| A scheduler on Cloudflare Pages | Pages cannot run jobs on a timer: use an outside scheduler or a small Worker ([LAUNCH.md](LAUNCH.md) section 2b). Vercel's schedule ships in `vercel.json` |
+| Notifications on a child's phone, quiet hours | See above |
+
+## No photos
+
+RankUp never takes, sends or keeps a photo. It asks for no camera permission,
+the host headers forbid the camera, and there is no picture on any phone or
+server. Phones that ran an older version have the photos it kept there
+removed the first time this version starts.
+
+---
+
+## On one phone only
+
+With no Supabase configured, everything is saved in the browser's own storage.
+It survives a refresh and a restart, but not clearing browser data, and no other
+phone can see it: a parent's phone and a child's phone are two separate copies
+of the app. That is fine for a one-phone demo. With Supabase, everything travels
+between phones ([SYNC.md](SYNC.md)).
+
+---
 
 ## Knowing it is working, without watching it
 
 | Thing | Where |
 |---|---|
-| A broken change cannot be pushed | `.github/workflows/ci.yml` — lint, build, SQL against a real Postgres, both browser suites |
+| A broken change is caught before it ships | `.github/workflows/ci.yml`: lint, build, the SQL suite against a real Postgres (every refusal reason given, every file safe to run twice), the production build, the browser suites in three parallel shards, two-phone sync, the server functions under Cloudflare's runtime. About ten minutes |
 | One screen crashing does not take the app down | `src/components/ScreenBoundary.jsx` |
-| You hear about crashes on other people's phones | `supabase/crashes.sql` — route and message only, never a name or a photo |
-| A scheduled job that stops being called | `/api/health` — silence is the failure mode for all three |
-| One URL to point a monitor at | `GET /api/health` → `{"ok":true}`, or 503 |
+| You hear about crashes on other people's phones | `supabase/crashes.sql`: the screen and the error, never a name |
+| A scheduled job that stops being called | `/api/health` with the `CRON_SECRET`: each of the seven jobs `ok`, `stale` or `never_run` |
+| A deleted family's subscription still not cancelled | The same check: `billing_cancellations_overdue` |
+| One address to point a monitor at | `GET /api/health` → `{"ok":true,"version":"…"}`, or 503 |
+| What to do when one of them is red | [IF-SOMETHING-BREAKS.md](IF-SOMETHING-BREAKS.md) |
 
-What none of this does is fix a bug for you. It means you find out from a
-dashboard rather than from a parent, and that one broken screen is not a broken
-app.
+None of this fixes a bug for you. It means you hear about it from a dashboard
+rather than from a parent.
 
 ---
 
-## Deliberate product rules — not gaps
+## Deliberate rules, not gaps
 
-These look like missing features. They are choices.
-
-- **Only a parent accepts.** There is no automatic checker and no "auto-accept"
-  button. A parent looks (at the chore, or a photo sent by message) and decides.
-- **Adaptive quests are scored leniently.** They are written around one child's limits,
-  so a fixed "is the bed perfectly made" test does not apply.
-- **Overrides never remove XP, levels or streaks.** A parent can tax currency and lock
-  the app, but progress a kid earned stays earned.
-- **Parent themes change nothing but colours.** That is the promise made in the pricing.
+- **Only a parent accepts.** There is no automatic checker and no auto-accept.
+  A parent looks (at the chore, or a photo sent by message) and decides.
+- **Adaptive chores are judged leniently.** They are written around one child's
+  limits.
+- **Overrides never remove XP, levels or streaks.** A parent can tax coins and
+  lock the app; progress a child earned stays earned.
+- **Parent themes change nothing but colours.** That is the promise in the
+  pricing.
+- **Real money is paid exactly as set.** No streak bonus, Elite multiplier or
+  surprise double on pocket money.

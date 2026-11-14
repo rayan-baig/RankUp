@@ -77,6 +77,79 @@ begin
     (d->>'waiting_for_you')::int = 0);
 end $$;
 
+-- ---------- the days are the family's days, not the server's ----------
+-- A family in California and one in Sydney. Every approval below sits on a
+-- different day, or in a different week, depending on whether it is counted
+-- where the family lives or in UTC; the digest must count where they live.
+insert into families (id, name, tier, timezone) values
+  ('7a222222-0000-0000-0000-0000000000a1', 'West Coast Family', 'standard', 'America/Los_Angeles'),
+  ('7a222222-0000-0000-0000-0000000000a2', 'Sydney Family', 'standard', 'Australia/Sydney');
+select seed_consent('7a222222-0000-0000-0000-0000000000a1', '7a111111-1111-1111-1111-111111111111');
+select seed_consent('7a222222-0000-0000-0000-0000000000a2', '7a111111-1111-1111-1111-111111111111');
+insert into kids (id, family_id, name) values
+  ('7a4c4444-0000-0000-0000-0000000000a1', '7a222222-0000-0000-0000-0000000000a1', 'Wes'),
+  ('7a4c4444-0000-0000-0000-0000000000a2', '7a222222-0000-0000-0000-0000000000a2', 'Syd');
+
+do $$
+declare
+  v_la uuid := '7a222222-0000-0000-0000-0000000000a1';
+  v_la_kid uuid := '7a4c4444-0000-0000-0000-0000000000a1';
+  v_syd uuid := '7a222222-0000-0000-0000-0000000000a2';
+  v_syd_kid uuid := '7a4c4444-0000-0000-0000-0000000000a2';
+  v_at timestamptz;
+  i int := 0;
+  d jsonb;
+begin
+  -- In Los Angeles, for the week of Monday 26 October 2026:
+  --   Sun 25 Oct 22:00  last week there; already Monday 26th in UTC
+  --   Wed 28 Oct 18:00  Wednesday there; Thursday in UTC
+  --   Wed 28 Oct 20:00  Wednesday there; Thursday in UTC
+  --   Sun  1 Nov 19:00  this week there (the clocks went back that morning);
+  --                     Monday 2nd, next week, in UTC
+  foreach v_at in array array[
+    '2026-10-25 22:00 America/Los_Angeles'::timestamptz,
+    '2026-10-28 18:00 America/Los_Angeles'::timestamptz,
+    '2026-10-28 20:00 America/Los_Angeles'::timestamptz,
+    '2026-11-01 19:00 America/Los_Angeles'::timestamptz]
+  loop
+    i := i + 1;
+    insert into quests (id, family_id, kid_id, title, xp, status)
+    values (('7a6a0000-0000-0000-0000-00000000000' || i)::uuid, v_la, v_la_kid, 'LA chore ' || i, 20, 'approved');
+    insert into submissions (family_id, quest_id, kid_id, status, decided_at)
+    values (v_la, ('7a6a0000-0000-0000-0000-00000000000' || i)::uuid, v_la_kid, 'approved', v_at);
+  end loop;
+
+  d := family_week_digest(v_la, '2026-10-26');
+  perform ok('a Sunday-evening chore in California counts in that week, not the next',
+    (d->>'approved')::int = 3, d::text);
+  perform ok('and a late Sunday chore the week before counts as last week',
+    (d->>'approved_last_week')::int = 1, d::text);
+  perform ok('the busiest day is the family''s Wednesday, not UTC''s Thursday',
+    d->>'busiest_day' = 'Wednesday', d->>'busiest_day');
+  perform ok('the child''s own count uses the family''s week too',
+    (d->'kids'->0->>'done')::int = 3);
+
+  -- Sydney: Monday 26 October 08:00 there is still Sunday 25th in UTC.
+  insert into quests (id, family_id, kid_id, title, xp, status)
+  values ('7a6b0000-0000-0000-0000-000000000001', v_syd, v_syd_kid, 'Sydney chore', 20, 'approved');
+  insert into submissions (family_id, quest_id, kid_id, status, decided_at)
+  values (v_syd, '7a6b0000-0000-0000-0000-000000000001', v_syd_kid, 'approved',
+          '2026-10-26 08:00 Australia/Sydney');
+  d := family_week_digest(v_syd, '2026-10-26');
+  perform ok('a Monday-morning chore in Sydney counts in that Monday''s week',
+    (d->>'approved')::int = 1 and (d->>'approved_last_week')::int = 0, d::text);
+  perform ok('and on Monday', d->>'busiest_day' = 'Monday', d->>'busiest_day');
+
+  -- What the job sends on the family's Sunday evening carries the same count.
+  d := due_digests_at('2026-11-01 20:00 America/Los_Angeles', 7, 18);
+  perform ok('the Sunday-evening digest for California carries all three',
+    (select (e->>'approved')::int from jsonb_array_elements(d->'digests') e
+      where (e->>'family_id')::uuid = v_la) = 3, d::text);
+end $$;
+
+-- Gone again: the checks below read "who is due" across every family.
+delete from families where id in ('7a222222-0000-0000-0000-0000000000a1', '7a222222-0000-0000-0000-0000000000a2');
+
 -- ---------- what is waiting is the one call to action ----------
 do $$
 declare d jsonb;
@@ -91,7 +164,7 @@ begin
 
   d := family_week_digest('7a222222-0000-0000-0000-000000000001',
                           date_trunc('week', current_date)::date);
-  perform ok('a photo waiting for the parent is counted', (d->>'waiting_for_you')::int = 1);
+  perform ok('a chore waiting for the parent is counted', (d->>'waiting_for_you')::int = 1);
 end $$;
 
 -- ---------- due, once, and only once ----------
