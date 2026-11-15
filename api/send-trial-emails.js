@@ -18,12 +18,18 @@
  * answers not_configured, records no run, and /api/health shows it as never
  * run, which is the point: an email nobody set up should not look healthy.
  *
+ * Then the reminder that a paused plan starts again: three days before
+ * billing starts again after a pause (Pause instead of cancel,
+ * docs/PAYMENTS.md), each parent gets one email saying when, what will be
+ * charged, and that cancelling is a tap away. The same claim, send, mark
+ * as above (due_pause_reminders, supabase/billing.sql), once per pause.
+ *
  * Then, if ERRORS_EMAIL is set, the hourly error report to that address
  * (api/_shared/errorReport.js): crashes and server errors since the last
  * one, with nothing in it that could point at a family.
  */
 import { recordRun, secretMatches, makeServiceRpc } from './_shared/job.js'
-import { emailSettings, emailConfigured, sendEmail, trialEmail } from './_shared/email.js'
+import { emailSettings, emailConfigured, sendEmail, trialEmail, pauseReminderEmail } from './_shared/email.js'
 import { sendErrorReport } from './_shared/errorReport.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -93,14 +99,56 @@ export default async function handler(req, res) {
     failed += results.filter((x) => !x.ok).length
   }
 
+  // A paused plan starting again in three days.
+  const pauses = { due: 0, sent: 0, failed: 0 }
+  let pauseLookupFailed = false
+  let pauseDue = []
+  try {
+    pauseDue = (await serviceRpc('due_pause_reminders', {}))?.reminders || []
+  } catch {
+    // A database without this version's billing.sql yet: the trial emails
+    // above still went, and the run says the pause reminders did not.
+    pauseLookupFailed = true
+  }
+  pauses.due = pauseDue.length
+  for (const r of pauseDue) {
+    let claimed = false
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      claimed = await serviceRpc('claim_pause_reminder', { p_pause_id: r.pause_id })
+    } catch {
+      continue
+    }
+    if (claimed !== true) continue
+    const email = pauseReminderEmail({
+      paidTier: r.paid_tier, cycle: r.cycle, resumesLocal: r.resumes_local, site: SITE, replyTo: settings.replyTo,
+    })
+    // eslint-disable-next-line no-await-in-loop
+    const results = await Promise.all((r.recipients || []).map((to) => sendEmail({
+      to: to.email,
+      ...email,
+      // The pause and its date: a pause whose date moved is a new email.
+      idempotencyKey: `pause-${r.pause_id}-${String(r.resumes_at).slice(0, 19)}-${String(to.email).toLowerCase()}`,
+    }, settings)))
+    const done = results.every((x) => x.ok)
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await serviceRpc('finish_pause_reminder', { p_pause_id: r.pause_id, p_sent: done })
+    } catch { /* the claim runs out in an hour and the idempotency key covers the retry */ }
+    pauses.sent += results.filter((x) => x.ok).length
+    pauses.failed += results.filter((x) => !x.ok).length
+  }
+
   const errors = await sendErrorReport(serviceRpc, settings, { to: ERRORS_EMAIL, site: SITE })
   const problems = [
     failed ? `${failed} email(s) not sent` : '',
+    pauses.failed ? `${pauses.failed} pause reminder(s) not sent` : '',
+    pauseLookupFailed ? 'pause reminders not looked up' : '',
     errors.configured && !errors.ok ? 'error report not sent' : '',
   ].filter(Boolean)
   await recordRun(serviceRpc, 'send-trial-emails', problems.length === 0, problems.join('; ') || null)
   return res.status(200).json({
-    ok: true, due: reminders.length, sent, failed,
+    ok: true, due: reminders.length, sent, failed, pauses,
     error_report: errors.configured ? { kinds: errors.kinds || 0, sent: errors.sent || 0, ...(errors.capped ? { capped: true } : {}) } : null,
   })
 }

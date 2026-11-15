@@ -15,7 +15,7 @@ import { quickChatText } from '../../data/quickChat.js'
  * at all.
  */
 export default function ParentGuilds() {
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
   const [requests, setRequests] = useState([])
   const [reported, setReported] = useState([])
   const [kidId, setKidId] = useState(state.kids[0]?.id || '')
@@ -75,6 +75,14 @@ export default function ParentGuilds() {
     const result = await guilds.approveMember(req.guild_id, req.kid_id)
     setBusy(false)
     if (!result.ok) setError(guildError(result.reason))
+    // The guild is full at its plan's size: what the dashboard's Elite nudge
+    // may say next (lib/upgradeNudge.js). Nothing is shown here.
+    if (result.reason === 'full') {
+      dispatch({
+        type: 'UPDATE_SETTINGS',
+        patch: { upgradeNudge: { ...(state.settings?.upgradeNudge || {}), limitAt: Date.now(), limitWhat: 'guild' } },
+      })
+    }
     load()
   }
 

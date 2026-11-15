@@ -62,6 +62,29 @@ alter table families add column if not exists billing_event_at timestamptz;
 -- The plan a family last paid for, so a parent dropped to Starter by a failed
 -- or refunded payment is told which plan stopped, not just that one did.
 alter table families add column if not exists last_paid_tier text;
+-- Monthly or yearly, as the webhook last read it from the subscription's
+-- price. Only a monthly plan can be paused or take the half-price month: a
+-- month of pause on a yearly plan stops no payment, and half off "the next
+-- invoice" of a yearly plan is half a year.
+alter table families add column if not exists billing_cycle text check (billing_cycle in ('month', 'year'));
+-- When the family took the one half-price month (claim_save_offer). Once per
+-- family, ever: it is never cleared once Stripe has applied it.
+alter table families add column if not exists save_offer_used_at timestamptz;
+
+/*
+ * One count for the owner's console (usage_bump, health.sql): a plan paused,
+ * saved or cancelled. A count must never be the thing that stops a plan
+ * changing, so a database without this version's health.sql yet simply
+ * counts nothing.
+ */
+create or replace function count_plan_change(p_metric text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform usage_bump(p_metric);
+exception when others then
+  null;
+end $$;
+revoke execute on function count_plan_change(text) from public, anon, authenticated;
 
 drop function if exists apply_subscription_change(uuid, text, text, text, text, timestamptz, text, jsonb);
 create or replace function apply_subscription_change(
@@ -136,6 +159,16 @@ begin
     return jsonb_build_object('ok', true, 'ignored', 'refunded_period', 'tier', v_fam.tier);
   end if;
 
+  -- A plan cancelled, for the owner's console: once when it is set to stop
+  -- (cancelled in the portal, running to its end), or once when it ends with
+  -- no warning (cancelled at once). Replays never reach here.
+  if (p_status in ('active', 'trialing') and nullif(p_payload->>'cancel_at', '') is not null
+      and v_fam.subscription_ends_at is null)
+     or (p_status = 'canceled' and v_fam.subscription_ends_at is null
+         and v_fam.subscription_status in ('active', 'trialing', 'past_due')) then
+    perform count_plan_change('plans_cancelled');
+  end if;
+
   -- Fail closed: an unpaid subscription drops to the cheapest plan, never to a
   -- plan it did not pay for. An unrecognised tier name is treated the same way.
   v_tier := case
@@ -169,8 +202,19 @@ begin
              then coalesce(nullif(p_payload->>'ended_at', '')::timestamptz, p_period_end)
            when p_status in ('active', 'trialing')
              then nullif(p_payload->>'cancel_at', '')::timestamptz
-           else null end
+           else null end,
+         -- Monthly or yearly, from the price Stripe charges (the webhook
+         -- reads it); kept as it was when an event does not say.
+         billing_cycle = case when p_payload->>'cycle' in ('month', 'year') then p_payload->>'cycle'
+                              else billing_cycle end
    where id = p_family_id;
+
+  -- A pause (pause_collection), as Stripe sees it, or the plan ending under
+  -- one. Only subscription events say either; a refund says neither.
+  if p_payload ? 'paused_until' or p_status in ('canceled', 'unpaid', 'incomplete_expired') then
+    perform sync_plan_pause(p_family_id, nullif(p_payload->>'paused_until', '')::timestamptz,
+                            p_status in ('active', 'trialing', 'past_due'), p_event_created);
+  end if;
 
   return jsonb_build_object('ok', true, 'tier', v_tier);
 end $$;
@@ -504,7 +548,16 @@ begin
     -- charge on the day it ends, so a gift year is never paid for twice.
     'gift_tier', v_family.gift_tier,
     'gift_starts_at', v_family.gift_starts_at,
-    'gift_until', v_family.gift_until
+    'gift_until', v_family.gift_until,
+    -- A pause (start_plan_pause): when billing starts again, or null.
+    'paused_until', case when v_family.paused_until > now() then v_family.paused_until end,
+    -- Monthly or yearly: only a monthly plan is offered a pause, the
+    -- half-price month and "Switch to yearly".
+    'cycle', v_family.billing_cycle,
+    -- The half-price month has been taken (once per family, ever), and
+    -- whether it was in the last 31 days, when a pause would void it.
+    'save_offer_used', v_family.save_offer_used_at is not null,
+    'save_offer_recent', coalesce(v_family.save_offer_used_at > now() - interval '31 days', false)
   );
 end $$;
 
@@ -1100,3 +1153,367 @@ revoke execute on function fulfil_gift_order(uuid, text, text, text, int, text) 
 revoke execute on function mark_gift_sent(uuid, text) from public, anon, authenticated;
 revoke execute on function redeem_gift_code(uuid, text, text) from public, anon, authenticated;
 revoke execute on function apply_gift_refund(text, text, boolean) from public, anon, authenticated;
+
+-- ===========================================================================
+-- Pause instead of cancel, and the one half-price month.
+--
+-- docs/PAYMENTS.md, "Pause instead of cancel", has the whole story. In short:
+--
+--   1. A parent about to cancel is offered a pause of 1, 2 or 3 months
+--      first (monthly plans only). /api/keep-plan asks start_plan_pause,
+--      which checks the family may pause and writes it down; then tells
+--      Stripe (pause_collection, behavior "void", resuming on that date);
+--      then finish_plan_pause says whether Stripe took it. If Stripe did
+--      not, the pause is undone as if it never was.
+--   2. While paused, Stripe takes no money and effective_tier counts the
+--      plan they pay for as the free level. Nothing is deleted: XP, coins,
+--      items and every child stay. A trial or a gift still counts.
+--   3. Billing starts again by itself on the date (Stripe resumes it, and
+--      effective_tier stops counting the pause at that moment whether or not
+--      Stripe's news has arrived). Three days before, each parent gets one
+--      email (due_pause_reminders, sent by api/send-trial-emails.js).
+--   4. Or the parent resumes early (end_plan_pause), or cancels: cancelling
+--      is never hidden behind any of this.
+--
+-- The half-price month is offered once per family, ever (claim_save_offer):
+-- a Stripe coupon for 50% off one invoice (STRIPE_SAVE_COUPON).
+--
+-- Pauses, half-price months and cancellations are counted for the owner's
+-- console (usage_daily: plans_paused, plans_saved, plans_cancelled), totals
+-- only. Every function here is the server's: revoked from public, anon and
+-- authenticated; plan_pauses has row level security on and no policy.
+-- ===========================================================================
+
+/*
+ * One row per pause. `months` is null for a pause made in Stripe's own
+ * dashboard, which the webhook writes down when it hears of it. Kept 90 days
+ * after the pause is over (run_retention), long enough to answer a parent's
+ * question about it; the family row says whether one is running now.
+ */
+create table if not exists plan_pauses (
+  id                  bigserial primary key,
+  family_id           uuid not null references families(id) on delete cascade,
+  months              smallint check (months between 1 and 3),
+  started_at          timestamptz not null default now(),
+  resumes_at          timestamptz not null,
+  -- Stripe took it (finish_plan_pause), or the pause came from Stripe.
+  confirmed_at        timestamptz,
+  -- Resumed early, or the plan ended while paused.
+  ended_at            timestamptz,
+  -- The reminder three days before billing starts again.
+  reminder_claimed_at timestamptz,
+  reminder_sent_at    timestamptz
+);
+create index if not exists plan_pauses_family_idx on plan_pauses (family_id, started_at desc);
+create index if not exists plan_pauses_due_idx on plan_pauses (resumes_at)
+  where ended_at is null and reminder_sent_at is null;
+alter table plan_pauses enable row level security;
+revoke all on plan_pauses from public, anon, authenticated;
+
+/** The family's Stripe subscription, for the server functions that change it. */
+create or replace function stripe_subscription_for_family(p_family_id uuid)
+returns text language sql stable security definer set search_path = public as $$
+  select stripe_subscription_id from families where id = p_family_id;
+$$;
+
+/**
+ * May this family pause, and for how long? If so, write it down and say
+ * when billing starts again. Called by /api/keep-plan before it asks Stripe.
+ *
+ * `p_cycle` is the subscription's period as Stripe has it, which the server
+ * function reads from the subscription itself; the family row's copy is
+ * used when it is not given.
+ *
+ * Refused:
+ *   bad_months       not 1, 2 or 3
+ *   no_family        no such family
+ *   no_subscription  nothing at Stripe to pause
+ *   already_paused   a pause is running
+ *   not_active       not an active, paid plan: on a free trial nothing is
+ *                    charged yet; behind on a payment, the card comes first
+ *   plan_ending      cancelled and running to its end: nothing to pause
+ *   not_monthly      a yearly plan (a month of pause stops no payment)
+ *   half_price_month the half-price month was taken in the last 31 days: a
+ *                    pause now would void the invoice it takes half off
+ */
+create or replace function start_plan_pause(p_family_id uuid, p_months int, p_cycle text default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_fam   families;
+  v_cycle text;
+  v_until timestamptz;
+  v_id    bigint;
+begin
+  if p_months is null or p_months not between 1 and 3 then
+    return jsonb_build_object('ok', false, 'reason', 'bad_months');
+  end if;
+  select * into v_fam from families where id = p_family_id for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no_family');
+  end if;
+  if v_fam.stripe_subscription_id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no_subscription');
+  end if;
+  if v_fam.paused_until > now() then
+    return jsonb_build_object('ok', false, 'reason', 'already_paused', 'paused_until', v_fam.paused_until);
+  end if;
+  if v_fam.subscription_status is distinct from 'active' then
+    return jsonb_build_object('ok', false, 'reason', 'not_active');
+  end if;
+  if v_fam.subscription_ends_at > now() then
+    return jsonb_build_object('ok', false, 'reason', 'plan_ending');
+  end if;
+  v_cycle := coalesce(case when p_cycle in ('month', 'year') then p_cycle end, v_fam.billing_cycle);
+  if v_cycle is distinct from 'month' then
+    return jsonb_build_object('ok', false, 'reason', 'not_monthly');
+  end if;
+  if v_fam.save_offer_used_at > now() - interval '31 days' then
+    return jsonb_build_object('ok', false, 'reason', 'half_price_month');
+  end if;
+
+  v_until := now() + make_interval(months => p_months);
+  insert into plan_pauses (family_id, months, resumes_at)
+  values (p_family_id, p_months, v_until)
+  returning id into v_id;
+  update families set paused_until = v_until, billing_cycle = v_cycle where id = p_family_id;
+  return jsonb_build_object('ok', true, 'pause_id', v_id, 'months', p_months, 'resumes_at', v_until,
+                            'subscription_id', v_fam.stripe_subscription_id);
+end $$;
+
+/**
+ * How Stripe answered. Took it: the pause is confirmed, and counted once.
+ * Refused or did not answer: the pause is undone, as if it never was (a
+ * pause Stripe did make after all reaches the webhook, which writes it down
+ * again). A confirmed pause is never undone here.
+ */
+create or replace function finish_plan_pause(p_pause_id bigint, p_ok boolean)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_pause plan_pauses;
+begin
+  select * into v_pause from plan_pauses where id = p_pause_id for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no_pause');
+  end if;
+  if coalesce(p_ok, false) then
+    if v_pause.confirmed_at is null then
+      update plan_pauses set confirmed_at = now() where id = p_pause_id;
+      perform count_plan_change('plans_paused');
+    end if;
+    return jsonb_build_object('ok', true, 'resumes_at', v_pause.resumes_at);
+  end if;
+  if v_pause.confirmed_at is not null then
+    return jsonb_build_object('ok', true, 'kept', true);
+  end if;
+  delete from plan_pauses where id = p_pause_id;
+  update families set paused_until = null
+   where id = v_pause.family_id and paused_until = v_pause.resumes_at;
+  return jsonb_build_object('ok', true, 'undone', true);
+end $$;
+
+/**
+ * Resume now, before the date: called once Stripe has been told. The pause
+ * ends here and billing goes on from the next renewal date.
+ */
+create or replace function end_plan_pause(p_family_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_fam families;
+begin
+  select * into v_fam from families where id = p_family_id for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no_family');
+  end if;
+  if v_fam.paused_until is null or v_fam.paused_until <= now() then
+    return jsonb_build_object('ok', false, 'reason', 'not_paused');
+  end if;
+  update plan_pauses set ended_at = now()
+   where family_id = p_family_id and ended_at is null and resumes_at > now();
+  update families set paused_until = null where id = p_family_id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+/**
+ * What Stripe says about a pause, from a subscription event
+ * (apply_subscription_change, after its own checks for replays, old news and
+ * another subscription). `p_until` is pause_collection.resumes_at, or null
+ * when Stripe says it is not paused; `p_live` is false once the plan ended,
+ * which ends any pause with it.
+ *
+ * Stripe does not deliver in order, so: news from before a pause started
+ * does not end it, a pause the app is still telling Stripe about is left to
+ * finish_plan_pause, and news from before an early resume does not pause the
+ * family again. A pause made in Stripe's dashboard is written down here,
+ * with no months, and counted.
+ */
+create or replace function sync_plan_pause(p_family_id uuid, p_until timestamptz, p_live boolean,
+                                           p_event_created timestamptz default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_open plan_pauses;
+begin
+  select * into v_open from plan_pauses
+   where family_id = p_family_id and ended_at is null and resumes_at > now()
+   order by started_at desc limit 1;
+
+  if p_live and p_until > now() then
+    if v_open.id is not null then
+      -- The date moved (changed in Stripe): the reminder follows it.
+      if v_open.resumes_at <> p_until then
+        update plan_pauses set resumes_at = p_until, reminder_claimed_at = null, reminder_sent_at = null
+         where id = v_open.id;
+      end if;
+    elsif exists (select 1 from plan_pauses where family_id = p_family_id
+                    and ended_at > coalesce(p_event_created, 'infinity'::timestamptz)) then
+      -- Resumed early after this news was written.
+      return;
+    else
+      insert into plan_pauses (family_id, months, resumes_at, confirmed_at)
+      values (p_family_id, null, p_until, now());
+      perform count_plan_change('plans_paused');
+    end if;
+    update families set paused_until = p_until where id = p_family_id and paused_until is distinct from p_until;
+    return;
+  end if;
+
+  if v_open.id is not null and p_live then
+    -- Older than the pause, or the app is still waiting for Stripe's answer.
+    if v_open.started_at > coalesce(p_event_created, 'infinity'::timestamptz) or v_open.confirmed_at is null then
+      return;
+    end if;
+  end if;
+  update plan_pauses set ended_at = now()
+   where family_id = p_family_id and ended_at is null and resumes_at > now();
+  update families set paused_until = null where id = p_family_id and paused_until is not null;
+end $$;
+
+/**
+ * May this family have the half-price month? If so, mark it taken, before
+ * Stripe is asked, so two taps at once cannot both have it. Called by
+ * /api/keep-plan; finish_save_offer then says whether Stripe applied it.
+ *
+ * Refused:
+ *   no_family, no_subscription, not_active, plan_ending, not_monthly as for
+ *   a pause (half off the next invoice of a yearly plan is half a year);
+ *   already_used  this family has had it (once, ever)
+ *   paused        nothing is charged during a pause to take half off
+ */
+create or replace function claim_save_offer(p_family_id uuid, p_cycle text default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_fam   families;
+  v_cycle text;
+begin
+  select * into v_fam from families where id = p_family_id for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no_family');
+  end if;
+  if v_fam.save_offer_used_at is not null then
+    return jsonb_build_object('ok', false, 'reason', 'already_used');
+  end if;
+  if v_fam.stripe_subscription_id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no_subscription');
+  end if;
+  if v_fam.paused_until > now() then
+    return jsonb_build_object('ok', false, 'reason', 'paused');
+  end if;
+  if v_fam.subscription_status is distinct from 'active' then
+    return jsonb_build_object('ok', false, 'reason', 'not_active');
+  end if;
+  if v_fam.subscription_ends_at > now() then
+    return jsonb_build_object('ok', false, 'reason', 'plan_ending');
+  end if;
+  v_cycle := coalesce(case when p_cycle in ('month', 'year') then p_cycle end, v_fam.billing_cycle);
+  if v_cycle is distinct from 'month' then
+    return jsonb_build_object('ok', false, 'reason', 'not_monthly');
+  end if;
+  update families set save_offer_used_at = now(), billing_cycle = v_cycle where id = p_family_id;
+  return jsonb_build_object('ok', true, 'subscription_id', v_fam.stripe_subscription_id, 'claimed_at', now());
+end $$;
+
+/**
+ * How Stripe answered the half-price month. Applied: counted, and it stays
+ * taken for ever. Not applied: given back, so the family can try again.
+ */
+create or replace function finish_save_offer(p_family_id uuid, p_ok boolean)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if coalesce(p_ok, false) then
+    if not exists (select 1 from families where id = p_family_id and save_offer_used_at is not null) then
+      return jsonb_build_object('ok', false, 'reason', 'not_claimed');
+    end if;
+    perform count_plan_change('plans_saved');
+    return jsonb_build_object('ok', true);
+  end if;
+  update families set save_offer_used_at = null where id = p_family_id;
+  return jsonb_build_object('ok', true, 'given_back', true);
+end $$;
+
+/**
+ * Which families' billing starts again within three days, with each parent
+ * to write to (never a supporter, only an account with an email address).
+ * Once per pause: a pause whose date moved is due again for the new date.
+ * The job claims each before sending (claim_pause_reminder).
+ */
+create or replace function due_pause_reminders(p_now timestamptz default now())
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_rows jsonb;
+begin
+  with due as (
+    select p.id, p.family_id, p.resumes_at, f.tier, coalesce(f.billing_cycle, 'month') as cycle,
+           case when is_time_zone(f.timezone) then f.timezone else 'UTC' end as tz
+      from plan_pauses p join families f on f.id = p.family_id
+     where p.ended_at is null
+       and p.reminder_sent_at is null
+       and (p.reminder_claimed_at is null or p.reminder_claimed_at < p_now - interval '1 hour')
+       and p.resumes_at > p_now
+       and p.resumes_at <= p_now + interval '3 days'
+       and f.paused_until = p.resumes_at
+       and f.stripe_subscription_id is not null
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'pause_id', d.id,
+           'family_id', d.family_id,
+           'paid_tier', d.tier,
+           'cycle', d.cycle,
+           'resumes_at', d.resumes_at,
+           'resumes_local', to_char(d.resumes_at at time zone d.tz, 'FMDay FMDD FMMonth'),
+           'recipients', (
+             select coalesce(jsonb_agg(jsonb_build_object('email', u.email) order by p.created_at), '[]'::jsonb)
+               from parents p join auth.users u on u.id = p.user_id
+              where p.family_id = d.family_id and p.role = 'parent'
+                and u.email is not null and u.email like '%@%')
+         ) order by d.resumes_at), '[]'::jsonb)
+    into v_rows
+    from due d;
+  return jsonb_build_object('ok', true, 'reminders', v_rows);
+end $$;
+
+/** Claim one pause's reminder before it is sent: true for the one run that gets it. */
+create or replace function claim_pause_reminder(p_pause_id bigint)
+returns boolean language sql security definer set search_path = public as $$
+  with claimed as (
+    update plan_pauses set reminder_claimed_at = now()
+     where id = p_pause_id and ended_at is null and reminder_sent_at is null
+       and (reminder_claimed_at is null or reminder_claimed_at < now() - interval '1 hour')
+    returning 1
+  ) select exists (select 1 from claimed);
+$$;
+
+/** After the send: sent, so never again for this date; or not, so the next run tries. */
+create or replace function finish_pause_reminder(p_pause_id bigint, p_sent boolean)
+returns void language sql security definer set search_path = public as $$
+  update plan_pauses
+     set reminder_sent_at = case when p_sent then coalesce(reminder_sent_at, now()) else reminder_sent_at end,
+         reminder_claimed_at = case when p_sent then reminder_claimed_at else null end
+   where id = p_pause_id;
+$$;
+
+revoke execute on function stripe_subscription_for_family(uuid) from public, anon, authenticated;
+revoke execute on function start_plan_pause(uuid, int, text) from public, anon, authenticated;
+revoke execute on function finish_plan_pause(bigint, boolean) from public, anon, authenticated;
+revoke execute on function end_plan_pause(uuid) from public, anon, authenticated;
+revoke execute on function sync_plan_pause(uuid, timestamptz, boolean, timestamptz) from public, anon, authenticated;
+revoke execute on function claim_save_offer(uuid, text) from public, anon, authenticated;
+revoke execute on function finish_save_offer(uuid, boolean) from public, anon, authenticated;
+revoke execute on function due_pause_reminders(timestamptz) from public, anon, authenticated;
+revoke execute on function claim_pause_reminder(bigint) from public, anon, authenticated;
+revoke execute on function finish_pause_reminder(bigint, boolean) from public, anon, authenticated;

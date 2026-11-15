@@ -33,6 +33,7 @@ const ROUTES = {
   'district-quote': () => import('../../api/district-quote.js'),
   'gift-checkout': () => import('../../api/gift-checkout.js'),
   health: () => import('../../api/health.js'),
+  'keep-plan': () => import('../../api/keep-plan.js'),
   'redeem-gift': () => import('../../api/redeem-gift.js'),
   'refresh-leaderboards': () => import('../../api/refresh-leaderboards.js'),
   'run-retention': () => import('../../api/run-retention.js'),

@@ -2,8 +2,8 @@
  * Every email RankUp's own code sends, rendered and read the way a mail
  * program would show it.
  *
- * Five kinds are written here (api/_shared/email.js): the free trial's
- * reminders, a school's month, the error report, and a gift's two emails
+ * Seven kinds are written here (api/_shared/email.js): the free trial's
+ * reminders, the reminder that a paused plan starts again, a school's month, the error report, and a gift's two emails
  * (the buyer's receipt with the code, and the gift to the person it is for). Supabase's and Stripe's
  * emails are written in their dashboards (docs/EMAILS.md), not by this code.
  * Each kind is rendered in every variant it has, and each one must have:
@@ -20,7 +20,7 @@
  * Reads code only; needs nothing running.
  */
 import { readFileSync } from 'node:fs'
-import { trialEmail, schoolMonthEmail, errorReportEmail, giftReceiptEmail, giftEmail, districtQuoteEmail } from '../api/_shared/email.js'
+import { trialEmail, pauseReminderEmail, schoolMonthEmail, errorReportEmail, giftReceiptEmail, giftEmail, districtQuoteEmail } from '../api/_shared/email.js'
 import { TIERS } from '../src/state/initialState.js'
 import { PRODUCT_OF } from '../src/data/legalText.js'
 
@@ -53,6 +53,17 @@ for (const site of [SITE, '']) {
         for (const daysLeft of [0, 1]) {
           add(`trial, last day (${daysLeft ? 'the evening before' : 'on the day'}), ${trialTier} over ${paidTier}, ${where}`,
             trialEmail({ kind: 'last_day', trialTier, paidTier, endsLocal: 'Friday 14 November', daysLeft, site, replyTo }))
+        }
+      }
+    }
+
+    // A paused plan starting again in three days: each paid plan, monthly
+    // and yearly, with the day as the database writes it, and with none.
+    for (const paidTier of ['standard', 'elite']) {
+      for (const cycle of ['month', 'year']) {
+        for (const resumesLocal of ['Friday 12 December', null]) {
+          add(`pause reminder, ${paidTier}, ${cycle}ly, ${resumesLocal ? 'with' : 'without'} the day, ${where}`,
+            pauseReminderEmail({ paidTier, cycle, resumesLocal, site, replyTo }))
         }
       }
     }
@@ -130,8 +141,8 @@ for (const site of [SITE, '']) {
 console.log('\n=== Every email RankUp sends itself is rendered here ===')
 const source = readFileSync(new URL('../api/_shared/email.js', import.meta.url), 'utf8')
 const builders = [...source.matchAll(/^export function (\w+Email)\(/gm)].map((m) => m[1])
-const rendered = ['trialEmail', 'schoolMonthEmail', 'errorReportEmail', 'giftReceiptEmail', 'giftEmail', 'districtQuoteEmail']
-ok(`the builders in api/_shared/email.js are the six rendered here (${builders.join(', ')})`,
+const rendered = ['trialEmail', 'pauseReminderEmail', 'schoolMonthEmail', 'errorReportEmail', 'giftReceiptEmail', 'giftEmail', 'districtQuoteEmail']
+ok(`the builders in api/_shared/email.js are the seven rendered here (${builders.join(', ')})`,
   builders.length === rendered.length && builders.every((b) => rendered.includes(b)),
   `a new one needs its variants added to tests/emails.mjs: ${builders.filter((b) => !rendered.includes(b)).join(', ')}`)
 ok(`${emails.length} emails rendered`, emails.length > 100)
@@ -212,6 +223,20 @@ console.log('\n=== A district\'s quote request ===')
   const district = emails.filter((e) => e.name.includes('paid for by its district'))
   ok('a school its district pays for is told so, not that its plan ended',
     district.length > 0 && district.every((e) => /North Valley Unified pays for/.test(e.text) && !/Your plan has ended/.test(e.text)))
+}
+
+console.log('\n=== A paused plan starting again ===')
+{
+  const pauses = emails.filter((e) => e.name.startsWith('pause reminder'))
+  ok(`${pauses.length} pause reminders rendered`, pauses.length >= 16)
+  const one = pauseReminderEmail({ paidTier: 'standard', cycle: 'month', resumesLocal: 'Friday 12 December', site: SITE, replyTo: HELP })
+  ok('the subject says the day it starts again', one.subject === 'Your RankUp plan starts again on Friday 12 December', one.subject)
+  ok('it says what is charged then, at the plan list\'s own price',
+    one.text.includes(`$${TIERS.standard.price.toFixed(2)} a month`)
+    && pauseReminderEmail({ paidTier: 'elite', cycle: 'year', site: SITE }).text.includes(`$${TIERS.elite.yearPrice.toFixed(2)} a year`))
+  ok('that nothing was lost while it was paused', /every child, their XP, coins and items are all still there/.test(one.text))
+  ok('and that cancelling instead is one tap, with a link to the plan', /Cancelling is one tap/.test(one.text) && one.text.includes(`${SITE}/#/parent/plan`))
+  ok('no child is named in it', !/Ava|kid name/.test(one.text))
 }
 
 console.log('\n=== A gift ===')

@@ -135,6 +135,7 @@ STRIPE_PRICE_ELITE_YEAR=price_...
 STRIPE_PRICE_GIFT_STANDARD_YEAR=price_...   # one-time
 STRIPE_PRICE_GIFT_ELITE_YEAR=price_...      # one-time
 GIFT_CODE_SECRET=...                        # openssl rand -hex 32, set once
+STRIPE_SAVE_COUPON=...                      # the half-price month's coupon id (below)
 SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
@@ -276,8 +277,8 @@ itself. This is how the Alliance and School League prizes are already paid:
 
 - not a coupon, which takes a percentage off the next invoice, and for a yearly
   plan would be a free year
-- not a pause or a longer trial on the subscription: subscriptions are made by
-  Checkout and changed only in Stripe's portal, and a credit touches neither
+- not a pause or a longer trial on the subscription: a pause is the family's
+  own choice ("Pause instead of cancel", below), and a credit touches neither
 - the credit carries the idempotency key `referral-reward:<invited family>`,
   so a replay, a timeout retry or two deliveries at once give one credit. If
   Stripe fails, the webhook answers 500 and Stripe's retry gives it.
@@ -507,13 +508,163 @@ reminder, and no child's screen).
 
 ---
 
+## Pause instead of cancel
+
+Many families cancel for the summer or the holidays and never come back. So
+a parent on the way out is offered a break first, and cancelling stays one tap
+away the whole time.
+
+**What a parent sees.** On the plan screen, "Cancel my plan" (always shown
+while a plan can still charge) and "Manage billing or update card" open
+**Before you cancel**: pause for 1, 2 or 3 months, and, on a monthly plan that
+has not had it, one month at half price. "Cancel my plan" is in the same sheet
+and opens Stripe's own cancel page straight away (the portal's
+`subscription_cancel` flow), and "Billing and card" its front page. All of it
+fits on a phone screen with nothing to scroll. When there is nothing to offer
+(a yearly plan, a plan already paused or ending, the half-price month running),
+both buttons go straight to Stripe.
+
+**Who can pause.** An active, monthly, paid plan that is not set to stop and
+not already paused: `start_plan_pause` (`supabase/billing.sql`) decides, with
+Stripe's own view of the subscription checked first by `/api/keep-plan`.
+On Stripe's trial nothing is charged yet (`not_active`); behind on a payment,
+the card comes first; a yearly plan cannot pause, because a month off stops no
+payment (`not_monthly`); and not in the 31 days after the half-price month,
+whose invoice a pause would void (`half_price_month`).
+
+**How it is done.** `/api/keep-plan` (`{ action: 'pause', months }`):
+
+1. `start_plan_pause` writes the pause down (`plan_pauses`, and
+   `families.paused_until`) and says when billing starts again: now plus that
+   many months.
+2. Stripe: the subscription's `pause_collection` with behavior **void** and
+   `resumes_at` on that date, with the idempotency key
+   `rankup-pause-<pause id>`. Invoices that fall inside are voided, so nothing
+   is charged; a monthly plan paused for N months misses exactly N charges,
+   and the days already paid for before the pause are given back as days
+   after it, until the next renewal date. Stripe starts charging again by
+   itself on `resumes_at`.
+3. `finish_plan_pause`: Stripe took it, so it is confirmed and counted; or
+   Stripe refused or did not answer, so it is undone as if it never was.
+
+**While paused**, `effective_tier` counts the plan they pay for as Starter
+until `paused_until`, and stops at that moment whether or not Stripe's news
+has arrived. A free trial or a gift still counts in full: only the paid part
+is paused. Nothing is deleted: Starter's one-child rule only stops a new child
+being added, and every child, their XP, coins, items and streaks stay. The
+plan screen and the parent's dashboard say "Your plan is paused" and the date;
+the child's home screen says "Paused — your progress is safe", never a price.
+A gift cannot be redeemed during a pause (the plan still renews: turn it off
+first), checkout refuses a second plan, and a change of plan in the portal is
+refused until it is resumed (it would charge today).
+
+**Resuming early**: "Start my plan again now" (`{ action: 'resume' }`) takes
+`pause_collection` off at Stripe, then `end_plan_pause`. Charging carries on
+from the next renewal date; nothing is charged that day.
+
+**Three days before** billing starts again, each parent (never a supporter)
+gets one email: when, what will be charged at the plan list's price, that
+nothing was lost and that cancelling is one tap away (`pauseReminderEmail`,
+sent by the hourly `/api/send-trial-emails`; `due_pause_reminders`, claimed
+before it is sent, once per pause, again only if the date moves).
+
+**Stripe's news.** Every `customer.subscription.updated` carries
+`pause_collection` (or null), and the webhook passes it on
+(`sync_plan_pause`): a pause made or moved in Stripe's dashboard is written
+down and counted (one with no end date runs until somebody resumes it),
+Stripe resuming it ends it, and a plan that ends while paused ends the pause.
+Out of order: news written before a pause started does not end it, news
+while `/api/keep-plan` is still waiting for Stripe's answer is left to it, and
+news from before an early resume does not pause the family again.
+
+**The half-price month** (`{ action: 'save' }`): the coupon in
+`STRIPE_SAVE_COUPON`, added to the subscription's `discounts` beside any it
+already has (an Alliance prize, say), with the idempotency key
+`rankup-save-<family>-<time>`. Once per family, ever:
+`families.save_offer_used_at`, set by `claim_save_offer` **before** Stripe is
+asked, so two taps cannot both have it, and given back by
+`finish_save_offer` only if Stripe did not apply it. Not on a yearly plan
+(half off the next invoice would be half a year), not while paused, not for a
+plan already ending. Without the setting the offer is not made at all.
+
+**Counted** for the owner's console: `plans_paused` (a pause Stripe took, or
+one made in its dashboard), `plans_saved` (a half-price month Stripe applied)
+and `plans_cancelled` (once when a plan is set to stop, or once when it ends
+with no warning) in `usage_daily`, in `/api/stats` and on the operator page.
+Totals only.
+
+**Tests.** `supabase/test/57-pauses.sql` (every rule and refusal, Stripe's
+news out of order, the counts, the reminder, the revokes),
+`tests/keepplan.mjs` (the real `/api/keep-plan`, portal and webhook under
+workerd against a stand-in Stripe: pause, resume, Stripe failing, the
+half-price month once, cancelling paused or not, the reminder email) and
+`tests/pauseplan.mjs` (the screens, and no child's screen with a price or an
+offer).
+
+### To switch it on
+
+1. In Stripe, Products → Coupons: a coupon for **50% off**, duration
+   **once**, in the plans' currency; set `STRIPE_SAVE_COUPON` to its id.
+   Pausing and cancelling work without it; only the half-price month needs it.
+2. Customer portal settings: keep cancelling on (at the end of the period),
+   and turn on **Customers can switch plans** with the four Standard and Elite
+   Pass prices, so the Elite and yearly confirm pages work (below).
+3. Run every SQL file again, in the documented order (`schema.sql`,
+   `billing.sql`, `health.sql` and `retention.sql` changed). No new file.
+4. In test mode: pause a monthly test subscription for a month, check the
+   subscription shows "Collection paused" in Stripe and the plan screen says
+   until when; resume it; take the half-price month and check the coupon on
+   the subscription; cancel it from the sheet.
+
+---
+
+## The Elite nudge and "Switch to yearly"
+
+**The Elite nudge** is a short card on the parent's dashboard, in Parent Mode
+only, for a family on Standard (not on a gift, not paused, not behind on a
+payment), at one of two moments (`src/lib/upgradeNudge.js`):
+
+- a **great week**: 10 or more chores accepted in seven days, "Elite Pass
+  gives 1.5× XP on every chore";
+- a **Standard limit hit**: a parent opened an Elite-only tool (the screen in
+  front of it writes that down), or the family's guild is full at Standard's
+  size.
+
+At most once every 14 days on that phone, counting from when it was shown or
+dismissed, and "Not now" takes it away. It upgrades through the existing
+prices: a family already paying moves to Elite on Stripe's own confirm page
+(`/api/billing-portal` with `flow: 'upgrade'`, the portal's
+`subscription_update_confirm`, Elite for the same period), so Stripe shows the
+new price and what is charged today before the parent agrees; any other family
+goes through checkout. Every number in it comes from `TIERS`.
+
+**"Switch to yearly — save about 30%"** is a card in Settings for a parent
+paying monthly (live, not paused, not ending). The saving is the real
+difference between the plan list's two prices (30% on Standard, 33% on Elite
+Pass). It opens the same confirm page for the yearly price of the plan they
+are on (`flow: 'yearly'`).
+
+Both need "Customers can switch plans" in the portal's settings, with the four
+prices. A subscription on a price RankUp does not know (one made by hand) is
+told to write to us (`custom_plan`).
+
+**Children never see either**, nor any price, offer or anything to buy: the
+cards are on Parent Mode screens only, behind the PIN, and a child's phone has
+no Parent Mode. `tests/upgradenudge.mjs` holds the rules and
+`tests/pauseplan.mjs` checks every child's screen.
+
+---
+
 ## Cancelling and card changes
 
 These go to Stripe's own customer portal (`/api/billing-portal`), not to
 screens rebuilt here. That is deliberate: how cancellation is presented carries
-legal obligations in several places, and Stripe keeps theirs current.
+legal obligations in several places, and Stripe keeps theirs current. RankUp
+offers a pause and the half-price month first (above), and "Cancel my plan"
+then opens Stripe's cancel page directly, in one tap.
 
-Enable the portal once in Stripe: Settings → Billing → Customer portal.
+Enable the portal once in Stripe: Settings → Billing → Customer portal. Keep
+cancelling on, and turn on switching plans with the four family prices.
 
 ---
 

@@ -12,7 +12,7 @@
  * Needs Postgres with the schema applied:  supabase/test/run.sh
  */
 import pg from 'pg'
-import { effectiveTier, trialDaysLeft } from '../src/state/reducer.js'
+import { effectiveTier, trialDaysLeft, pausedUntilOf } from '../src/state/reducer.js'
 
 let fails = 0
 const ok = (label, cond, detail = '') => {
@@ -109,6 +109,42 @@ console.log('\n=== A gift plan: the app and the database agree on that too ===')
   ok('one waiting for the paid plan to end does not, yet', effectiveTier({ tier: 'standard', giftTier: 'elite', giftStartsAt: Date.now() + 8.64e7, giftUntil: Date.now() + 9e9 }) === 'standard')
   ok('and one past gift_until is over', effectiveTier({ tier: 'starter', giftTier: 'elite', giftStartsAt: Date.now() - 9e9, giftUntil: Date.now() - 1000 }) === 'starter')
   await db.query('update families set gift_tier = null, gift_starts_at = null, gift_until = null where id = $1', [FAMILY])
+}
+
+console.log('\n=== A paused plan: the app and the database agree on that too ===')
+{
+  // What they pay for, a trial or none, a gift or none, and a pause that is
+  // over, running, or running with no end date (made in Stripe's dashboard).
+  const PAUSES = [null, -1, 720, 'infinity']
+  const off = []
+  let n = 0
+  for (const tier of TIERS) {
+    for (const trial of [null, 'elite']) {
+      for (const gift of [null, 'standard']) {
+        for (const hours of PAUSES) {
+          const paused = hours === null ? null : hours === 'infinity' ? 'infinity' : new Date(Date.now() + hours * 3600000)
+          const trialEnds = trial ? new Date(Date.now() + 72 * 3600000) : null
+          const giftStarts = gift ? new Date(Date.now() - 3600000) : null
+          const giftUntil = gift ? new Date(Date.now() + 9000 * 3600000) : null
+          await db.query(
+            `update families set tier = $1, trial_tier = $2, trial_ends_at = $3, gift_tier = $4, gift_starts_at = $5, gift_until = $6,
+                    paused_until = $7 where id = $8`, [tier, trial, trialEnds, gift, giftStarts, giftUntil, paused, FAMILY])
+          const fromDb = (await db.query('select effective_tier($1) as t', [FAMILY])).rows[0].t
+          const fromApp = effectiveTier({ tier, trialTier: trial, trialEndsAt: trialEnds?.getTime() ?? null,
+            giftTier: gift, giftStartsAt: giftStarts?.getTime() ?? null, giftUntil: giftUntil?.getTime() ?? null,
+            pausedUntil: pausedUntilOf(paused instanceof Date ? paused.toISOString() : paused) })
+          n += 1
+          if (fromDb !== fromApp) off.push(`paid=${tier} trial=${trial} gift=${gift} paused=${hours} app=${fromApp} db=${fromDb}`)
+        }
+      }
+    }
+  }
+  ok(`the app and the database agree on all ${n} of them`, off.length === 0, `${off.length} differ, first: ${off[0] || ''}`)
+  ok('a pause takes a paying family to the free level', effectiveTier({ tier: 'elite', pausedUntil: Date.now() + 8.64e7 }) === 'starter')
+  ok('but a trial still counts in full', effectiveTier({ tier: 'standard', pausedUntil: Date.now() + 8.64e7, trialTier: 'elite', trialEndsAt: Date.now() + 8.64e7 }) === 'elite')
+  ok('and so does a gift', effectiveTier({ tier: 'elite', pausedUntil: Date.now() + 8.64e7, giftTier: 'standard', giftStartsAt: Date.now() - 1000, giftUntil: Date.now() + 8.64e7 }) === 'standard')
+  ok('and when it is over, they have what they pay for', effectiveTier({ tier: 'elite', pausedUntil: Date.now() - 1000 }) === 'elite')
+  await db.query('update families set paused_until = null, gift_tier = null, gift_starts_at = null, gift_until = null where id = $1', [FAMILY])
 }
 
 console.log('\n=== The countdown a parent is shown ===')

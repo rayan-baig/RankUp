@@ -29,6 +29,19 @@ Theme Genesis (0.11.0) added to `sync.sql` the tables `kid_themes`,
 `consent.sql` the children's themes in "Download my data". No new file and no
 change to the order: re-running the three files is the upgrade.
 
+Pause instead of cancel (0.18.0) added to `schema.sql` the column
+`families.paused_until` and the pause in `effective_tier` (a paused plan
+counts as Starter until then; a trial or a gift still counts); to
+`billing.sql` the columns `families.billing_cycle` and `save_offer_used_at`,
+the table `plan_pauses` (row level security on, no policy; reached only
+through functions), the functions that start, confirm, undo, end and follow a
+pause, claim the half-price month and remind a family three days before
+billing starts again (every one revoked from `public, anon, authenticated`),
+and the pause, the period and the half-price month in
+`apply_subscription_change` and `billing_status`; to `health.sql` three daily
+counts (plans paused, saved, cancelled); and to `retention.sql` deleting a
+pause 90 days after it is over. No new file and no change to the order.
+
 School districts (0.17.0) added to `schools.sql` the tables `districts`,
 `district_staff`, `district_schools` and `district_quote_attempts` (row level
 security on, no policy; reached only through functions), `district_covers` and

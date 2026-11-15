@@ -5,7 +5,8 @@
  * numbers, families and families active in the last 30 days, and the daily
  * usage totals for the last 30 days (`daily`: families signed up, chores
  * accepted, rewards bought, games played, schools signed up, help page
- * views; supabase/health.sql), and nothing about any one family. Off unless
+ * views, and plans paused, saved with the half-price month and cancelled;
+ * supabase/health.sql), and nothing about any one family. Off unless
  * STATS_KEY is set; answered only to that key, which is the same value as
  * the console's MTRX_STATS_KEY.
  */

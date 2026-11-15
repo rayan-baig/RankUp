@@ -43,6 +43,10 @@ export const LAST_UPDATED = 'November 2026'
  * section still holds ("exchange short messages"). docs/LEGAL.md asks the
  * lawyer whether Arena should have a notice of its own.
  *
+ * The policy and terms were updated for pausing a plan (0.18.0) without a
+ * new consent version: a pause is about the family's billing, kept on the
+ * family's own record, and nothing more is collected about a child.
+ *
  * The policy and terms were updated for the School League without a new
  * consent version: joining a school is a
  * separate, explicit choice a parent makes on the School League screen, which
@@ -211,6 +215,7 @@ export const PRIVACY_POLICY = {
         'A theme sent to RankUp for a Season that we decline or do not pick: 90 days from when it was sent.',
         'A school district\'s account: until a year after its plan ends. Its schools are not deleted with it. If you ask for a district quote, what you type is sent to us by email and not kept by RankUp.',
         `If you buy a RankUp gift, we keep your email for the receipt and for help with the gift until its code runs out, ${GIFT_CODE_YEARS} years after you buy it, and we use the name and email of the person it is for, and your message, only to send the gift, deleting them ${GIFT_RECIPIENT_DAYS} days after you buy it.`,
+        'If you pause your plan, we keep a note of the pause (when it started and when it ends) for 90 days after it is over, and whether your family has had its half-price month for as long as you have an account.',
         'If you pay for a plan, deleting your account also cancels the subscription at once, so nothing more is charged. Stripe keeps its record of the payments you made (invoices and receipts), because payment records have to be kept for tax and are needed if a refund is due. We keep only Stripe\'s reference to your billing, and only until the cancellation is confirmed and 30 days have passed.',
       ],
     },
@@ -274,6 +279,7 @@ export const TERMS = {
       body: [
         `${TIERS.starter.name} is free. ${TIERS.standard.name} is ${priceWords(TIERS.standard)} or ${priceWords(TIERS.standard, 'year')}, and ${TIERS.elite.name} is ${priceWords(TIERS.elite)} or ${priceWords(TIERS.elite, 'year')}, billed monthly or yearly until you cancel.`,
         'You can cancel at any time from Settings. Your subscription runs to the end of the period you have paid for, and is not renewed.',
+        `A monthly plan can be paused instead, for 1, 2 or 3 months. Nothing is charged while it is paused, your family has ${TIERS.starter.name}'s features, nothing is deleted, and billing starts again by itself on the day we show you (we email you 3 days before). You can start it again sooner, or cancel, at any time. A family may also be offered one month at half price, once.`,
         'Deleting your account cancels your subscription straight away rather than at the end of the period, so you are not charged again.',
         `If a payment fails we will retry, and your account moves to ${TIERS.starter.name} while it is failing. Nothing your child has earned is ever removed.`,
       ],

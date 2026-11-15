@@ -120,8 +120,11 @@ const dataRights = readFileSync('src/components/DataRights.jsx', 'utf8')
 const plan = readFileSync('src/screens/parent/ParentPlan.jsx', 'utf8')
 ok('"Download my data" is a real button', /Download my data/.test(dataRights) && /Download my data/.test(answer('download')))
 ok('"Delete my account" is a real button, and asks for DELETE', /Delete my account/.test(dataRights) && /typed !== 'DELETE'/.test(dataRights))
-ok('"Manage billing, cancel, or update card" is the plan page\'s button', plan.includes('Manage billing, cancel, or update card')
-  && answer('cancel').includes('Manage billing, cancel, or update card'))
+ok('"Cancel my plan" is the plan page\'s button, and the answer names it', plan.includes('Cancel my plan')
+  && answer('cancel').includes('Cancel my plan'))
+ok('"Manage billing or update card" and "Start my plan again now" are the plan page\'s too, and the answer names them',
+  plan.includes('Manage billing or update card') && plan.includes('Start my plan again now')
+  && answer('cancel').includes('Manage billing or update card') && answer('cancel').includes('Start my plan again now'))
 ok('"Erase local data on this device only" is in Settings', settings.includes('Erase local data on this device only'))
 ok('"Link a kid\'s device" is in Settings', settings.includes("Link a kid's device") && answer('pairing').includes("Link a kid's device"))
 ok('"Rewards catalogue" and "Parent account" are Settings sections',

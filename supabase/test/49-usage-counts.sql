@@ -2,7 +2,7 @@
 -- The daily usage counts (health.sql: usage_daily, the usage_* triggers,
 -- count_help_view, usage_daily_counts; pruned by run_retention).
 --
---   * each of the six counts goes up by one for the thing it counts, through
+--   * each of the six activity counts goes up by one for the thing it counts, through
 --     the same functions the app calls, and not for anything else;
 --   * a count holds a day, a name and a number: no column could hold a
 --     family, a child, an adult, a device or a time of day;
@@ -118,10 +118,13 @@ begin
     (select string_agg(column_name || ':' || data_type, ',' order by ordinal_position)
        from information_schema.columns where table_schema = 'public' and table_name = 'usage_daily')
     = 'day:date,metric:text,shard:smallint,n:bigint');
-  perform ok('no row for any one family, only totals: the six counts, nothing more',
-    (select count(distinct metric) from usage_daily) <= 6
+  -- The three about plans (paused, saved, cancelled) are counted by the
+  -- billing functions; 57-pauses.sql checks each.
+  perform ok('no row for any one family, only totals: the nine counts, nothing more',
+    (select count(distinct metric) from usage_daily) <= 9
     and not exists (select 1 from usage_daily where metric not in
-      ('families_signed_up', 'chores_accepted', 'rewards_bought', 'games_played', 'schools_signed_up', 'help_views')));
+      ('families_signed_up', 'chores_accepted', 'rewards_bought', 'games_played', 'schools_signed_up', 'help_views',
+       'plans_paused', 'plans_saved', 'plans_cancelled')));
 end $$;
 
 -- ---------- the last 30 days ----------
@@ -137,9 +140,10 @@ begin
   perform ok('oldest first, ending today (UTC)',
     (v_days->0->>'day')::date = (now() at time zone 'utc')::date - 29
     and (v_days->29->>'day')::date = (now() at time zone 'utc')::date);
-  perform ok('each day has all six counts',
+  perform ok('each day has all nine counts',
     (select bool_and(d ?& array['families_signed_up', 'chores_accepted', 'rewards_bought', 'games_played',
-                                'schools_signed_up', 'help_views']) from jsonb_array_elements(v_days) d));
+                                'schools_signed_up', 'help_views', 'plans_paused', 'plans_saved', 'plans_cancelled'])
+       from jsonb_array_elements(v_days) d));
   perform ok('a day with nothing counted says 0', (v_days->1->>'families_signed_up')::int >= 0
     and (v_days->1->>'help_views')::int = 0);
   perform ok('today''s numbers are the sum of its rows',

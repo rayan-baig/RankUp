@@ -484,10 +484,20 @@ alter table families add column if not exists gift_tier text check (gift_tier in
 alter table families add column if not exists gift_starts_at timestamptz;
 alter table families add column if not exists gift_until timestamptz;
 
+/*
+ * A paid plan on pause (billing.sql, start_plan_pause): Stripe takes no
+ * money until this moment, and until then the plan they pay for counts as
+ * the free level. Nothing is deleted and nothing a child earned is touched;
+ * a trial or a gift still counts in full, because only the paid part is
+ * paused. Written by the pause functions and the Stripe webhook alone.
+ */
+alter table families add column if not exists paused_until timestamptz;
+
 /**
  * What this family is actually entitled to, right now.
  *
- * The best of what they pay for, an unexpired trial and a running gift plan.
+ * The best of what they pay for (unless that plan is paused), an unexpired
+ * trial and a running gift plan.
  * Every gate in this schema asks this rather than reading `tier` directly, so
  * a trial or a gift is real everywhere (a second child, guilds, alliances,
  * the XP boost) rather than being a flag some screens remember to honour and
@@ -503,7 +513,9 @@ returns text language sql stable security definer set search_path = public as $$
   -- Rank each and keep the highest. Comparing the words themselves would put
   -- 'elite' below 'standard' alphabetically and quietly demote people.
   select case greatest(
-           case f.tier when 'elite' then 2 when 'standard' then 1 else 0 end,
+           -- A paused plan pays for nothing until billing starts again.
+           case when f.paused_until > now() then 0
+                else case f.tier when 'elite' then 2 when 'standard' then 1 else 0 end end,
            case when f.trial_tier is not null and f.trial_ends_at > now()
                 then case f.trial_tier when 'elite' then 2 when 'standard' then 1 else 0 end
                 else 0 end,

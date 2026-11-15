@@ -9,7 +9,7 @@ Every suite is listed, file by file, in **`tests/run-suite.mjs`**, which runs it
 | sync | `npm run test:sync` | the same | Two and three phones against a real Postgres |
 | awards | `npm run test:awards` | Postgres | The rules, in Node, against the app's own code and the database |
 | built | `npm run test:built` | a browser | The production build: no secrets in it, the security policy, the arcade's framed games |
-| api | `npm run test:api` | `up.sh --cf` | Every function in `api/`, under the runtime Cloudflare uses, against stand-ins for Stripe and the email provider; a family's and a school's whole plan, start to finish (`billingwalk.mjs`) |
+| api | `npm run test:api` | `up.sh --cf` | Every function in `api/`, under the runtime Cloudflare uses, against stand-ins for Stripe and the email provider; a family's and a school's whole plan, start to finish (`billingwalk.mjs`); pausing, resuming, the half-price month, cancelling and the reminder email (`keepplan.mjs`) |
 | SQL | `npm run test:db` | Postgres | About a thousand checks on the database rules (`supabase/test/`) |
 | refusals | `npm run test:refusals` | Postgres | Every `{ ok: false, reason }` in the SQL is actually given while the SQL suite runs |
 
@@ -94,6 +94,21 @@ dashboard's reminder 30 days before the end; and no child's screen showing a
 gift, with the gift pages unreachable out of Parent Mode. Buying, paying, the
 emails and refunds are the "Gift" part of `billingwalk.mjs`, the rules
 `supabase/test/55-gifts.sql`.
+
+**`pauseplan.mjs`** is pause instead of cancel, the half-price month, the
+Elite nudge and "Switch to yearly" in the app, with payments switched on (it
+starts its own dev server with `VITE_STRIPE_ENABLED=true` on a free port):
+"Cancel my plan" on the plan screen opening "Before you cancel" with every
+choice, cancelling included, on screen at once and cancelling going straight
+to Stripe's cancel page; a pause said on the plan screen and the dashboard,
+and "Paused — your progress is safe" on the child's home; resuming; the
+half-price month never offered twice; the nudge after a great week shown once,
+not again within 14 days, gone with "Not now", back after an Elite tool is
+opened, and upgrading on Stripe's confirm page; the yearly card for a monthly
+payer only; and no child's screen with a price, an offer or anything to buy.
+`upgradenudge.mjs` (awards) holds the nudge's and the yearly card's rules,
+`keepplan.mjs` (api) the server functions and the webhook, and
+`supabase/test/57-pauses.sql` the database.
 
 **`leaderboards.mjs`** is Adventure and Arena in the app: a new child is in
 Adventure with no public board offered; a parent reads what Arena shows,

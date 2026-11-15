@@ -15,7 +15,7 @@ import AppHeader from '../../components/AppHeader.jsx'
 import SeasonMoment from '../../components/SeasonMoment.jsx'
 import { PickedNotice } from '../../components/KidThemesParent.jsx'
 import { useKidSchool } from './useKidSchool.js'
-import { familyGoalProgress } from '../../state/reducer.js'
+import { familyGoalProgress, planPaused } from '../../state/reducer.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
 import ModeBadge, { useLeaderboardMe } from '../../components/ModeBadge.jsx'
 import ArenaMoment from '../../components/ArenaMoment.jsx'
@@ -91,6 +91,18 @@ export default function KidHome() {
       <SeasonMoment />
       <ArenaMoment kidId={kid.id} me={me} />
       <PickedNotice who="kid" />
+      {/*
+        The family's plan is paused: some extras rest for a while, and the
+        child is told nothing was lost. Never a price, a plan name or
+        anything to buy: that is the parent's business, in Parent Mode.
+      */}
+      {planPaused(state.family) && (
+        <div className="mb-3" data-testid="paused-note">
+          <Banner tone="info" icon="⏸️" title="Paused — your progress is safe">
+            Your XP, coins and items are all kept. A few extras are resting for a while, and they come back by themselves.
+          </Banner>
+        </div>
+      )}
 
       {/* The header card: who you are and how far along you are. */}
       <Card className="mb-3 fx-hero">

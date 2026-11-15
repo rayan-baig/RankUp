@@ -22,6 +22,10 @@
 --                              typed that did not work, and the per-address
 --                              count of gifts started, after 2 days. The
 --                              privacy policy says each.
+--   plan_pauses (billing.sql)  a pause, 90 days after it was over (resumed,
+--                              ended early, or the plan ended under it). The
+--                              family row keeps only whether one is running,
+--                              and when the half-price month was taken.
 --   district_* (schools.sql)   "Get a quote" rate-limit marks after 2 days; a
 --                              school invite nobody used, once it has run out
 --                              (30 days); a district a year after its plan
@@ -65,6 +69,7 @@ declare
   v_themes  int;
   v_gifts   int;
   v_districts int;
+  v_pauses  int;
 begin
   with gone as (
     delete from events
@@ -150,6 +155,14 @@ begin
     delete from gift_checkout_attempts where tried_at < now() - interval '2 days';
   end if;
 
+  -- Pauses (billing.sql), 90 days after each was over: when it was ended
+  -- early, or else the day billing started again.
+  if to_regclass('public.plan_pauses') is not null then
+    with gone as (
+      delete from plan_pauses where coalesce(ended_at, resumes_at) < now() - interval '90 days' returning 1
+    ) select count(*) into v_pauses from gone;
+  end if;
+
   -- School districts (schools.sql). Nothing is deleted the day a plan ends:
   -- the schools simply stop being paid for. A year later the district itself
   -- goes (its staff and its list of schools with it); the schools stay. A
@@ -182,7 +195,8 @@ begin
     'claim_attempts_deleted', v_tries,
     'theme_submissions_deleted', coalesce(v_themes, 0),
     'unpaid_gifts_deleted', coalesce(v_gifts, 0),
-    'districts_deleted', coalesce(v_districts, 0)
+    'districts_deleted', coalesce(v_districts, 0),
+    'pauses_deleted', coalesce(v_pauses, 0)
   );
 end $$;
 

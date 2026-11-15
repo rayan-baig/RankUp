@@ -80,7 +80,7 @@ export default function ParentRedeem() {
       {renews(state.family) && (
         <div className="mb-3" data-testid="redeem-renews">
           <Banner tone="info" icon="💳" title="You pay for a plan that renews">
-            Turn renewal off first, in “Manage billing, cancel, or update card” on the plan screen. Your plan runs to the end of
+            Turn renewal off first, with “Cancel my plan” on the plan screen. Your plan runs to the end of
             what you paid for, then your gift year starts, so you are never charged for time the gift covers.
           </Banner>
         </div>

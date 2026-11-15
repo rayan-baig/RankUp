@@ -147,11 +147,48 @@ export async function openDistrictBillingPortal() {
   return result
 }
 
-/** Send them to Stripe's portal to cancel, change card or get invoices. */
-export async function openBillingPortal() {
-  const result = await post(PORTAL_URL, {})
+/**
+ * Send them to Stripe's portal to cancel, change card or get invoices.
+ *
+ * `flow` opens it on one page: 'cancel' (Stripe's own cancel page, one tap
+ * from the plan screen), 'upgrade' (confirm a move to Elite for the period
+ * they pay for) or 'yearly' (confirm the same plan, billed yearly). Stripe
+ * shows the new price and anything charged today before they agree.
+ */
+export async function openBillingPortal(flow = null) {
+  const result = await post(PORTAL_URL, flow ? { flow } : {})
   if (result.ok && result.url) window.location.href = result.url
   return result
+}
+
+const KEEP_PLAN_URL = import.meta.env?.VITE_KEEP_PLAN_URL || '/api/keep-plan'
+
+/**
+ * Keep the plan instead of cancelling it (api/keep-plan.js):
+ *   keepPlan('pause', 1 | 2 | 3)   stop billing for that many months
+ *   keepPlan('resume')             start billing again now
+ *   keepPlan('save')               one month at half price, once ever
+ * The server checks who is asking and whether the family may; nothing here
+ * decides either.
+ */
+export async function keepPlan(action, months = null) {
+  return post(KEEP_PLAN_URL, action === 'pause' ? { action, months } : { action })
+}
+
+/** The months a plan can be paused for. */
+export const PAUSE_MONTHS = [1, 2, 3]
+
+/**
+ * What a parent on the way to cancelling may be offered first, from
+ * billing_status: a pause (an active monthly plan, not ending, not paused,
+ * not in its half-price month), and the half-price month (the same, and not
+ * had before). Cancelling is
+ * always offered, whatever this says.
+ */
+export function keepOffers(status) {
+  const paying = Boolean(status?.has_subscription) && status?.status === 'active'
+    && !status?.ends_at && !status?.paused_until && status?.cycle === 'month'
+  return { pause: paying && !status?.save_offer_recent, save: paying && !status?.save_offer_used }
 }
 
 const GIFT_CHECKOUT_URL = import.meta.env?.VITE_GIFT_CHECKOUT_URL || '/api/gift-checkout'
@@ -224,8 +261,8 @@ export const BILLING_ERRORS = {
   stripe_unavailable: 'Stripe, who look after billing, is not answering right now. Nothing about your plan has changed. Try again in a few minutes.',
   not_school_admin: 'Only the school’s admin can manage its plan.',
   suspended: 'This school is suspended. Contact us to sort it out.',
-  already_subscribed: 'You already have a plan. Change it from “Manage billing, cancel, or update card”, where Stripe swaps it over without charging you twice.',
-  refunded_plan_renews: 'Your refunded plan is still set to renew. Cancel it from “Manage billing, cancel, or update card” first, so you are never charged for two plans.',
+  already_subscribed: 'You already have a plan. Change it from “Manage billing or update card”, where Stripe swaps it over without charging you twice.',
+  refunded_plan_renews: 'Your refunded plan is still set to renew. Cancel it from “Cancel my plan” first, so you are never charged for two plans.',
   gift_too_long: 'Your gift plans run for more than two years from now, longer than Stripe can wait to take a first payment. Choose a plan once less than two years of gift are left.',
   already_paying: 'Your school is already paying. Use “Card, invoices and cancelling” to change the plan.',
   district_pays: 'Your district pays for your school, so there is nothing to pay here.',
@@ -236,6 +273,22 @@ export const BILLING_ERRORS = {
   district_already_paying: 'Your district is already paying. Use “Update the plan” or “Invoices and cancelling”.',
   not_paying: 'There is no plan to update yet. Send the invoice first.',
   custom_plan: 'Your plan was set up with us by hand. Write to us to change it.',
+  // Pause instead of cancel, and the half-price month (api/keep-plan.js).
+  bad_months: 'Choose 1, 2 or 3 months.',
+  not_active: 'Only a plan you are paying for each month can be paused. You can still cancel it.',
+  already_paused: 'Your plan is already paused.',
+  plan_ending: 'Your plan is already set to stop, so there is nothing to pause. Changed your mind? Use “Manage billing”.',
+  not_monthly: 'A yearly plan cannot be paused or made half price. You can still cancel it, or change it in “Manage billing”.',
+  half_price_month: 'Your half-price month is still running. You can pause after it.',
+  already_used: 'Your family has already had its half-price month.',
+  paused: 'Your plan is paused. Start it again first.',
+  not_paused: 'Your plan is not paused.',
+  save_off: 'The half-price month is not offered here.',
+  pause_failed: 'Stripe could not pause your plan. Nothing has changed. Please try again.',
+  resume_failed: 'Stripe could not start your plan again. Please try again.',
+  save_failed: 'Stripe could not take half off your next month. Nothing has changed. Please try again.',
+  already_elite: 'You are already on Elite Pass.',
+  already_yearly: 'You already pay yearly.',
 }
 
 export function billingError(reason) {
@@ -267,6 +320,17 @@ export const planDate = (d) => new Date(d).toLocaleDateString(undefined, { day: 
 export function billingNotice(status) {
   const state = status?.status
   const kept = 'Nothing your kids have earned has been touched.'
+  // A pause the parent chose (keepPlan('pause')): when billing starts again.
+  const pausedUntil = status?.paused_until ? pauseTime(status.paused_until) : null
+  if (pausedUntil && pausedUntil > Date.now()) {
+    const plan = PLAN_NAMES[status?.tier] || PLAN_NAMES[status?.paid_tier] || 'paid'
+    return {
+      tone: 'info', icon: '⏸️', title: 'Your plan is paused',
+      body: pausedUntil >= 8.64e15
+        ? `Your ${plan} plan is paused until you start it again, so nothing is charged and you have Starter's features. ${kept}`
+        : `Your ${plan} plan is paused, so nothing is charged and you have Starter's features. It starts again by itself on ${planDate(pausedUntil)}. ${kept}`,
+    }
+  }
   const until = status?.ends_at ? new Date(status.ends_at) : null
   const plan = PLAN_NAMES[status?.paid_tier] || 'paid'
   // A gift plan running now, or waiting for the paid plan to end.
@@ -330,15 +394,28 @@ export function billingNotice(status) {
   }
 }
 
+/** paused_until as a time: 'infinity' (a pause with no end date) as the latest date there is. */
+function pauseTime(value) {
+  if (typeof value === 'number') return value
+  if (String(value) === 'infinity') return 8.64e15
+  const at = Date.parse(value)
+  return Number.isFinite(at) ? at : null
+}
+
 /** The statuses that mean a payment stopped the plan, which the dashboard shows. */
 const PAYMENT_STOPPED = ['past_due', 'unpaid', 'incomplete', 'incomplete_expired', 'paused', 'refunded']
 
 /**
- * The notice on the parent dashboard, from the synced family row: only a
- * plan a payment stopped. A plan they cancelled themselves, or one ending on
- * a date they chose, is not news there; the plan screen says it.
+ * The notice on the parent dashboard, from the synced family row: a plan a
+ * payment stopped, or a pause (fewer features until a date is news a parent
+ * should not have to go looking for). A plan they cancelled themselves, or
+ * one ending on a date they chose, is not news there; the plan screen says it.
  */
 export function dashboardBillingNotice(family, { demo = false } = {}) {
-  if (demo || !PAYMENT_STOPPED.includes(family?.subscriptionStatus)) return null
+  if (demo) return null
+  if (family?.pausedUntil && family.pausedUntil > Date.now()) {
+    return billingNotice({ status: family.subscriptionStatus, tier: family.tier, paused_until: family.pausedUntil })
+  }
+  if (!PAYMENT_STOPPED.includes(family?.subscriptionStatus)) return null
   return billingNotice({ status: family.subscriptionStatus, paid_tier: family.lastPaidTier })
 }

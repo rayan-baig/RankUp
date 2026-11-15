@@ -54,7 +54,8 @@ console.log('\n=== On the operator page ===')
 const { browser, page, errors } = await launch()
 let schools = [base, twin, neighbour]
 // The daily usage totals, as usage_daily_counts (supabase/health.sql) gives them.
-const METRICS = ['families_signed_up', 'chores_accepted', 'rewards_bought', 'games_played', 'schools_signed_up', 'help_views']
+const METRICS = ['families_signed_up', 'chores_accepted', 'rewards_bought', 'games_played', 'schools_signed_up', 'help_views',
+  'plans_paused', 'plans_saved', 'plans_cancelled']
 const usageDays = Array.from({ length: 30 }, (_, i) => {
   const day = new Date(Date.UTC(2026, 9, 5 + i)).toISOString().slice(0, 10)
   return { day, ...Object.fromEntries(METRICS.map((m, k) => [m, (i * (k + 3)) % 17])) }

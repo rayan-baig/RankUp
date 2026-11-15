@@ -152,7 +152,10 @@ begin
                              'gift_checkout_attempts',
                              -- School districts: their functions and the server's
                              -- reach them, nothing else (schools.sql).
-                             'districts', 'district_staff', 'district_schools', 'district_quote_attempts');
+                             'districts', 'district_staff', 'district_schools', 'district_quote_attempts',
+                             -- Pauses: /api/keep-plan, the webhook and the reminder
+                             -- job reach them, with the service key (billing.sql).
+                             'plan_pauses');
   perform ok('no table is left locked with no policy at all', coalesce(bare, '') = '',
              'bare: ' || coalesce(bare, ''));
 end $$;

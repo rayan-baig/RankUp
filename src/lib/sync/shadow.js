@@ -74,7 +74,10 @@ const SERVER_OWNED = {
   // direct write anyway, but pushing it would fill the outbox with rejections.
   families: ['tier', 'subscription_status', 'stripe_customer_id', 'stripe_subscription_id',
              // A gift plan is written by redeem_gift_code alone.
-             'gift_tier', 'gift_starts_at', 'gift_until'],
+             'gift_tier', 'gift_starts_at', 'gift_until',
+             // A pause and the half-price month: the pause functions and the
+             // webhook alone (supabase/billing.sql).
+             'paused_until', 'billing_cycle', 'save_offer_used_at'],
   kids: ['xp', 'coins', 'streak_count', 'streak_last_day', 'streak_freezes',
          // Arcade tokens and the day's winnings are balances too: play_minigame
          // and approve_submission are the only things allowed to move them.

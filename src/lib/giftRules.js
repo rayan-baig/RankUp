@@ -209,7 +209,7 @@ export const GIFT_ERRORS = {
   expired: `That code has expired. A gift code works for ${GIFT_CODE_YEARS} years from when it was bought.`,
   refunded: 'That gift was refunded, so the code no longer works.',
   too_many_tries: 'Too many codes that did not work. Wait an hour and try again.',
-  subscription_renews: 'You pay for a plan that renews. Turn renewal off first in “Manage billing, cancel, or update card” on the plan screen (your plan runs to the end of what you paid for). Then redeem the code: your gift year starts the day your paid plan ends, so you never pay for the same time twice.',
+  subscription_renews: 'You pay for a plan that renews. Turn renewal off first with “Cancel my plan” on the plan screen (your plan runs to the end of what you paid for). Then redeem the code: your gift year starts the day your paid plan ends, so you never pay for the same time twice.',
   no_family: 'Only a parent of the family can redeem a gift.',
   not_configured: 'Gifts are not set up on this copy of RankUp yet.',
   signed_out: 'Sign in first.',

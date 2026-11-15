@@ -15,6 +15,7 @@ import DataRights from '../../components/DataRights.jsx'
 import { KidThemesSection } from '../../components/KidThemesParent.jsx'
 import InviteCard from '../../components/InviteCard.jsx'
 import GiftPlanCard from '../../components/GiftPlanCard.jsx'
+import YearlySwitchCard from '../../components/YearlySwitchCard.jsx'
 import AdultsCard from '../../components/AdultsCard.jsx'
 import { navigate } from '../../lib/router.js'
 import { APP_VERSION } from '../../lib/version.js'
@@ -51,6 +52,8 @@ export default function ParentSettings() {
       <p className="text-sm text-muted mb-4">Tap a section to open it.</p>
 
       <AdultsCard />
+      {/* Paying monthly: a year for less, from the plan list's two prices. */}
+      <YearlySwitchCard />
       <InviteCard />
       <GiftPlanCard />
 

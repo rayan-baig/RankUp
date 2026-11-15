@@ -227,6 +227,25 @@ function endDates(event, sub) {
   return cancelAt ? { cancel_at: iso(cancelAt) } : {}
 }
 
+/**
+ * A pause, as Stripe holds it (pause_collection, set by api/keep-plan.js or
+ * in Stripe's dashboard): when billing starts again, or null when it is not
+ * paused. A pause with no end date, which only Stripe's dashboard can make,
+ * runs until somebody resumes it. Always a key, so "not paused" is news too.
+ */
+function pauseNews(sub) {
+  const pause = sub?.pause_collection
+  if (!pause) return { paused_until: null }
+  return { paused_until: pause.resumes_at ? iso(pause.resumes_at) : 'infinity' }
+}
+
+/** Monthly or yearly, from the price Stripe charges; nothing when it cannot tell. */
+function cycleNews(sub) {
+  const item = sub?.items?.data?.[0]
+  const interval = item?.price?.recurring?.interval || item?.plan?.interval || sub?.metadata?.cycle
+  return interval === 'year' || interval === 'month' ? { cycle: interval } : {}
+}
+
 /** A charge handed back in full: Stripe's flag, or every penny of it. */
 function refundedInFull(charge) {
   const amount = Number(charge?.amount || 0)
@@ -482,8 +501,9 @@ export default async function handler(req, res) {
         p_period_end: periodEnd(object),
         p_stripe_event: event.id,
         // When a plan cancelled in the portal will stop, and when an ended
-        // one did: the plan screen says so.
-        p_payload: { type: event.type, ...endDates(event, object) },
+        // one did: the plan screen says so. Whether it is paused, and until
+        // when; and monthly or yearly, which decides what can be offered.
+        p_payload: { type: event.type, ...endDates(event, object), ...pauseNews(object), ...cycleNews(object) },
         // Stripe does not deliver in order. Older news than the family's
         // latest is ignored by the database.
         p_event_created: eventTime(event),
