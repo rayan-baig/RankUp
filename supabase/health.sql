@@ -144,14 +144,17 @@ revoke execute on function usage_counts() from public, anon, authenticated;
 -- ---------------------------------------------------------------------------
 -- How much RankUp is used, day by day: totals only.
 --
--- Six numbers a day: families signed up, chores accepted, rewards bought,
--- games played, schools signed up, and views of a help page. Each is a count
+-- Nine numbers a day: families signed up, chores accepted, rewards bought,
+-- games played, schools signed up, views of a help page, and plans paused,
+-- saved (the half-price month taken) and cancelled. Each is a count
 -- and nothing else. No family, child, adult, device or school is recorded
 -- with it, not even a time of day; no cookie is set and nothing is sent
 -- anywhere else. Five are bumped inside the database by the thing they count
 -- (a trigger), so there is no extra request and no list of who did what to
 -- keep; the sixth, a help page view, is one request with the public key
--- alone, never a sign-in. A count cannot be turned back into a family.
+-- alone, never a sign-in; the three about plans are bumped by the billing
+-- functions that make the change (count_plan_change, billing.sql). A count
+-- cannot be turned back into a family.
 --
 -- Each day's count is split over 16 rows picked at random, so thousands of
 -- families accepting chores at once do not all wait on one row; the totals
@@ -162,12 +165,18 @@ revoke execute on function usage_counts() from public, anon, authenticated;
 
 create table if not exists usage_daily (
   day    date not null,
-  metric text not null check (metric in ('families_signed_up', 'chores_accepted', 'rewards_bought',
-                                         'games_played', 'schools_signed_up', 'help_views')),
+  metric text not null,
   shard  smallint not null check (shard between 0 and 15),
   n      bigint not null default 0,
   primary key (day, metric, shard)
 );
+
+-- The list of counts, replaced whole so a database made by an older version
+-- takes the new ones too.
+alter table usage_daily drop constraint if exists usage_daily_metric_check;
+alter table usage_daily add constraint usage_daily_metric_check
+  check (metric in ('families_signed_up', 'chores_accepted', 'rewards_bought', 'games_played',
+                    'schools_signed_up', 'help_views', 'plans_paused', 'plans_saved', 'plans_cancelled'));
 
 alter table usage_daily enable row level security;
 revoke all on usage_daily from public, anon, authenticated;
@@ -241,7 +250,8 @@ returns jsonb language sql stable security definer set search_path = public as $
                            (now() at time zone 'utc')::date, interval '1 day') d
   ), metrics(metric) as (
     values ('families_signed_up'), ('chores_accepted'), ('rewards_bought'),
-           ('games_played'), ('schools_signed_up'), ('help_views')
+           ('games_played'), ('schools_signed_up'), ('help_views'),
+           ('plans_paused'), ('plans_saved'), ('plans_cancelled')
   ), grid as (
     select d.day, m.metric, coalesce((select sum(u.n) from usage_daily u
                                        where u.day = d.day and u.metric = m.metric), 0)::bigint as n

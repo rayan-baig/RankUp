@@ -233,3 +233,31 @@ code, as an ordinary family. Ask the lawyer:
 - Does a gift need its own short terms (what a refund means once a code is used, the two-year
   life of a code, what happens if RankUp closes), or do the main terms cover a
   buyer who never signs up?
+
+## Pausing a plan, the half-price month and offers: what was decided
+
+A parent on the way to cancelling is offered a pause of 1, 2 or 3 months and,
+once per family, one month at half price (docs/PAYMENTS.md, "Pause instead of
+cancel"). What keeps this fair, and what to keep true:
+
+- **Cancelling is never hidden.** "Cancel my plan" is on the plan screen in
+  plain words, and in the offer sheet beside the offers; one tap opens
+  Stripe's own cancel page. Nothing has to be declined first. Keep it that
+  way: rules on "click to cancel" in several places require cancelling to be
+  as easy as signing up.
+- **A pause is said plainly**: nothing is charged, the family has the free
+  plan's features, nothing is deleted, and it starts again by itself on a
+  date shown before agreeing. An email goes three days before.
+- **Kept**: a note of each pause (when it started and ended, and its
+  reminder) for 90 days after it is over, and whether the family has had its
+  half-price month for as long as the account exists. Nothing about a child.
+  The privacy policy and terms say so; the consent notice is unchanged.
+- **Children never see a price, an offer or anything to buy.** The pause and
+  half-price offers, the Elite nudge and "Switch to yearly" are on Parent Mode
+  screens only, behind the PIN. A child is told only "Paused — your progress
+  is safe". `tests/pauseplan.mjs` checks every child's screen.
+
+Ask the lawyer whether the half-price month needs its own line in the terms
+beyond "a family may be offered one month at half price, once", and whether
+any place you sell in requires a cancellation to be confirmed by email (Stripe
+can send one: Settings, Emails).

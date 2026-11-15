@@ -90,8 +90,23 @@ export function overdriveActive(state) {
 }
 
 /**
- * What this family is entitled to right now: the best of what they pay for,
- * an unexpired trial and a running gift plan.
+ * True while the plan they pay for is paused (Pause instead of cancel,
+ * supabase/billing.sql): Stripe takes no money until `pausedUntil`, and the
+ * paid plan counts as the free level until then. Nothing is deleted.
+ */
+export function planPaused(family) {
+  return Boolean(family?.pausedUntil && family.pausedUntil > clock())
+}
+
+/** The plan they pay for, as it counts right now: the free level while paused. */
+export function paidTierNow(family) {
+  if (planPaused(family)) return 'starter'
+  return TIERS[family?.tier] ? family.tier : 'starter'
+}
+
+/**
+ * What this family is entitled to right now: the best of what they pay for
+ * (unless it is paused), an unexpired trial and a running gift plan.
  *
  * MIRRORS effective_tier() in supabase/schema.sql, which is the authority —
  * every gate in the database asks that one, and tests/trials.mjs runs the two
@@ -102,7 +117,7 @@ const TIER_RANK = { starter: 0, standard: 1, elite: 2 }
 
 export function effectiveTier(family) {
   const now = clock()
-  let best = TIERS[family?.tier] ? family.tier : 'starter'
+  let best = paidTierNow(family)
   const trial = family?.trialTier
   const until = family?.trialEndsAt
   if (trial && until && until > now && (TIER_RANK[trial] ?? 0) > (TIER_RANK[best] ?? 0)) best = trial
@@ -113,6 +128,14 @@ export function effectiveTier(family) {
   if (gift && giftUntil && giftUntil > now && (giftStarts == null || giftStarts <= now)
       && (TIER_RANK[gift] ?? 0) > (TIER_RANK[best] ?? 0)) best = gift
   return best
+}
+
+/** The family row's paused_until as a time: 'infinity' (no end date) as the latest date there is. */
+export function pausedUntilOf(value) {
+  if (!value) return null
+  if (String(value) === 'infinity') return 8.64e15
+  const at = Date.parse(value)
+  return Number.isFinite(at) ? at : null
 }
 
 /** Days left on a running trial, or null when there is not one. */
@@ -130,7 +153,7 @@ export function trialDaysLeft(family) {
  */
 export function onGift(state) {
   const f = state?.family
-  const paid = TIERS[f?.tier] ? f.tier : 'starter'
+  const paid = paidTierNow(f)
   const running = effectiveTier({ tier: 'starter', giftTier: f?.giftTier, giftStartsAt: f?.giftStartsAt, giftUntil: f?.giftUntil })
   return running !== 'starter' && TIER_RANK[running] > TIER_RANK[paid] && running === effectiveTier(f)
 }
@@ -138,7 +161,7 @@ export function onGift(state) {
 /** True while a trial is the reason they have what they have (and not a gift, which is said on its own). */
 export function onTrial(state) {
   return trialDaysLeft(state.family) !== null
-    && effectiveTier(state.family) !== (state.family.tier || 'starter')
+    && effectiveTier(state.family) !== paidTierNow(state.family)
     && !onGift(state)
 }
 
@@ -156,6 +179,7 @@ export function planOf(state) {
  */
 export function planSummary(state) {
   const paid = TIERS[state?.family?.tier] || TIERS.starter
+  if (planPaused(state?.family)) return `${paid.name} · paused`
   if (onGift(state)) return `${paid.name} · gift of ${planOf(state).name}`
   if (!onTrial(state)) return paid.name
   return `${paid.name} · trying ${planOf(state).name}`
@@ -384,6 +408,13 @@ function reduce(state, action) {
             giftTier: family.gift_tier || null,
             giftStartsAt: family.gift_starts_at ? Date.parse(family.gift_starts_at) : null,
             giftUntil: family.gift_until ? Date.parse(family.gift_until) : null,
+            // A paid plan on pause (start_plan_pause), beside the paid tier
+            // for the same reason: when it ends, what they pay for is back.
+            // A pause with no end date (made in Stripe's dashboard) is kept
+            // as the latest date there is, so it survives being saved.
+            pausedUntil: pausedUntilOf(family.paused_until),
+            // Monthly or yearly: decides whether "Switch to yearly" is offered.
+            billingCycle: family.billing_cycle || null,
             flashTickets: family.flash_tickets ?? next.family.flashTickets ?? 0,
             // Why a paid plan stopped, if it has: the dashboard says so
             // rather than simply showing fewer features. See billingNotice.

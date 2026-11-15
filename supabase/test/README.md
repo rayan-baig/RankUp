@@ -147,6 +147,18 @@ place and 30 in all; retention removes a district a year after its plan
 ended and never a school; none of the server's half is reachable from a
 browser.
 
+`57-pauses.sql` — pause instead of cancel and the half-price month: only an
+active, monthly, paid plan that is not ending pauses, for 1, 2 or 3 months,
+one at a time; while paused the plan counts as the free level, a trial or a
+gift still counts in full, and nothing a child has is touched; Stripe
+refusing undoes the pause, Stripe taking it counts it once; resuming early,
+and the plan back on the date by itself; Stripe's own news out of order and
+replayed (a pause made in its dashboard, a moved date, old news, news while
+the app waits, the plan ending while paused); the half-price month once per
+family, ever, given back only when Stripe did not apply it; pauses,
+half-price months and cancellations counted; the reminder three days before,
+once per date, never to a supporter; none of it reachable from a browser.
+
 `refusals.mjs` (`npm run test:refusals`) — reads every
 `jsonb_build_object('ok', false, 'reason', ...)` out of the SQL files, applies
 them to a scratch database with each one marked so it raises a notice naming

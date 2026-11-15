@@ -3,9 +3,10 @@
  *
  * Most of RankUp's email is not sent from here: sign-up confirmations and
  * password resets are Supabase's, and receipts and payment problems are
- * Stripe's. Both are set up in those dashboards (docs/EMAILS.md). Six kinds
- * are sent from this code: the free trial's two reminders
- * (api/send-trial-emails.js), a school's month (api/settle-schools.js), the
+ * Stripe's. Both are set up in those dashboards (docs/EMAILS.md). Seven kinds
+ * are sent from this code: the free trial's two reminders and the reminder
+ * that a paused plan starts again (api/send-trial-emails.js), a school's
+ * month (api/settle-schools.js), the
  * error report to whoever runs RankUp (api/_shared/errorReport.js), a
  * gift's two emails, the buyer's receipt with the code and the gift to the
  * person it is for (api/_shared/gifts.js, from the Stripe webhook), and a
@@ -148,6 +149,37 @@ export function trialEmail({ kind, trialTier, paidTier, endsLocal, daysLeft = 3,
     ...foot,
   ].join('\n\n')
 
+  return { subject, text, html: toHtml(paragraphs, link, help, foot) }
+}
+
+/**
+ * Three days before a paused plan starts again (api/send-trial-emails.js,
+ * due_pause_reminders in supabase/billing.sql), to each parent. When, what
+ * is charged from then (the plan list's own price, never typed here), that
+ * nothing was lost, and that a longer break or cancelling is a tap away in
+ * the app. `resumesLocal` is the day in the family's own time zone
+ * ("Friday 12 December"); `paidTier` the plan they pay for.
+ */
+export function pauseReminderEmail({ paidTier, cycle = 'month', resumesLocal, site, replyTo }) {
+  const plan = TIERS[paidTier] && TIERS[paidTier].price ? TIERS[paidTier] : TIERS.standard
+  const price = cycle === 'year' && plan.yearPrice ? `$${plan.yearPrice.toFixed(2)} a year` : `$${plan.price.toFixed(2)} a month`
+  const when = resumesLocal ? `on ${resumesLocal}` : 'in 3 days'
+  const subject = resumesLocal ? `Your RankUp plan starts again on ${resumesLocal}` : 'Your RankUp plan starts again in 3 days'
+  const planUrl = site ? `${site.replace(/\/+$/, '')}/#/parent/plan` : ''
+  const paragraphs = [
+    'Hello,',
+    `Your family's ${plan.name} plan is paused. It starts again ${when}, by itself.`,
+    `From then, Stripe charges your card ${price} again, and your kids get everything in ${plan.name} back.`,
+    'Nothing was lost while it was paused: every child, their XP, coins and items are all still there.',
+    'Want it to start now, or to cancel instead? Open RankUp, go to Settings, then Your plan. Cancelling is one tap.',
+  ]
+  const help = helpLine(replyTo)
+  const foot = [
+    PRODUCT_OF,
+    'You get this because your family paused its plan. One email for each pause, three days before it ends.',
+  ]
+  const link = planUrl ? { url: planUrl, label: 'See your plan' } : null
+  const text = [...paragraphs, ...(link ? [`${link.label}: ${link.url}`] : []), help, '--', ...foot].join('\n\n')
   return { subject, text, html: toHtml(paragraphs, link, help, foot) }
 }
 

@@ -89,6 +89,7 @@ const SUITES = {
     { file: 'plans.mjs', weight: 25 },
     { file: 'referrals.mjs', weight: 20 },
     { file: 'gifts.mjs', weight: 25 },
+    { file: 'pauseplan.mjs', weight: 40 },
     { file: 'arcade.mjs', weight: 86 },
     { file: 'arcade2.mjs', weight: 68 },
     { file: 'arcade3.mjs', weight: 132 },
@@ -148,6 +149,7 @@ const SUITES = {
     { file: 'arcadecap.mjs' },
     { file: 'crashreport.mjs' },
     { file: 'storagegrowth.mjs' },
+    { file: 'upgradenudge.mjs' },
   ],
   // The server functions under workerd on :8788 (supabase/test/up.sh --cf).
   api: [
@@ -155,6 +157,7 @@ const SUITES = {
     { file: 'pushbatch.mjs' },
     { file: 'push.mjs' },
     { file: 'billingwalk.mjs' },
+    { file: 'keepplan.mjs' },
   ],
   // A production build: no secrets in it, the policy, the framed games.
   built: [

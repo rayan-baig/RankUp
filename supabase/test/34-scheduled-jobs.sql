@@ -122,6 +122,13 @@ insert into gift_redeem_attempts (family_id, ip_key, tried_at) values
   ('34a00000-0000-4000-8000-00000000000f', 't34', now() - interval '3 days'),
   ('34a00000-0000-4000-8000-00000000000f', 't34', now() - interval '1 day');
 insert into gift_checkout_attempts (ip_key, tried_at) values ('t34', now() - interval '3 days'), ('t34', now() - interval '1 day');
+-- Pauses (billing.sql): one over 91 days ago, one ended early 91 days ago,
+-- one over 89 days ago, and one still running.
+insert into plan_pauses (family_id, months, started_at, resumes_at, ended_at) values
+  ('34a00000-0000-4000-8000-00000000000f', 1, now() - interval '121 days', now() - interval '91 days', null),
+  ('34a00000-0000-4000-8000-00000000000f', 3, now() - interval '100 days', now() + interval '20 days', now() - interval '91 days'),
+  ('34a00000-0000-4000-8000-00000000000f', 1, now() - interval '119 days', now() - interval '89 days', null),
+  ('34a00000-0000-4000-8000-00000000000f', 2, now() - interval '10 days', now() + interval '50 days', null);
 
 /*
  * Every table, fingerprinted without the rows the job may delete. Generated
@@ -166,6 +173,7 @@ declare
     'gift_recipients',        'x.keep_until < now() or exists (select 1 from gift_orders o where o.id = x.order_id and o.paid_at is null and o.created_at < now() - interval ''14 days'')',
     'gift_redeem_attempts',   'x.tried_at < now() - interval ''2 days''',
     'gift_checkout_attempts', 'x.tried_at < now() - interval ''2 days''',
+    'plan_pauses',            'coalesce(x.ended_at, x.resumes_at) < now() - interval ''90 days''',
     'billing_cancellations',  'x.done_at is not null and (x.done_at < now() - interval ''30 days'' or (x.stripe_customer_id is null and x.stripe_subscription_id is null and x.queued_at < now() - interval ''7 days''))');
   k text;
   v_before jsonb;

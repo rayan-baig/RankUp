@@ -152,9 +152,11 @@ export function parentHelp() {
         },
         {
           id: 'cancel',
-          q: 'How do I cancel?',
+          q: 'How do I cancel, or pause?',
           a: [
-            'Open your plan and tap “Manage billing, cancel, or update card”. That opens Stripe, who look after billing, where you can cancel.',
+            'Open your plan and tap “Cancel my plan”. You are offered a pause first, and on a monthly plan a half-price month once; “Cancel my plan” is right there too, and opens Stripe, who look after billing, where you confirm it.',
+            'A pause is 1, 2 or 3 months, on a monthly plan, from “Cancel my plan” or “Manage billing or update card”. Nothing is charged while it is paused, and it starts again by itself on the day; we email you 3 days before.',
+            `While paused your family has ${TIERS.starter.name}'s features. Nothing is deleted: your kids keep every level, XP point, coin and item, and a free trial or a gift still counts. Want it back sooner? Tap “Start my plan again now”.`,
             'Deleting your account also cancels a paid plan, straight away.',
           ],
           to: { path: '/parent/plan', label: 'See your plan' },

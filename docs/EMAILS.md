@@ -11,6 +11,7 @@ no RankUp account: the buyer, and the person they bought it for.
 | **Reset your password** | Supabase Auth | When you send one from the dashboard (the app has no "forgot password" screen yet) | Supabase dashboard: the template below |
 | **3 days left of your trial** | RankUp, `/api/send-trial-emails` | Three days before a family's free trial ends, in its own time zone | `EMAIL_API_KEY`, `EMAIL_FROM`, the hourly job (below) |
 | **Last day of your free trial** | RankUp, `/api/send-trial-emails` | On the day it ends, in its own time zone (late the evening before, for a trial that ends in the first two hours of a day, which an hourly job could miss) | The same |
+| **Your RankUp plan starts again on <day>** | RankUp, `/api/send-trial-emails` | Three days before a paused plan starts again, once per pause | The same |
 | **Your School League month** (to a school's admin) | RankUp, `/api/settle-schools` | Once a month, when the month is closed (the 2nd) | `EMAIL_API_KEY`, `EMAIL_FROM`, the monthly job |
 | **Your RankUp gift** (the buyer's receipt, with the code) | RankUp, the Stripe webhook (`api/_shared/gifts.js`) | The moment Stripe confirms a gift is paid for | `EMAIL_API_KEY`, `EMAIL_FROM`, `GIFT_CODE_SECRET` |
 | **"<name> gave your family a year of RankUp"** (to the person it is for) | RankUp, the same | The same moment, only if the buyer chose "Email it to them now" | The same |
@@ -98,6 +99,54 @@ DMARC on the parent domain).
   `tests/api.mjs` (the job under workerd against a stand-in provider: the
   words, both parts, the footer, the help line, once only, the provider
   down).
+
+---
+
+## RankUp's own: a paused plan starting again
+
+Sent by the same hourly job, `api/send-trial-emails.js`; words in
+`api/_shared/email.js` (`pauseReminderEmail`), who is due in
+`supabase/billing.sql` (`due_pause_reminders`). See
+[PAYMENTS.md](PAYMENTS.md#pause-instead-of-cancel).
+
+- **Who.** A family whose paid plan is paused. Each parent, to their own
+  address; never a supporter.
+- **When.** Within three days of billing starting again. Once per pause:
+  claimed before it is sent and marked sent after, with an idempotency key
+  naming the pause and its date. A pause whose date moves (changed in
+  Stripe) is due again for the new date; one resumed early is not due.
+- **The words**, for a family on Standard, monthly:
+
+  > **Subject:** Your RankUp plan starts again on Friday 12 December
+  >
+  > Hello,
+  >
+  > Your family's Standard plan is paused. It starts again on Friday 12
+  > December, by itself.
+  >
+  > From then, Stripe charges your card $5.99 a month again, and your kids get
+  > everything in Standard back.
+  >
+  > Nothing was lost while it was paused: every child, their XP, coins and
+  > items are all still there.
+  >
+  > Want it to start now, or to cancel instead? Open RankUp, go to Settings,
+  > then Your plan. Cancelling is one tap.
+  >
+  > [See your plan] → `https://rankup.mtrxhorizyn.com/#/parent/plan`
+  >
+  > Need help? ... a person reads it.
+  >
+  > --
+  > RankUp is a product of MTRX Horizyn.
+  > You get this because your family paused its plan. One email for each
+  > pause, three days before it ends.
+
+  The plan name and price come from the plan list, so they follow it.
+- **Tested** by `supabase/test/57-pauses.sql` (who is due, once, a failed
+  send retried, a resumed pause not reminded), `tests/keepplan.mjs` (the job
+  under workerd: the words, the price, once only, never the supporter) and
+  `tests/emails.mjs` (every variant).
 
 ---
 

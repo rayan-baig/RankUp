@@ -2,7 +2,9 @@
  * Serverless function: open Stripe's customer portal.
  *
  * Cancelling, changing a card and downloading invoices all happen there rather
- * than being rebuilt here. That is not laziness: those flows carry legal
+ * than being rebuilt here. With `flow`, it opens on one page of it: cancelling
+ * (one tap from the plan screen), or confirming a move to Elite or to yearly
+ * billing (see FLOWS). That is not laziness: those flows carry legal
  * obligations about how cancellation is presented, and Stripe keeps theirs
  * current.
  */
@@ -14,6 +16,85 @@ import { returnOrigin } from './_shared/site.js'
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+
+/*
+ * The family plans' prices, the same four create-checkout.js charges. A
+ * change of plan in the portal moves the subscription from one of these to
+ * another, so a family is only ever charged a price the plan screen shows.
+ */
+const PRICES = {
+  month: { standard: process.env.STRIPE_PRICE_STANDARD || '', elite: process.env.STRIPE_PRICE_ELITE || '' },
+  year: { standard: process.env.STRIPE_PRICE_STANDARD_YEAR || '', elite: process.env.STRIPE_PRICE_ELITE_YEAR || '' },
+}
+
+/*
+ * Straight to one thing in Stripe's portal, instead of its front page:
+ *
+ *   cancel   Stripe's own "cancel your plan" page. The plan screen's
+ *            "Cancel my plan" opens it in one tap, after the pause and the
+ *            half-price month have been offered, never instead of them.
+ *   upgrade  Elite, for the same period they pay for now (the Elite nudge).
+ *   yearly   the same plan, billed yearly ("Switch to yearly" in Settings).
+ *
+ * The last two use Stripe's confirm page (subscription_update_confirm), so
+ * the parent sees the new price and what is charged today before agreeing.
+ */
+const FLOWS = new Set(['cancel', 'upgrade', 'yearly'])
+
+/** Which plan, and which period, a subscription's price is. */
+function planOf(sub) {
+  const item = sub?.items?.data?.[0]
+  const price = item?.price?.id || item?.plan?.id || ''
+  for (const cycle of ['month', 'year']) {
+    for (const tier of ['standard', 'elite']) {
+      if (price && PRICES[cycle][tier] === price) return { item, tier, cycle }
+    }
+  }
+  const interval = item?.price?.recurring?.interval || item?.plan?.interval
+  const tier = sub?.metadata?.tier === 'elite' ? 'elite' : sub?.metadata?.tier === 'standard' ? 'standard' : null
+  return { item, tier, cycle: interval === 'year' ? 'year' : interval === 'month' ? 'month' : null }
+}
+
+/**
+ * The portal session's flow for `flow`, or { error } to answer with. Asks
+ * Stripe for the subscription: which price it is on now is Stripe's to say.
+ */
+async function flowData(stripe, status, flow, origin) {
+  const subscriptionId = await serviceRpc('stripe_subscription_for_family', { p_family_id: status.family_id })
+  if (!subscriptionId) return { error: 'no_subscription', code: 400 }
+  const back = { type: 'redirect', redirect: { return_url: `${origin}/#/parent/plan${flow === 'cancel' ? '' : '?changed=1'}` } }
+  if (flow === 'cancel') {
+    return { flow: { type: 'subscription_cancel', subscription_cancel: { subscription: subscriptionId }, after_completion: back } }
+  }
+  // Changing plan during a pause would start charging the new price today.
+  if (status.paused_until) return { error: 'paused', code: 409 }
+  const sub = await stripe.subscriptions.retrieve(subscriptionId)
+  if (!sub || !['active', 'trialing'].includes(sub.status)) return { error: 'no_subscription', code: 400 }
+  const { item, tier, cycle } = planOf(sub)
+  if (!item?.id || !tier || !cycle) return { error: 'custom_plan', code: 409 }
+  if (flow === 'upgrade' && tier === 'elite') return { error: 'already_elite', code: 409 }
+  if (flow === 'yearly' && cycle === 'year') return { error: 'already_yearly', code: 409 }
+  const price = flow === 'upgrade' ? PRICES[cycle].elite : PRICES.year[tier]
+  if (!price) return { error: 'not_configured', code: 503 }
+  return {
+    flow: {
+      type: 'subscription_update_confirm',
+      subscription_update_confirm: { subscription: subscriptionId, items: [{ id: item.id, price, quantity: 1 }] },
+      after_completion: back,
+    },
+  }
+}
+
+async function serviceRpc(fn, args) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+    body: JSON.stringify(args),
+  })
+  if (!res.ok) throw new Error(`${fn} failed: ${res.status}`)
+  const text = await res.text()
+  return text ? JSON.parse(text) : null
+}
 
 async function schoolPortal(req, res, token) {
   try {
@@ -112,9 +193,19 @@ export default async function handler(req, res) {
 
     const stripe = makeStripe(STRIPE_SECRET)
 
+    // Straight to cancelling, or to a change of plan, when asked for one.
+    let flow = null
+    if (body?.flow !== undefined && body?.flow !== null) {
+      if (!FLOWS.has(body.flow)) return res.status(400).json({ error: 'bad_request' })
+      const made = await flowData(stripe, status, body.flow, origin)
+      if (made.error) return res.status(made.code).json({ error: made.error })
+      flow = made.flow
+    }
+
     const portal = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${origin}/#/parent/plan`,
+      ...(flow ? { flow_data: flow } : {}),
     })
     return res.status(200).json({ url: portal.url })
   } catch (err) {

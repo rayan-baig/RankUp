@@ -379,7 +379,14 @@ begin
     'stripe_customer_for_district(uuid)', 'stripe_subscription_for_district(uuid)',
     'apply_district_subscription(uuid,text,text,text,text,jsonb,timestamptz,timestamptz,jsonb,boolean)',
     'apply_district_refund(uuid,text,boolean,timestamptz,timestamptz)',
-    'record_district_payment(uuid,text,integer,text)', 'record_district_quote(text)']
+    'record_district_payment(uuid,text,integer,text)', 'record_district_quote(text)',
+    -- Pause instead of cancel and the half-price month: what /api/keep-plan,
+    -- the billing portal, the webhook and the reminder job call with the
+    -- service key, and the console's count of each.
+    'stripe_subscription_for_family(uuid)', 'start_plan_pause(uuid,integer,text)', 'finish_plan_pause(bigint,boolean)',
+    'end_plan_pause(uuid)', 'sync_plan_pause(uuid,timestamptz,boolean,timestamptz)', 'claim_save_offer(uuid,text)',
+    'finish_save_offer(uuid,boolean)', 'due_pause_reminders(timestamptz)', 'claim_pause_reminder(bigint)',
+    'finish_pause_reminder(bigint,boolean)', 'count_plan_change(text)']
   loop
     if to_regprocedure(f) is null then
       v_open := v_open || (f || ' (no longer exists — update this list)');

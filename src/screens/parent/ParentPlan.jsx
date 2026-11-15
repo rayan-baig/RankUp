@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { effectiveTier, onTrial, trialDaysLeft } from '../../state/reducer.js'
 import { TIERS, TIER_LADDER, PLAN_COMPARISON, ELITE_KID_PERKS, ELITE_PARENT_PERKS } from '../../state/initialState.js'
-import { billingLive, startCheckout, openBillingPortal, fetchBillingStatus, billingError, billingNotice } from '../../lib/billing.js'
+import { billingLive, startCheckout, openBillingPortal, fetchBillingStatus, billingError, billingNotice, keepPlan, keepOffers, PAUSE_MONTHS, planDate } from '../../lib/billing.js'
 import { Screen, Card, Button, SectionTitle, Banner, Chip, Modal } from '../../components/ui.jsx'
 import InviteCard from '../../components/InviteCard.jsx'
 import GiftPlanCard from '../../components/GiftPlanCard.jsx'
@@ -36,6 +36,19 @@ export default function ParentPlan() {
   const live = billingLive()
   // A gift plan, running or waiting for the paid one to end.
   const gift = giftState(state.family)
+  /*
+   * "Before you cancel": a pause, and the half-price month, offered first
+   * to a parent on the way to cancelling or managing billing. Cancelling is
+   * in the same sheet, one tap, never further away than that; and the plan
+   * screen's own "Cancel my plan" button is always there.
+   */
+  const [keepOpen, setKeepOpen] = useState(false)
+  const [keepNote, setKeepNote] = useState(null)
+  const offers = keepOffers(status)
+  const offering = offers.pause || offers.save
+  const paidPlan = TIERS[status?.tier] && TIERS[status.tier].price ? TIERS[status.tier] : null
+  // A plan Stripe can still charge: the one a parent can cancel.
+  const cancellable = Boolean(status?.has_subscription) && ['active', 'trialing', 'past_due'].includes(status?.status) && !status?.ends_at
 
   useEffect(() => {
     // Nothing is asked of the server during the look-around. There is no
@@ -50,6 +63,37 @@ export default function ParentPlan() {
     }
     return undefined
   }, [state.demo])
+
+  // Back from Stripe's page with the browser's back button: the buttons work
+  // again (the page can come back from the browser's cache as it was left).
+  useEffect(() => {
+    const back = () => setBusy(false)
+    window.addEventListener('pageshow', back)
+    return () => window.removeEventListener('pageshow', back)
+  }, [])
+
+  const portal = async (flow = null) => {
+    setBusy(true)
+    setError('')
+    const r = await openBillingPortal(flow)
+    if (!r.ok) { setError(billingError(r.reason)); setBusy(false) }
+  }
+
+  /** Pause, resume or the half-price month; then ask the server what is true now. */
+  const keep = async (action, months = null) => {
+    setBusy(true)
+    setError('')
+    const r = await keepPlan(action, months)
+    setBusy(false)
+    if (!r.ok) { setError(billingError(r.reason)); return }
+    setKeepOpen(false)
+    setKeepNote(action === 'pause'
+      ? { title: `Paused until ${planDate(r.paused_until)}`, body: 'Nothing is charged until then, and it starts again by itself. Your kids keep everything they have earned.' }
+      : action === 'save'
+        ? { title: 'Your next month is half price', body: 'Stripe takes 50% off your next payment. Nothing else changes.' }
+        : { title: 'Your plan is back on', body: 'Everything in your plan is back now. Billing carries on from your next renewal date.' })
+    fetchBillingStatus().then(setStatus)
+  }
 
   /**
    * With Stripe live, the only route to Elite is a real payment — the database
@@ -103,13 +147,27 @@ export default function ParentPlan() {
               {billingNotice(status).body}
             </Banner>
           )}
+          {keepNote && (
+            <div data-testid="keep-note">
+              <Banner tone="good" icon="✅" title={keepNote.title}>{keepNote.body}</Banner>
+            </div>
+          )}
+          {status?.paused_until && (
+            <Button className="w-full mt-2" disabled={busy} onClick={() => keep('resume')} data-testid="resume-plan">
+              Start my plan again now
+            </Button>
+          )}
           {status?.has_customer && (
-            <Button variant="soft" className="w-full" disabled={busy} onClick={async () => {
-              setBusy(true)
-              const r = await openBillingPortal()
-              if (!r.ok) { setError(billingError(r.reason)); setBusy(false) }
-            }}>
-              Manage billing, cancel, or update card
+            <Button variant="soft" className="w-full mt-2" disabled={busy} data-testid="manage-billing"
+              onClick={() => (offering ? setKeepOpen(true) : portal())}>
+              Manage billing or update card
+            </Button>
+          )}
+          {/* Cancelling is always here, in plain words, one tap from this screen. */}
+          {cancellable && (
+            <Button variant="ghost" className="w-full mt-2" disabled={busy} data-testid="cancel-plan"
+              onClick={() => (offering ? setKeepOpen(true) : portal('cancel'))}>
+              Cancel my plan
             </Button>
           )}
         </>
@@ -334,6 +392,60 @@ export default function ParentPlan() {
           </span>
         </Card>
       ))}
+
+      <Modal
+        open={keepOpen}
+        onClose={() => setKeepOpen(false)}
+        title="Before you cancel"
+      >
+        <div data-testid="keep-sheet">
+          {offers.pause && (
+            <div className="mb-4">
+              <p className="font-semibold text-sm">Taking a break? Pause instead.</p>
+              <p className="text-sm text-muted mb-2">
+                Nothing is charged while it is paused, and it starts again by itself. Your kids keep
+                every bit of XP, coins and items; some extras rest until it starts again.
+              </p>
+              <div className="flex gap-2">
+                {PAUSE_MONTHS.map((n) => (
+                  <Button key={n} variant="soft" className="flex-1 py-2 min-h-0 text-sm" disabled={busy}
+                    onClick={() => keep('pause', n)} data-testid={`pause-${n}`}>
+                    {n === 1 ? '1 month' : `${n} months`}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+          {offers.save && paidPlan && (
+            <div className="mb-4">
+              <p className="font-semibold text-sm">Or stay, at half price</p>
+              <p className="text-sm text-muted mb-2">
+                Your next month of {paidPlan.name} at half price, instead of {priceWords(paidPlan)}. Then it
+                carries on as before. Once only.
+              </p>
+              <Button variant="soft" className="w-full py-2 min-h-0 text-sm" disabled={busy}
+                onClick={() => keep('save')} data-testid="save-offer">
+                Take 50% off my next month
+              </Button>
+            </div>
+          )}
+          {error && <p className="text-sm mb-3 text-bad" role="alert">{error}</p>}
+          <div className="flex gap-2">
+            {cancellable && (
+              <Button variant="danger" className="flex-1 py-2 min-h-0 text-sm" disabled={busy}
+                onClick={() => portal('cancel')} data-testid="cancel-anyway">
+                Cancel my plan
+              </Button>
+            )}
+            {status?.has_customer && (
+              <Button variant="ghost" className="flex-1 py-2 min-h-0 text-sm" disabled={busy}
+                onClick={() => portal()} data-testid="manage-anyway">
+                Billing and card
+              </Button>
+            )}
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         open={Boolean(confirm)}

@@ -37,7 +37,7 @@ async function call(key, body) {
   }
 }
 
-/** The six daily counts (supabase/health.sql), in the order they are shown. */
+/** The nine daily counts (supabase/health.sql), in the order they are shown. */
 const USAGE = [
   ['families_signed_up', 'Families signed up'],
   ['chores_accepted', 'Chores accepted'],
@@ -45,6 +45,9 @@ const USAGE = [
   ['games_played', 'Games played'],
   ['schools_signed_up', 'Schools signed up'],
   ['help_views', 'Help page views'],
+  ['plans_paused', 'Plans paused'],
+  ['plans_saved', 'Half-price months taken'],
+  ['plans_cancelled', 'Plans cancelled'],
 ]
 
 const shortDay = (day) => {

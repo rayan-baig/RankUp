@@ -1,4 +1,8 @@
+import { useEffect } from 'react'
 import { Screen, Card, Button, Banner } from './ui.jsx'
+import { useApp } from '../state/AppContext.jsx'
+import { effectiveTier } from '../state/reducer.js'
+import { inParentMode } from '../lib/upgradeNudge.js'
 import { ELITE_KID_PERKS, ELITE_PARENT_PERKS, TIERS } from '../state/initialState.js'
 import { billingLive } from '../lib/billing.js'
 import { priceTag } from '../lib/plans.js'
@@ -16,6 +20,19 @@ import { navigate } from '../lib/router.js'
  */
 export default function EliteGate({ icon, title, body, perk }) {
   const others = ELITE_PARENT_PERKS.filter((p) => p.id !== perk)
+  const { state, dispatch } = useApp()
+  const standard = effectiveTier(state.family) === 'standard'
+  const parent = inParentMode(state)
+
+  // A Standard family reaching for an Elite tool has hit what its plan
+  // stops at: the dashboard's Elite nudge may say so (lib/upgradeNudge.js).
+  useEffect(() => {
+    if (!standard || !parent) return
+    dispatch({
+      type: 'UPDATE_SETTINGS',
+      patch: { upgradeNudge: { ...(state.settings?.upgradeNudge || {}), limitAt: Date.now(), limitWhat: 'tool' } },
+    })
+  }, [standard, parent, perk])
 
   return (
     <Screen>

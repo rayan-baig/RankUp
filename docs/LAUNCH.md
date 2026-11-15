@@ -237,7 +237,7 @@ Seven jobs:
 | `/api/send-reminders` | every 15 minutes | Daily reminders never arrive |
 | `/api/refresh-leaderboards` | every 10 minutes | The leaderboards stop moving: a child in Arena never appears on them, and every board shows the last run's places (weekly and monthly boards still empty at their reset) |
 | `/api/send-digests` | hourly | The weekly digest never goes out |
-| `/api/send-trial-emails` | hourly | No email three days before a free trial ends, or on the day, and no error report to `ERRORS_EMAIL`. Needs `EMAIL_API_KEY` and `EMAIL_FROM` ([EMAILS.md](EMAILS.md)) |
+| `/api/send-trial-emails` | hourly | No email three days before a free trial ends, or on the day, no reminder three days before a paused plan starts again, and no error report to `ERRORS_EMAIL`. Needs `EMAIL_API_KEY` and `EMAIL_FROM` ([EMAILS.md](EMAILS.md)) |
 | `/api/run-retention` | daily | Old activity piles up, and a deleted family's Stripe cancellation that failed is never retried |
 | `/api/settle-alliances` | monthly (the 2nd) | Nobody is ever given their 20% discount |
 | `/api/settle-schools` | monthly (the 2nd) | No District Champion, no School Stars, no free month, and no monthly email to each school's admin |
@@ -344,6 +344,7 @@ changes no other row in any table):
 | A district's "Get a quote" marks (a keyed hash of where a request came from; what was typed is never stored) | 2 days |
 | A school's invite from its district that nobody used | When it runs out, 30 days after it was made |
 | A school district's account (its admin and its list of schools), once its plan has ended or it never paid | A year after its plan ended, or after it signed up. Never a school: each carries on by itself |
+| A family's pause (when it started, when billing started again, its reminder email) | 90 days after it was over. Whether the family has had its half-price month stays on the family's own record until the account is deleted |
 
 A gift's order itself is kept (the plan, when it was paid, used or refunded,
 and its code's hash): it is the record of the sale.
@@ -435,7 +436,16 @@ cancellation still waiting for Stripe is never deleted.
       [PAYMENTS.md](PAYMENTS.md) says what each one does to a family.
 - [ ] Stripe → Settings → Billing → **Customer portal**: turn it on. Cancelling
       and changing cards happen there. Its default return link:
-      `https://rankup.mtrxhorizyn.com/#/parent/plan`.
+      `https://rankup.mtrxhorizyn.com/#/parent/plan`. Keep **cancelling** on,
+      and turn on **Customers can switch plans** with the four Standard and
+      Elite Pass prices: the Elite nudge and "Switch to yearly" open Stripe's
+      confirm page for a change of plan, which needs it.
+- [ ] Stripe → Products → **Coupons**: one coupon, **50% off**, duration
+      **once**, in the plans' currency → `STRIPE_SAVE_COUPON`. It is the
+      half-price month offered once to a family on the way to cancelling a
+      monthly plan. Leave the setting unset to not offer it; pausing and
+      cancelling work either way. See
+      [PAYMENTS.md](PAYMENTS.md#pause-instead-of-cancel).
 - [ ] Stripe → Settings → Business → **Public details**: the business name
       **MTRX Horizyn**, the company's support email, and a statement
       descriptor that says RankUp (for example `MTRX RANKUP`), so a parent
@@ -461,6 +471,7 @@ every phone downloads. A secret in a `VITE_` name is a published secret.
 | `VITE_STRIPE_ENABLED` | `true` to switch billing on | No |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe's secret key and the webhook's signing secret | **Yes** |
 | `STRIPE_PRICE_*` | The price ids from section 3 | No |
+| `STRIPE_SAVE_COUPON` | Optional. The half-price month's Stripe coupon id from section 3 (50% off, once). Unset, the offer is not made ([PAYMENTS.md](PAYMENTS.md#pause-instead-of-cancel)) | No |
 | `GIFT_CODE_SECRET` | One more long random string (`openssl rand -hex 32`), set once: gift codes are worked out from the paid checkout with it, so only the server can make one ([PAYMENTS.md](PAYMENTS.md#gift-subscriptions-a-year-of-rankup)). Without it a paid gift's webhook answers 500 until it is set, and Stripe keeps retrying. Changing it later does not break codes already sold | **Yes** |
 | `DISTRICT_INVOICE_DAYS` | Optional. Days a school district has to pay each invoice: 30 unless set (1 to 90) ([PAYMENTS.md](PAYMENTS.md#school-districts)) | No |
 | `CRON_SECRET` | One long random string (`openssl rand -hex 32`) that protects all seven scheduled jobs and the detailed health check | **Yes** |
@@ -469,7 +480,7 @@ every phone downloads. A secret in a `VITE_` name is a published secret.
 | `SALES_EMAIL` | Optional. Where a school district's "Get a quote" request goes, one email each, with the person's address as the reply-to; nothing they type is stored. A company address (`sales@rankup.mtrxhorizyn.com`). Unset, `SUPPORT_EMAIL`; with neither, the form says quotes are not set up | No |
 | `SUPPORT_EMAIL` | Optional. The support address the app shows under Settings → Help & about and on both help pages (`help@rankup.mtrxhorizyn.com`), built in when the app is built; the emails use it too when `EMAIL_REPLY_TO` is unset. Without it, the contact email in `src/data/legalText.js` once filled in (section 5) | No |
 | `OPERATOR_SECRET` | A different long random string: your key to `/#/operator`, where you check each school is real | **Yes** |
-| `STATS_KEY` | Optional. Lets your own console read two counts (families, active families) and the daily usage totals for the last 30 days from `/api/stats`. Unset, that address does not exist. | **Yes** |
+| `STATS_KEY` | Optional. Lets your own console read two counts (families, active families) and the daily usage totals for the last 30 days from `/api/stats`, plans paused, half-price months taken and plans cancelled among them. Unset, that address does not exist. | **Yes** |
 | `VITE_GUILDS_ENABLED` | Leave unset for launch (section 7) | No |
 | `RETENTION_*`, `REMINDER_GRACE_MINUTES`, `DIGEST_WEEKDAY`, `DIGEST_HOUR` | Optional; the defaults are in `.env.example` | No |
 
@@ -538,7 +549,8 @@ the phone.
       Tick every check, verify, and see it ranked. The same page shows
       RankUp's daily usage totals for the last 30 days (families signed up,
       chores accepted, rewards bought, games played, schools signed up, help
-      page views): counts only, with no family in them.
+      page views, plans paused, half-price months taken, plans cancelled):
+      counts only, with no family in them.
 - [ ] With a test family three days from the end of its free trial, check
       the trial email arrives (and again on the last day), from
       `no-reply@rankup.mtrxhorizyn.com`. In the database:
@@ -607,7 +619,10 @@ Free things worth doing first, either way:
 - [ ] Price, renewal date and how to cancel shown before payment.
 - [ ] A refund policy, written down and reachable from the app.
 - [ ] Stripe Tax switched on.
-- [ ] Cancel a real subscription yourself and check it works end to end.
+- [ ] Cancel a real subscription yourself and check it works end to end: from
+      "Cancel my plan", past the pause offer, to Stripe's cancel page.
+- [ ] Pause a real monthly subscription for a month, check Stripe shows the
+      collection paused until the date, then start it again.
 
 ## 10. Then, the important one
 

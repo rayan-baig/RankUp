@@ -111,6 +111,10 @@ console.log('\n=== Nothing works without a token ===')
 ok('a push with no token is refused', (await post('/api/send-push', { familyId: FAMILY, role: 'parent', kind: 'reminder' })).status === 401)
 ok('a checkout with no token is refused', (await post('/api/create-checkout', { tier: 'standard' })).status === 401)
 ok('a school checkout with no token is refused', (await post('/api/school-checkout', { cycle: 'month' })).status === 401)
+// Pausing, resuming and the half-price month: all of it in tests/keepplan.mjs.
+ok('a pause with no token is refused', (await post('/api/keep-plan', { action: 'pause', months: 1 })).status === 401)
+const outsiderPause = await post('/api/keep-plan', { action: 'nap' }, OUTSIDER)
+ok('and a made-up action is refused before anything is asked', outsiderPause.status === 400, `status ${outsiderPause.status}`)
 const parentAsSchool = await post('/api/school-checkout', { cycle: 'month' }, PARENT)
 ok('a parent CANNOT start a school’s checkout', parentAsSchool.status === 403 || parentAsSchool.status === 503,
   `status ${parentAsSchool.status}`)
@@ -188,11 +192,12 @@ if (STATS_KEY_FOR_TEST) {
   try { body = JSON.parse(raw) } catch { body = {} }
   ok('and answer the console with two numbers and the daily totals, nothing more', counted.status === 200 && Number.isInteger(body.users)
     && Number.isInteger(body.active_users) && Object.keys(body).sort().join(',') === 'active_users,daily,users', raw.slice(0, 200))
-  const METRICS = ['chores_accepted', 'families_signed_up', 'games_played', 'help_views', 'rewards_bought', 'schools_signed_up']
+  const METRICS = ['chores_accepted', 'families_signed_up', 'games_played', 'help_views', 'plans_cancelled', 'plans_paused',
+    'plans_saved', 'rewards_bought', 'schools_signed_up']
   const days = body.daily?.days || []
   ok('the daily totals are the last 30 days, oldest first, ending today (UTC)',
     days.length === 30 && days[29]?.day === new Date().toISOString().slice(0, 10) && days[0].day < days[29].day, JSON.stringify(days.slice(-1)))
-  ok('each day is a date and the six counts, and nothing else: no id, no name, no family',
+  ok('each day is a date and the nine counts, and nothing else: no id, no name, no family',
     days.every((d) => Object.keys(d).sort().join(',') === ['day', ...METRICS].sort().join(',')
       && METRICS.every((m) => Number.isInteger(d[m]) && d[m] >= 0)), JSON.stringify(days[29]))
   ok('with the totals over the 30 days',

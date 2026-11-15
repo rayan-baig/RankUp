@@ -25,6 +25,7 @@ import { ReferralRewardNotice } from '../../components/InviteCard.jsx'
 import HowItWorks from '../../components/HowItWorks.jsx'
 import FirstWeek from '../../components/FirstWeek.jsx'
 import DemoTour from '../../components/DemoTour.jsx'
+import UpgradeNudge from '../../components/UpgradeNudge.jsx'
 
 export default function ParentDashboard() {
   const { state, dispatch } = useApp()
@@ -112,6 +113,8 @@ export default function ParentDashboard() {
       <DemoTour />
       <HowItWorks />
       <FirstWeek />
+      {/* Elite, offered at a moment it is true; once a fortnight at most. */}
+      <UpgradeNudge />
       {/* After the first accepted chore, once; never on a child's phone. */}
       <InstallPrompt />
 
