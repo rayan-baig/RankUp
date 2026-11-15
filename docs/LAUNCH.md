@@ -495,12 +495,12 @@ the phone.
 
 - [ ] `src/data/legalText.js` → `OPERATOR`. The name is already **MTRX
       Horizyn**: the privacy policy and terms say "RankUp is a product of MTRX
-      Horizyn", and "we" means the company. Fill in the company's contact
-      email (such as `help@rankup.mtrxhorizyn.com`) and its registered postal
-      address. The company's, never a person's: this repository and the app
-      are public. The app shows a warning banner until both are filled in.
-      Once the email is there, both help pages end with "Still stuck? Write
-      to …" with it.
+      Horizyn", and "we" means the company. The contact email is filled in:
+      `help@mtrxhorizyn.com` (set up forwarding for it in section 4). Still to
+      fill in: the company's registered postal address, such as a PO box or
+      a mailbox service. The company's, never a person's: this repository and
+      the app are public. The app shows a warning banner until it is filled
+      in. Both help pages end with "Still stuck? Write to …" with the email.
       The consent notice does not name the operator, so this needs no new
       consent version.
 - [ ] Read the privacy policy and terms in that file from start to finish. They
