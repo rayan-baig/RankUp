@@ -62,7 +62,7 @@ export const LAST_UPDATED = 'November 2026'
  */
 export const OPERATOR = {
   name: 'MTRX Horizyn',
-  email: '[YOUR CONTACT EMAIL]',
+  email: 'help@mtrxhorizyn.com',
   address: '[YOUR POSTAL ADDRESS]',
 }
 
