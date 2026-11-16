@@ -1,15 +1,26 @@
 /**
- * Serverless function: start a school's Stripe Checkout.
+ * Serverless function: start a school's plan.
+ *
+ * By card: Stripe Checkout, monthly or yearly. Or, with `method: 'invoice'`,
+ * a yearly plan by invoice, as a school office usually pays: a subscription
+ * with `collection_method: 'send_invoice'`, which Stripe emails to the
+ * address the admin gives, to be paid by card or bank transfer within
+ * DISTRICT_INVOICE_DAYS (30 by default), and again each year it renews. The
+ * same as a district's plan (api/district-billing.js), for one school.
  *
  * Only the school's admin can, and which price is charged comes from the
  * database (the school's size band), never from the request. The school id
- * travels in the metadata so the webhook knows which school paid.
+ * travels in the metadata so the webhook knows which school paid. Either way
+ * what is left of the school's free trial or pilot is kept: nothing is
+ * charged, and no invoice is due, before it ends.
  */
 
 import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
 import { schoolCycle, schoolPriceId, schoolTrialEnd } from './_shared/schoolBilling.js'
-import { reportError, userHeaders } from './_shared/job.js'
+import { invoiceDays } from './_shared/districtBilling.js'
+import { reportError, userHeaders, makeServiceRpc } from './_shared/job.js'
 import { returnOrigin } from './_shared/site.js'
+import { cleanEmail } from '../src/lib/quoteRules.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -62,10 +73,14 @@ export default async function handler(req, res) {
   if (typeof body === 'string') {
     try { body = JSON.parse(body) } catch { body = null }
   }
-  const cycle = schoolCycle(body?.cycle)
+  const byInvoice = body?.method === 'invoice'
+  // An invoice is for a year: nobody posts an invoice every month.
+  const cycle = byInvoice ? 'year' : schoolCycle(body?.cycle)
 
   const school = await callerSchool(token)
   if (!school?.ok) return res.status(403).json({ error: school?.reason || 'not_school_admin' })
+
+  if (byInvoice) return invoicePlan(req, res, school, body)
 
   const price = schoolPriceId(school.band, cycle)
   if (!price) return res.status(503).json({ error: 'not_configured', message: `No ${cycle} price for a ${school.band} school.` })
@@ -100,5 +115,54 @@ export default async function handler(req, res) {
   } catch (err) {
     await reportError('school-checkout', err)
     return res.status(stripeUnavailable(err) ? 503 : 502).json({ error: stripeUnavailable(err) ? 'stripe_unavailable' : 'checkout_failed' })
+  }
+}
+
+/**
+ * A yearly plan by invoice. Stripe sends the invoice to `body.email`; the
+ * customer is the school's own (made here the first time, with the school's
+ * name, that address and which school it is, nothing else).
+ */
+async function invoicePlan(req, res, school, body) {
+  if (!SERVICE_KEY) return res.status(503).json({ error: 'not_configured' })
+  const email = cleanEmail(body?.email)
+  if (!email) return res.status(400).json({ error: 'bad_email' })
+  const price = schoolPriceId(school.band, 'year')
+  if (!price) return res.status(503).json({ error: 'not_configured', message: `No yearly price for a ${school.band} school.` })
+
+  const serviceRpc = makeServiceRpc(SUPABASE_URL, SERVICE_KEY)
+  const stripe = makeStripe(STRIPE_SECRET)
+  try {
+    let customer = school.has_customer ? await existingCustomer(school.school_id) : null
+    if (customer) {
+      // The invoice goes where the admin said this time.
+      await stripe.customers.update(customer, { email })
+    } else {
+      const made = await stripe.customers.create(
+        { name: school.name, email, metadata: { school_id: school.school_id, kind: 'school' } },
+        { idempotencyKey: `school-customer:${school.school_id}` },
+      )
+      customer = made.id
+      await serviceRpc('attach_school_customer', { p_school_id: school.school_id, p_customer_id: customer })
+    }
+    const metadata = { school_id: school.school_id, band: school.band, cycle: 'year', kind: 'school' }
+    const trialEnd = schoolTrialEnd(school.trial_ends_at)
+    const day = new Date().toISOString().slice(0, 10)
+    const subscription = await stripe.subscriptions.create({
+      customer,
+      items: [{ price }],
+      collection_method: 'send_invoice',
+      days_until_due: invoiceDays(),
+      description: `RankUp School League for ${school.name}, one year`,
+      metadata,
+      ...(trialEnd ? { trial_end: trialEnd } : {}),
+    }, {
+      // Two taps on the button, or a retry after a timeout, make one plan.
+      idempotencyKey: `school-invoice:${school.school_id}:${day}:${price}`,
+    })
+    return res.status(200).json({ ok: true, sent_to: email, status: subscription.status || null, first_invoice_at: trialEnd || null })
+  } catch (err) {
+    await reportError('school-checkout', err)
+    return res.status(stripeUnavailable(err) ? 503 : 502).json({ error: stripeUnavailable(err) ? 'stripe_unavailable' : 'invoice_failed' })
   }
 }

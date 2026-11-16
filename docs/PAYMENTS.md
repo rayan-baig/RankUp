@@ -865,6 +865,66 @@ it in Stripe too.
   and their email; verify, un-verify, suspend or lift a suspension there.
   Until a school is verified it is in no league and sees no child's name.
 
+- **Paying by invoice**: a school office often cannot pay by card. On the
+  school's page, Plan, "a year, by invoice" asks for an address and
+  `api/school-checkout.js` (`method: 'invoice'`) makes a yearly subscription at
+  the school's yearly price with `collection_method: 'send_invoice'`: Stripe
+  emails the invoice, the office pays by card or bank transfer within
+  `DISTRICT_INVOICE_DAYS` (30 by default), and it renews with a new invoice
+  each year. What is left of the trial or pilot is kept as Stripe's trial, so
+  the first invoice comes when it ends. The customer is the school's own (its
+  name, the invoice address and `school_id`, nothing else). The webhook treats
+  it like any school subscription. Turn on emailing finalized invoices in
+  Stripe's settings (the same switch districts need). No new price.
+
+---
+
+## School pilots
+
+A free pilot, usually a semester, for a school that wants longer than the
+30-day trial to decide. Nothing in Stripe: a pilot is a longer trial.
+
+1. **A school asks.** "Request a pilot" on the School League's front page
+   (`#/school`) asks for the school, a name, role, work email, town, about
+   how many students and a note. `api/pilot-request.js` emails it to
+   `SALES_EMAIL` (or `SUPPORT_EMAIL`) with the person as the reply-to, the same
+   way as a district's "Get a quote". Nothing typed is stored; the database
+   keeps a keyed hash of where requests came from, for a limit of 3 an hour
+   from one place and 30 an hour in all, counted apart from quotes.
+2. **You make a code.** Open `#/operator`, the **Pilots** tab: who it is for
+   (the school's name, e.g. "Example Academy"), the pilot's length (90 days
+   unless `PILOT_DAYS` says otherwise; 14 to 365) and the date the code must be
+   used by (60 days from today unless you pick another). The code
+   (`XXXXX-XXXXX`) is shown **once**: only its hash is stored. Send it to the
+   school. You can take back a code nobody has used.
+3. **The school uses it.** Its admin types it when signing the school up, or
+   under Plan on the school's page. The trial becomes a pilot of that length
+   from that day (`redeem_school_pilot`). Single use; one pilot per school;
+   5 wrong codes an hour per sign-in. **It never adds to a paid plan:** a school
+   paying by card or invoice, or whose district pays, is told a pilot would add
+   nothing, and the code stays unused.
+4. **During the pilot** the school is in the league like a school on its trial.
+   Its admin can open the **pilot report** (`#/school/report`) any time: one
+   printable page of totals (students taking part, the share who did a chore,
+   chores done, the average per student, the busiest week, the most popular
+   kinds of chore, the same per house or class), the price for its size and how
+   to buy. Never a child's name or anything typed, and no numbers for a group
+   of fewer than 5 students. There is no "what families said": RankUp asks
+   families for no rating.
+5. **14 days before it ends** each of the school's admins gets one email (the
+   hourly `/api/send-trial-emails` job, `due_pilot_reminders`): when it ends,
+   the price for its size, card or invoice, and a link to the report. Not if
+   the school has chosen a plan, or its district pays.
+6. **After it ends** the school sits out the league until it chooses a plan,
+   like a trial that ran out. Nothing is deleted. Paying during the pilot keeps
+   the rest of it: nothing is charged, and no invoice is due, until it ends.
+
+The operator page lists every code: not used yet, ran out unused, pilot
+running, ended, or paying, with each pilot's end date. Retention deletes a
+code nobody used 90 days after its date, and a pilot's record a year after
+it ended (never the school). Tests: `supabase/test/58-pilots-and-houses.sql`,
+the pilot part of `tests/api.mjs`, and `tests/schoolpilot.mjs`.
+
 ---
 
 ## School districts

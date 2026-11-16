@@ -13,6 +13,11 @@
  */
 
 import { transport } from './sync/transport.js'
+import {
+  PILOT_DEFAULT_DAYS, PILOT_TRIES_AN_HOUR, SCHOOL_MAX_GROUPS, checkPilotRequest, normalizePilotCode,
+} from './pilotRules.js'
+
+export { PILOT_DEFAULT_DAYS, PILOT_REMINDER_DAYS, SCHOOL_MAX_GROUPS, SCHOOL_GROUP_NAME_MAX } from './pilotRules.js'
 
 /** Upper size of each band, and its price in cents a month. */
 export const SCHOOL_PRICES = [
@@ -166,6 +171,21 @@ export const SCHOOL_ERRORS = {
   already_in_district: 'Your school is already part of a district. Leave it first.',
   not_in_district: 'Your school is not part of a district.',
   too_many_schools: 'That district already has as many schools as a plan can hold. Ask the district to get a quote.',
+  // Pilot codes (redeem_school_pilot).
+  bad_code: 'That is not a pilot code we know. Check the letters and try again.',
+  used: 'That pilot code has already been used.',
+  expired: 'That pilot code has run out. Ask us for a new one.',
+  too_many_tries: `That is ${PILOT_TRIES_AN_HOUR} codes that did not work in an hour. Please wait an hour and try again.`,
+  already_piloted: 'Your school has already had its pilot.',
+  already_paying: 'Your school already has a plan, so a pilot would add nothing. The code is still unused.',
+  district_pays: 'Your district already pays for your school, so a pilot would add nothing. The code is still unused.',
+  suspended: 'This school is suspended. Contact us to sort it out.',
+  // Houses and classes.
+  bad_group_name: `Give it a short name, up to 30 letters, that children can read.`,
+  group_name_taken: 'Your school already has one with that name.',
+  too_many_groups: `A school can have up to ${SCHOOL_MAX_GROUPS}.`,
+  no_such_group: 'That one is not in this school any more.',
+  bad_group_kind: 'Choose houses or classes.',
 }
 
 export function schoolError(reason) {
@@ -208,6 +228,14 @@ export const schools = {
   updateSize: (students) => call('update_school_size', { p_students: Number(students) }),
   publishStars: (monthKey, leaveOut = []) =>
     call('publish_top_students', { p_month_key: monthKey, p_leave_out: leaveOut }),
+  // A pilot code from us, and the report for the school office.
+  redeemPilot: (pilotCode) => call('redeem_school_pilot', { p_code: normalizePilotCode(pilotCode) }),
+  report: () => call('school_pilot_report'),
+  // Houses (or classes), named by the admin.
+  addGroup: (name) => call('add_school_group', { p_name: name }),
+  renameGroup: (id, name) => call('rename_school_group', { p_group_id: id, p_name: name }),
+  removeGroup: (id) => call('remove_school_group', { p_group_id: id }),
+  setGroupKind: (kind) => call('set_school_group_kind', { p_kind: kind === 'class' ? 'class' : 'house' }),
 
   // For a family.
   mine: () => call('my_schools'),
@@ -215,10 +243,56 @@ export const schools = {
     call('join_school', { p_kid_id: kidId, p_join_code: code(joinCode), p_show_name: Boolean(showName) }),
   setNameSharing: (kidId, show) => call('set_school_name_sharing', { p_kid_id: kidId, p_show: Boolean(show) }),
   leave: (kidId) => call('leave_school', { p_kid_id: kidId }),
+  // Which house (or class) a child is in. Null for none.
+  setGroup: (kidId, groupId) => call('set_kid_school_group', { p_kid_id: kidId, p_group_id: groupId || null }),
 
   // Either.
   league: (schoolId = null) => call('school_league', { p_school_id: schoolId }),
 }
+
+/** "House" or "Class", from the school's choice (schools.group_kind). */
+export const groupWord = (kind, { plural = false, lower = false } = {}) => {
+  const word = kind === 'class' ? (plural ? 'Classes' : 'Class') : (plural ? 'Houses' : 'House')
+  return lower ? word.toLowerCase() : word
+}
+
+const PILOT_REQUEST_URL = import.meta.env?.VITE_PILOT_REQUEST_URL || '/api/pilot-request'
+
+/**
+ * Send a "Request a pilot" request. No account needed: it goes to the
+ * server, which emails it to whoever runs RankUp and keeps none of it.
+ * Checked here first with the same rules the server uses.
+ */
+export async function requestPilot(form) {
+  const { ok, errors, clean } = checkPilotRequest(form)
+  if (!ok) return { ok: false, reason: 'invalid', errors }
+  try {
+    const res = await fetch(PILOT_REQUEST_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(clean),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, reason: data.error || `http_${res.status}` }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, reason: 'network', message: err.message }
+  }
+}
+
+export const PILOT_REQUEST_ERRORS = {
+  too_many_requests: 'We have had a few requests from here this hour. Please try again later.',
+  busy: 'We have had a lot of requests this hour. Please try again later.',
+  not_configured: 'Pilot requests are not set up on this site yet.',
+  not_sent: 'Your request could not be sent just now. Please try again in a few minutes.',
+}
+
+export function pilotRequestError(reason) {
+  return PILOT_REQUEST_ERRORS[reason] || 'Your request could not be sent. Please try again.'
+}
+
+/** "16 November 2026". */
+export const longDate = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
 
 // ---------------------------------------------------------------------------
 // The look-around. Same shapes the database returns, clearly sample data, so
@@ -258,6 +332,7 @@ export function demoSchoolCard({ forKid = null, asKid = false, staff = false } =
     stars,
     stars_month: last,
     titles: [{ month: '2026-06', score: 15.8 }],
+    houses: DEMO_HOUSES,
   }
   if (staff) {
     Object.assign(card, {
@@ -271,9 +346,61 @@ export function demoSchoolCard({ forKid = null, asKid = false, staff = false } =
       sharing_names: 121,
       staff: [{ name: 'Ms Lane', role: 'admin', you: true }, { name: 'Mr Ray', role: 'teacher', you: false }],
       challenges_in: 1,
+      pilot: { days: PILOT_DEFAULT_DAYS, started_at: new Date(Date.now() - (PILOT_DEFAULT_DAYS - 19) * 86400000).toISOString(), ends_at: new Date(Date.now() + 19 * 86400000).toISOString() },
     })
   }
   return card
+}
+
+/*
+ * Four houses, one too small to show. A shown house's numbers are made up
+ * to be believable; the small one shows nothing, as the database does.
+ */
+const demoHouse = (id, name, students, active, chores) => ({
+  id, name, shown: true, students, active, chores,
+  share_pct: Math.round((100 * active) / students),
+  average: Math.round((chores / students) * 10) / 10,
+})
+const DEMO_HOUSES = {
+  kind: 'house',
+  min_students: SCHOOL_MIN_STUDENTS,
+  groups: [
+    demoHouse('demo-h1', 'Kestrel', 52, 44, 812),
+    demoHouse('demo-h2', 'Otter', 61, 49, 866),
+    demoHouse('demo-h3', 'Heron', 48, 35, 590),
+    { id: 'demo-h4', name: 'Badger', shown: false },
+  ],
+}
+
+/** What school_pilot_report() returns for the sample school. */
+export function demoReport(now = Date.now()) {
+  const day = 86400000
+  const from = new Date(now - (PILOT_DEFAULT_DAYS - 19) * day)
+  const monday = new Date(now - 30 * day)
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7))
+  const shown = DEMO_HOUSES.groups.filter((g) => g.shown)
+  const students = 186
+  const active = 151
+  const chores = 2718
+  return {
+    ok: true,
+    school: { name: 'Oakridge Elementary', city: 'Springfield', district: 'North Valley', student_count: 420 },
+    kind: 'pilot',
+    from: from.toISOString(),
+    to: new Date(now).toISOString(),
+    ends_at: new Date(now + 19 * day).toISOString(),
+    over: false,
+    status: 'trial',
+    paid: false,
+    min_students: SCHOOL_MIN_STUDENTS,
+    totals: { shown: true, students, active, share_pct: Math.round((100 * active) / students), chores, average: Math.round((chores / students) * 10) / 10 },
+    busiest_week: { starts: monday.toISOString().slice(0, 10), chores: 412 },
+    kinds: [{ kind: 'kitchen', share_pct: 31 }, { kind: 'bedroom', share_pct: 24 }, { kind: 'pets', share_pct: 12 }],
+    groups: { ...DEMO_HOUSES, groups: [...shown].sort((a, b) => b.average - a.average).concat(DEMO_HOUSES.groups.filter((g) => !g.shown)) },
+    price: (({ band, label, monthlyCents, yearlyCents, trialDays }) => ({
+      ok: true, band, label, monthly_cents: monthlyCents, yearly_cents: yearlyCents, trial_days: trialDays,
+    }))(schoolPrice(420)),
+  }
 }
 
 export const DEMO_LEAGUE = {
@@ -300,6 +427,7 @@ export function demoMySchools(kids = [], onlyKidId = null) {
         kid_id: k.id,
         kid_name: k.name,
         show_name: i === 0,
+        group_id: i === 0 ? 'demo-h2' : null,
         // The first child is in a school and the second is not, so the
         // look-around shows both the league and how a child joins one.
         school: i === 0 ? demoSchoolCard({ forKid: k.name, asKid: Boolean(onlyKidId) }) : null,

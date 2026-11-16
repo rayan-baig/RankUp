@@ -147,6 +147,19 @@ place and 30 in all; retention removes a district a year after its plan
 ended and never a school; none of the server's half is reachable from a
 browser.
 
+`58-pilots-and-houses.sql` — school pilots, the report and houses: a pilot
+code is the operator's, holds only a hash, is single use and has a date; the
+trial becomes a pilot of the code's length, and never on top of a paid plan
+(a school paying by card, by a plan billing after its trial, or through its
+district is told so and the code stays unused); one pilot per school and 5
+wrong codes an hour; the reminder 14 days before, once, to the admins only;
+the report's totals, daily cap, busiest week and kinds of chore, and no
+numbers for fewer than 5 students; houses named by the admin (no rude words,
+12 at most), chosen by a parent, with the students left over never 1 to 4,
+so no house's numbers can be worked out by subtraction; "Request a pilot"
+limited apart from quotes; retention; none of the server's half reachable
+from a browser.
+
 `57-pauses.sql` — pause instead of cancel and the half-price month: only an
 active, monthly, paid plan that is not ending pauses, for 1, 2 or 3 months,
 one at a time; while paused the plan counts as the free level, a trial or a

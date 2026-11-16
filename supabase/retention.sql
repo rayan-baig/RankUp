@@ -31,7 +31,12 @@
 --                              (30 days); a district a year after its plan
 --                              ended, or a year after it signed up if it never
 --                              paid. Its schools are never deleted with it:
---                              they carry on as they are.
+--                              they carry on as they are. "Request a pilot"
+--                              marks (the same table) after 2 days too.
+--   school_pilot* (schools.sql) pilot codes typed that did not work, after 2
+--                              days; a pilot code nobody used, 90 days after
+--                              the date it had to be used by; a pilot a year
+--                              after it ended.
 --
 -- Guild messages are deliberately NOT in this list. They are the record of what
 -- children said to each other, they can be reported, and a job that quietly
@@ -69,6 +74,7 @@ declare
   v_themes  int;
   v_gifts   int;
   v_districts int;
+  v_pilots  int;
   v_pauses  int;
 begin
   with gone as (
@@ -181,6 +187,19 @@ begin
     ) select count(*) into v_districts from gone;
   end if;
 
+  -- Pilots (schools.sql). A school keeps its pilot's numbers: only the code
+  -- and its record go. A used code a year after the pilot ended; one never
+  -- used, 90 days after the date it had to be used by.
+  if to_regclass('public.school_pilots') is not null then
+    delete from school_pilot_attempts where tried_at < now() - interval '2 days';
+    with gone as (
+      delete from school_pilots
+       where (redeemed_at is null and code_expires_at < now() - interval '90 days')
+          or (redeemed_at is not null and ends_at < now() - interval '365 days')
+      returning 1
+    ) select count(*) into v_pilots from gone;
+  end if;
+
   -- The daily usage counts (health.sql): totals only, kept for 400 days, a
   -- year and a bit, so this month can be set beside the same month last year.
   if to_regclass('public.usage_daily') is not null then
@@ -196,7 +215,8 @@ begin
     'theme_submissions_deleted', coalesce(v_themes, 0),
     'unpaid_gifts_deleted', coalesce(v_gifts, 0),
     'districts_deleted', coalesce(v_districts, 0),
-    'pauses_deleted', coalesce(v_pauses, 0)
+    'pauses_deleted', coalesce(v_pauses, 0),
+    'pilots_deleted', coalesce(v_pilots, 0)
   );
 end $$;
 

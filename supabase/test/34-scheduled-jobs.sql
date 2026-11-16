@@ -129,6 +129,22 @@ insert into plan_pauses (family_id, months, started_at, resumes_at, ended_at) va
   ('34a00000-0000-4000-8000-00000000000f', 3, now() - interval '100 days', now() + interval '20 days', now() - interval '91 days'),
   ('34a00000-0000-4000-8000-00000000000f', 1, now() - interval '119 days', now() - interval '89 days', null),
   ('34a00000-0000-4000-8000-00000000000f', 2, now() - interval '10 days', now() + interval '50 days', null);
+-- Pilots (schools.sql): a code nobody used, 91 days and 89 days after it
+-- could last be used; a pilot that ended 366 days ago and one 300 days ago;
+-- codes typed wrong 3 days and 1 day ago.
+insert into schools (id, name, district, district_key, student_count, size_band) values
+  ('34a00000-0000-4000-8000-0000000005c1', 'T34 School', 'T34 District', 't34 district', 100, 'small'),
+  ('34a00000-0000-4000-8000-0000000005c2', 'T34 Other School', 'T34 District', 't34 district', 100, 'small');
+insert into school_pilots (code_hash, label, days, code_expires_at, created_at, school_id, redeemed_at, ends_at) values
+  (encode(sha256('t34-p1'::bytea), 'hex'), 'T34 unused old', 90, now() - interval '91 days', now() - interval '150 days', null, null, null),
+  (encode(sha256('t34-p2'::bytea), 'hex'), 'T34 unused new', 90, now() - interval '89 days', now() - interval '150 days', null, null, null),
+  (encode(sha256('t34-p3'::bytea), 'hex'), 'T34 ended old', 90, now() - interval '400 days', now() - interval '500 days',
+   '34a00000-0000-4000-8000-0000000005c1', now() - interval '456 days', now() - interval '366 days'),
+  (encode(sha256('t34-p4'::bytea), 'hex'), 'T34 ended new', 90, now() - interval '350 days', now() - interval '400 days',
+   '34a00000-0000-4000-8000-0000000005c2', now() - interval '390 days', now() - interval '300 days');
+insert into school_pilot_attempts (user_id, tried_at) values
+  ('34a00000-0000-4000-8000-0000000000a1', now() - interval '3 days'),
+  ('34a00000-0000-4000-8000-0000000000a1', now() - interval '1 day');
 
 /*
  * Every table, fingerprinted without the rows the job may delete. Generated
@@ -174,6 +190,8 @@ declare
     'gift_redeem_attempts',   'x.tried_at < now() - interval ''2 days''',
     'gift_checkout_attempts', 'x.tried_at < now() - interval ''2 days''',
     'plan_pauses',            'coalesce(x.ended_at, x.resumes_at) < now() - interval ''90 days''',
+    'school_pilots',          '(x.redeemed_at is null and x.code_expires_at < now() - interval ''90 days'') or (x.redeemed_at is not null and x.ends_at < now() - interval ''365 days'')',
+    'school_pilot_attempts',  'x.tried_at < now() - interval ''2 days''',
     'billing_cancellations',  'x.done_at is not null and (x.done_at < now() - interval ''30 days'' or (x.stripe_customer_id is null and x.stripe_subscription_id is null and x.queued_at < now() - interval ''7 days''))');
   k text;
   v_before jsonb;
@@ -384,3 +402,6 @@ begin
     (select pronargs from pg_proc where oid = 'claim_push_send(uuid,integer)'::regprocedure) = 2
     and (select proargnames[1] from pg_proc where oid = 'claim_push_send(uuid,integer)'::regprocedure) = 'p_family_id');
 end $$;
+
+-- The schools the pilot rows above hung on.
+delete from schools where id in ('34a00000-0000-4000-8000-0000000005c1', '34a00000-0000-4000-8000-0000000005c2');

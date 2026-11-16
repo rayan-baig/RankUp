@@ -1,6 +1,7 @@
 import {
   SCHOOL_PRICES, SCHOOL_TRIAL_DAYS, SCHOOL_CHAMPION_TRIAL_DAYS, SCHOOL_YEAR_MONTHS, SCHOOL_MIN_STUDENTS,
   SCHOOL_DAILY_CHORES, SCHOOL_MAX_RIVALS, SCHOOL_STARS, DISTRICT_DISCOUNTS, DISTRICT_MIN_SCHOOLS, dollars,
+  PILOT_DEFAULT_DAYS, PILOT_REMINDER_DAYS, SCHOOL_MAX_GROUPS,
 } from '../lib/schools.js'
 
 /**
@@ -45,10 +46,12 @@ export function schoolHelp() {
     },
     {
       id: 'trial',
-      q: 'Is there a free trial?',
+      q: 'Is there a free trial, or a pilot?',
       a: [
         `Yes: ${SCHOOL_TRIAL_DAYS} days from signing up, with no card. Nothing is charged until the trial ends.`,
-        'When you are ready, the admin chooses monthly or yearly on the school’s page and pays on Stripe’s own page. Card details never come near RankUp.',
+        `Or ask for a free pilot, usually a semester (${PILOT_DEFAULT_DAYS} days), with “Request a pilot” on the School League’s front page. We send a pilot code; type it when you sign up, or under Plan on the school’s page. ${PILOT_REMINDER_DAYS} days before it ends we email the school’s admin.`,
+        'Any time during or after the trial or pilot, the admin can open a one-page report of totals to print for whoever decides.',
+        'When you are ready, the admin chooses monthly or yearly on the school’s page and pays on Stripe’s own page, or asks for a yearly invoice the office can pay by card or bank transfer. Card details never come near RankUp.',
       ],
     },
     {
@@ -67,6 +70,7 @@ export function schoolHelp() {
           `${SCHOOL_DAILY_CHORES} a day, so nobody can win by sending in fifty in one evening.`,
         'Points are averaged per student who joined, so a small school can beat a big one.',
         `A school needs at least ${SCHOOL_MIN_STUDENTS} students joined to be ranked in its district.`,
+        `A school can split its students into houses or classes (up to ${SCHOOL_MAX_GROUPS}). Parents choose which one their child is in, and each one’s average is on the school’s board, once ${SCHOOL_MIN_STUDENTS} or more of its students take part.`,
       ],
     },
     {

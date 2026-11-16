@@ -63,17 +63,7 @@ export function SectionTitle({ children, action }) {
       <h2 className="section-title mb-0 flex items-center gap-2">
         {/* A lit tick before the heading, so the eye finds the start of a
             section without the heading having to shout. */}
-        <span
-          aria-hidden="true"
-          style={{
-            width: 3,
-            height: 13,
-            borderRadius: 2,
-            background: 'var(--accent)',
-            boxShadow: '0 0 8px var(--accent)',
-            flex: '0 0 auto',
-          }}
-        />
+        <span aria-hidden="true" className="section-tick" />
         {children}
       </h2>
       {action}

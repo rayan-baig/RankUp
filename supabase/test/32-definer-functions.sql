@@ -380,6 +380,14 @@ begin
     'apply_district_subscription(uuid,text,text,text,text,jsonb,timestamptz,timestamptz,jsonb,boolean)',
     'apply_district_refund(uuid,text,boolean,timestamptz,timestamptz)',
     'record_district_payment(uuid,text,integer,text)', 'record_district_quote(text)',
+    -- Pilots, the report and houses: what the operator's page, the reminder
+    -- job and "Request a pilot" call with the service key, and the totals
+    -- the school's card and the report are built from.
+    'school_points_between(uuid,timestamptz,timestamptz)', 'school_group_totals(uuid,timestamptz,timestamptz)',
+    'school_house_board(uuid,timestamptz,timestamptz)', 'school_max_groups()', 'school_group_name(text)',
+    'create_school_pilot(text,text,integer,timestamptz)', 'withdraw_school_pilot(uuid)', 'operator_school_pilots()',
+    'due_pilot_reminders(timestamptz)', 'claim_pilot_reminder(uuid)', 'finish_pilot_reminder(uuid,boolean)',
+    'school_report_categories()', 'record_pilot_request(text)',
     -- Pause instead of cancel and the half-price month: what /api/keep-plan,
     -- the billing portal, the webhook and the reminder job call with the
     -- service key, and the console's count of each.

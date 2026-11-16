@@ -153,6 +153,9 @@ begin
                              -- School districts: their functions and the server's
                              -- reach them, nothing else (schools.sql).
                              'districts', 'district_staff', 'district_schools', 'district_quote_attempts',
+                             -- Houses and pilots: their functions, the operator's
+                             -- page and the reminder job reach them (schools.sql).
+                             'school_groups', 'school_pilots', 'school_pilot_attempts',
                              -- Pauses: /api/keep-plan, the webhook and the reminder
                              -- job reach them, with the service key (billing.sql).
                              'plan_pauses');

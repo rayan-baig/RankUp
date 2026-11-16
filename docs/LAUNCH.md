@@ -237,7 +237,7 @@ Seven jobs:
 | `/api/send-reminders` | every 15 minutes | Daily reminders never arrive |
 | `/api/refresh-leaderboards` | every 10 minutes | The leaderboards stop moving: a child in Arena never appears on them, and every board shows the last run's places (weekly and monthly boards still empty at their reset) |
 | `/api/send-digests` | hourly | The weekly digest never goes out |
-| `/api/send-trial-emails` | hourly | No email three days before a free trial ends, or on the day, no reminder three days before a paused plan starts again, and no error report to `ERRORS_EMAIL`. Needs `EMAIL_API_KEY` and `EMAIL_FROM` ([EMAILS.md](EMAILS.md)) |
+| `/api/send-trial-emails` | hourly | No email three days before a free trial ends, or on the day, no reminder three days before a paused plan starts again, no reminder 14 days before a school's pilot ends, and no error report to `ERRORS_EMAIL`. Needs `EMAIL_API_KEY` and `EMAIL_FROM` ([EMAILS.md](EMAILS.md)) |
 | `/api/run-retention` | daily | Old activity piles up, and a deleted family's Stripe cancellation that failed is never retried |
 | `/api/settle-alliances` | monthly (the 2nd) | Nobody is ever given their 20% discount |
 | `/api/settle-schools` | monthly (the 2nd) | No District Champion, no School Stars, no free month, and no monthly email to each school's admin |
@@ -344,6 +344,10 @@ changes no other row in any table):
 | A district's "Get a quote" marks (a keyed hash of where a request came from; what was typed is never stored) | 2 days |
 | A school's invite from its district that nobody used | When it runs out, 30 days after it was made |
 | A school district's account (its admin and its list of schools), once its plan has ended or it never paid | A year after its plan ended, or after it signed up. Never a school: each carries on by itself |
+| "Request a pilot" marks (the same kind of keyed hash; what was typed is never stored) | 2 days |
+| School pilot codes typed that did not work (the rate limit) | 2 days |
+| A school pilot code nobody used | 90 days after the date it had to be used by |
+| A school pilot's record (the code's hash, who it was for, when it ran) | A year after the pilot ended. Never the school |
 | A family's pause (when it started, when billing started again, its reminder email) | 90 days after it was over. Whether the family has had its half-price month stays on the family's own record until the account is deleted |
 
 A gift's order itself is kept (the plan, when it was paid, used or refunded,
@@ -389,7 +393,11 @@ cancellation still waiting for Stripe is never deleted.
         emailing finalized invoices to customers, and choose what happens to a
         subscription whose invoice stays unpaid (cancel it, or mark it
         unpaid): that is when a district's schools stop being covered. See
-        [PAYMENTS.md](PAYMENTS.md#school-districts).
+        [PAYMENTS.md](PAYMENTS.md#school-districts). The same invoice emails
+        are what a single school paying by invoice gets.
+      - School pilots need nothing in Stripe: a pilot is a longer free trial.
+        Make each code on `/#/operator`, Pilots, and send it to the school
+        ([PAYMENTS.md](PAYMENTS.md#school-pilots)).
 
       These are the prices in the code (`TIERS` in
       `src/state/initialState.js`, `FLASH_TICKET_PACKS` in
@@ -475,11 +483,12 @@ every phone downloads. A secret in a `VITE_` name is a published secret.
 | `GIFT_CODE_SECRET` | One more long random string (`openssl rand -hex 32`), set once: gift codes are worked out from the paid checkout with it, so only the server can make one ([PAYMENTS.md](PAYMENTS.md#gift-subscriptions-a-year-of-rankup)). Without it a paid gift's webhook answers 500 until it is set, and Stripe keeps retrying. Changing it later does not break codes already sold | **Yes** |
 | `DISTRICT_INVOICE_DAYS` | Optional. Days a school district has to pay each invoice: 30 unless set (1 to 90) ([PAYMENTS.md](PAYMENTS.md#school-districts)) | No |
 | `CRON_SECRET` | One long random string (`openssl rand -hex 32`) that protects all seven scheduled jobs and the detailed health check | **Yes** |
-| `EMAIL_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | The email provider's API key, who RankUp's own emails are from (`RankUp <no-reply@rankup.mtrxhorizyn.com>`), and an optional support address for replies (`help@rankup.mtrxhorizyn.com`). RankUp's own emails use them: the trial reminders, a school's month, a district's quote request, the error report ([EMAILS.md](EMAILS.md)). Without the first two, `/api/send-trial-emails` sends nothing and the health check says so. Leave `EMAIL_API_BASE` unset: it is for the tests | Key: **yes** |
+| `EMAIL_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | The email provider's API key, who RankUp's own emails are from (`RankUp <no-reply@rankup.mtrxhorizyn.com>`), and an optional support address for replies (`help@rankup.mtrxhorizyn.com`). RankUp's own emails use them: the trial reminders, a school's month and its pilot reminder, a district's quote request, a school's pilot request, the error report ([EMAILS.md](EMAILS.md)). Without the first two, `/api/send-trial-emails` sends nothing and the health check says so. Leave `EMAIL_API_BASE` unset: it is for the tests | Key: **yes** |
 | `ERRORS_EMAIL` | Optional. One inbox for the error report: new crashes on phones and errors in the server functions, from the hourly email job, each error at most once an hour and at most 20 reports a day, with no name, email or family id in it ([EMAILS.md](EMAILS.md#rankups-own-the-error-report)) | No |
-| `SALES_EMAIL` | Optional. Where a school district's "Get a quote" request goes, one email each, with the person's address as the reply-to; nothing they type is stored. A company address (`sales@rankup.mtrxhorizyn.com`). Unset, `SUPPORT_EMAIL`; with neither, the form says quotes are not set up | No |
+| `SALES_EMAIL` | Optional. Where a school district's "Get a quote" request and a school's "Request a pilot" go, one email each, with the person's address as the reply-to; nothing they type is stored. A company address (`sales@rankup.mtrxhorizyn.com`). Unset, `SUPPORT_EMAIL`; with neither, the form says quotes are not set up | No |
 | `SUPPORT_EMAIL` | Optional. The support address the app shows under Settings → Help & about and on both help pages (`help@rankup.mtrxhorizyn.com`), built in when the app is built; the emails use it too when `EMAIL_REPLY_TO` is unset. Without it, the contact email in `src/data/legalText.js` once filled in (section 5) | No |
-| `OPERATOR_SECRET` | A different long random string: your key to `/#/operator`, where you check each school is real | **Yes** |
+| `OPERATOR_SECRET` | A different long random string: your key to `/#/operator`, where you check each school is real and make school pilot codes | **Yes** |
+| `PILOT_DAYS` | Optional. How long a school pilot is when you make a code: 90 unless set (14 to 365); you can change it for each code ([PAYMENTS.md](PAYMENTS.md#school-pilots)) | No |
 | `STATS_KEY` | Optional. Lets your own console read two counts (families, active families) and the daily usage totals for the last 30 days from `/api/stats`, plans paused, half-price months taken and plans cancelled among them. Unset, that address does not exist. | **Yes** |
 | `VITE_GUILDS_ENABLED` | Leave unset for launch (section 7) | No |
 | `RETENTION_*`, `REMINDER_GRACE_MINUTES`, `DIGEST_WEEKDAY`, `DIGEST_HOUR` | Optional; the defaults are in `.env.example` | No |

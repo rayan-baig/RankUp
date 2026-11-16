@@ -1,5 +1,5 @@
 import { Card, Chip, SectionTitle, ProgressBar, DemoTag } from './ui.jsx'
-import { monthLabel, districtLabel } from '../lib/schools.js'
+import { monthLabel, districtLabel, groupWord, SCHOOL_MIN_STUDENTS } from '../lib/schools.js'
 
 /*
  * The pieces of the School League that the staff page, the parent page and
@@ -213,6 +213,55 @@ export function StarList({ stars = [], monthKey, staff = false, leaveOut = [], o
           )
         })}
       </Card>
+    </>
+  )
+}
+
+/**
+ * The school's own board: its houses (or classes) this month, best average
+ * first. Totals only, from school_house_board(); a house too small to show
+ * (or that would give a small group away) has no numbers at all. `mine` is
+ * the houses the viewer's own children are in, to mark them.
+ */
+export function HouseBoard({ houses, mine = [], title = null }) {
+  const groups = houses?.groups || []
+  if (!groups.length) return null
+  const min = houses.min_students || SCHOOL_MIN_STUDENTS
+  const words = groupWord(houses.kind, { plural: true, lower: true })
+  let place = 0
+  return (
+    <>
+      <SectionTitle>{title || `${groupWord(houses.kind, { plural: true })} this month`}</SectionTitle>
+      <Card className="p-0 overflow-hidden mb-3" data-testid="house-board">
+        {groups.map((g, i) => {
+          if (g.shown) place += 1
+          const yours = mine.includes(g.id)
+          return (
+            <div key={g.id}
+                 className={`flex items-center gap-3 px-3.5 py-3 ${i < groups.length - 1 ? 'border-b border-line' : ''} ${yours ? 'bg-surface2' : ''}`}>
+              <span className={`w-6 text-center font-display font-extrabold text-sm ${g.shown && place === 1 ? 'text-accent' : 'text-muted'}`}>
+                {g.shown ? medal(place - 1) : '·'}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-sm truncate">{g.name}</span>
+                  {yours && <Chip className="border-accent text-accent">Yours</Chip>}
+                </div>
+                <span className="block text-[11px] text-muted">
+                  {g.shown
+                    ? `${g.students} students · ${g.share_pct}% did a chore · ${g.chores} chores`
+                    : 'Too few students taking part to show, yet'}
+                </span>
+              </div>
+              <span className="font-display font-bold text-sm shrink-0">{g.shown ? Number(g.average).toFixed(1) : '—'}</span>
+            </div>
+          )
+        })}
+      </Card>
+      <p className="text-xs text-muted -mt-1 mb-3">
+        Points per student, so a small {groupWord(houses.kind, { lower: true })} can beat a big one. Totals only: nobody
+        sees who is in which, and {words} show numbers once {min} or more of their students take part.
+      </p>
     </>
   )
 }

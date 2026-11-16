@@ -112,6 +112,17 @@ insert into district_staff (user_id, district_id, name) values
 insert into district_schools (school_id, district_id, admin_invite, invite_expires_at) values
   ('31a00000-0000-4000-8000-0000000005c1', '31d00000-0000-4000-8000-0000000000d0', 'T31INVITE0', now() + interval '1 day');
 insert into district_quote_attempts (ip_key) values ('t31');
+insert into district_quote_attempts (ip_key, kind) values ('t31', 'pilot');
+-- The school's houses, A's child in one, a pilot code it used and one it
+-- typed wrong. No family may read the houses, the codes or the tries.
+insert into school_groups (id, school_id, name) values
+  ('31a00000-0000-4000-8000-0000000005d1', '31a00000-0000-4000-8000-0000000005c1', 'T31 House');
+insert into school_members (kid_id, school_id, family_id, group_id) values
+  ('31a00000-0000-4000-8000-00000000000c', '31a00000-0000-4000-8000-0000000005c1', '31a00000-0000-4000-8000-00000000000f',
+   '31a00000-0000-4000-8000-0000000005d1');
+insert into school_pilots (code_hash, label, days, code_expires_at, school_id, redeemed_at, ends_at) values
+  (encode(sha256('t31-pilot'::bytea), 'hex'), 'T31 School', 90, now() + interval '1 day', '31a00000-0000-4000-8000-0000000005c1', now(), now() + interval '90 days');
+insert into school_pilot_attempts (user_id) values ('31d00000-0000-4000-8000-0000000000d1');
 -- A Season that has started, with a theme in it: official, the same for every
 -- family. Removed again at the end of this file, so the app's tests that run
 -- on this database afterwards do not open on a "New Season!" moment.
@@ -382,3 +393,5 @@ drop function t31_tenancy(text, uuid, uuid[], uuid, uuid, text);
 delete from seasons where number = 931;
 delete from leaderboard_ranks where kid_id = '31a00000-0000-4000-8000-00000000000c';
 delete from leaderboard_profiles where kid_id = '31a00000-0000-4000-8000-00000000000c';
+delete from school_members where kid_id = '31a00000-0000-4000-8000-00000000000c';
+delete from school_pilots where label = 'T31 School';

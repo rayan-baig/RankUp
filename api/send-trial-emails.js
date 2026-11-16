@@ -24,12 +24,18 @@
  * charged, and that cancelling is a tap away. The same claim, send, mark
  * as above (due_pause_reminders, supabase/billing.sql), once per pause.
  *
+ * Then the reminder that a school's pilot ends: 14 days before a pilot
+ * ends (School pilots, docs/PAYMENTS.md), each admin of a school that has
+ * not chosen a plan gets one email saying when, what the school would pay
+ * for its size, how to buy, and where the pilot report is. The same claim,
+ * send, mark (due_pilot_reminders, supabase/schools.sql), once per pilot.
+ *
  * Then, if ERRORS_EMAIL is set, the hourly error report to that address
  * (api/_shared/errorReport.js): crashes and server errors since the last
  * one, with nothing in it that could point at a family.
  */
 import { recordRun, secretMatches, makeServiceRpc } from './_shared/job.js'
-import { emailSettings, emailConfigured, sendEmail, trialEmail, pauseReminderEmail } from './_shared/email.js'
+import { emailSettings, emailConfigured, sendEmail, trialEmail, pauseReminderEmail, pilotReminderEmail } from './_shared/email.js'
 import { sendErrorReport } from './_shared/errorReport.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -139,16 +145,56 @@ export default async function handler(req, res) {
     pauses.failed += results.filter((x) => !x.ok).length
   }
 
+  // A school's pilot ending in 14 days.
+  const pilots = { due: 0, sent: 0, failed: 0 }
+  let pilotLookupFailed = false
+  let pilotDue = []
+  try {
+    pilotDue = (await serviceRpc('due_pilot_reminders', {}))?.reminders || []
+  } catch {
+    // A database without this version's schools.sql yet.
+    pilotLookupFailed = true
+  }
+  pilots.due = pilotDue.length
+  for (const r of pilotDue) {
+    let claimed = false
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      claimed = await serviceRpc('claim_pilot_reminder', { p_pilot_id: r.pilot_id })
+    } catch {
+      continue
+    }
+    if (claimed !== true) continue
+    const email = pilotReminderEmail(r, { site: SITE, replyTo: settings.replyTo })
+    // One email per admin, each to their own address.
+    // eslint-disable-next-line no-await-in-loop
+    const results = await Promise.all((r.recipients || []).map((to) => sendEmail({
+      to,
+      ...email,
+      // The pilot and its end: an end that moved is a new email.
+      idempotencyKey: `pilot-${r.pilot_id}-${String(r.ends_at).slice(0, 10)}-${String(to).toLowerCase()}`,
+    }, settings)))
+    const done = results.every((x) => x.ok)
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await serviceRpc('finish_pilot_reminder', { p_pilot_id: r.pilot_id, p_sent: done })
+    } catch { /* the claim runs out in an hour and the idempotency key covers the retry */ }
+    pilots.sent += results.filter((x) => x.ok).length
+    pilots.failed += results.filter((x) => !x.ok).length
+  }
+
   const errors = await sendErrorReport(serviceRpc, settings, { to: ERRORS_EMAIL, site: SITE })
   const problems = [
     failed ? `${failed} email(s) not sent` : '',
     pauses.failed ? `${pauses.failed} pause reminder(s) not sent` : '',
     pauseLookupFailed ? 'pause reminders not looked up' : '',
+    pilots.failed ? `${pilots.failed} pilot reminder(s) not sent` : '',
+    pilotLookupFailed ? 'pilot reminders not looked up' : '',
     errors.configured && !errors.ok ? 'error report not sent' : '',
   ].filter(Boolean)
   await recordRun(serviceRpc, 'send-trial-emails', problems.length === 0, problems.join('; ') || null)
   return res.status(200).json({
-    ok: true, due: reminders.length, sent, failed, pauses,
+    ok: true, due: reminders.length, sent, failed, pauses, pilots,
     error_report: errors.configured ? { kinds: errors.kinds || 0, sent: errors.sent || 0, ...(errors.capped ? { capped: true } : {}) } : null,
   })
 }

@@ -3,7 +3,7 @@ import { useApp } from '../../state/AppContext.jsx'
 import { navigate } from '../../lib/router.js'
 import { schools, DEMO_LEAGUE } from '../../lib/schools.js'
 import { Screen, Card } from '../../components/ui.jsx'
-import { SchoolHeadline, LeagueTable, RivalryList, StarList } from '../../components/SchoolParts.jsx'
+import { SchoolHeadline, LeagueTable, RivalryList, StarList, HouseBoard } from '../../components/SchoolParts.jsx'
 import { useKidSchool } from './useKidSchool.js'
 
 /*
@@ -66,6 +66,7 @@ export default function KidSchool() {
           your school beat its rivals and become District Champion!
         </p>
       </Card>
+      <HouseBoard houses={school.houses} mine={school.my_group_id ? [school.my_group_id] : []} />
       <RivalryList rivalries={school.rivalries} />
       <StarList stars={school.stars} monthKey={school.stars_month} />
       {league && <LeagueTable league={league} demo={demo} />}

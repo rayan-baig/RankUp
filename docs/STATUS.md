@@ -99,6 +99,11 @@ one phone, with no account (see "On one phone only" below).
 | Closing each month, the Champion's free month | ✅ | `api/settle-schools.js`, monthly. **You have to schedule it.** Safe to run twice |
 | School districts | ✅ with Stripe | `/#/district`: one plan, by invoice, yearly, for 2 to 100 schools, a discount by each school's place (10% / 20% / 30%). The district adds schools and invites each principal, and sees totals per school and for the district, never a child. Needs the twelve `STRIPE_PRICE_DISTRICT_*` prices ([PAYMENTS.md](PAYMENTS.md#school-districts)) |
 | Get a quote (districts) | ✅ with email | Emailed to `SALES_EMAIL` (or `SUPPORT_EMAIL`), not stored; 3 an hour from one place, 30 in all |
+| School pilots | ✅ | A code from `/#/operator` (Pilots): a free pilot, 90 days by default (`PILOT_DAYS`), single use, used by a date, never on top of a paid plan. The admin types it at sign-up or on the school's page; an email 14 days before it ends ([PAYMENTS.md](PAYMENTS.md#school-pilots)) |
+| Pilot report | ✅ | `/#/school/report`, the school's admin only: one printable page of totals for the whole school and each house or class, the busiest week, the kinds of chore, the price and how to buy. No numbers for fewer than 5 students |
+| Houses or classes | ✅ | Named by the school's admin (up to 12), chosen by a parent for each child; each one's totals on the school's board. No numbers for fewer than 5, nor when the students left over would be fewer than 5 |
+| For schools page | ✅ | The School League's front page (`/#/school`, linked from the front door): what it does, what a school sees, what children never do, prices, how a pilot works, and "Request a pilot" (emailed, not stored, 3 an hour) |
+| A school paying by invoice | ✅ with Stripe | Yearly, Stripe Invoicing, the school's own yearly price; the rest of its trial or pilot kept |
 
 Known limits, decided rather than missed:
 

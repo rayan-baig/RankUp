@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { navigate } from '../../lib/router.js'
-import { schools, schoolError, demoMySchools, demoSchoolCard, DEMO_LEAGUE } from '../../lib/schools.js'
-import { Screen, Card, Button, SectionTitle, Banner, TextInput, Modal, Toggle, DemoTag } from '../../components/ui.jsx'
-import { SchoolHeadline, LeagueTable, RivalryList, StarList } from '../../components/SchoolParts.jsx'
+import { schools, schoolError, demoMySchools, demoSchoolCard, DEMO_LEAGUE, groupWord } from '../../lib/schools.js'
+import { Screen, Card, Button, SectionTitle, Banner, TextInput, Modal, Toggle, DemoTag, Field, Select } from '../../components/ui.jsx'
+import { SchoolHeadline, LeagueTable, RivalryList, StarList, HouseBoard } from '../../components/SchoolParts.jsx'
 
 /**
  * The School League, for a parent.
@@ -79,6 +79,16 @@ export default function ParentSchool() {
     act(() => schools.setNameSharing(kidId, show))
   }
 
+  // Which house (or class) the child is in. Only a parent says; the school
+  // sees each house's totals, never who is in it.
+  const setGroup = (kidId, groupId) => {
+    if (demo) {
+      setData((d) => ({ ...d, children: d.children.map((c) => (c.kid_id === kidId ? { ...c, group_id: groupId || null } : c)) }))
+      return
+    }
+    act(() => schools.setGroup(kidId, groupId))
+  }
+
   const leave = (kidId) => {
     if (demo) {
       setData((d) => ({ ...d, children: d.children.map((c) => (c.kid_id === kidId ? { ...c, school: null } : c)) }))
@@ -133,6 +143,19 @@ export default function ParentSchool() {
                   hint="Only the first name, only inside this school. Off: they show as “A student”."
                 />
               </Card>
+              {(c.school.houses?.groups || []).length > 0 && (
+                <Card flat className="mb-3" data-testid="choose-house">
+                  <Field label={`${c.kid_name}’s ${groupWord(c.school.houses.kind, { lower: true })}`}
+                         hint="The school sees each one’s totals, never who is in it.">
+                    <Select value={c.group_id || ''} disabled={busy} onChange={(e) => setGroup(c.kid_id, e.target.value)}>
+                      <option value="">Not chosen yet</option>
+                      {c.school.houses.groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </Select>
+                  </Field>
+                </Card>
+              )}
+              <HouseBoard houses={c.school.houses}
+                          mine={children.filter((x) => x.school?.school_id === c.school.school_id && x.group_id).map((x) => x.group_id)} />
               <RivalryList rivalries={c.school.rivalries} />
               <StarList stars={c.school.stars} monthKey={c.school.stars_month} />
               <Button variant="soft" className="w-full mb-2" onClick={() => showLeague(c.kid_id, c.school.school_id)}>
