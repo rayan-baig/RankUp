@@ -27,7 +27,8 @@ export function useKidSchool(kid) {
       : schools.mine()
     get.then((res) => {
       const mine = res.ok ? (res.children || []).find((c) => c.kid_id === kid.id) : null
-      const value = mine?.school || null
+      // The child's own house (or class), to mark it on the school's board.
+      const value = mine?.school ? { ...mine.school, my_group_id: mine.group_id || null } : null
       // A failed request is not remembered, so the next visit tries again.
       if (res.ok) cache.set(key, value)
       if (live) setSchool(value)

@@ -1058,6 +1058,184 @@ console.log('\n=== A school district: its plan by invoice, and nobody else\'s ==
   await db.query('delete from auth.users where id in ($1, $2)', [OFFICE, STRANGER])
 }
 
+console.log('\n=== School pilots: codes from the operator, used once, never on top of a paid plan ===')
+{
+  const HEAD = 'a0000000-0000-4000-8000-00000000c6a1'
+  const PAYING_HEAD = 'a0000000-0000-4000-8000-00000000c6a2'
+  const OTHER_HEAD = 'a0000000-0000-4000-8000-00000000c6a3'
+  const head = `api-pilot-head-${RUN}@example.com`
+  await db.query(`insert into auth.users (id, email) values ($1, $4), ($2, $5), ($3, $6) on conflict (id) do update set email = excluded.email`,
+    [HEAD, PAYING_HEAD, OTHER_HEAD, head, `api-pilot-paying-${RUN}@example.com`, `api-pilot-other-${RUN}@example.com`])
+  await db.query('delete from school_staff where user_id in ($1, $2, $3)', [HEAD, PAYING_HEAD, OTHER_HEAD])
+  await db.query('delete from school_pilot_attempts where user_id in ($1, $2, $3)', [HEAD, PAYING_HEAD, OTHER_HEAD])
+  const rpc = (fn, args, token) => fetch(`${MOCK}/rest/v1/rpc/${fn}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'local-anon-key', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(args),
+  }).then((r) => r.json())
+  const reg = await rpc('register_school', { p_name: `Example Academy ${RUN}`, p_district: `API Pilot District ${RUN}`, p_city: 'Exampleton',
+    p_students: 420, p_your_name: 'Ms Example' }, HEAD)
+  const PILOT_SCHOOL = reg.school_id
+  ok('a school signs up through the API, on the 30-day trial', reg.ok === true, JSON.stringify(reg))
+  const paying = await rpc('register_school', { p_name: `Paying Prep ${RUN}`, p_district: `API Pilot District ${RUN}`, p_city: 'Exampleton',
+    p_students: 200, p_your_name: 'Mr Paying' }, PAYING_HEAD)
+  await db.query(`update schools set status = 'active', stripe_subscription_id = 'sub_api_pilot_paying', trial_ends_at = now() + interval '5 days'
+                   where id = $1`, [paying.school_id])
+  const other = await rpc('register_school', { p_name: `Other School ${RUN}`, p_district: `API Pilot District ${RUN}`, p_city: 'Exampleton',
+    p_students: 900, p_your_name: 'Dr Other' }, OTHER_HEAD)
+
+  ok('making a pilot code needs the operator key', (await operator(null, { action: 'create_pilot', label: 'Example Academy' })).status === 401
+    && (await operator(HEAD, { action: 'create_pilot', label: 'Example Academy' })).status === 401)
+  const listed0 = await (await operator('test-operator-secret')).json()
+  ok('the page is told the pilot length to start at: 90 days', listed0.pilot_days === 90 && Array.isArray(listed0.pilots), JSON.stringify(listed0.pilot_days))
+  const noLabel = await operator('test-operator-secret', { action: 'create_pilot', label: 'X' })
+  ok('a code needs to say who it is for', noLabel.status === 400 && (await noLabel.json()).error === 'bad_label')
+  ok('and a length the database allows', (await (await operator('test-operator-secret', { action: 'create_pilot', label: 'Example Academy', days: 3 })).json()).error === 'bad_days')
+  const madeRes = await operator('test-operator-secret', { action: 'create_pilot', label: `Example Academy ${RUN}` })
+  const madeBody = await madeRes.json()
+  const code = madeBody.made?.code || ''
+  ok('the operator makes a 90-day code, shown once, as XXXXX-XXXXX', madeRes.status === 200 && /^[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}$/.test(code)
+    && madeBody.made.days === 90, JSON.stringify(madeBody.made))
+  const stored = (await db.query('select * from school_pilots where id = $1', [madeBody.made?.id])).rows[0]
+  ok('only its hash is stored, never the code', stored && !JSON.stringify(stored).includes(code.replace('-', '')) && /^[0-9a-f]{64}$/.test(stored.code_hash))
+  ok('used by a date: 60 days unless the operator says otherwise',
+    Math.abs(new Date(stored.code_expires_at) - (Date.now() + 60 * 86400000)) < 120000, String(stored?.code_expires_at))
+  ok('the list has it, waiting, and never the code',
+    madeBody.pilots.some((p) => p.id === madeBody.made.id && p.state === 'waiting') && !JSON.stringify(madeBody.pilots).includes(code))
+
+  ok('a paying school is told a pilot adds nothing to its plan, and the code is not spent',
+    (await rpc('redeem_school_pilot', { p_code: code }, PAYING_HEAD)).reason === 'already_paying'
+    && (await db.query('select redeemed_at from school_pilots where id = $1', [madeBody.made.id])).rows[0].redeemed_at === null
+    && (await db.query('select status from schools where id = $1', [paying.school_id])).rows[0].status === 'active')
+  const used = await rpc('redeem_school_pilot', { p_code: code.toLowerCase() }, HEAD)
+  ok('the school\'s admin types it, and the trial becomes a 90-day pilot', used.ok === true && used.days === 90, JSON.stringify(used))
+  const school = (await db.query('select status, trial_ends_at from schools where id = $1', [PILOT_SCHOOL])).rows[0]
+  ok('ending 90 days from today', school.status === 'trial' && Math.abs(new Date(school.trial_ends_at) - (Date.now() + 90 * 86400000)) < 120000)
+  ok('single use: nobody else can use it', (await rpc('redeem_school_pilot', { p_code: code }, OTHER_HEAD)).reason === 'used')
+  const shortCode = await (await operator('test-operator-secret', { action: 'create_pilot', label: `Short ${RUN}`, days: 30,
+    code_expires_at: new Date(Date.now() + 86400000).toISOString() })).json()
+  await db.query(`update school_pilots set code_expires_at = now() - interval '1 minute' where id = $1`, [shortCode.made.id])
+  ok('a code past its date no longer works', (await rpc('redeem_school_pilot', { p_code: shortCode.made.code }, OTHER_HEAD)).reason === 'expired')
+  const gone = await operator('test-operator-secret', { action: 'withdraw_pilot', pilot_id: shortCode.made.id })
+  ok('one nobody used can be taken back', gone.status === 200 && (await db.query('select 1 from school_pilots where id = $1', [shortCode.made.id])).rowCount === 0)
+  ok('one that was used cannot', (await operator('test-operator-secret', { action: 'withdraw_pilot', pilot_id: madeBody.made.id })).status === 409)
+  const after = await (await operator('test-operator-secret')).json()
+  const mine = after.pilots.find((p) => p.id === madeBody.made.id)
+  ok('the operator\'s list says the pilot is running, for which school, until when',
+    mine?.state === 'running' && mine.school?.name === `Example Academy ${RUN}` && new Date(mine.ends_at) > new Date(Date.now() + 89 * 86400000), JSON.stringify(mine))
+
+  console.log('\n=== The report, and houses ===')
+  ok('the report is the admin\'s alone', (await rpc('school_pilot_report', {}, OUTSIDER)).reason === 'not_school_admin')
+  for (const n of ['Kestrel', 'Otter']) await rpc('add_school_group', { p_name: n }, HEAD)
+  const card = (await rpc('school_overview', {}, HEAD)).school
+  const kestrel = card.houses.groups.find((g) => g.name === 'Kestrel')
+  ok('the admin names houses, on the school\'s board', card.houses.kind === 'house' && card.houses.groups.length === 2 && card.pilot?.days === 90)
+  // Seven children of one family: five in Kestrel, two in no house yet.
+  const fam = (await db.query(`insert into families (name, tier) values ('API Pilot Family', 'standard') returning id`)).rows[0].id
+  const parentUser = (await db.query(`insert into auth.users (email) values ($1) returning id`, [`api-pilot-parent-${RUN}@example.com`])).rows[0].id
+  await db.query(`insert into parents (user_id, family_id, name) values ($1, $2, 'Pilot Parent')`, [parentUser, fam])
+  await db.query('select seed_consent($1, $2)', [fam, parentUser])
+  const joinCode = card.join_code
+  const kids = []
+  for (let n = 1; n <= 7; n += 1) {
+    const kid = (await db.query(`insert into kids (family_id, name) values ($1, $2) returning id`, [fam, `Pilotkid${n} Secretname`])).rows[0].id
+    kids.push(kid)
+    await rpc('join_school', { p_kid_id: kid, p_join_code: joinCode, p_show_name: false }, parentUser)
+    const quest = (await db.query(`insert into quests (family_id, kid_id, title, category) values ($1, $2, 'Secret chore words', 'kitchen') returning id`, [fam, kid])).rows[0].id
+    await db.query(`insert into submissions (family_id, quest_id, kid_id, status, decided_at) values ($1, $2, $3, 'approved', now())`, [fam, quest, kid])
+  }
+  for (const kid of kids.slice(0, 5)) await rpc('set_kid_school_group', { p_kid_id: kid, p_group_id: kestrel.id }, parentUser)
+  const report = await rpc('school_pilot_report', {}, HEAD)
+  ok('the report: 7 taking part, all did a chore, 7 chores, 1.0 each',
+    report.ok && report.kind === 'pilot' && report.totals.students === 7 && report.totals.share_pct === 100
+    && report.totals.chores === 7 && Number(report.totals.average) === 1, JSON.stringify(report.totals))
+  const k = report.groups.groups.find((g) => g.name === 'Kestrel')
+  ok('Kestrel shows (5), and the two in no house are not a group anyone can work out: so it is hidden too',
+    k && k.shown === false && !('chores' in k), JSON.stringify(report.groups))
+  await rpc('set_kid_school_group', { p_kid_id: kids[5], p_group_id: kestrel.id }, parentUser)
+  await rpc('set_kid_school_group', { p_kid_id: kids[6], p_group_id: kestrel.id }, parentUser)
+  const report2 = await rpc('school_pilot_report', {}, HEAD)
+  const k2 = report2.groups.groups.find((g) => g.name === 'Kestrel')
+  const o2 = report2.groups.groups.find((g) => g.name === 'Otter')
+  ok('all seven in Kestrel: its totals show, 7 chores; Otter, with none, shows nothing',
+    k2.shown === true && k2.students === 7 && k2.chores === 7 && o2.shown === false, JSON.stringify(report2.groups))
+  ok('ending with the price for its size', report2.price?.monthly_cents === 5900 && report2.price?.label === 'Medium school')
+  ok('and nothing about any child', !/Pilotkid|Secretname|Secret chore/.test(JSON.stringify(report2)))
+  const board = (await rpc('my_schools', {}, parentUser)).children[0]
+  ok('the parent sees the house board and which house their child is in',
+    board.group_id === kestrel.id && board.school.houses.groups.length === 2 && !/Pilotkid|Secretname/.test(JSON.stringify(board.school.houses)))
+
+  console.log('\n=== The reminder, 14 days before a pilot ends ===')
+  await db.query(`update schools set trial_ends_at = now() + interval '13 days' where id = $1`, [PILOT_SCHOOL])
+  const run = () => fetch(`${BASE}/api/send-trial-emails`, { method: 'POST', headers: { Authorization: `Bearer ${CRON}` } })
+  const ours = () => emails.filter((e) => e.body.to?.includes(head) && /pilot/i.test(e.body.subject || ''))
+  const ran = await (await run()).json()
+  const reminder = ours()[0]?.body || {}
+  ok('the hourly email job sends the admin one reminder', ran.pilots?.sent >= 1 && ours().length === 1, JSON.stringify(ran.pilots))
+  ok('saying so, with the price and both ways to buy, and the report',
+    reminder.subject === 'Your RankUp pilot ends in 13 days' && (reminder.text || '').includes('$59.00 a month, or $590.00 a year')
+    && /pay by card, or ask for a yearly invoice/.test(reminder.text || '') && (reminder.text || '').includes(`${BASE}/#/school/report`), reminder.subject)
+  ok('and no child in it', !/Pilotkid|Secretname/.test(JSON.stringify(reminder)))
+  await run()
+  ok('once per pilot', ours().length === 1)
+
+  console.log('\n=== A school paying by invoice ===')
+  const before = stripeCalls.length
+  ok('the invoice needs an address', (await asUser('/api/school-checkout', { method: 'invoice', email: 'nope' }, HEAD)).status === 400)
+  ok('and the school\'s admin', (await asUser('/api/school-checkout', { method: 'invoice', email: 'office@example.test' }, OUTSIDER)).status === 403)
+  const inv = await asUser('/api/school-checkout', { method: 'invoice', email: 'Office@Example-Academy.example' }, HEAD)
+  const invBody = await inv.json()
+  const sub = stripeCalls.slice(before).find((c) => c.method === 'POST' && c.path === '/v1/subscriptions')
+  const cust = stripeCalls.slice(before).find((c) => c.method === 'POST' && c.path === '/v1/customers')
+  ok('the admin asks for a yearly invoice, and Stripe is told to send it', inv.status === 200 && invBody.sent_to === 'office@example-academy.example',
+    `${inv.status} ${JSON.stringify(invBody)}`)
+  ok('at the yearly price for its size, invoiced by email, for this school',
+    sub?.params.get('items[0][price]') === 'price_test_school_medium_year' && sub?.params.get('collection_method') === 'send_invoice'
+    && sub?.params.get('days_until_due') === '21' && sub?.params.get('metadata[school_id]') === PILOT_SCHOOL,
+    sub ? [...sub.params].join('&') : 'no call')
+  ok('with what is left of the pilot kept: nothing is due before it ends',
+    Math.abs(Number(sub?.params.get('trial_end')) * 1000 - (Date.now() + 13 * 86400000)) < 300000)
+  ok('to a customer for the school alone', cust?.params.get('metadata[school_id]') === PILOT_SCHOOL && cust?.params.get('email') === 'office@example-academy.example'
+    && (await db.query('select stripe_customer_id from schools where id = $1', [PILOT_SCHOOL])).rows[0].stripe_customer_id)
+
+  await db.query('delete from families where id = $1', [fam])
+  await db.query('delete from schools where id in ($1, $2, $3)', [PILOT_SCHOOL, paying.school_id, other.school_id])
+  await db.query('delete from school_pilots where label like $1', [`%${RUN}`])
+  await db.query('delete from auth.users where id in ($1, $2, $3, $4)', [HEAD, PAYING_HEAD, OTHER_HEAD, parentUser])
+}
+
+console.log('\n=== "Request a pilot": to the owner by email, and rate limited ===')
+{
+  await db.query(`delete from district_quote_attempts where kind = 'pilot'`)
+  const ask = (body) => fetch(`${BASE}/api/pilot-request`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Origin: BASE }, body: JSON.stringify(body),
+  })
+  ok('the pilot form takes POST only', (await fetch(`${BASE}/api/pilot-request`)).status === 405)
+  const bad = await ask({ school: '', email: 'nope' })
+  const badBody = await bad.json().catch(() => ({}))
+  ok('a form not filled in is refused, naming the fields, and nothing is sent',
+    bad.status === 400 && ['school', 'name', 'email'].every((f) => badBody.fields?.includes(f)), JSON.stringify(badBody))
+  const before = emails.length
+  const form = { school: `Example Academy ${RUN}`, name: 'Ms Example', role: 'Head of school', email: `head-${RUN}@example-academy.example`,
+    town: 'Exampleton', students: 640, message: 'We use houses & want <a semester>.' }
+  const sent = await ask(form)
+  const mail = emails[before]
+  ok('a request goes to the owner\'s sales address, with no sign-in at all', sent.status === 200 && emails.length === before + 1
+    && mail.body.to?.[0] === 'sales@example.test', `status ${sent.status}, ${emails.length - before} emails`)
+  ok('replying goes to the person who asked', mail?.body.reply_to === `head-${RUN}@example-academy.example`)
+  ok('it says what they asked for', /Example Academy/.test(mail?.body.subject || '') && mail?.body.text.includes('640')
+    && mail?.body.text.includes('want <a semester>') && !mail?.body.html.includes('<a semester>'))
+  ok('with a key, so a retry is never a second email', /^pilot-request:\d+$/.test(mail?.key || ''), mail?.key)
+  ok('and nothing they typed is stored: only a mark that a request was made',
+    (await db.query(`select count(*)::int n from district_quote_attempts where kind = 'pilot'`)).rows[0].n === 1
+    && !JSON.stringify((await db.query('select * from district_quote_attempts')).rows).includes('example-academy'))
+  await ask(form)
+  await ask(form)
+  const fourth = await ask(form)
+  ok('three an hour from one place, then wait', fourth.status === 429 && (await fourth.json()).error === 'too_many_requests', `status ${fourth.status}`)
+  ok('and the fourth sent nothing', emails.length === before + 3)
+  await db.query(`delete from district_quote_attempts where kind = 'pilot'`)
+}
+
 console.log('\n=== "Get a quote": to the owner by email, and rate limited ===')
 {
   await db.query('delete from district_quote_attempts')

@@ -233,6 +233,10 @@ create table if not exists district_quote_attempts (
 );
 
 create index if not exists district_quote_attempts_tried on district_quote_attempts (tried_at);
+-- The same marks for "Request a pilot" on the School League's front page
+-- (record_pilot_request, under "Pilots" at the end of this file): one table
+-- of where-and-when, each request kind counted on its own.
+alter table district_quote_attempts add column if not exists kind text not null default 'quote';
 
 alter table districts               enable row level security;
 alter table district_staff          enable row level security;
@@ -241,6 +245,79 @@ alter table district_quote_attempts enable row level security;
 
 revoke all on districts, district_staff, district_schools, district_quote_attempts
   from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Houses, pilots: the tables. Here rather than with their functions (under
+-- "Pilots, the report for the school office, and houses" at the end of this
+-- file) because the family's data export and the operator's list, further
+-- up, read them.
+--
+-- HOUSES. Many schools split their students into houses or teams for
+-- competitions, or want the numbers by class. A school's admin names its
+-- houses (or classes, the word is the school's choice); a PARENT says which
+-- one their child is in, the same way only a parent puts a child in a
+-- school. The school never learns which child is in which house: it sees each
+-- house's totals, and none for a house with fewer than school_min_students()
+-- taking part.
+--
+-- PILOTS. A free pilot instead of the 30-day trial, usually a semester.
+-- Whoever runs RankUp makes a code on the operator page; the school's admin
+-- types it at sign-up or on the school's page, and the trial becomes a pilot
+-- of that length. Single use, with a date it must be used by. Only its hash is
+-- stored (the code is shown once, on the operator page, and given to the
+-- school). It never adds to a plan someone is paying for.
+-- ---------------------------------------------------------------------------
+
+alter table schools add column if not exists group_kind text not null default 'house'
+  check (group_kind in ('house', 'class'));
+
+create table if not exists school_groups (
+  id         uuid primary key default gen_random_uuid(),
+  school_id  uuid not null references schools(id) on delete cascade,
+  -- Typed by the school's admin, seen by its families and students: a short
+  -- plain name (kid_theme_name_ok, the rude-word list).
+  name       text not null check (length(name) between 1 and 30),
+  created_at timestamptz not null default now()
+);
+create unique index if not exists school_groups_one_name on school_groups (school_id, lower(name));
+
+-- Which house a child is in, set by a parent. A house removed leaves its
+-- children in the school, in no house.
+alter table school_members add column if not exists group_id uuid references school_groups(id) on delete set null;
+
+create table if not exists school_pilots (
+  id              uuid primary key default gen_random_uuid(),
+  -- sha256 of the code without dashes or spaces, in hex. Never the code.
+  code_hash       text not null unique,
+  -- Who the code was made for, in the operator's words ("Example Academy").
+  label           text not null check (length(label) between 2 and 80),
+  days            int  not null check (days between 14 and 365),
+  -- The code must be used by this date.
+  code_expires_at timestamptz not null,
+  created_at      timestamptz not null default now(),
+  -- Set when a school's admin uses it. One pilot per school.
+  school_id       uuid unique references schools(id) on delete cascade,
+  redeemed_at     timestamptz,
+  ends_at         timestamptz,
+  -- The reminder to the school's admin 14 days before the pilot ends.
+  reminder_claimed_at timestamptz,
+  reminder_sent_at    timestamptz,
+  constraint school_pilot_used_together check ((school_id is null) = (redeemed_at is null))
+);
+
+-- Codes typed that did not work, per sign-in, for the limit of 5 an hour.
+create table if not exists school_pilot_attempts (
+  id       bigserial primary key,
+  user_id  uuid not null references auth.users(id) on delete cascade,
+  tried_at timestamptz not null default now()
+);
+create index if not exists school_pilot_attempts_user on school_pilot_attempts (user_id, tried_at);
+
+alter table school_groups         enable row level security;
+alter table school_pilots         enable row level security;
+alter table school_pilot_attempts enable row level security;
+
+revoke all on school_groups, school_pilots, school_pilot_attempts from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Prices. Kept in step with SCHOOL_PRICES in src/lib/schools.js, and
@@ -699,7 +776,11 @@ begin
     'stars_month', v_last,
     'titles', coalesce((select jsonb_agg(jsonb_build_object('month', a.month_key, 'score', a.score)
                                          order by a.month_key desc)
-                          from school_awards a where a.school_id = p_school), '[]'::jsonb));
+                          from school_awards a where a.school_id = p_school), '[]'::jsonb),
+    -- The school's houses (or classes) this month: totals only, and none for
+    -- a house with fewer than school_min_students() taking part. Defined
+    -- under "Houses" at the end of this file and read at call time.
+    'houses', school_house_board(p_school, v_month::timestamptz, (v_month + interval '1 month')::timestamptz));
 
   if p_as = 'staff' then
     v_out := v_out || jsonb_build_object(
@@ -733,7 +814,11 @@ begin
                                                   'covered', district_covers(p_school),
                                                   'active', d.status = 'active')
                           from district_schools ds join districts d on d.id = ds.district_id
-                         where ds.school_id = p_school));
+                         where ds.school_id = p_school),
+      -- A pilot code the admin typed (redeem_school_pilot): how long, and
+      -- when it ends. Null for a school on its ordinary trial.
+      'pilot', (select jsonb_build_object('days', p.days, 'started_at', p.redeemed_at, 'ends_at', p.ends_at)
+                  from school_pilots p where p.school_id = p_school));
   end if;
   return v_out;
 end $$;
@@ -757,6 +842,8 @@ begin
     select jsonb_agg(jsonb_build_object(
              'kid_id', k.id, 'kid_name', k.name,
              'show_name', m.show_name,
+             -- The house (or class) a parent put the child in, if the school has them.
+             'group_id', m.group_id,
              'school', case when m.school_id is not null
                             then school_card(m.school_id, case when is_parent() then 'parent' else 'kid' end) end)
            order by k.name)
@@ -1399,6 +1486,7 @@ returns jsonb language sql stable security definer set search_path = public as $
            'school', s.name, 'district', s.district, 'city', s.city,
            'joined_at', m.joined_at,
            'first_name_shown_to_school', m.show_name,
+           'house_or_class', (select g.name from school_groups g where g.id = m.group_id),
            'school_stars', coalesce((
              select jsonb_agg(jsonb_build_object('month', t.month_key, 'place', t.rank,
                                                  'points', t.score, 'published', t.published)
@@ -1436,6 +1524,8 @@ returns jsonb language sql stable security definer set search_path = public as $
                                  where ds.school_id = s.id),
            'district_paid', district_covers(s.id),
            'students_joined', (select count(*) from school_members m where m.school_id = s.id),
+           -- A pilot code it used, and when the pilot ends (school_pilots).
+           'pilot_ends_at', (select p.ends_at from school_pilots p where p.school_id = s.id),
            'staff', (select coalesce(jsonb_agg(jsonb_build_object(
                               'name', st.name, 'role', st.role, 'email', u.email,
                               -- Whether they clicked the link Supabase emailed:
@@ -2399,14 +2489,15 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_id bigint;
 begin
   perform pg_advisory_xact_lock(hashtext('record_district_quote'));
-  if (select count(*) from district_quote_attempts where tried_at > now() - interval '1 hour') >= 30 then
+  if (select count(*) from district_quote_attempts
+       where kind = 'quote' and tried_at > now() - interval '1 hour') >= 30 then
     return jsonb_build_object('ok', false, 'reason', 'busy');
   end if;
   if (select count(*) from district_quote_attempts
-       where ip_key = coalesce(p_ip_key, '') and tried_at > now() - interval '1 hour') >= 3 then
+       where kind = 'quote' and ip_key = coalesce(p_ip_key, '') and tried_at > now() - interval '1 hour') >= 3 then
     return jsonb_build_object('ok', false, 'reason', 'too_many_quotes');
   end if;
-  insert into district_quote_attempts (ip_key) values (left(coalesce(p_ip_key, ''), 64)) returning id into v_id;
+  insert into district_quote_attempts (ip_key, kind) values (left(coalesce(p_ip_key, ''), 64), 'quote') returning id into v_id;
   return jsonb_build_object('ok', true, 'id', v_id);
 end $$;
 
@@ -2450,3 +2541,572 @@ revoke execute on function apply_district_subscription(uuid, text, text, text, t
 revoke execute on function apply_district_refund(uuid, text, boolean, timestamptz, timestamptz) from public, anon, authenticated;
 revoke execute on function record_district_payment(uuid, text, int, text) from public, anon, authenticated;
 revoke execute on function record_district_quote(text) from public, anon, authenticated;
+
+-- ===========================================================================
+-- Pilots, the report for the school office, and houses.
+--
+-- Three things that make it easier for a school to say yes:
+--
+--   * A PILOT CODE: a free pilot (usually a semester, 90 days) instead of the
+--     30-day trial. Made by whoever runs RankUp on the operator page
+--     (api/operator-schools.js, create_school_pilot), single use, used by a
+--     date. The school's admin types it (redeem_school_pilot) and the trial
+--     becomes a pilot of that length. It never adds to a paid plan: a school
+--     that pays, or whose district pays, is told so and the code is left
+--     unused. 14 days before the pilot ends the admin gets one email
+--     (due_pilot_reminders, sent by api/send-trial-emails.js).
+--   * THE REPORT (school_pilot_report): one printable page the admin can
+--     hand to whoever decides. Totals only, the district picture's rules:
+--     never a child's name, nickname or anything typed, and no numbers for a
+--     group of fewer than school_min_students().
+--   * HOUSES (or classes): see the tables above. Each house's totals on the
+--     school's league board, the same rules.
+--
+-- And "Request a pilot" (record_pilot_request): the front page's form,
+-- emailed to whoever runs RankUp and not stored, rate limited like "Get a
+-- quote".
+-- ===========================================================================
+
+/**
+ * Each student's chores between two moments: approved, at most
+ * school_daily_chores() a day, counted from the day they joined. The same
+ * count as school_kid_points, for any window rather than a month, with the
+ * house each is in.
+ */
+create or replace function school_points_between(p_school uuid, p_from timestamptz, p_to timestamptz)
+returns table (kid_id uuid, group_id uuid, points int)
+language sql stable security definer set search_path = public as $$
+  select m.kid_id, m.group_id,
+         coalesce((
+           select sum(d.n) from (
+             select least(count(*), school_daily_chores()) as n
+               from submissions s
+              where s.kid_id = m.kid_id
+                and s.status = 'approved'
+                and s.decided_at >= greatest(p_from, m.joined_at)
+                and s.decided_at < p_to
+              group by (s.decided_at at time zone 'UTC')::date
+           ) d), 0)::int
+    from school_members m
+   where m.school_id = p_school
+     and m.joined_at < p_to;
+$$;
+
+/**
+ * Each house's totals between two moments, for the board and the report.
+ *
+ * A house is shown only with at least school_min_students() taking part.
+ * And because the school's own total is shown too, the students left over
+ * (in no house, or in a house too small to show) must not be between 1 and
+ * the minimum either, or the school's total less the houses shown would be
+ * those few children's numbers. So while they are, the smallest house shown
+ * is hidden as well, until what is left over is none or enough. The same
+ * reason the district totals add up only the schools shown.
+ */
+create or replace function school_group_totals(p_school uuid, p_from timestamptz, p_to timestamptz)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  v_min    int := school_min_students();
+  v_total  int;
+  v_groups jsonb;
+  v_ids    uuid[];
+  v_sizes  int[];
+  v_pool   int;
+  i        int := 1;
+begin
+  with k as (select * from school_points_between(p_school, p_from, p_to)),
+  g as (select g.id, g.name, x.students, x.active, x.chores
+          from school_groups g
+          cross join lateral (select count(*)::int as students,
+                                     count(*) filter (where k.points > 0)::int as active,
+                                     coalesce(sum(k.points), 0)::int as chores
+                                from k where k.group_id = g.id) x
+         where g.school_id = p_school)
+  select (select count(*) from k)::int,
+         coalesce((select jsonb_agg(jsonb_build_object('id', g.id, 'name', g.name, 'students', g.students,
+                                                       'active', g.active, 'chores', g.chores)
+                                    order by g.name, g.id) from g), '[]'::jsonb)
+    into v_total, v_groups;
+
+  -- The houses big enough to show, smallest first.
+  select coalesce(array_agg((e->>'id')::uuid order by (e->>'students')::int, e->>'name'), '{}'),
+         coalesce(array_agg((e->>'students')::int order by (e->>'students')::int, e->>'name'), '{}')
+    into v_ids, v_sizes
+    from jsonb_array_elements(v_groups) e where (e->>'students')::int >= v_min;
+  v_pool := v_total - coalesce((select sum(x) from unnest(v_sizes) x), 0);
+  while v_pool between 1 and v_min - 1 and i <= coalesce(array_length(v_ids, 1), 0) loop
+    v_pool := v_pool + v_sizes[i];
+    i := i + 1;
+  end loop;
+  v_ids := v_ids[i:];
+
+  return coalesce((
+    select jsonb_agg(case when (e->>'id')::uuid = any (v_ids)
+             then jsonb_build_object('id', e->'id', 'name', e->'name', 'shown', true,
+                                     'students', (e->>'students')::int,
+                                     'active', (e->>'active')::int,
+                                     'chores', (e->>'chores')::int,
+                                     'share_pct', round(100.0 * (e->>'active')::int / (e->>'students')::int)::int,
+                                     'average', round((e->>'chores')::numeric / (e->>'students')::int, 1))
+             else jsonb_build_object('id', e->'id', 'name', e->'name', 'shown', false) end
+           -- Shown houses best first, by the average (as the league ranks
+           -- schools); then the rest by name.
+           order by ((e->>'id')::uuid = any (v_ids)) desc,
+                    case when (e->>'id')::uuid = any (v_ids)
+                         then (e->>'chores')::numeric / (e->>'students')::int end desc nulls last,
+                    e->>'name')
+      from jsonb_array_elements(v_groups) e), '[]'::jsonb);
+end $$;
+
+/** The school's league board of houses for a window: the word it uses, and each house's totals. */
+create or replace function school_house_board(p_school uuid, p_from timestamptz, p_to timestamptz)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'kind', s.group_kind,
+    'min_students', school_min_students(),
+    'groups', school_group_totals(p_school, p_from, p_to))
+    from schools s where s.id = p_school;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Houses: named by the school's admin, chosen by a parent.
+-- ---------------------------------------------------------------------------
+
+/** At most this many houses (or classes) in a school. */
+create or replace function school_max_groups()
+returns int language sql immutable as $$ select 12 $$;
+
+/** "Red  house " → "Red house", or null when it is not a name a child may read. */
+create or replace function school_group_name(p_name text)
+returns text language sql immutable set search_path = public as $$
+  select case when kid_theme_name_ok(v, 30) then v end
+    from (select regexp_replace(trim(coalesce(p_name, '')), '\s+', ' ', 'g') as v) x;
+$$;
+
+create or replace function add_school_group(p_name text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_me   school_staff := current_school_staff();
+  v_name text := school_group_name(p_name);
+  v_id   uuid;
+begin
+  if v_me.user_id is null or v_me.role <> 'admin' then
+    return jsonb_build_object('ok', false, 'reason', 'not_school_admin');
+  end if;
+  if v_name is null then return jsonb_build_object('ok', false, 'reason', 'bad_group_name'); end if;
+  perform 1 from schools where id = v_me.school_id for update;
+  if (select count(*) from school_groups where school_id = v_me.school_id) >= school_max_groups() then
+    return jsonb_build_object('ok', false, 'reason', 'too_many_groups');
+  end if;
+  insert into school_groups (school_id, name) values (v_me.school_id, v_name)
+  on conflict (school_id, lower(name)) do nothing
+  returning id into v_id;
+  if v_id is null then return jsonb_build_object('ok', false, 'reason', 'group_name_taken'); end if;
+  return jsonb_build_object('ok', true, 'id', v_id, 'name', v_name);
+end $$;
+
+create or replace function rename_school_group(p_group_id uuid, p_name text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_me   school_staff := current_school_staff();
+  v_name text := school_group_name(p_name);
+begin
+  if v_me.user_id is null or v_me.role <> 'admin' then
+    return jsonb_build_object('ok', false, 'reason', 'not_school_admin');
+  end if;
+  if not exists (select 1 from school_groups where id = p_group_id and school_id = v_me.school_id) then
+    return jsonb_build_object('ok', false, 'reason', 'no_such_group');
+  end if;
+  if v_name is null then return jsonb_build_object('ok', false, 'reason', 'bad_group_name'); end if;
+  if exists (select 1 from school_groups where school_id = v_me.school_id and lower(name) = lower(v_name) and id <> p_group_id) then
+    return jsonb_build_object('ok', false, 'reason', 'group_name_taken');
+  end if;
+  update school_groups set name = v_name where id = p_group_id;
+  return jsonb_build_object('ok', true, 'name', v_name);
+end $$;
+
+/** Removes a house. Its children stay in the school, in no house. */
+create or replace function remove_school_group(p_group_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_me school_staff := current_school_staff();
+begin
+  if v_me.user_id is null or v_me.role <> 'admin' then
+    return jsonb_build_object('ok', false, 'reason', 'not_school_admin');
+  end if;
+  delete from school_groups where id = p_group_id and school_id = v_me.school_id;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_such_group'); end if;
+  return jsonb_build_object('ok', true);
+end $$;
+
+/** "House" or "Class": the word the school's board, its families and its report use. */
+create or replace function set_school_group_kind(p_kind text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_me school_staff := current_school_staff();
+begin
+  if v_me.user_id is null or v_me.role <> 'admin' then
+    return jsonb_build_object('ok', false, 'reason', 'not_school_admin');
+  end if;
+  if p_kind is null or p_kind not in ('house', 'class') then
+    return jsonb_build_object('ok', false, 'reason', 'bad_group_kind');
+  end if;
+  update schools set group_kind = p_kind where id = v_me.school_id;
+  return jsonb_build_object('ok', true, 'kind', p_kind);
+end $$;
+
+/** A parent says which house their child is in, or none (null). */
+create or replace function set_kid_school_group(p_kid_id uuid, p_group_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_m school_members;
+begin
+  if current_family_id() is null or not is_parent() then
+    return jsonb_build_object('ok', false, 'reason', 'not_a_parent');
+  end if;
+  select * into v_m from school_members where kid_id = p_kid_id and family_id = current_family_id() for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'not_in_one'); end if;
+  if p_group_id is not null
+     and not exists (select 1 from school_groups where id = p_group_id and school_id = v_m.school_id) then
+    return jsonb_build_object('ok', false, 'reason', 'no_such_group');
+  end if;
+  update school_members set group_id = p_group_id where kid_id = p_kid_id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Pilot codes.
+-- ---------------------------------------------------------------------------
+
+/**
+ * The operator makes a code (api/operator-schools.js). The server makes the
+ * code itself and hands only its hash here, so the database never holds it.
+ */
+create or replace function create_school_pilot(p_code_hash text, p_label text, p_days int,
+                                               p_code_expires_at timestamptz)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_label text := regexp_replace(trim(coalesce(p_label, '')), '\s+', ' ', 'g');
+  v_id    uuid;
+begin
+  if coalesce(p_code_hash, '') !~ '^[0-9a-f]{64}$' then
+    return jsonb_build_object('ok', false, 'reason', 'bad_code_hash');
+  end if;
+  if length(v_label) < 2 or length(v_label) > 80 or v_label ~ '[[:cntrl:]<>]' then
+    return jsonb_build_object('ok', false, 'reason', 'bad_label');
+  end if;
+  if p_days is null or p_days < 14 or p_days > 365 then
+    return jsonb_build_object('ok', false, 'reason', 'bad_days');
+  end if;
+  if p_code_expires_at is null or p_code_expires_at <= now() or p_code_expires_at > now() + interval '1 year' then
+    return jsonb_build_object('ok', false, 'reason', 'bad_expiry');
+  end if;
+  insert into school_pilots (code_hash, label, days, code_expires_at)
+  values (p_code_hash, v_label, p_days, p_code_expires_at)
+  on conflict (code_hash) do nothing
+  returning id into v_id;
+  if v_id is null then return jsonb_build_object('ok', false, 'reason', 'code_taken'); end if;
+  return jsonb_build_object('ok', true, 'id', v_id, 'label', v_label, 'days', p_days,
+                            'code_expires_at', p_code_expires_at);
+end $$;
+
+/** Take back a code nobody has used yet. A used one stays: it is the record of the pilot. */
+create or replace function withdraw_school_pilot(p_pilot_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  delete from school_pilots where id = p_pilot_id and redeemed_at is null;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'not_withdrawable'); end if;
+  return jsonb_build_object('ok', true);
+end $$;
+
+/** The operator's list: every code, who it was for, and how each pilot stands. */
+create or replace function operator_school_pilots()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', p.id, 'label', p.label, 'days', p.days,
+           'code_expires_at', p.code_expires_at, 'created_at', p.created_at,
+           'redeemed_at', p.redeemed_at, 'ends_at', p.ends_at,
+           -- When the school's trial really ends now: a District Champion's
+           -- free month moves it on.
+           'school_ends_at', s.trial_ends_at,
+           'reminder_sent_at', p.reminder_sent_at,
+           'school', case when s.id is not null then jsonb_build_object(
+                       'id', s.id, 'name', s.name, 'city', s.city, 'district', s.district,
+                       'students_joined', (select count(*) from school_members m where m.school_id = s.id)) end,
+           'state', case
+             when p.redeemed_at is null and p.code_expires_at > now() then 'waiting'
+             when p.redeemed_at is null then 'expired'
+             when s.status = 'active' or district_covers(s.id) then 'paying'
+             when s.status = 'trial' and s.trial_ends_at > now() then 'running'
+             else 'ended' end)
+           order by (p.redeemed_at is null) desc, coalesce(p.ends_at, p.code_expires_at), p.created_at), '[]'::jsonb)
+    from school_pilots p left join schools s on s.id = p.school_id;
+$$;
+
+/**
+ * The school's admin types a pilot code. The trial becomes a pilot of the
+ * code's length, from today (or stays as it is if it already ends later).
+ * Never for a school that pays, or whose district pays: the code is left
+ * unused for them. One pilot per school, and 5 codes that did not work an
+ * hour per sign-in.
+ */
+create or replace function redeem_school_pilot(p_code text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_me   school_staff := current_school_staff();
+  v_s    schools;
+  v_p    school_pilots;
+  v_code text := regexp_replace(upper(coalesce(p_code, '')), '[^A-Z0-9]', '', 'g');
+  v_fail text;
+  v_end  timestamptz;
+begin
+  if v_me.user_id is null or v_me.role <> 'admin' then
+    return jsonb_build_object('ok', false, 'reason', 'not_school_admin');
+  end if;
+  if (select count(*) from school_pilot_attempts
+       where user_id = v_me.user_id and tried_at > now() - interval '1 hour') >= 5 then
+    return jsonb_build_object('ok', false, 'reason', 'too_many_tries');
+  end if;
+  select * into v_s from schools where id = v_me.school_id for update;
+  if v_s.status = 'suspended' then return jsonb_build_object('ok', false, 'reason', 'suspended'); end if;
+  if exists (select 1 from school_pilots where school_id = v_s.id) then
+    return jsonb_build_object('ok', false, 'reason', 'already_piloted');
+  end if;
+  -- Paying already, by card, by invoice or through its district: a pilot
+  -- would only be a month of the plan given away. Not a wrong guess, so not
+  -- counted, and the code is not spent.
+  if v_s.status = 'active' or v_s.stripe_subscription_id is not null then
+    return jsonb_build_object('ok', false, 'reason', 'already_paying');
+  end if;
+  if district_covers(v_s.id) then return jsonb_build_object('ok', false, 'reason', 'district_pays'); end if;
+
+  if length(v_code) = 10 then
+    select * into v_p from school_pilots
+     where code_hash = encode(sha256(convert_to(v_code, 'UTF8')), 'hex') for update;
+  end if;
+  v_fail := case
+    when v_p.id is null then 'bad_code'
+    when v_p.redeemed_at is not null then 'used'
+    when v_p.code_expires_at <= now() then 'expired'
+    else null end;
+  if v_fail is not null then
+    insert into school_pilot_attempts (user_id) values (v_me.user_id);
+    return jsonb_build_object('ok', false, 'reason', v_fail);
+  end if;
+
+  v_end := greatest(v_s.trial_ends_at, now() + make_interval(days => v_p.days));
+  update schools set status = 'trial', trial_ends_at = v_end where id = v_s.id;
+  update school_pilots set school_id = v_s.id, redeemed_at = now(), ends_at = v_end where id = v_p.id;
+  return jsonb_build_object('ok', true, 'days', v_p.days, 'ends_at', v_end);
+end $$;
+
+/**
+ * Pilots ending within 14 days whose school has not chosen a plan, with
+ * what the email says and who to send it to: the school's admins. Once per
+ * pilot (claim_pilot_reminder, finish_pilot_reminder).
+ */
+create or replace function due_pilot_reminders(p_now timestamptz default now())
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('ok', true, 'reminders', coalesce(jsonb_agg(jsonb_build_object(
+           'pilot_id', p.id,
+           'school_id', s.id,
+           'name', s.name,
+           'ends_at', s.trial_ends_at,
+           -- Schools keep no time zone: the day, in UTC, written out.
+           'ends_local', to_char(s.trial_ends_at at time zone 'UTC', 'FMDay FMDD FMMonth YYYY'),
+           'days_left', greatest(1, ceil(extract(epoch from (s.trial_ends_at - p_now)) / 86400)::int),
+           'price', school_price_quote(s.student_count),
+           'recipients', (select coalesce(jsonb_agg(u.email order by st.joined_at), '[]'::jsonb)
+                            from school_staff st join auth.users u on u.id = st.user_id
+                           where st.school_id = s.id and st.role = 'admin' and u.email like '%@%'))
+           order by s.trial_ends_at, p.id), '[]'::jsonb))
+    from school_pilots p join schools s on s.id = p.school_id
+   where p.reminder_sent_at is null
+     and (p.reminder_claimed_at is null or p.reminder_claimed_at < p_now - interval '1 hour')
+     and s.status = 'trial'
+     and s.stripe_subscription_id is null
+     and s.trial_ends_at > p_now
+     and s.trial_ends_at <= p_now + interval '14 days'
+     and not district_covers(s.id);
+$$;
+
+create or replace function claim_pilot_reminder(p_pilot_id uuid)
+returns boolean language sql security definer set search_path = public as $$
+  with claimed as (
+    update school_pilots set reminder_claimed_at = now()
+     where id = p_pilot_id and reminder_sent_at is null
+       and (reminder_claimed_at is null or reminder_claimed_at < now() - interval '1 hour')
+    returning 1
+  ) select exists (select 1 from claimed);
+$$;
+
+create or replace function finish_pilot_reminder(p_pilot_id uuid, p_sent boolean)
+returns void language sql security definer set search_path = public as $$
+  update school_pilots
+     set reminder_sent_at = case when p_sent then coalesce(reminder_sent_at, now()) else reminder_sent_at end,
+         reminder_claimed_at = case when p_sent then reminder_claimed_at else null end
+   where id = p_pilot_id;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- The report for the school office.
+-- ---------------------------------------------------------------------------
+
+/*
+ * The kinds of chore the report counts: the app's own categories
+ * (CATEGORIES in src/data/questTemplates.js; tests/schoolpilot.mjs holds the
+ * two lists together). A quest's category is chosen from that list, never
+ * typed, and anything else is not counted.
+ */
+create or replace function school_report_categories()
+returns text[] language sql immutable as $$
+  select array['bedroom', 'kitchen', 'bathroom', 'laundry', 'home', 'outdoor', 'pets', 'school',
+               'selfcare', 'kindness']
+$$;
+
+/**
+ * One page the school's admin can print and hand to whoever decides: from
+ * the day the school signed up to the end of its pilot or trial (or today,
+ * if that is sooner). Totals only, for the whole school and each house:
+ * students taking part, the share who did a chore, chores done, the average
+ * per student; for the whole school, the busiest week and the most popular
+ * kinds of chore. Never a child, and no numbers for fewer than
+ * school_min_students(). Then the price for the school's size.
+ */
+create or replace function school_pilot_report()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  v_me     school_staff := current_school_staff();
+  v_s      schools;
+  v_p      school_pilots;
+  v_from   timestamptz;
+  v_to     timestamptz;
+  v_n      int;
+  v_active int;
+  v_chores int;
+  v_min    int := school_min_students();
+  v_week   jsonb;
+  v_kinds  jsonb;
+  v_totals jsonb;
+begin
+  if v_me.user_id is null or v_me.role <> 'admin' then
+    return jsonb_build_object('ok', false, 'reason', 'not_school_admin');
+  end if;
+  select * into v_s from schools where id = v_me.school_id;
+  select * into v_p from school_pilots where school_id = v_s.id;
+  v_from := v_s.created_at;
+  v_to := least(now(), v_s.trial_ends_at);
+  if v_to <= v_from then v_to := now(); end if;
+
+  select count(*), count(*) filter (where points > 0), coalesce(sum(points), 0)
+    into v_n, v_active, v_chores
+    from school_points_between(v_s.id, v_from, v_to);
+
+  if v_n >= v_min then
+    v_totals := jsonb_build_object('shown', true, 'students', v_n, 'active', v_active,
+                                   'share_pct', round(100.0 * v_active / v_n)::int,
+                                   'chores', v_chores, 'average', round(v_chores::numeric / v_n, 1));
+    -- The busiest week (Monday to Sunday, UTC), counted the way the league
+    -- counts: at most school_daily_chores() a day for each student.
+    select jsonb_build_object('starts', w.wk, 'chores', w.n) into v_week from (
+      select date_trunc('week', d.day)::date as wk, sum(d.n)::int as n
+        from (select (s.decided_at at time zone 'UTC')::date as day, least(count(*), school_daily_chores()) as n
+                from submissions s join school_members m on m.kid_id = s.kid_id
+               where m.school_id = v_s.id and s.status = 'approved'
+                 and s.decided_at >= greatest(v_from, m.joined_at) and s.decided_at < v_to
+               group by s.kid_id, 1) d
+       group by 1 order by 2 desc, 1 limit 1) w;
+    -- The three kinds of chore done most, as a share of the chores counted.
+    select coalesce(jsonb_agg(jsonb_build_object('kind', k.category, 'share_pct', k.pct) order by k.n desc, k.category), '[]'::jsonb)
+      into v_kinds
+      from (select c.category, c.n, round(100.0 * c.n / sum(c.n) over ())::int as pct
+              from (select q.category, count(*) as n
+                      from submissions s
+                      join school_members m on m.kid_id = s.kid_id
+                      join quests q on q.id = s.quest_id
+                     where m.school_id = v_s.id and s.status = 'approved'
+                       and s.decided_at >= greatest(v_from, m.joined_at) and s.decided_at < v_to
+                       and q.category = any (school_report_categories())
+                     group by q.category) c
+             order by c.n desc, c.category limit 3) k;
+  else
+    -- How many joined is on the school's page already; nothing else is shown.
+    v_totals := jsonb_build_object('shown', false, 'students', v_n);
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'school', jsonb_build_object('name', v_s.name, 'city', v_s.city, 'district', v_s.district,
+                                 'student_count', v_s.student_count),
+    'kind', case when v_p.id is not null then 'pilot' else 'trial' end,
+    'from', v_from,
+    'to', v_to,
+    'ends_at', v_s.trial_ends_at,
+    'over', v_s.trial_ends_at <= now(),
+    'status', v_s.status,
+    'paid', v_s.status = 'active' or district_covers(v_s.id),
+    'min_students', v_min,
+    'totals', v_totals,
+    'busiest_week', v_week,
+    'kinds', coalesce(v_kinds, '[]'::jsonb),
+    'groups', school_house_board(v_s.id, v_from, v_to),
+    'price', school_price_quote(v_s.student_count));
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- "Request a pilot", from the front page.
+-- ---------------------------------------------------------------------------
+
+/**
+ * A request for a pilot was made: 3 an hour from one place and 30 an hour
+ * in all, counted apart from "Get a quote". The same marks as a quote: a
+ * keyed hash of where it came from, and when. What the person typed goes by
+ * email (api/pilot-request.js) and is not kept.
+ */
+create or replace function record_pilot_request(p_ip_key text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_id bigint;
+begin
+  perform pg_advisory_xact_lock(hashtext('record_pilot_request'));
+  if (select count(*) from district_quote_attempts
+       where kind = 'pilot' and tried_at > now() - interval '1 hour') >= 30 then
+    return jsonb_build_object('ok', false, 'reason', 'busy');
+  end if;
+  if (select count(*) from district_quote_attempts
+       where kind = 'pilot' and ip_key = coalesce(p_ip_key, '') and tried_at > now() - interval '1 hour') >= 3 then
+    return jsonb_build_object('ok', false, 'reason', 'too_many_requests');
+  end if;
+  insert into district_quote_attempts (ip_key, kind) values (left(coalesce(p_ip_key, ''), 64), 'pilot') returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Grants, as above: the browser's few, and everything else revoked.
+-- ---------------------------------------------------------------------------
+
+grant execute on function add_school_group(text) to authenticated;
+grant execute on function rename_school_group(uuid, text) to authenticated;
+grant execute on function remove_school_group(uuid) to authenticated;
+grant execute on function set_school_group_kind(text) to authenticated;
+grant execute on function set_kid_school_group(uuid, uuid) to authenticated;
+grant execute on function redeem_school_pilot(text) to authenticated;
+grant execute on function school_pilot_report() to authenticated;
+revoke execute on function add_school_group(text) from public, anon;
+revoke execute on function rename_school_group(uuid, text) from public, anon;
+revoke execute on function remove_school_group(uuid) from public, anon;
+revoke execute on function set_school_group_kind(text) from public, anon;
+revoke execute on function set_kid_school_group(uuid, uuid) from public, anon;
+revoke execute on function redeem_school_pilot(text) from public, anon;
+revoke execute on function school_pilot_report() from public, anon;
+
+-- The server's alone.
+revoke execute on function school_points_between(uuid, timestamptz, timestamptz) from public, anon, authenticated;
+revoke execute on function school_group_totals(uuid, timestamptz, timestamptz) from public, anon, authenticated;
+revoke execute on function school_house_board(uuid, timestamptz, timestamptz) from public, anon, authenticated;
+revoke execute on function school_max_groups() from public, anon, authenticated;
+revoke execute on function school_group_name(text) from public, anon, authenticated;
+revoke execute on function create_school_pilot(text, text, int, timestamptz) from public, anon, authenticated;
+revoke execute on function withdraw_school_pilot(uuid) from public, anon, authenticated;
+revoke execute on function operator_school_pilots() from public, anon, authenticated;
+revoke execute on function due_pilot_reminders(timestamptz) from public, anon, authenticated;
+revoke execute on function claim_pilot_reminder(uuid) from public, anon, authenticated;
+revoke execute on function finish_pilot_reminder(uuid, boolean) from public, anon, authenticated;
+revoke execute on function school_report_categories() from public, anon, authenticated;
+revoke execute on function record_pilot_request(text) from public, anon, authenticated;

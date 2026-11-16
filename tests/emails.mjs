@@ -20,7 +20,10 @@
  * Reads code only; needs nothing running.
  */
 import { readFileSync } from 'node:fs'
-import { trialEmail, pauseReminderEmail, schoolMonthEmail, errorReportEmail, giftReceiptEmail, giftEmail, districtQuoteEmail } from '../api/_shared/email.js'
+import {
+  trialEmail, pauseReminderEmail, schoolMonthEmail, errorReportEmail, giftReceiptEmail, giftEmail, districtQuoteEmail,
+  pilotReminderEmail, pilotRequestEmail,
+} from '../api/_shared/email.js'
 import { TIERS } from '../src/state/initialState.js'
 import { PRODUCT_OF } from '../src/data/legalText.js'
 
@@ -128,6 +131,31 @@ for (const site of [SITE, '']) {
     }
   }
 
+  // A school's pilot ending, with and without the price and the day, and the
+  // help address.
+  for (const days of [1, 14]) {
+    for (const full of [true, false]) {
+      for (const replyTo of [HELP, '']) {
+        add(`pilot reminder, ${days} day(s) left, ${full ? 'everything known' : 'nothing optional'}, ${replyTo ? 'with' : 'without'} help, ${site ? 'with' : 'without'} a site`,
+          pilotReminderEmail({
+            name: 'Example "Oak" & <Elm> Academy', days_left: days,
+            ends_local: full ? 'Monday 30 November 2026' : '',
+            price: full ? { ok: true, label: 'Medium school', monthly_cents: 5900, yearly_cents: 59000 } : null,
+          }, { site, replyTo }))
+      }
+    }
+  }
+
+  // "Request a pilot", every way it can be filled in.
+  for (const full of [true, false]) {
+    add(`pilot request, ${full ? 'everything filled in' : 'nothing optional'}, ${site ? 'with' : 'without'} a site`,
+      pilotRequestEmail({
+        school: 'Example "Oak" & <Elm> Academy', name: 'Ms Example', email: 'head@example-academy.example',
+        role: full ? 'Head of school' : '', town: full ? 'Exampleton' : '', students: full ? 640 : null,
+        message: full ? 'We use houses & would love one <soon>.\nThanks!' : '',
+      }, { site }))
+  }
+
   const errorKinds = [
     { source: 'app', where: '/parent/settings', message: 'TypeError: rewards.map is not a function', count: 3, new: true },
     { source: 'server', where: 'create-checkout', message: 'create_checkout failed: 500', count: 1, new: false },
@@ -141,8 +169,9 @@ for (const site of [SITE, '']) {
 console.log('\n=== Every email RankUp sends itself is rendered here ===')
 const source = readFileSync(new URL('../api/_shared/email.js', import.meta.url), 'utf8')
 const builders = [...source.matchAll(/^export function (\w+Email)\(/gm)].map((m) => m[1])
-const rendered = ['trialEmail', 'pauseReminderEmail', 'schoolMonthEmail', 'errorReportEmail', 'giftReceiptEmail', 'giftEmail', 'districtQuoteEmail']
-ok(`the builders in api/_shared/email.js are the seven rendered here (${builders.join(', ')})`,
+const rendered = ['trialEmail', 'pauseReminderEmail', 'schoolMonthEmail', 'errorReportEmail', 'giftReceiptEmail', 'giftEmail', 'districtQuoteEmail',
+  'pilotReminderEmail', 'pilotRequestEmail']
+ok(`the builders in api/_shared/email.js are the nine rendered here (${builders.join(', ')})`,
   builders.length === rendered.length && builders.every((b) => rendered.includes(b)),
   `a new one needs its variants added to tests/emails.mjs: ${builders.filter((b) => !rendered.includes(b)).join(', ')}`)
 ok(`${emails.length} emails rendered`, emails.length > 100)
@@ -223,6 +252,25 @@ console.log('\n=== A district\'s quote request ===')
   const district = emails.filter((e) => e.name.includes('paid for by its district'))
   ok('a school its district pays for is told so, not that its plan ended',
     district.length > 0 && district.every((e) => /North Valley Unified pays for/.test(e.text) && !/Your plan has ended/.test(e.text)))
+}
+
+console.log('\n=== A school\'s pilot ending, and a request for one ===')
+{
+  const reminders = emails.filter((e) => e.name.startsWith('pilot reminder'))
+  ok(`${reminders.length} pilot reminders rendered`, reminders.length >= 16)
+  const one = pilotReminderEmail({ name: 'Example Academy', days_left: 14, ends_local: 'Monday 30 November 2026',
+    price: { ok: true, label: 'Medium school', monthly_cents: 5900, yearly_cents: 59000 } }, { site: SITE, replyTo: HELP })
+  ok('the subject says how many days are left', one.subject === 'Your RankUp pilot ends in 14 days', one.subject)
+  ok('it says the day, what the school would pay and both ways to buy',
+    one.text.includes('ends on Monday 30 November 2026') && one.text.includes('$59.00 a month, or $590.00 a year')
+    && /pay by card, or ask for a yearly invoice/.test(one.text))
+  ok('that nothing is deleted, and links the report', /Nothing is deleted/.test(one.text) && one.text.includes(`${SITE}/#/school/report`))
+  ok('one day left is "1 day"', pilotReminderEmail({ name: 'X', days_left: 1 }, {}).subject === 'Your RankUp pilot ends in 1 day')
+  ok('no child is named in it', !/Ava|kid name/.test(one.text))
+  const requests = emails.filter((e) => e.name.startsWith('pilot request'))
+  ok(`${requests.length} pilot requests rendered`, requests.length >= 4)
+  ok('each says it is the only copy, and how to reply', requests.every((e) => /the only copy/.test(e.text) && /Replying to this email goes to them/.test(e.text)))
+  ok('what was typed is escaped in the HTML part', requests.every((e) => !/<Elm>|<soon>/.test(e.html)))
 }
 
 console.log('\n=== A paused plan starting again ===')

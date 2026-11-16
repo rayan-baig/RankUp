@@ -42,6 +42,23 @@ and the pause, the period and the half-price month in
 counts (plans paused, saved, cancelled); and to `retention.sql` deleting a
 pause 90 days after it is over. No new file and no change to the order.
 
+School pilots, the pilot report and houses (0.19.0) added to `schools.sql`
+the tables `school_groups` (a school's houses or classes), `school_pilots`
+(pilot codes, by hash) and `school_pilot_attempts` (row level security on, no
+policy; reached only through functions), `schools.group_kind`,
+`school_members.group_id` and `district_quote_attempts.kind`; the house
+functions (`add_school_group`, `rename_school_group`, `remove_school_group`,
+`set_school_group_kind`, `set_kid_school_group`), `redeem_school_pilot` and
+`school_pilot_report` for the browser; and, revoked from `public, anon,
+authenticated`, `create_school_pilot`, `withdraw_school_pilot`,
+`operator_school_pilots`, the pilot reminder (`due_pilot_reminders`,
+`claim_pilot_reminder`, `finish_pilot_reminder`), `record_pilot_request` and
+the totals they are built from (`school_points_between`,
+`school_group_totals`, `school_house_board`). `school_card`, `my_schools`,
+`operator_schools` and the family's data export gained the houses and the
+pilot. To `retention.sql`, the pilot rules. No new file and no change to the
+order.
+
 School districts (0.17.0) added to `schools.sql` the tables `districts`,
 `district_staff`, `district_schools` and `district_quote_attempts` (row level
 security on, no policy; reached only through functions), `district_covers` and

@@ -136,10 +136,17 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null })
         </button>
 
         {/* For grandparents, aunts and uncles: a year of RankUp for a family,
-            bought with no account (#/gift). */}
-        <a href="#/gift" className="block text-center text-xs underline text-muted mt-2.5" data-testid="give-link">
-          🎁 Give a year of RankUp as a gift
-        </a>
+            bought with no account (#/gift). Beside it, for heads of school and
+            teachers, the School League's front page. One line, so the front
+            door still fits one phone screen. */}
+        <div className="flex justify-center flex-wrap gap-x-3 gap-y-1 mt-2.5 text-xs">
+          <a href="#/gift" className="underline text-muted" data-testid="give-link">
+            🎁 Give a year of RankUp as a gift
+          </a>
+          <a href="#/school" className="underline text-muted" data-testid="schools-link">
+            🏫 For schools
+          </a>
+        </div>
       </div>
     </div>
   )

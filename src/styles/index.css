@@ -113,6 +113,15 @@
       inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
   }
 
+  /* The lit tick before a section's heading (SectionTitle in ui.jsx). */
+  .section-tick {
+    width: 3px;
+    height: 13px;
+    border-radius: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    flex: 0 0 auto;
+  }
   .card-flat {
     background: var(--surface-2);
     border: 1px solid var(--line);
@@ -622,3 +631,25 @@
 }
 
 
+
+/*
+ * The pilot report (#/school/report) on paper: one page, black on white,
+ * nothing but the report. The app's moving background, its buttons and the
+ * look-around banner are left off.
+ */
+@media print {
+  @page { margin: 14mm; }
+  html, body { background: #ffffff !important; }
+  body * { visibility: hidden; }
+  .print-page, .print-page * { visibility: visible; }
+  .print-page {
+    position: absolute; left: 0; top: 0; width: 100%; max-width: none;
+    padding: 0; color: #111111; animation: none;
+  }
+  .print-page .text-muted { color: #444444 !important; }
+  .print-page .card, .print-page .card-flat {
+    background: #ffffff !important; box-shadow: none !important; border: 1px solid #cccccc !important;
+    break-inside: avoid;
+  }
+  .print-page .print-hidden, .print-page .print-hidden * { display: none !important; }
+}

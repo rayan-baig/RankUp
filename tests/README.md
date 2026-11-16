@@ -4,12 +4,12 @@ Every suite is listed, file by file, in **`tests/run-suite.mjs`**, which runs it
 
 | Suite | Command | Needs | What it covers |
 |---|---|---|---|
-| static | `npm run test:static` | nothing | Every setting the code reads is in `.env.example`; the Cloudflare route table matches `api/`; the scheduled jobs in `vercel.json`, `/api/health` and the jobs agree; the SQL files are in one order everywhere (`config.mjs`, `wiring.mjs`); RankUp shares nothing with the sites beside it on its parent domain: no cookie, no CORS, no wildcard in the policy, a service worker and a way back from Stripe that never lead to a sibling (`isolation.mjs`); the version has a CHANGELOG entry and is built in, never typed (`release.mjs`); every icon exists, the link preview's picture is a whole address or left out, robots.txt and the sitemap show only the front door (`sharecard.mjs`); every arcade game and sport has a short how-to line (`howtoplay.mjs`); the parent help page covers what parents ask, with the plan list's prices (`help.mjs`); the readable copy of a family's data escapes everything typed and reads both export shapes (`dataexport.mjs`); no price or trial length is typed by hand anywhere in `src/` (`prices.mjs`); what the plan screen says each plan gives is what the app enforces, and the yearly saving is the real difference (`planwords.mjs`); every notification's words fit a lock screen with the longest values, never shame, say what happened, and every link in a notice, the weekly digest, an email or Stripe's way back is a real screen that survives the Parent Mode PIN (`noticewords.mjs`); every email RankUp's own code sends (the trial reminders, a school's month, the error report, a gift's receipt and the gift itself), in every variant, has a plain-text part, no blank left unfilled, the MTRX Horizyn footer once, nothing wider than 600px, and the same words and links in both parts (`emails.mjs`) |
+| static | `npm run test:static` | nothing | Every setting the code reads is in `.env.example`; the Cloudflare route table matches `api/`; the scheduled jobs in `vercel.json`, `/api/health` and the jobs agree; the SQL files are in one order everywhere (`config.mjs`, `wiring.mjs`); RankUp shares nothing with the sites beside it on its parent domain: no cookie, no CORS, no wildcard in the policy, a service worker and a way back from Stripe that never lead to a sibling (`isolation.mjs`); the version has a CHANGELOG entry and is built in, never typed (`release.mjs`); every icon exists, the link preview's picture is a whole address or left out, robots.txt and the sitemap show only the front door (`sharecard.mjs`); every arcade game and sport has a short how-to line (`howtoplay.mjs`); the parent help page covers what parents ask, with the plan list's prices (`help.mjs`); the readable copy of a family's data escapes everything typed and reads both export shapes (`dataexport.mjs`); no price or trial length is typed by hand anywhere in `src/` (`prices.mjs`); what the plan screen says each plan gives is what the app enforces, and the yearly saving is the real difference (`planwords.mjs`); every notification's words fit a lock screen with the longest values, never shame, say what happened, and every link in a notice, the weekly digest, an email or Stripe's way back is a real screen that survives the Parent Mode PIN (`noticewords.mjs`); every email RankUp's own code sends (the trial reminders, a school's month, its pilot reminder and a pilot request, the error report, a gift's receipt and the gift itself), in every variant, has a plain-text part, no blank left unfilled, the MTRX Horizyn footer once, nothing wider than 600px, and the same words and links in both parts (`emails.mjs`) |
 | smoke | `npm run test:smoke` | the dev server and the stand-in API | The app in a real browser, screen by screen |
 | sync | `npm run test:sync` | the same | Two and three phones against a real Postgres |
 | awards | `npm run test:awards` | Postgres | The rules, in Node, against the app's own code and the database |
 | built | `npm run test:built` | a browser | The production build: no secrets in it, the security policy, the arcade's framed games |
-| api | `npm run test:api` | `up.sh --cf` | Every function in `api/`, under the runtime Cloudflare uses, against stand-ins for Stripe and the email provider; a family's and a school's whole plan, start to finish (`billingwalk.mjs`); pausing, resuming, the half-price month, cancelling and the reminder email (`keepplan.mjs`) |
+| api | `npm run test:api` | `up.sh --cf` | Every function in `api/`, under the runtime Cloudflare uses, against stand-ins for Stripe and the email provider; school pilots, the report, houses, paying by invoice and "Request a pilot"; a family's and a school's whole plan, start to finish (`billingwalk.mjs`); pausing, resuming, the half-price month, cancelling and the reminder email (`keepplan.mjs`) |
 | SQL | `npm run test:db` | Postgres | About a thousand checks on the database rules (`supabase/test/`) |
 | refusals | `npm run test:refusals` | Postgres | Every `{ ok: false, reason }` in the SQL is actually given while the SQL suite runs |
 
@@ -109,6 +109,21 @@ payer only; and no child's screen with a price, an offer or anything to buy.
 `upgradenudge.mjs` (awards) holds the nudge's and the yearly card's rules,
 `keepplan.mjs` (api) the server functions and the webhook, and
 `supabase/test/57-pauses.sql` the database.
+
+**`schoolpilot.mjs`** is a school pilot in the app: the School League's
+front page saying what RankUp does, what a school sees (totals only), what
+children never do, the prices and how a pilot works, with nothing styled
+inline; "Request a pilot" refusing an empty form, saying when it was asked
+too often, and sending only what it checked; a pilot code typed at sign-up
+starting the pilot, one already used or past its date refused in words with
+the school signed up anyway, and a school that pays told a pilot adds nothing
+(the code left unused); houses named by the admin (no rude names), each
+house's totals on the board and none for a house under 5 or when the
+students left over would be under 5; the pilot report's totals, busiest week,
+kinds of chore, the per-house table, the price and how to buy, no child
+anywhere, the buttons left off on paper, and no numbers at all under 5
+students. The server side is the pilot part of `api.mjs`, the rules
+`supabase/test/58-pilots-and-houses.sql`.
 
 **`leaderboards.mjs`** is Adventure and Arena in the app: a new child is in
 Adventure with no public board offered; a parent reads what Arena shows,

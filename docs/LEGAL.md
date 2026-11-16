@@ -208,6 +208,31 @@ unchanged: a district sees less than a school. Ask:
   when it does not pay (they fall back to their own plan or the free level,
   and nothing is deleted).
 
+## School pilots, the pilot report and houses: questions for the lawyer
+
+A school can get a free pilot instead of the trial, with a code we send
+(docs/PAYMENTS.md, "School pilots"). Its admin can print a one-page report of
+totals for whoever decides: students taking part, the share who did a chore,
+chores done, the average, the busiest week and the kinds of chore, for the
+school and for each house or class. A school can name houses or classes; a
+parent chooses which one their child is in. No numbers are shown for a group
+of fewer than 5 students, nor when the students left over would be fewer
+than 5 (so no group can be worked out by subtraction). Never a name, nothing
+typed, and there is no "what families said": families are asked for no
+rating. "Request a pilot" is emailed and not stored. The privacy policy now
+says a parent chooses the house and the school sees totals only; the terms
+say what a pilot is and that a school can pay by invoice. The consent notice
+is unchanged: a school sees totals, as before. Ask:
+
+- **The report leaving the school.** It is made to be handed to a governing
+  board or a bursar. Is a printed page of totals, from 5 students up, still
+  outside "personal information"? Would they want a note on it saying so?
+- **Houses.** Which house a child is in is a new fact about the child, chosen
+  by the parent and never shown to the school. Is the privacy policy's one
+  sentence enough, or does it belong in the consent notice too?
+- **A pilot's end.** Nothing is charged when a pilot ends; check the terms'
+  sentence is enough for a school's purchasing rules.
+
 ## Gifts: what is collected from people who are not families
 
 "A year of RankUp" can be bought by somebody with no account, for another

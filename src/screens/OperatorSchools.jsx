@@ -3,6 +3,7 @@ import { Screen, Card, Button, SectionTitle, Banner, Field, TextInput, Chip } fr
 import { districtLabel } from '../lib/schools.js'
 import { schoolChecks } from '../lib/schoolChecks.js'
 import OperatorThemes from './OperatorThemes.jsx'
+import { PILOT_DEFAULT_DAYS, PILOT_MIN_DAYS, PILOT_MAX_DAYS, PILOT_CODE_VALID_DAYS } from '../lib/pilotRules.js'
 
 /**
  * The operator's page for checking schools are real, and RankUp's daily
@@ -125,11 +126,117 @@ function UsageCard({ usage }) {
 
 const STATUS_TONE = { trial: 'var(--accent)', active: 'var(--good)', lapsed: 'var(--warn)', suspended: 'var(--bad)' }
 
+const PILOT_STATE = {
+  waiting: ['Not used yet', 'border-accent text-accent'],
+  expired: ['Ran out unused', 'border-warn text-warn'],
+  running: ['Pilot running', 'border-good text-good'],
+  paying: ['Pilot over: paying', 'border-good text-good'],
+  ended: ['Pilot ended', 'border-warn text-warn'],
+}
+const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—')
+const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10)
+
+/**
+ * Pilot codes: make one for a school (a free pilot instead of the trial,
+ * single use, used by a date), see every one and when each pilot ends, and
+ * take back one nobody has used. A new code is shown here once: only its
+ * hash is kept, so it cannot be shown again.
+ */
+function PilotCodes({ operatorKey, pilots, pilotDays, codeDays, onList }) {
+  const [label, setLabel] = useState('')
+  const [days, setDays] = useState(String(pilotDays || PILOT_DEFAULT_DAYS))
+  const [until, setUntil] = useState(isoDay(Date.now() + (codeDays || PILOT_CODE_VALID_DAYS) * 86400000))
+  const [made, setMade] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const send = async (body) => {
+    setBusy(true)
+    const res = await call(operatorKey, body)
+    setBusy(false)
+    if (!res.ok) { setError(res.error ? `Not done: ${res.error.replace(/_/g, ' ')}.` : 'Not done.'); return null }
+    setError('')
+    onList(res)
+    return res
+  }
+  const create = async () => {
+    const res = await send({ action: 'create_pilot', label, days: Number(days), code_expires_at: `${until}T23:59:59Z` })
+    if (res?.made) { setMade(res.made); setLabel('') }
+  }
+
+  return (
+    <>
+      <Card className="mb-3" data-testid="pilot-make">
+        <p className="font-semibold text-sm">Make a pilot code</p>
+        <p className="text-xs text-muted mb-2">
+          For a school that asked for a pilot. Its admin types the code at sign-up or on the school’s page,
+          and its trial becomes a free pilot of this length. Single use; never on top of a plan it pays for.
+        </p>
+        <Field label="Who it is for" hint="The school's name, as you will recognise it, e.g. Example Academy.">
+          <TextInput value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} />
+        </Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Pilot length, days" hint={`${PILOT_MIN_DAYS} to ${PILOT_MAX_DAYS}.`}>
+            <TextInput type="number" inputMode="numeric" min={PILOT_MIN_DAYS} max={PILOT_MAX_DAYS} value={days} onChange={(e) => setDays(e.target.value)} />
+          </Field>
+          <Field label="Use the code by" hint="After this it no longer works.">
+            <TextInput type="date" value={until} onChange={(e) => setUntil(e.target.value)} />
+          </Field>
+        </div>
+        {error && <p className="text-sm text-bad mb-2" role="alert">{error}</p>}
+        <Button className="w-full" disabled={busy || label.trim().length < 2} onClick={create}>Make the code</Button>
+        {made && (
+          <div className="card-flat p-3 mt-3 text-center" data-testid="pilot-made">
+            <p className="text-xs text-muted">The code for {made.label}, a {made.days}-day pilot. Copy it now: it is not shown again.</p>
+            <p className="font-mono text-2xl font-bold tracking-[0.2em] py-1 select-all">{made.code}</p>
+            <p className="text-xs text-muted">Use by {day(made.code_expires_at)}.</p>
+          </div>
+        )}
+      </Card>
+
+      <SectionTitle>Pilot codes ({pilots.length})</SectionTitle>
+      {pilots.length === 0 && <p className="text-sm text-muted mb-3">None yet.</p>}
+      <div data-testid="pilot-list">
+        {pilots.map((p) => {
+          const [word, tone] = PILOT_STATE[p.state] || [p.state, '']
+          return (
+            <Card key={p.id} className="mb-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm">{p.label}</p>
+                  <p className="text-xs text-muted">
+                    {p.days}-day pilot · {p.school ? `${p.school.name}${p.school.city ? `, ${p.school.city}` : ''}` : `use by ${day(p.code_expires_at)}`}
+                  </p>
+                </div>
+                <Chip className={`${tone} shrink-0 whitespace-nowrap`}>{word}</Chip>
+              </div>
+              {p.school && (
+                <p className="text-xs mt-1">
+                  Started {day(p.redeemed_at)} · <strong>ends {day(p.school_ends_at || p.ends_at)}</strong>
+                  {' '}· {p.school.students_joined} {p.school.students_joined === 1 ? 'child' : 'children'} joined
+                  {p.reminder_sent_at ? ` · reminded ${day(p.reminder_sent_at)}` : ''}
+                </p>
+              )}
+              {!p.school && (
+                <button type="button" className="text-xs underline text-muted mt-1" disabled={busy}
+                        onClick={() => { if (window.confirm(`Take back the code for ${p.label}? It stops working.`)) send({ action: 'withdraw_pilot', pilot_id: p.id }) }}>
+                  Take this code back
+                </button>
+              )}
+            </Card>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
 export default function OperatorSchools() {
   const [key, setKey] = useState(readKey)
   const [typed, setTyped] = useState('')
   const [schools, setSchools] = useState(null)
   const [usage, setUsage] = useState(null)
+  const [pilots, setPilots] = useState(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
   // Which half of the page: the schools, or the themes sent for a Season.
@@ -157,6 +264,7 @@ export default function OperatorSchools() {
     setError('')
     setSchools(res.schools || [])
     setUsage(res.usage || null)
+    setPilots(res)
   }, [])
 
   useEffect(() => { if (key) load(key) }, [key, load])
@@ -281,7 +389,7 @@ export default function OperatorSchools() {
       <header className="mb-3 flex items-start justify-between gap-2">
         <div>
           <p className="text-xs uppercase tracking-widest text-muted">RankUp operator</p>
-          <h1 className="font-display text-2xl font-extrabold">{tab === 'themes' ? 'Theme submissions' : 'Check schools'}</h1>
+          <h1 className="font-display text-2xl font-extrabold">{tab === 'themes' ? 'Theme submissions' : tab === 'pilots' ? 'School pilots' : 'Check schools'}</h1>
         </div>
         <button type="button" className="text-xs underline text-muted mt-1"
                 onClick={() => { try { sessionStorage.removeItem(KEY) } catch { /* fine */ } setKey(''); setSchools(null) }}>
@@ -289,13 +397,18 @@ export default function OperatorSchools() {
         </button>
       </header>
       <div className="flex gap-2 mb-3" role="tablist">
-        {[['schools', 'Schools'], ['themes', 'Theme submissions']].map(([id, label]) => (
+        {[['schools', 'Schools'], ['pilots', 'Pilots'], ['themes', 'Theme submissions']].map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} className="chip"
                   style={tab === id ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : undefined}
                   onClick={() => setTab(id)}>{label}</button>
         ))}
       </div>
       {tab === 'themes' && <OperatorThemes operatorKey={key} />}
+      {tab === 'pilots' && !pilots && <Card><p className="text-sm text-muted">Loading…</p></Card>}
+      {tab === 'pilots' && pilots && (
+        <PilotCodes operatorKey={key} pilots={pilots.pilots || []} pilotDays={pilots.pilot_days} codeDays={pilots.pilot_code_days}
+                    onList={(res) => { setPilots(res); setSchools(res.schools || []) }} />
+      )}
       {tab === 'schools' && error && <Banner tone="warn" icon="⚠️" title="Not right now" className="mb-3">{error}</Banner>}
       {tab === 'schools' && !schools && !error && <Card><p className="text-sm text-muted">Loading…</p></Card>}
 

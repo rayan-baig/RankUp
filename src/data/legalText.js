@@ -15,7 +15,7 @@
 
 import { TIERS } from '../state/initialState.js'
 import { priceWords } from '../lib/plans.js'
-import { SCHOOL_PRICES, SCHOOL_TRIAL_DAYS, SCHOOL_CHAMPION_TRIAL_DAYS, SCHOOL_YEAR_MONTHS, SCHOOL_MIN_STUDENTS, DISTRICT_DISCOUNTS, DISTRICT_MIN_SCHOOLS, dollars } from '../lib/schools.js'
+import { SCHOOL_PRICES, SCHOOL_TRIAL_DAYS, SCHOOL_CHAMPION_TRIAL_DAYS, SCHOOL_YEAR_MONTHS, SCHOOL_MIN_STUDENTS, DISTRICT_DISCOUNTS, DISTRICT_MIN_SCHOOLS, PILOT_DEFAULT_DAYS, dollars } from '../lib/schools.js'
 import { GIFT_CODE_YEARS, GIFT_RECIPIENT_DAYS } from '../lib/giftRules.js'
 
 export const CONSENT_VERSION = '2026-11'
@@ -205,6 +205,7 @@ export const PRIVACY_POLICY = {
         'Each month the school sees its ten highest-scoring students. A child is shown there by first name only if you turned that on; otherwise they appear as "A student". You can change this at any time, and taking your child out of the school removes them from every list, past months included.',
         'A school sees no names at all until we have checked that it is a real school. Schools never see a list of their students, and nothing about any child is shown to another school.',
         `If your child's school is part of a district plan, the district sees only totals for each school, such as how many students take part and how many chores were done. Never your child's name or anything about your child on their own, and no numbers at all for a school with fewer than ${SCHOOL_MIN_STUDENTS} students taking part.`,
+        `If the school splits its students into houses or classes, you choose which one your child is in, or none. The school sees each house's totals, never who is in which, and no numbers for a house with fewer than ${SCHOOL_MIN_STUDENTS} students taking part.`,
         'For school and district staff we collect the name and email address they sign in with, and the school\'s or district\'s name, town and size.',
       ],
     },
@@ -213,7 +214,7 @@ export const PRIVACY_POLICY = {
       body: [
         'Everything: until you delete your account, which removes it immediately and permanently.',
         'A theme sent to RankUp for a Season that we decline or do not pick: 90 days from when it was sent.',
-        'A school district\'s account: until a year after its plan ends. Its schools are not deleted with it. If you ask for a district quote, what you type is sent to us by email and not kept by RankUp.',
+        'A school district\'s account: until a year after its plan ends. Its schools are not deleted with it. If you ask for a district quote or a school pilot, what you type is sent to us by email and not kept by RankUp.',
         `If you buy a RankUp gift, we keep your email for the receipt and for help with the gift until its code runs out, ${GIFT_CODE_YEARS} years after you buy it, and we use the name and email of the person it is for, and your message, only to send the gift, deleting them ${GIFT_RECIPIENT_DAYS} days after you buy it.`,
         'If you pause your plan, we keep a note of the pause (when it started and when it ends) for 90 days after it is over, and whether your family has had its half-price month for as long as you have an account.',
         'If you pay for a plan, deleting your account also cancels the subscription at once, so nothing more is charged. Stripe keeps its record of the payments you made (invoices and receipts), because payment records have to be kept for tax and are needed if a refund is due. We keep only Stripe\'s reference to your billing, and only until the cancellation is confirmed and 30 days have passed.',
@@ -304,6 +305,8 @@ export const TERMS = {
       body: [
         'Whoever signs a school up must work there and be allowed to sign it up. We check every school before it joins a league, and we may suspend one that is not genuine or that misuses the league.',
         `A school's plan is priced by its number of students: ${schoolPriceList()}. A year costs ${SCHOOL_YEAR_MONTHS === 10 ? 'ten' : SCHOOL_YEAR_MONTHS} months. The first ${SCHOOL_TRIAL_DAYS} days are free, and nothing is charged until they end.`,
+        `We may give a school a free pilot instead of the trial, usually ${PILOT_DEFAULT_DAYS} days, with a single-use code. A pilot never adds to a plan the school already pays for, and nothing is charged when it ends.`,
+        'A school can pay by card, or yearly by invoice, payable by card or bank transfer by the date on the invoice.',
         'A school can cancel at any time from its School League page. Its plan runs to the end of the period paid for. If a payment keeps failing, or the plan ends, the school stops being ranked until it is renewed.',
         `A school district can buy one yearly plan, by invoice, for ${DISTRICT_MIN_SCHOOLS} schools or more. Each school is priced by its size at the yearly price, less a discount by its place in the plan: ${DISTRICT_DISCOUNTS.map((d, i) => { const next = DISTRICT_DISCOUNTS[i + 1]; return next ? `${d.pct}% for schools ${d.from} to ${next.from - 1}` : `${d.pct}% from school ${d.from}` }).join(', ')}, biggest schools first. A district that cancels keeps its plan to the end of the year paid for; an invoice left unpaid ends it. Then each school goes back to its own plan, its free trial or the free level, and nothing is deleted.`,
         `Each month the best school in each district is named District Champion and its next month is free (or, during the free trial, the trial is extended by ${SCHOOL_CHAMPION_TRIAL_DAYS} days). This needs at least two ranked schools in the district.`,

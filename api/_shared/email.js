@@ -3,15 +3,16 @@
  *
  * Most of RankUp's email is not sent from here: sign-up confirmations and
  * password resets are Supabase's, and receipts and payment problems are
- * Stripe's. Both are set up in those dashboards (docs/EMAILS.md). Seven kinds
- * are sent from this code: the free trial's two reminders and the reminder
- * that a paused plan starts again (api/send-trial-emails.js), a school's
- * month (api/settle-schools.js), the
+ * Stripe's. Both are set up in those dashboards (docs/EMAILS.md). Nine kinds
+ * are sent from this code: the free trial's two reminders, the reminder
+ * that a paused plan starts again and the one that a school's pilot ends
+ * (api/send-trial-emails.js), a school's month (api/settle-schools.js), the
  * error report to whoever runs RankUp (api/_shared/errorReport.js), a
  * gift's two emails, the buyer's receipt with the code and the gift to the
  * person it is for (api/_shared/gifts.js, from the Stripe webhook), and a
- * district's "Get a quote" request, to whoever runs RankUp
- * (api/district-quote.js). A district's invoices are Stripe's.
+ * district's "Get a quote" request and a school's "Request a pilot", to
+ * whoever runs RankUp (api/district-quote.js, api/pilot-request.js). A
+ * district's or a school's invoices are Stripe's.
  *
  * Sent through the email provider's HTTP API, because a Cloudflare Worker
  * cannot speak SMTP. Written for Resend's API (POST /emails): one call, a
@@ -411,6 +412,64 @@ export function districtQuoteEmail(q, { site } = {}) {
   const base = site ? site.replace(/\/+$/, '') : ''
   const link = base ? { url: `${base}/#/district`, label: 'The district page' } : null
   const help = 'How districts pay, and how to set up a quoted plan in Stripe: docs/PAYMENTS.md, "School districts", in RankUp\'s code.'
+  const foot = [
+    PRODUCT_OF,
+    'You get this because SALES_EMAIL (or SUPPORT_EMAIL) is set to this address. At most 3 requests an hour from one place, and 30 in all.',
+  ]
+  const text = [...paragraphs, ...(link ? [`${link.label}: ${link.url}`] : []), help, '--', ...foot].join('\n\n')
+  return { subject, text, html: toHtml(paragraphs, link, help, foot) }
+}
+
+/**
+ * Fourteen days before a school's pilot ends, to its admins: when it ends,
+ * what the school would pay for its size, how to buy (card or invoice), and
+ * the report to hand to whoever decides. Nothing about any child.
+ * `p` is a row of due_pilot_reminders (supabase/schools.sql).
+ */
+export function pilotReminderEmail(p, { site, replyTo } = {}) {
+  const days = Math.max(1, Number(p.days_left) || 14)
+  const when = p.ends_local || 'in two weeks'
+  const subject = `Your RankUp pilot ends in ${days} ${days === 1 ? 'day' : 'days'}`
+  const price = p.price && p.price.ok !== false
+    ? `${p.price.label}: ${money(p.price.monthly_cents)} a month, or ${money(p.price.yearly_cents)} a year.`
+    : ''
+  const base = site ? site.replace(/\/+$/, '') : ''
+  const paragraphs = [
+    'Hello,',
+    `${p.name}'s free pilot of the RankUp School League ends on ${when}.`,
+    'After that the school sits out the league until it chooses a plan. Nothing is deleted: your students keep their points, and families keep using RankUp at home.',
+    ...(price ? [`What your school would pay, for its size. ${price}`] : []),
+    'To carry on, the school\'s admin opens the school\'s page, then Plan: pay by card, or ask for a yearly invoice your office can pay by card or bank transfer.',
+    'The pilot report is one page you can print and hand to whoever decides: how many students took part, how many chores they did, and your houses or classes. Totals only, never a child\'s name.',
+  ]
+  const link = base ? { url: `${base}/#/school/report`, label: 'Open the pilot report' } : null
+  const help = helpLine(replyTo)
+  const foot = [
+    PRODUCT_OF,
+    'You get this because you are the admin of a school on a RankUp pilot. One email for each pilot, two weeks before it ends.',
+  ]
+  const text = [...paragraphs, ...(link ? [`${link.label}: ${link.url}`] : []), help, '--', ...foot].join('\n\n')
+  return { subject, text, html: toHtml(paragraphs, link, help, foot) }
+}
+
+/**
+ * "Request a pilot", from the School League's front page, to whoever runs
+ * RankUp. What the person typed, already checked (src/lib/pilotRules.js);
+ * this email is the only copy of it.
+ */
+export function pilotRequestEmail(q, { site } = {}) {
+  const subject = `Pilot request: ${q.school}${q.town ? `, ${q.town}` : ''}`
+  const paragraphs = [
+    'Hello,',
+    `${q.name}${q.role ? `, ${q.role},` : ''} asked for a free pilot of the RankUp School League for ${q.school}${q.town ? ` in ${q.town}` : ''}.`,
+    ...(Number.isInteger(q.students) ? [`Students, about: ${q.students.toLocaleString('en-US')}.`] : []),
+    `Their email: ${q.email}. Replying to this email goes to them.`,
+    ...(q.message ? [`They wrote: “${q.message}”`] : []),
+    'To give them a pilot, make a code on the operator page (Pilots) and send it to them. Nothing from this request is kept in RankUp: this email is the only copy.',
+  ]
+  const base = site ? site.replace(/\/+$/, '') : ''
+  const link = base ? { url: `${base}/#/operator`, label: 'The operator page' } : null
+  const help = 'How pilots work: docs/PAYMENTS.md, "School pilots", in RankUp\'s code.'
   const foot = [
     PRODUCT_OF,
     'You get this because SALES_EMAIL (or SUPPORT_EMAIL) is set to this address. At most 3 requests an hour from one place, and 30 in all.',

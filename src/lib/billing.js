@@ -116,6 +116,16 @@ export async function startSchoolCheckout(cycle = 'month') {
   return result
 }
 
+/**
+ * A school's yearly plan by invoice (api/school-checkout.js, `method:
+ * 'invoice'`): Stripe emails the invoice to `email`, to be paid by card or
+ * bank transfer. The price is the server's, from the school's size. Nobody is
+ * sent anywhere.
+ */
+export async function requestSchoolInvoice(email) {
+  return post(SCHOOL_CHECKOUT_URL, { method: 'invoice', email: String(email || '').trim() })
+}
+
 /** The school's card, invoices and cancelling, on Stripe's own pages. */
 export async function openSchoolBillingPortal() {
   const result = await post(PORTAL_URL, { for: 'school' })
@@ -273,6 +283,7 @@ export const BILLING_ERRORS = {
   district_already_paying: 'Your district is already paying. Use “Update the plan” or “Invoices and cancelling”.',
   not_paying: 'There is no plan to update yet. Send the invoice first.',
   custom_plan: 'Your plan was set up with us by hand. Write to us to change it.',
+  invoice_failed: 'Stripe could not send the invoice. Please try again.',
   // Pause instead of cancel, and the half-price month (api/keep-plan.js).
   bad_months: 'Choose 1, 2 or 3 months.',
   not_active: 'Only a plan you are paying for each month can be paused. You can still cancel it.',

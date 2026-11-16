@@ -16,6 +16,9 @@ no RankUp account: the buyer, and the person they bought it for.
 | **Your RankUp gift** (the buyer's receipt, with the code) | RankUp, the Stripe webhook (`api/_shared/gifts.js`) | The moment Stripe confirms a gift is paid for | `EMAIL_API_KEY`, `EMAIL_FROM`, `GIFT_CODE_SECRET` |
 | **"<name> gave your family a year of RankUp"** (to the person it is for) | RankUp, the same | The same moment, only if the buyer chose "Email it to them now" | The same |
 | **A district's quote request** (to whoever runs RankUp, not a family) | RankUp, `/api/district-quote` | When somebody sends the "Get a quote" form on the district page: at most 3 an hour from one place, 30 in all | `SALES_EMAIL` (or `SUPPORT_EMAIL`), with `EMAIL_API_KEY` and `EMAIL_FROM` |
+| **Your RankUp pilot ends in <n> days** (to a school's admins) | RankUp, `/api/send-trial-emails` | 14 days before a school's pilot ends, once per pilot, unless it has chosen a plan | `EMAIL_API_KEY`, `EMAIL_FROM`, the hourly job |
+| **A school's pilot request** (to whoever runs RankUp, not a family) | RankUp, `/api/pilot-request` | When somebody sends "Request a pilot" on the School League's front page: at most 3 an hour from one place, 30 in all | `SALES_EMAIL` (or `SUPPORT_EMAIL`), with `EMAIL_API_KEY` and `EMAIL_FROM` |
+| **A school's invoice** | Stripe | When a school chooses "a year, by invoice", and each year it renews | The same Stripe switch as a district's ([PAYMENTS.md](PAYMENTS.md#the-school-league)) |
 | **A district's invoice** | Stripe | When a district's yearly plan starts and each year it renews | Stripe dashboard: email finalized invoices to customers ([PAYMENTS.md](PAYMENTS.md#school-districts)) |
 | **The error report** (to whoever runs RankUp, not a family) | RankUp, `/api/send-trial-emails` | Hourly, when there is a new error: each error at most once an hour, at most 20 a day | `ERRORS_EMAIL`, with `EMAIL_API_KEY` and `EMAIL_FROM` |
 | **Receipt** | Stripe | Each payment | Stripe dashboard (below) |
@@ -392,6 +395,26 @@ A school its district pays for gets its month's email as before, saying the
 district pays for the school instead of what the school paid.
 
 ---
+
+## RankUp's own: a school's pilot, and asking for one
+
+**The reminder.** 14 days before a school's free pilot ends (docs/PAYMENTS.md,
+"School pilots"), each of its admins gets one email from the hourly job
+(`/api/send-trial-emails`, `due_pilot_reminders`): "Your RankUp pilot ends in
+<n> days", the day it ends, that nothing is deleted, what the school would pay
+for its size (the School League price list), that it can pay by card or ask
+for a yearly invoice, and a link to the pilot report (`#/school/report`).
+Claimed before it is sent and marked after, with an idempotency key, so it
+goes once per pilot. Not to a teacher, never to a family, and no child in it.
+Not sent if the school has chosen a plan or its district pays.
+
+**Request a pilot.** The form on the School League's front page goes to
+`SALES_EMAIL` (or `SUPPORT_EMAIL`) the same way as a district's quote request
+(below): the school, the person's name, role, email, town, about how many
+students and their note, with their address as the reply-to. This email is
+the only copy; the database keeps a keyed hash of where requests came from,
+for 3 an hour from one place and 30 in all. Answer it by making a pilot code
+on the operator page and sending it to them.
 
 ## Every email, checked
 
