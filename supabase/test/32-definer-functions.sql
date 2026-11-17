@@ -392,7 +392,7 @@ begin
     -- the billing portal, the webhook and the reminder job call with the
     -- service key, and the console's count of each.
     'stripe_subscription_for_family(uuid)', 'start_plan_pause(uuid,integer,text)', 'finish_plan_pause(bigint,boolean)',
-    'end_plan_pause(uuid)', 'sync_plan_pause(uuid,timestamptz,boolean,timestamptz)', 'claim_save_offer(uuid,text)',
+    'end_plan_pause(uuid)', 'plan_pause_credit(uuid)', 'sync_plan_pause(uuid,timestamptz,boolean,timestamptz)', 'claim_save_offer(uuid,text)',
     'finish_save_offer(uuid,boolean)', 'due_pause_reminders(timestamptz)', 'claim_pause_reminder(bigint)',
     'finish_pause_reminder(bigint,boolean)', 'count_plan_change(text)']
   loop

@@ -160,6 +160,13 @@ so no house's numbers can be worked out by subtraction; "Request a pilot"
 limited apart from quotes; retention; none of the server's half reachable
 from a browser.
 
+`59-review-fixes.sql` — defects found reviewing gifts, districts, pauses and
+pilots before launch, each written down as the check that failed before its
+fix: a suspended school, left off a district's bill, takes none of the
+places the district's plan pays for; a pause keeps the renewal date it
+started with, so resuming early after a renewal fell inside it gives back
+the days paid for and no more (`plan_pause_credit`, the server's alone).
+
 `57-pauses.sql` — pause instead of cancel and the half-price month: only an
 active, monthly, paid plan that is not ending pauses, for 1, 2 or 3 months,
 one at a time; while paused the plan counts as the free level, a trial or a

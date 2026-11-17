@@ -91,7 +91,11 @@ export default function ParentPlan() {
       ? { title: `Paused until ${planDate(r.paused_until)}`, body: 'Nothing is charged until then, and it starts again by itself. Your kids keep everything they have earned.' }
       : action === 'save'
         ? { title: 'Your next month is half price', body: 'Stripe takes 50% off your next payment. Nothing else changes.' }
-        : { title: 'Your plan is back on', body: 'Everything in your plan is back now. Billing carries on from your next renewal date.' })
+        : r.charged_today
+          ? { title: 'Your plan is back on', body: 'Everything in your plan is back now. Your renewal date fell inside the pause, so a new month starts today and Stripe charges for it today.' }
+          : r.next_charge_at
+            ? { title: 'Your plan is back on', body: `Everything in your plan is back now. Your renewal date fell inside the pause, so the days you had already paid for come first: your next payment is on ${planDate(r.next_charge_at)}.` }
+            : { title: 'Your plan is back on', body: 'Everything in your plan is back now. Billing carries on from your next renewal date.' })
     fetchBillingStatus().then(setStatus)
   }
 
@@ -153,9 +157,14 @@ export default function ParentPlan() {
             </div>
           )}
           {status?.paused_until && (
-            <Button className="w-full mt-2" disabled={busy} onClick={() => keep('resume')} data-testid="resume-plan">
-              Start my plan again now
-            </Button>
+            <>
+              <Button className="w-full mt-2" disabled={busy} onClick={() => keep('resume')} data-testid="resume-plan">
+                Start my plan again now
+              </Button>
+              <p className="text-xs text-muted mt-1" data-testid="resume-note">
+                If your renewal date passed during the pause, the days you had already paid for come back first, then a new month starts and is charged (today, if none were left).
+              </p>
+            </>
           )}
           {status?.has_customer && (
             <Button variant="soft" className="w-full mt-2" disabled={busy} data-testid="manage-billing"

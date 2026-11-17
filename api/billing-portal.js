@@ -68,6 +68,10 @@ async function flowData(stripe, status, flow, origin) {
   }
   // Changing plan during a pause would start charging the new price today.
   if (status.paused_until) return { error: 'paused', code: 409 }
+  // Yearly bills the year at once, and the half-price month's coupon takes
+  // 50% off the next invoice, whatever it is: half a year free. Not until
+  // that month is over (the same 31 days a pause waits).
+  if (flow === 'yearly' && status.save_offer_recent) return { error: 'half_price_yearly', code: 409 }
   const sub = await stripe.subscriptions.retrieve(subscriptionId)
   if (!sub || !['active', 'trialing'].includes(sub.status)) return { error: 'no_subscription', code: 400 }
   const { item, tier, cycle } = planOf(sub)

@@ -279,6 +279,8 @@ console.log('\n=== Resume early ===')
   const update = callsTo(from, `/v1/subscriptions/${SUB}`)[0]
   ok('Stripe is told to take the pause off', update?.params.get('pause_collection') === '' && subs.get(SUB).pause_collection === null,
     update ? [...update.params].join('&') : 'no update')
+  ok('and, with no renewal inside the pause, nothing is charged today: the billing date stays',
+    !update?.params.has('billing_cycle_anchor') && r.charged_today === false, update ? [...update.params].join('&') : 'no update')
   const f = await row(FAMILY)
   ok('the plan they pay for is back at once, on the child\'s phone too', !f.paused_until && f.effective === 'standard' && (await childSees(FAMILY)) === 'standard')
   ok('the plan screen\'s notice goes', billingNotice(await billingAs(PARENT)) === null)
@@ -300,6 +302,46 @@ console.log('\n=== Billing starting again on the date, by itself ===')
   subs.get(SUB).pause_collection = null
   ok('and Stripe\'s news that it resumed ends the pause', (await signed(subEvent('date_came'))).status === 200
     && (await db.query('select count(*)::int n from plan_pauses where family_id = $1 and ended_at is null and resumes_at > now()', [FAMILY])).rows[0].n === 0)
+}
+
+console.log('\n=== Resuming early after a renewal fell inside the pause ===')
+{
+  // A renewal that falls inside a pause has its invoice voided. Resuming
+  // early must not leave the whole month that invoice was for free, or
+  // pausing the day before every renewal and resuming the day after would be
+  // a plan never paid for; nor take away the days paid for before the pause.
+  const DAY = 86400000
+  await db.query(`update families set subscription_renews_at = now() + interval '20 days' where id = $1`, [FAMILY])
+  const r = await answer(await keep({ action: 'pause', months: 2 }, PARENT))
+  ok('(paused, with 20 days paid for and not used yet)', r.status === 200, JSON.stringify(r))
+  subs.get(SUB).latest_invoice = { id: `in_kp_void_${RUN}`, object: 'invoice', status: 'void' }
+  let from = calls.length
+  let back = await answer(await keep({ action: 'resume' }, PARENT))
+  let update = callsTo(from, `/v1/subscriptions/${SUB}`)[0]
+  const trialEnd = Number(update?.params.get('trial_end')) * 1000
+  ok('the parent starts it again after the renewal date', back.status === 200 && back.resumed, JSON.stringify(back))
+  ok('the 20 days paid for before the pause come back first, with nothing charged, then a new month is charged',
+    update?.params.get('pause_collection') === '' && Math.abs(trialEnd - (Date.now() + 20 * DAY)) < 65 * 60000
+    && update?.params.get('proration_behavior') === 'none' && !update?.params.has('billing_cycle_anchor'),
+    update ? [...update.params].join('&') : 'no update')
+  ok('and the parent is told when the next payment is', back.charged_today === false
+    && Math.abs(Date.parse(back.next_charge_at) - trialEnd) < 2000, JSON.stringify(back))
+  ok('the plan they pay for is back', (await row(FAMILY)).effective === 'standard')
+
+  // Paused a minute before the renewal: nothing paid for was left unused.
+  const again = await answer(await keep({ action: 'pause', months: 1 }, PARENT))
+  ok('(paused again, a minute before the renewal date)', again.status === 200, JSON.stringify(again))
+  await db.query(`update plan_pauses set paid_until = started_at + interval '1 minute' where family_id = $1 and ended_at is null`, [FAMILY])
+  from = calls.length
+  back = await answer(await keep({ action: 'resume' }, PARENT))
+  update = callsTo(from, `/v1/subscriptions/${SUB}`)[0]
+  ok('resuming the day after starts a new month today, charged today: the voided month is not free',
+    update?.params.get('pause_collection') === '' && update?.params.get('billing_cycle_anchor') === 'now'
+    && update?.params.get('proration_behavior') === 'none' && !update?.params.has('trial_end'),
+    update ? [...update.params].join('&') : 'no update')
+  ok('and the parent is told so', back.status === 200 && back.charged_today === true, JSON.stringify(back))
+  subs.get(SUB).latest_invoice = null
+  await db.query('update families set subscription_renews_at = null where id = $1', [FAMILY])
 }
 
 console.log('\n=== Stripe failing undoes a pause ===')
@@ -369,6 +411,16 @@ console.log('\n=== Elite, and yearly, on Stripe\'s own confirm page ===')
     && call.body.flow_data.subscription_update_confirm.items['0'].price === 'price_test_elite_month',
     call ? [...call.params].join('&') : 'no call')
   ok('and back to the plan screen afterwards', call?.body?.flow_data?.after_completion?.redirect?.return_url === `${BASE}/#/parent/plan?changed=1`)
+  // The half-price month was taken just above. Moving to yearly bills the
+  // year at once, and the coupon takes half off the next invoice, whatever
+  // it is: half a year free, the thing claim_save_offer refuses a yearly
+  // plan for.
+  const beforeHalf = calls.length
+  const during = await answer(await portal({ flow: 'yearly' }, PARENT))
+  ok('"Switch to yearly" during the half-price month: refused, in words, and Stripe is not asked',
+    during.status === 409 && during.error === 'half_price_yearly' && /half-price month/.test(billingError(during.error))
+    && callsTo(beforeHalf, '/v1/billing_portal/sessions').length === 0, JSON.stringify(during))
+  await db.query(`update families set save_offer_used_at = now() - interval '40 days' where id = $1`, [FAMILY])
   const year = await answer(await portal({ flow: 'yearly' }, PARENT))
   const yearCall = lastCall('/v1/billing_portal/sessions')
   ok('"Switch to yearly" opens it for the same plan, yearly', year.status === 200

@@ -5,6 +5,15 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.19.1 — 2026-11-17
+
+Fixes from a review of gifts, districts, pausing and pilots before launch.
+
+- **Pausing around a renewal no longer gives a month away.** A renewal that falls inside a pause has its invoice voided by Stripe. "Start my plan again now" used to take the pause off and nothing more, so the month that invoice was for was free: pausing the day before each renewal and resuming the day after was a plan never paid for. Now, when a renewal fell inside the pause, resuming gives back exactly the days that were paid for before the pause and not used (nothing is charged for those), and then a new month starts and is charged; with none left, the new month starts that day and is charged that day. With no renewal inside the pause, nothing changes: billing carries on from the next renewal date. The plan screen says so under the button, and says when the next payment is afterwards. `plan_pauses.paid_until` keeps the renewal date the pause started with; `plan_pause_credit` (server only) reads it for `/api/keep-plan`.
+- **No half-price year.** "Switch to yearly" during the half-price month bills the year at once, and that month's coupon takes half off the next invoice, whatever it is. The yearly switch is now refused for the same 31 days a pause waits (`half_price_yearly`), with a plain message.
+- **A district pays for the schools it pays for.** A suspended school is left off a district's bill, but it still took one of the places the plan pays for, so the last school of its size added sat out the league while the district paid for it. A suspended school now takes no place and is never shown as covered.
+- SQL: billing.sql (`plan_pauses.paid_until`, set by `start_plan_pause` and `sync_plan_pause`; `plan_pause_credit`, revoked from `public, anon, authenticated`) and schools.sql (`district_covers`). Run every file again on the live database, in the documented order; no new file. New SQL test: `supabase/test/59-review-fixes.sql`; 32 updated. `tests/keepplan.mjs` covers both resumes and the yearly switch.
+
 ## 0.19.0 — 2026-11-16
 
 School pilots, a report for the school office, houses, and a "For schools" page.

@@ -75,6 +75,29 @@ function stripeRefusal(sub, action) {
   return null
 }
 
+/**
+ * Whether the subscription's latest invoice, the one for the period running
+ * now, was voided: what pause_collection "void" does to a renewal that falls
+ * inside a pause.
+ */
+function renewalVoided(sub) {
+  const invoice = sub?.latest_invoice
+  return Boolean(invoice && typeof invoice === 'object' && invoice.status === 'void')
+}
+
+const HOUR = 3600000
+
+/**
+ * The time paid for before the pause and not used, in milliseconds, from
+ * plan_pause_credit: from when the pause started to when the period paid for
+ * would have ended. 0 when it is not known.
+ */
+function unusedPaidTime(credit) {
+  const from = Date.parse(credit?.started_at || '')
+  const until = Date.parse(credit?.paid_until || '')
+  return Number.isFinite(from) && Number.isFinite(until) && until > from ? until - from : 0
+}
+
 const failed = (err) => (stripeUnavailable(err) ? [503, 'stripe_unavailable'] : [502, null])
 
 export default async function handler(req, res) {
@@ -115,10 +138,35 @@ export default async function handler(req, res) {
   // ---- resume: start billing again now ----
   if (action === 'resume') {
     if (!billing.paused_until) return res.status(409).json({ error: 'not_paused' })
+    let chargeToday = false
+    let nextChargeAt = null
     try {
-      // An empty value takes the pause off. Charging carries on from the next
-      // renewal date; nothing is charged today.
-      await stripe.subscriptions.update(subscriptionId, { pause_collection: '' },
+      // Did a renewal fall inside the pause? Its invoice was voided, so the
+      // month now running was never paid for. Taking the pause off alone
+      // would hand that month over free: pausing the day before every
+      // renewal and resuming the day after was a plan never paid for.
+      const sub = await stripe.subscriptions.retrieve(subscriptionId, { expand: ['latest_invoice'] })
+      let restart = {}
+      if (renewalVoided(sub)) {
+        // What was paid for before the pause and not used comes back first,
+        // as days with nothing charged; then a new month starts and is
+        // charged. None left (or not known): the new month starts today.
+        const unused = unusedPaidTime(await rpc('plan_pause_credit', { p_family_id: familyId }).catch(() => null))
+        if (unused >= HOUR) {
+          // To the hour, so a second tap or a retry asks Stripe for the same
+          // thing under the same idempotency key.
+          const at = Math.ceil((Date.now() + unused) / HOUR) * (HOUR / 1000)
+          restart = { trial_end: at, proration_behavior: 'none' }
+          nextChargeAt = new Date(at * 1000).toISOString()
+        } else {
+          restart = { billing_cycle_anchor: 'now', proration_behavior: 'none' }
+          chargeToday = true
+        }
+      }
+      // An empty value takes the pause off. With no renewal inside the pause,
+      // charging carries on from the next renewal date and nothing is charged
+      // today.
+      await stripe.subscriptions.update(subscriptionId, { pause_collection: '', ...restart },
         { idempotencyKey: `rankup-resume-${familyId}-${String(billing.paused_until).slice(0, 19)}` })
     } catch (err) {
       await reportError('keep-plan:resume', err)
@@ -131,7 +179,7 @@ export default async function handler(req, res) {
       // Stripe has resumed it; its webhook tells the database the same.
       await reportError('keep-plan:resume', err)
     }
-    return res.status(200).json({ ok: true, resumed: true })
+    return res.status(200).json({ ok: true, resumed: true, charged_today: chargeToday, next_charge_at: nextChargeAt })
   }
 
   let sub
