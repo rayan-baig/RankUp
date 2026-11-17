@@ -394,6 +394,10 @@ revoke execute on function school_daily_chores() from public, anon, authenticate
  * subscription's prices). Within a size, the schools added first are the ones
  * paid for, so a school added after the plan was bought waits until the plan
  * is updated to include it. A plan set up by hand in Stripe pays for all.
+ *
+ * A suspended school is never covered and takes no place: the plan is
+ * priced without it (district_plan_quote), so counting it here left the
+ * last school of its size unpaid for while the district paid for it.
  */
 create or replace function district_covers(p_school uuid)
 returns boolean language sql stable security definer set search_path = public as $$
@@ -404,9 +408,11 @@ returns boolean language sql stable security definer set search_path = public as
       join schools s on s.id = ds.school_id
      where ds.school_id = p_school
        and d.status = 'active'
+       and s.status <> 'suspended'
        and (d.paid_all
             or (select count(*) from district_schools o join schools os on os.id = o.school_id
                  where o.district_id = d.id and os.size_band = s.size_band
+                   and os.status <> 'suspended'
                    and (o.added_at, o.school_id) <= (ds.added_at, ds.school_id))
                <= coalesce((d.paid_bands ->> s.size_band)::int, 0)));
 $$;

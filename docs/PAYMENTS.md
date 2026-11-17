@@ -559,8 +559,19 @@ first), checkout refuses a second plan, and a change of plan in the portal is
 refused until it is resumed (it would charge today).
 
 **Resuming early**: "Start my plan again now" (`{ action: 'resume' }`) takes
-`pause_collection` off at Stripe, then `end_plan_pause`. Charging carries on
-from the next renewal date; nothing is charged that day.
+`pause_collection` off at Stripe, then `end_plan_pause`. If no renewal date
+fell inside the pause, charging carries on from the next renewal date and
+nothing is charged that day. If one did, its invoice was voided, so the month
+running now was never paid for, and taking the pause off alone handed it over
+free: pausing the day before each renewal and resuming the day after was a
+plan never paid for. So the resume gives back exactly what was paid for and
+not used, from the pause's start to the renewal date it had then
+(`plan_pauses.paid_until`, read by `plan_pause_credit`), as days with nothing
+charged (`trial_end` that far from now, `proration_behavior: none`), and then a
+new month starts and is charged. With less than an hour of that left (or none
+known), the new month starts that day and is charged that day
+(`billing_cycle_anchor: now`). The plan screen says so under the button, and
+says when the next payment is after.
 
 **Three days before** billing starts again, each parent (never a supporter)
 gets one email: when, what will be charged at the plan list's price, that
@@ -642,7 +653,9 @@ goes through checkout. Every number in it comes from `TIERS`.
 paying monthly (live, not paused, not ending). The saving is the real
 difference between the plan list's two prices (30% on Standard, 33% on Elite
 Pass). It opens the same confirm page for the yearly price of the plan they
-are on (`flow: 'yearly'`).
+are on (`flow: 'yearly'`). Not in the 31 days after the half-price month
+(`half_price_yearly`): yearly bills the year at once, and that month's coupon
+takes half off the next invoice, whatever it is, which would be half a year.
 
 Both need "Customers can switch plans" in the portal's settings, with the four
 prices. A subscription on a price RankUp does not know (one made by hand) is

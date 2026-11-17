@@ -291,6 +291,7 @@ export const BILLING_ERRORS = {
   plan_ending: 'Your plan is already set to stop, so there is nothing to pause. Changed your mind? Use “Manage billing”.',
   not_monthly: 'A yearly plan cannot be paused or made half price. You can still cancel it, or change it in “Manage billing”.',
   half_price_month: 'Your half-price month is still running. You can pause after it.',
+  half_price_yearly: 'Your half-price month is still running. You can switch to yearly after it.',
   already_used: 'Your family has already had its half-price month.',
   paused: 'Your plan is paused. Start it again first.',
   not_paused: 'Your plan is not paused.',

@@ -1204,6 +1204,11 @@ create table if not exists plan_pauses (
   reminder_claimed_at timestamptz,
   reminder_sent_at    timestamptz
 );
+-- When the period paid for before the pause would have ended (the renewal
+-- date then), so resuming early after a renewal fell inside the pause gives
+-- back exactly the days paid for and not used (api/keep-plan.js,
+-- plan_pause_credit). Null when it was not known.
+alter table plan_pauses add column if not exists paid_until timestamptz;
 create index if not exists plan_pauses_family_idx on plan_pauses (family_id, started_at desc);
 create index if not exists plan_pauses_due_idx on plan_pauses (resumes_at)
   where ended_at is null and reminder_sent_at is null;
@@ -1272,8 +1277,9 @@ begin
   end if;
 
   v_until := now() + make_interval(months => p_months);
-  insert into plan_pauses (family_id, months, resumes_at)
-  values (p_family_id, p_months, v_until)
+  insert into plan_pauses (family_id, months, resumes_at, paid_until)
+  values (p_family_id, p_months, v_until,
+          case when v_fam.subscription_renews_at > now() then v_fam.subscription_renews_at end)
   returning id into v_id;
   update families set paused_until = v_until, billing_cycle = v_cycle where id = p_family_id;
   return jsonb_build_object('ok', true, 'pause_id', v_id, 'months', p_months, 'resumes_at', v_until,
@@ -1332,6 +1338,22 @@ begin
 end $$;
 
 /**
+ * What resuming early has to give back, for /api/keep-plan before it asks
+ * Stripe: when the running pause started, and when the period paid for
+ * before it would have ended. A renewal that fell inside the pause was
+ * voided, so the month running now was never paid for; the days between
+ * the two times here were paid for and never used, and come back first.
+ */
+create or replace function plan_pause_credit(p_family_id uuid)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce((
+    select jsonb_build_object('started_at', p.started_at, 'paid_until', p.paid_until)
+      from plan_pauses p
+     where p.family_id = p_family_id and p.ended_at is null and p.resumes_at > now()
+     order by p.started_at desc limit 1), '{}'::jsonb);
+$$;
+
+/**
  * What Stripe says about a pause, from a subscription event
  * (apply_subscription_change, after its own checks for replays, old news and
  * another subscription). `p_until` is pause_collection.resumes_at, or null
@@ -1366,8 +1388,9 @@ begin
       -- Resumed early after this news was written.
       return;
     else
-      insert into plan_pauses (family_id, months, resumes_at, confirmed_at)
-      values (p_family_id, null, p_until, now());
+      insert into plan_pauses (family_id, months, resumes_at, confirmed_at, paid_until)
+      values (p_family_id, null, p_until, now(),
+              (select f.subscription_renews_at from families f where f.id = p_family_id and f.subscription_renews_at > now()));
       perform count_plan_change('plans_paused');
     end if;
     update families set paused_until = p_until where id = p_family_id and paused_until is distinct from p_until;
@@ -1511,6 +1534,7 @@ revoke execute on function stripe_subscription_for_family(uuid) from public, ano
 revoke execute on function start_plan_pause(uuid, int, text) from public, anon, authenticated;
 revoke execute on function finish_plan_pause(bigint, boolean) from public, anon, authenticated;
 revoke execute on function end_plan_pause(uuid) from public, anon, authenticated;
+revoke execute on function plan_pause_credit(uuid) from public, anon, authenticated;
 revoke execute on function sync_plan_pause(uuid, timestamptz, boolean, timestamptz) from public, anon, authenticated;
 revoke execute on function claim_save_offer(uuid, text) from public, anon, authenticated;
 revoke execute on function finish_save_offer(uuid, boolean) from public, anon, authenticated;
