@@ -133,7 +133,7 @@ console.log('\n=== Chapters are only ever the ones reached ===')
   ok('level 125: the portal opens', names(125) === 'raid,portal')
   ok('level 400: up to the dragon, not past it', names(400) === 'raid,portal,rise,end,dragon', names(400))
   ok('the dragon beaten: the way home', names(400, { dragonDefeated: true }).endsWith(',dragon,home'))
-  ok('the glitch chapters are the portal and the End',
+  ok('the glitch chapters are the portal and the Far Isle',
     storyChapters('blockcraft', 400).filter((c) => c.glitch).map((c) => c.chapter).join() === 'portal,end')
   ok('a theme with no story has no chapters', storyChapters('apex', 400).length === 0)
 }

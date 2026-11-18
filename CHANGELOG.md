@@ -5,6 +5,18 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.20.1 — 2026-11-18
+
+Our own artwork and names throughout.
+
+- **Block Craft has its own hero.** The nine avatar pictures were made by a picture generator and copied another company's game: its best-known character, then its armour, one metal after another. They are gone. In their place is a hero drawn for RankUp: an ivory cube helmet with a dark visor and two glowing green eyes, a sprout growing out of the top, an orange scarf and a purple tunic. Each form adds to the hero's own gear: a second leaf and a satchel, copper shoulder guards and a star badge, a cape and a flower, glowing runes, a gold band and an ember flower, a ring of runes, a crystal circlet and a cape full of stars, and at the dragon a gold crown and wings of light. Drawn as small pictures (4 to 10 KB each, was about 15 KB) by `scripts/draw-blockcraft-avatars.mjs`, and checked inside the circle at every size the app shows them. The rings round the avatar follow the same colours, not the old metals.
+- **The Block Craft battles match.** The hero in every battle is the same cube-helmed hero with a green blade. The raiders wear hoods and pale masks; the fire creatures are little flame wisps; the shades of the Far Isle are empty floating cloaks with two cold eyes; the portal is a stone arch with fire in its seams; the Far Isle has crystal spires on violet rock; the villagers have ordinary faces; and the dragon's eyes and breath are amber. The companion who joins at the Ember Gate is **Sparkbit**, a little flying cube with leaf wings.
+- **Block Craft's names are our own.** Emeralds are now **Gems**. The worlds are **The Ember Gate** (was named after the other game's fire world), **The Ashlands**, **The Far Isle** (was "The End") and The Dragon. Raid Night and Hero's Return are unchanged.
+- **No brand or real person in the theme picker.** Each theme's line under its name now says what kind of game it feels like: Falling blocks, Blocky adventure, Squad tactics, Battle royale, Anime, Cute pastel, Pop star stage, Winged horses, Sweet bakery, Fashion studio, Cozy village, Cyberpunk, Platform jumping, Rhythm runner and Creature collecting.
+- **Coins and worlds renamed where they copied a game.** Renown is **Merit**, V-Coins are **Drop Coins**, Mana Orbs are **Beat Orbs**, Pocket Coins are **Tamer Coins**. Plumber Kingdom no longer loses a princess or cuts a bridge, and its worlds are Meadow Run, Underground, Lava Castle and **Starlight Path**. Monster Tamer's worlds are **First Trail**, Deep Cavern, **Volcano Arena** (a trophy, not a badge) and **Champion Climb**. Campfire Cozy no longer opens with a loan.
+- **The arcade.** Find the Impostor is **Find the Fibber**: five animal friends (Fox, Owl, Frog, Bear and Cat), an empty cookie jar, and "Case 1 of 3". 2048 is **Number Merge**, Formula 1 in SportsMania is **Grand Prix**. Tennis Tour's players and tournaments are all made up for the game, with no real players, tournaments or tours named; the football match's all-star team has nicknames, not real footballers.
+- Spending, saved games and scores are unchanged: only names and pictures changed, never an id. No SQL change, no new setting. Tests updated for the new names (`tests/arcade3.mjs`, `tests/arcade4.mjs`, `tests/sweets.mjs`, `tests/battles.mjs`, `tests/forms.mjs`).
+
 ## 0.20.0 — 2026-11-18
 
 The first five minutes: a demo anyone can open, a shorter start, and no blank screens.

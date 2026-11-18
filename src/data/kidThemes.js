@@ -31,8 +31,8 @@ export const KID_THEMES = [
     id: 'matrixblocks',
     story: 'The Stack never stops falling. Every chore you clear is a line cleared — and the well goes deeper than anyone has been.',
     name: 'MatrixBlocks',
-    inspiredBy: 'Tetris style',
-    blurb: 'Midnight blue fields and glowing cyber tetrominoes.',
+    inspiredBy: 'Falling blocks',
+    blurb: 'Midnight blue fields and glowing cyber blocks.',
     currency: { name: 'Matrix Clears', icon: '🧱' },
     scene: 'tetrominoes',
     ...base,
@@ -51,7 +51,7 @@ export const KID_THEMES = [
      * and Coquette rebuilt out of Cyber Grid wireframes stops being
      * Coquette. What travels is the light — the palette and what hangs
      * in the sky above it. Block Craft is the exception that proves it;
-     * the Nether and the End really are different drawings, because
+     * the Ashlands and the Far Isle really are different drawings, because
      * there the worlds are the story.
      */
     evolutions: [
@@ -107,15 +107,15 @@ export const KID_THEMES = [
      */
     storyStart: { chapter: 'raid', label: 'Raid Night' },
     name: 'Block Craft',
-    inspiredBy: 'Minecraft style',
+    inspiredBy: 'Blocky adventure',
     blurb: 'Pixelated soil panels and blocky voxel borders.',
-    currency: { name: 'Emeralds', icon: '💎' },
+    currency: { name: 'Gems', icon: '💎' },
     scene: 'voxel',
     ...base,
     radius: '0px',
     shadow: '4px 4px 0 0 rgb(0 0 0 / 0.45)',
     /*
-     * The Overworld: a deep evening sky with grass and water in it. This
+     * The village at dusk: a deep evening sky with grass and water in it. This
      * was brown soil under a brown sky, which is how a voxel theme ends
      * up looking like mud rather than like standing outside at dusk. The
      * ground strata still read as earth because the scene draws those
@@ -129,28 +129,30 @@ export const KID_THEMES = [
      * Block Craft is the one theme with nine forms instead of five.
      *
      * Its later levels are a story rather than a recolour — the portal
-     * opens, then the Nether, then the End, then the dragon — and a
+     * opens, then the Ashlands, then the Far Isle, then the dragon — and a
      * five-rung ladder would stop that story halfway. Everything that
      * shows a form number reads this list rather than assuming five, so a
      * child here is told "form 6 of 9" and nobody on another theme is
      * measured against it.
      *
-     * One hue per rung, in the order the story goes: overworld greens,
-     * then diamond, then the Nether reds, the End purples, and the dragon.
+     * One hue per rung, following the hero's own gear (the pictures are
+     * drawn by scripts/draw-blockcraft-avatars.mjs): the sprout, the
+     * scarf, copper guards, the cape, the runes, then the Ember Gate, the
+     * Ashlands, the Far Isle's crystal, and the crown.
      */
     tiers: [1, 10, 25, 50, 100, 125, 175, 250, 399],
     avatar: {
       motif: 'block',
       hues: [
-        '#8bd450', '#c9d1d9', '#f5c542', '#26d0c8', '#7ef0ff',
-        '#ff5c4d', '#b4202a', '#b06bff', '#6b21a8',
+        '#8bd450', '#ff9a4a', '#d98a4e', '#ff6a4d', '#7dffb0',
+        '#ffb302', '#ff3b5c', '#d6b4ff', '#ffd36b',
       ],
     },
     /**
      * Every theme now has level-gated worlds; each entry overrides the
      * colours, sky and (here) scene from that level upward. Block Craft's
      * are the deepest, because it has nine forms rather than five and the
-     * Nether and the End are drawings of their own.
+     * Ashlands and the Far Isle are drawings of their own.
      */
     /*
      * The worlds, on the levels the story uses.
@@ -158,23 +160,23 @@ export const KID_THEMES = [
      * These were at 51, 101, 200 and 300 — numbers from before the nine
      * forms existed — so the world changed in the gaps between forms
      * instead of at them. Now each new world arrives exactly when the
-     * avatar does: the portal at 125, deeper in at 175, the End at 250,
+     * avatar does: the portal at 125, deeper in at 175, the Far Isle at 250,
      * the dragon at 399.
      *
-     * The old "Pale Cream" world is gone. A cream Minecraft is not part
+     * The old "Pale Cream" world is gone. A cream block world is not part
      * of this story, and being the only light theme in the set it also
      * put dark night artwork behind dark-on-light text.
      */
     evolutions: [
       {
         level: 125,
-        label: 'The Nether Portal',
-        story: "You followed the raiders' tracks to a portal of obsidian, still warm. This is where they come from.",
+        label: 'The Ember Gate',
+        story: "You followed the raiders' tracks to a gate of black stone, still warm. This is where they come from.",
         chapter: 'portal',
         // Arriving here tears the screen for a moment: something is open that should not be.
         glitchIntro: true,
         scene: 'voxel-volcanic',
-        companion: 'boarling',
+        companion: 'sparkbit',
         colors: {
           bg: '#1b0605', surface: '#3f120c', surface2: '#5c1a12', line: '#8f2e1d',
           ink: '#ffe9e2', inkMuted: '#d79d8f', accent: '#ff6a3d', accent2: '#ffb302',
@@ -182,11 +184,11 @@ export const KID_THEMES = [
       },
       {
         level: 175,
-        label: 'Nether Rise',
+        label: 'The Ashlands',
         story: 'Their land. The air burns, and every raid on your village started here.',
         chapter: 'rise',
         scene: 'voxel-nether',
-        companion: 'boarling',
+        companion: 'sparkbit',
         colors: {
           bg: '#170305', surface: '#3d0a12', surface2: '#57101c', line: '#8d1f32',
           ink: '#ffe4e9', inkMuted: '#d2919f', accent: '#ff3b5c', accent2: '#ff9f43',
@@ -194,12 +196,12 @@ export const KID_THEMES = [
       },
       {
         level: 250,
-        label: 'The End',
-        story: 'The raiders were never in charge. Something sent them, from a quiet island at the end of everything.',
+        label: 'The Far Isle',
+        story: 'The raiders were never in charge. Something sent them, from a quiet island floating at the edge of the sky.',
         chapter: 'end',
         glitchIntro: true,
         scene: 'voxel-end',
-        companion: 'ender',
+        companion: 'sparkbit',
         colors: {
           bg: '#0a0713', surface: '#1d1533', surface2: '#2b1f4d', line: '#4a3880',
           ink: '#f0e8ff', inkMuted: '#b3a4d6', accent: '#d6b4ff', accent2: '#7ef0ff',
@@ -211,7 +213,7 @@ export const KID_THEMES = [
         story: 'It sent the raiders the whole time. Now it has seen you. Every chore you finish is a hit.',
         chapter: 'dragon',
         scene: 'voxel-end',
-        companion: 'ender',
+        companion: 'sparkbit',
         colors: {
           bg: '#0d0418', surface: '#2a0c3d', surface2: '#3d1157', line: '#6a1f96',
           ink: '#fbe9ff', inkMuted: '#c79add', accent: '#e879f9', accent2: '#a855f7',
@@ -222,7 +224,7 @@ export const KID_THEMES = [
        * health reaches zero (src/lib/dragonFight.js), which is why it sits
        * on the same level as the dragon and carries `requires`.
        *
-       * Back to the Overworld scene, at dawn. Still a dark palette, because
+       * Back to the village scene, at dawn. Still a dark palette, because
        * Block Craft is a dark theme at every stage.
        */
       {
@@ -232,7 +234,7 @@ export const KID_THEMES = [
         story: 'The dragon is down and the raids are over. You walk back through the portal, and your whole village is waiting to cheer you home.',
         chapter: 'home',
         scene: 'voxel',
-        companion: 'ender',
+        companion: 'sparkbit',
         colors: {
           bg: '#1a1033', surface: '#2e1f4f', surface2: '#3d2a66', line: '#6b4fa0',
           ink: '#fff4e6', inkMuted: '#e0c9b0', accent: '#ffc94a', accent2: '#ff9a6b',
@@ -244,9 +246,9 @@ export const KID_THEMES = [
     id: 'tactical',
     story: 'You run point. The breach, the timing and the call are all yours.',
     name: 'Tactical Override',
-    inspiredBy: 'R6 style',
+    inspiredBy: 'Squad tactics',
     blurb: 'Matte grey panels with a sharp neon-orange tactical HUD.',
-    currency: { name: 'Renown', icon: '🪙' },
+    currency: { name: 'Merit', icon: '🪙' },
     scene: 'hud',
     ...base,
     radius: '2px',
@@ -264,7 +266,7 @@ export const KID_THEMES = [
      * and Coquette rebuilt out of Cyber Grid wireframes stops being
      * Coquette. What travels is the light — the palette and what hangs
      * in the sky above it. Block Craft is the exception that proves it;
-     * the Nether and the End really are different drawings, because
+     * the Ashlands and the Far Isle really are different drawings, because
      * there the worlds are the story.
      */
     evolutions: [
@@ -301,7 +303,7 @@ export const KID_THEMES = [
       {
         level: 100,
         label: 'Orbital',
-        story: 'Overwatch from above. You can see the whole board now.',
+        story: 'Eyes in the sky. You can see the whole board now.',
         sky: 'rings',
         colors: {
           bg: '#04060f', surface: '#0c1227', surface2: '#131c3b', line: '#22305e',
@@ -314,9 +316,9 @@ export const KID_THEMES = [
     id: 'apex',
     story: 'A hundred drop in. You plan on walking out.',
     name: 'Apex Royale',
-    inspiredBy: 'Fortnite style',
+    inspiredBy: 'Battle royale',
     blurb: 'Slanted high-contrast grids and bright battle-pass tracks.',
-    currency: { name: 'V-Coins', icon: '🪙' },
+    currency: { name: 'Drop Coins', icon: '🪙' },
     scene: 'slant',
     ...base,
     radius: '10px',
@@ -333,7 +335,7 @@ export const KID_THEMES = [
      * and Coquette rebuilt out of Cyber Grid wireframes stops being
      * Coquette. What travels is the light — the palette and what hangs
      * in the sky above it. Block Craft is the exception that proves it;
-     * the Nether and the End really are different drawings, because
+     * the Ashlands and the Far Isle really are different drawings, because
      * there the worlds are the story.
      */
     evolutions: [
@@ -383,7 +385,7 @@ export const KID_THEMES = [
     id: 'aura',
     story: 'The power was always in you. It is just extremely rude about waking up.',
     name: 'Aura Awakening',
-    inspiredBy: 'Anime style',
+    inspiredBy: 'Anime',
     blurb: 'Manga framing with explosive golden energy meters.',
     currency: { name: 'Power Levels', icon: '💥' },
     scene: 'aura',
@@ -402,7 +404,7 @@ export const KID_THEMES = [
      * and Coquette rebuilt out of Cyber Grid wireframes stops being
      * Coquette. What travels is the light — the palette and what hangs
      * in the sky above it. Block Craft is the exception that proves it;
-     * the Nether and the End really are different drawings, because
+     * the Ashlands and the Far Isle really are different drawings, because
      * there the worlds are the story.
      */
     evolutions: [
@@ -452,7 +454,7 @@ export const KID_THEMES = [
     id: 'coquette',
     story: 'A tiny pastel kingdom runs on good manners and better ribbons, and it has decided you are its new favourite.',
     name: 'Coquette Circuit',
-    inspiredBy: 'Sanrio style',
+    inspiredBy: 'Cute pastel',
     blurb: 'Soft pastel pink fields with retro pixel bows and stars.',
     currency: { name: 'Pink Crystals', icon: '💎' },
     scene: 'bows',
@@ -473,7 +475,7 @@ export const KID_THEMES = [
      * and Coquette rebuilt out of Cyber Grid wireframes stops being
      * Coquette. What travels is the light — the palette and what hangs
      * in the sky above it. Block Craft is the exception that proves it;
-     * the Nether and the End really are different drawings, because
+     * the Ashlands and the Far Isle really are different drawings, because
      * there the worlds are the story.
      */
     evolutions: [
@@ -523,7 +525,7 @@ export const KID_THEMES = [
     id: 'poparena',
     story: 'One stage, one crowd, and a set list you have to earn song by song.',
     name: 'Pop Arena',
-    inspiredBy: 'Taylor Swift style',
+    inspiredBy: 'Pop star stage',
     blurb: 'Dark stadium fields lit by neon-purple stage rigs.',
     currency: { name: 'VIP Tickets', icon: '🎟️' },
     scene: 'stage',
@@ -542,7 +544,7 @@ export const KID_THEMES = [
      * and Coquette rebuilt out of Cyber Grid wireframes stops being
      * Coquette. What travels is the light — the palette and what hangs
      * in the sky above it. Block Craft is the exception that proves it;
-     * the Nether and the End really are different drawings, because
+     * the Ashlands and the Far Isle really are different drawings, because
      * there the worlds are the story.
      */
     evolutions: [
@@ -592,7 +594,7 @@ export const KID_THEMES = [
     id: 'pegasus',
     story: 'You have wings and no idea how far they go. Time to find out.',
     name: 'Pegasus Horizon',
-    inspiredBy: 'My Little Pony style',
+    inspiredBy: 'Winged horses',
     blurb: 'Lavender and sky-blue gradients trailing sparkling star dust.',
     currency: { name: 'Star Shards', icon: '✨' },
     scene: 'stardust',
@@ -613,7 +615,7 @@ export const KID_THEMES = [
      * and Coquette rebuilt out of Cyber Grid wireframes stops being
      * Coquette. What travels is the light — the palette and what hangs
      * in the sky above it. Block Craft is the exception that proves it;
-     * the Nether and the End really are different drawings, because
+     * the Ashlands and the Far Isle really are different drawings, because
      * there the worlds are the story.
      */
     evolutions: [
@@ -663,7 +665,7 @@ export const KID_THEMES = [
     id: 'sugarrush',
     story: 'Somebody has to keep the sweet kingdom running. Somebody is you.',
     name: 'Sugar Rush',
-    inspiredBy: 'Baking game style',
+    inspiredBy: 'Sweet bakery',
     blurb: 'Pastel mint counters, dripping icing borders, sprinkle dividers.',
     currency: { name: 'Sugar Orbs', icon: '🔮' },
     scene: 'sprinkles',
@@ -684,7 +686,7 @@ export const KID_THEMES = [
      * and Coquette rebuilt out of Cyber Grid wireframes stops being
      * Coquette. What travels is the light — the palette and what hangs
      * in the sky above it. Block Craft is the exception that proves it;
-     * the Nether and the End really are different drawings, because
+     * the Ashlands and the Far Isle really are different drawings, because
      * there the worlds are the story.
      */
     evolutions: [
@@ -734,7 +736,7 @@ export const KID_THEMES = [
     id: 'glam',
     story: 'A whole industry decides who gets looked at. You have decided to decide instead.',
     name: 'Glam Protocol',
-    inspiredBy: 'Barbie style',
+    inspiredBy: 'Fashion studio',
     blurb: 'Hot-pink vanity columns, mirror lines and diamond particles.',
     currency: { name: 'Glow Points', icon: '✨' },
     scene: 'vanity',
@@ -753,7 +755,7 @@ export const KID_THEMES = [
      * and Coquette rebuilt out of Cyber Grid wireframes stops being
      * Coquette. What travels is the light — the palette and what hangs
      * in the sky above it. Block Craft is the exception that proves it;
-     * the Nether and the End really are different drawings, because
+     * the Ashlands and the Far Isle really are different drawings, because
      * there the worlds are the story.
      */
     evolutions: [
@@ -801,9 +803,9 @@ export const KID_THEMES = [
   },
   {
     id: 'campfire',
-    story: 'A quiet island, a loan you never asked for, and neighbours worth the trouble.',
+    story: 'A quiet island, a little cabin to fix up, and neighbours worth the trouble.',
     name: 'Campfire Cozy',
-    inspiredBy: 'Animal Crossing style',
+    inspiredBy: 'Cozy village',
     blurb: 'Warm wood panels, calm pastel-green buttons, leaf-thin lines.',
     currency: { name: 'Berberries', icon: '🍒' },
     scene: 'leaves',
@@ -824,7 +826,7 @@ export const KID_THEMES = [
      * and Coquette rebuilt out of Cyber Grid wireframes stops being
      * Coquette. What travels is the light — the palette and what hangs
      * in the sky above it. Block Craft is the exception that proves it;
-     * the Nether and the End really are different drawings, because
+     * the Ashlands and the Far Isle really are different drawings, because
      * there the worlds are the story.
      */
     evolutions: [
@@ -874,7 +876,7 @@ export const KID_THEMES = [
     id: 'cybergrid',
     story: 'The city runs on systems. You have learned to run inside them.',
     name: 'Cyber Grid',
-    inspiredBy: 'Cyberpunk style',
+    inspiredBy: 'Cyberpunk',
     blurb: 'Electric purple grids and neon-cyan wireframe boxes.',
     currency: { name: 'Credits', icon: '💎' },
     scene: 'grid',
@@ -894,7 +896,7 @@ export const KID_THEMES = [
      * and Coquette rebuilt out of Cyber Grid wireframes stops being
      * Coquette. What travels is the light — the palette and what hangs
      * in the sky above it. Block Craft is the exception that proves it;
-     * the Nether and the End really are different drawings, because
+     * the Ashlands and the Far Isle really are different drawings, because
      * there the worlds are the story.
      */
     evolutions: [
@@ -942,9 +944,9 @@ export const KID_THEMES = [
   },
   {
     id: 'plumber',
-    story: 'The kingdom keeps losing its princess and finding its courage.',
+    story: 'Every pipe in the kingdom has sprung a leak. Grab your wrench and jump to it.',
     name: 'Plumber Kingdom',
-    inspiredBy: 'Super Mario style',
+    inspiredBy: 'Platform jumping',
     blurb: 'Bright sky-blue boards with classic castle brick dividers.',
     currency: { name: 'Star Coins', icon: '⭐' },
     scene: 'bricks',
@@ -956,7 +958,7 @@ export const KID_THEMES = [
       bg: '#bfe6ff', surface: '#ffffff', surface2: '#e6f4ff', line: '#8cc7ef',
       ink: '#1e3a5f', inkMuted: '#4f7a9c', accent: '#e5342b', accent2: '#c08800',
     },
-    avatar: { motif: 'cap', hues: ['#c08800', '#5cb85c', '#3b82f6', '#e5342b', '#ffffff'] },
+    avatar: { motif: 'cap', hues: ['#c08800', '#5cb85c', '#3b82f6', '#f2711c', '#ffffff'] },
     /*
      * The journey. Four worlds, arriving on the four form levels, so the
      * place changes at the same moment the avatar does.
@@ -965,14 +967,14 @@ export const KID_THEMES = [
      * and Coquette rebuilt out of Cyber Grid wireframes stops being
      * Coquette. What travels is the light — the palette and what hangs
      * in the sky above it. Block Craft is the exception that proves it;
-     * the Nether and the End really are different drawings, because
+     * the Ashlands and the Far Isle really are different drawings, because
      * there the worlds are the story.
      */
     evolutions: [
       {
         level: 10,
-        label: 'Green Hills',
-        story: 'Blue sky, warm pipes, and a run of coins pointing somewhere.',
+        label: 'Meadow Run',
+        story: 'Blue sky, springy platforms, and a run of coins pointing somewhere.',
         sky: 'sun',
         colors: {
           bg: '#eefaf0', surface: '#ffffff', surface2: '#dcf3e0', line: '#aedcb6',
@@ -982,7 +984,7 @@ export const KID_THEMES = [
       {
         level: 25,
         label: 'Underground',
-        story: 'Down a pipe. The music changes and so does everything else.',
+        story: 'Down a drain. The echoes change and so does everything else.',
         sky: 'stars',
         colors: {
           bg: '#eef0f7', surface: '#ffffff', surface2: '#dfe3f0', line: '#b6bedb',
@@ -992,7 +994,7 @@ export const KID_THEMES = [
       {
         level: 50,
         label: 'Lava Castle',
-        story: 'Bridges over orange, and one bridge that needs cutting.',
+        story: 'Stepping stones over orange, and a door at the top nobody has opened.',
         sky: 'eclipse',
         colors: {
           bg: '#fff1ea', surface: '#ffffff', surface2: '#ffded0', line: '#f5b396',
@@ -1001,7 +1003,7 @@ export const KID_THEMES = [
       },
       {
         level: 100,
-        label: 'Star World',
+        label: 'Starlight Path',
         story: 'A secret path above the map, where nothing can touch you.',
         sky: 'comet',
         colors: {
@@ -1015,9 +1017,9 @@ export const KID_THEMES = [
     id: 'neonpulse',
     story: 'The city has a beat. Learn it and the lights start doing what you say.',
     name: 'Neon Pulse',
-    inspiredBy: 'Geometry Dash style',
+    inspiredBy: 'Rhythm runner',
     blurb: 'Pitch-black space cut by razor-sharp neon triangle drifts.',
-    currency: { name: 'Mana Orbs', icon: '🔮' },
+    currency: { name: 'Beat Orbs', icon: '🔮' },
     scene: 'triangles',
     ...base,
     radius: '4px',
@@ -1034,7 +1036,7 @@ export const KID_THEMES = [
      * and Coquette rebuilt out of Cyber Grid wireframes stops being
      * Coquette. What travels is the light — the palette and what hangs
      * in the sky above it. Block Craft is the exception that proves it;
-     * the Nether and the End really are different drawings, because
+     * the Ashlands and the Far Isle really are different drawings, because
      * there the worlds are the story.
      */
     evolutions: [
@@ -1084,9 +1086,9 @@ export const KID_THEMES = [
     id: 'monstertamer',
     story: 'Leave home, meet something wild, and convince it you are worth following.',
     name: 'Monster Tamer',
-    inspiredBy: 'Pokémon style',
-    blurb: 'Handheld-yellow casing with a live elemental companion readout.',
-    currency: { name: 'Pocket Coins', icon: '🪙' },
+    inspiredBy: 'Creature collecting',
+    blurb: 'Sunny handheld casing with a live companion readout.',
+    currency: { name: 'Tamer Coins', icon: '🪙' },
     scene: 'handheld',
     ...base,
     mode: 'light',
@@ -1105,13 +1107,13 @@ export const KID_THEMES = [
      * and Coquette rebuilt out of Cyber Grid wireframes stops being
      * Coquette. What travels is the light — the palette and what hangs
      * in the sky above it. Block Craft is the exception that proves it;
-     * the Nether and the End really are different drawings, because
+     * the Ashlands and the Far Isle really are different drawings, because
      * there the worlds are the story.
      */
     evolutions: [
       {
         level: 10,
-        label: 'Route One',
+        label: 'First Trail',
         story: 'Tall grass, a borrowed bag, and the first thing that rustles.',
         sky: 'sun',
         colors: {
@@ -1131,8 +1133,8 @@ export const KID_THEMES = [
       },
       {
         level: 50,
-        label: 'Volcano Gym',
-        story: 'Heat you can feel through your boots, and a badge waiting behind it.',
+        label: 'Volcano Arena',
+        story: 'Heat you can feel through your boots, and a trophy waiting behind it.',
         sky: 'eclipse',
         colors: {
           bg: '#fff2ea', surface: '#ffffff', surface2: '#ffe0d1', line: '#f5b698',
@@ -1141,7 +1143,7 @@ export const KID_THEMES = [
       },
       {
         level: 100,
-        label: 'Champion Road',
+        label: 'Champion Climb',
         story: 'The last climb. Everything you ever caught comes up it with you.',
         sky: 'rings',
         colors: {

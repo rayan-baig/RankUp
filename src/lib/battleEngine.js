@@ -204,7 +204,7 @@ export function createBattle(canvas, opts = {}) {
       } else if (!a.done) {
         a.done = true; hero.swing = 0.25; b.hit = 0.2; shake = 0.25
         b.hp = a.e.dragon
-        burst(b.x, b.y, 18, ['#ffffff', '#bff6ff', '#e879f9'], 55, 0.6)
+        burst(b.x, b.y, 18, ['#ffffff', '#c8ffdc', '#e879f9'], 55, 0.6)
         pop(`-${a.e.dmg}`, b.x, b.y - 22, '#b9f5b9')
         opts.onEvent?.(a.e)
         if (b.hp === 0) {
@@ -270,13 +270,13 @@ export function createBattle(canvas, opts = {}) {
         hero.swing = 0.25; hero.cd = 0.42
         target.hp -= 1; target.hit = 0.15; shake = 0.12
         const hy = target.type === 'spirit' ? target.anchor : GROUND - 26
-        burst(target.x, hy, 8, ['#ffffff', '#bff6ff', scene.accent], 45, 0.4)
+        burst(target.x, hy, 8, ['#ffffff', '#c8ffdc', scene.accent], 45, 0.4)
         if (target.type !== 'spirit') target.x += hero.face * 8
         if (target.hp <= 0) {
           target.dead = true; shake = 0.25
           const cols = {
-            raider: ['#9aa0a6', '#3a3f47', '#5ad85a'], brute: ['#9aa0a6', '#3a3f47', '#5ad85a'],
-            spirit: ['#ffd23d', '#ff9a2a', '#fff'], shadow: ['#0c0816', '#d06bff', '#fff'],
+            raider: ['#e8e0cc', '#8a3a24', '#5ad85a'], brute: ['#a7afba', '#3a3f47', '#5ad85a'],
+            spirit: ['#ffd23d', '#ff9a2a', '#fff'], shadow: ['#0c0816', '#7ef0ff', '#fff'],
           }[target.type]
           burst(target.x, target.type === 'spirit' ? target.anchor : GROUND - 24, 30, cols, 60, 0.9)
         }
@@ -297,9 +297,9 @@ export function createBattle(canvas, opts = {}) {
         if (f.cd <= 0) { f.cd = 1.6; bolts.push({ x: f.x, y: f.anchor, vx: Math.sign(d) * 70, vy: 14 }) }
       } else if (f.type === 'shadow') {
         if (f.cd <= 0) {
-          f.cd = 1.4; f.blink = 0.3; burst(f.x, GROUND - 16, 10, ['#d06bff', '#3a1a5a'], 30, 0.5)
+          f.cd = 1.4; f.blink = 0.3; burst(f.x, GROUND - 16, 10, ['#7ef0ff', '#1a1440'], 30, 0.5)
           f.x = Math.max(16, Math.min(W - 16, hero.x + (rnd() > 0.5 ? 1 : -1) * (18 + rnd() * 10)))
-          burst(f.x, GROUND - 16, 10, ['#d06bff', '#3a1a5a'], 30, 0.5)
+          burst(f.x, GROUND - 16, 10, ['#7ef0ff', '#1a1440'], 30, 0.5)
         }
         if (Math.abs(d) < 26 && f.cd > 1.0 && f.cd < 1.05) hurtHero()
       }

@@ -72,21 +72,22 @@ const MOTIFS = {
   ),
 }
 
-/** Block Craft's secret companion, revealed by the Nether worlds. */
-function Boarling({ colors }) {
+/**
+ * Block Craft's secret companion, who joins at the Ember Gate: Sparkbit, a
+ * little flying cube with a lantern glow and two leaf wings.
+ */
+function Sparkbit({ colors }) {
   return (
     <g transform="translate(24 22) scale(0.85)" className="anim-float">
-      <ellipse cx="0" cy="2" rx="9" ry="7" fill={colors.accent2} />
-      <circle cx="-6" cy="-1" r="5.5" fill={colors.accent2} />
-      <circle cx="-9" cy="0" r="2.2" fill={colors.accent} />
-      <circle cx="-9.6" cy="-0.4" r="0.4" fill="#000" opacity="0.6" />
-      <circle cx="-8.4" cy="-0.4" r="0.4" fill="#000" opacity="0.6" />
-      <path d="M-7 -5 L-5 -8 L-3.5 -4.6 Z" fill={colors.accent2} />
-      <circle cx="-4.5" cy="-2.5" r="0.8" fill="#1a0f0a" />
-      <path d="M-2 -6 L0 -9 L2 -5.6 Z" fill={colors.accent2} opacity="0.9" />
-      <rect x="-5" y="7" width="2" height="4" fill={colors.accent2} />
-      <rect x="3" y="7" width="2" height="4" fill={colors.accent2} />
-      <path d="M8 0 q4 -1 3 3" stroke={colors.accent2} strokeWidth="1.4" fill="none" />
+      <circle r="11" fill={colors.accent} opacity="0.25" />
+      <path d="M-6 -3 C-14 -10 -17 -1 -9 3 Z" fill={colors.accent2} opacity="0.9" />
+      <path d="M6 -3 C14 -10 17 -1 9 3 Z" fill={colors.accent2} opacity="0.9" />
+      <rect x="-6.5" y="-6.5" width="13" height="13" rx="3" fill="#fff6e0" stroke={colors.accent} strokeWidth="1.2" />
+      <rect x="-4.5" y="-2.5" width="9" height="5" rx="2" fill="#0e1430" />
+      <rect x="-2.8" y="-1.6" width="1.6" height="3" rx="0.8" fill={colors.accent} />
+      <rect x="1.2" y="-1.6" width="1.6" height="3" rx="0.8" fill={colors.accent} />
+      <path d="M0 -6.5 L0 -9.5" stroke={colors.accent2} strokeWidth="1.2" strokeLinecap="round" />
+      <circle cy="-10.5" r="1.4" fill={colors.accent} />
     </g>
   )
 }
@@ -220,7 +221,7 @@ export default function Avatar({ theme, level = 1, size = 120, companion = false
             </g>
           )}
 
-          {companion && <Boarling colors={c} />}
+          {companion && <Sparkbit colors={c} />}
         </svg>
         <SparkleBurst trigger={burst} colors={hues} />
       </Wrapper>

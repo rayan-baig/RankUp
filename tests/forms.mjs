@@ -2,7 +2,7 @@
  * Avatar forms, and the one theme that has its own ladder.
  *
  * Block Craft runs to nine forms because its later levels are a story —
- * the portal, the Nether, the End, the dragon — while every other theme
+ * the portal, the Ashlands, the Far Isle, the dragon — while every other theme
  * stops at five. That is easy to break by accident in either direction:
  * give everything nine and the other fourteen themes promise forms that
  * do not exist; give everything five and Block Craft's story stops

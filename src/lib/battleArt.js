@@ -223,13 +223,17 @@ export function makeArt(g) {
       glow(70, 40, 90, '#6b2fbf', 0.35)
       glow(200, 30, 70, '#1f8fa8', 0.2)
       for (let i = 0; i < 90; i++) dot(hash(i, 1) * W, hash(i, 2) * 100, 0.3 + hash(i, 5) * 0.4, 'rgba(230,215,255,.6)')
+      // Crystal spires, lit from inside.
       for (const [x, h] of END_PILLARS) {
-        box(x - 6, GROUND - h, 12, h, 1, lin(x - 6, 0, x + 6, 0, '#2a1d40', '#0b0714'))
-        g.strokeStyle = 'rgba(180,140,255,.18)'; g.lineWidth = 0.5
-        for (let y = GROUND - h + 6; y < GROUND; y += 6) { g.beginPath(); g.moveTo(x - 6, y); g.lineTo(x + 6, y); g.stroke() }
+        g.beginPath()
+        g.moveTo(x - 7, GROUND); g.lineTo(x - 4.5, GROUND - h + 12); g.lineTo(x, GROUND - h); g.lineTo(x + 4.5, GROUND - h + 12); g.lineTo(x + 7, GROUND)
+        g.closePath()
+        g.fillStyle = lin(x - 7, 0, x + 7, 0, '#3a2f7a', '#8a7ae8', '#2a2058'); g.fill()
+        g.strokeStyle = 'rgba(214,180,255,.45)'; g.lineWidth = 0.6
+        g.beginPath(); g.moveTo(x, GROUND - h); g.lineTo(x, GROUND); g.stroke()
       }
-      groundBand(['#f4efc2', '#d6cc8f'], ['#c9bf84', '#8c834f'], '#fffbe0', 'rgba(80,70,30,.18)')
-      g.fillStyle = 'rgba(120,110,60,.25)'
+      groundBand(['#6a58c0', '#3f2f88'], ['#2a2058', '#140f30'], '#d6b4ff', 'rgba(0,0,0,.25)')
+      g.fillStyle = 'rgba(214,180,255,.25)'
       for (let i = 0; i < 14; i++) { g.beginPath(); g.ellipse(hash(i, 7) * W, GROUND + 8 + hash(i, 8) * 18, 2 + hash(i, 6) * 2, 1, 0, 0, TAU); g.fill() }
     }
   }
@@ -289,13 +293,13 @@ export function makeArt(g) {
         const tw = (Math.sin(t * 2 + i) + 1) / 2
         dot(hash(i, 11) * W, hash(i, 12) * 96, 0.4 + hash(i, 13) * 0.4, `rgba(235,220,255,${0.3 + tw * 0.7})`)
       }
+      // A shard of light hangs over every spire, rising and falling.
       END_PILLARS.forEach(([x, h], i) => {
-        const y = GROUND - h - 7 + Math.sin(t * 2 + i) * 1.5
+        const y = GROUND - h - 8 + Math.sin(t * 2 + i) * 2
         const p = (Math.sin(t * 3 + i) + 1) / 2
-        glow(x, y, 14, '#ff8adf', 0.4 + p * 0.3)
-        g.save(); g.translate(x, y); g.rotate(t * 1.5 + i)
-        box(-3, -3, 6, 6, 1, lin(-3, -3, 3, 3, '#ffe6fb', '#d36bff'))
-        g.restore()
+        glow(x, y, 12, '#7ef0ff', 0.35 + p * 0.3)
+        g.beginPath(); g.moveTo(x, y - 4); g.lineTo(x + 2, y); g.lineTo(x, y + 4); g.lineTo(x - 2, y); g.closePath()
+        g.fillStyle = lin(x, y - 4, x, y + 4, '#f2fdff', '#9fe8ff'); g.fill()
       })
     }
     if (portalAt != null) portal(portalAt, t)
@@ -312,31 +316,56 @@ export function makeArt(g) {
     }
   }
 
+  /** The Ember Gate: an arch of dark stone with fire in its seams, and a rift inside. */
+  function arch(cx, cy, r, bottom) {
+    g.beginPath()
+    g.moveTo(cx - r, bottom); g.lineTo(cx - r, cy)
+    g.arc(cx, cy, r, Math.PI, 0)
+    g.lineTo(cx + r, bottom); g.closePath()
+  }
+
   function portal(x, t) {
-    const top = GROUND - 46
-    // Obsidian frame, block by block.
-    for (let y = top; y < GROUND; y += 8) {
-      box(x, y, 6, 8, 1, lin(x, y, x + 6, y + 8, '#3a2860', '#0f0820'))
-      box(x + 26, y, 6, 8, 1, lin(x + 26, y, x + 32, y + 8, '#3a2860', '#0f0820'))
-    }
-    for (let i = 0; i < 4; i++) box(x + i * 8, top - 6, 8, 6, 1, lin(x, top - 6, x, top, '#3a2860', '#0f0820'))
-    // The swirl.
+    const cx = x + 16
+    const cy = GROUND - 32
+    const pulse = 0.5 + Math.sin(t * 4) * 0.15
+    glow(cx, cy + 6, 36, '#ff7a2d', pulse)
+    arch(cx, cy, 16, GROUND)
+    g.fillStyle = lin(cx - 16, 0, cx + 16, 0, '#3a302c', '#1d1714', '#120e0c'); g.fill()
+    // The rift.
     g.save()
-    rr(x + 6, top, 20, GROUND - top, 1); g.clip()
-    g.fillStyle = lin(x, top, x, GROUND, '#7a2cd6', '#3b0f85'); g.fillRect(x + 6, top, 20, GROUND - top)
+    arch(cx, cy, 10, GROUND); g.clip()
+    g.fillStyle = lin(0, cy - 10, 0, GROUND, '#ffe08a', '#ff6a1f', '#7a1206'); g.fillRect(cx - 10, cy - 10, 20, GROUND - cy + 10)
     g.globalCompositeOperation = 'lighter'
     for (let i = 0; i < 7; i++) {
-      const a = t * (0.8 + i * 0.15) + i
-      g.fillStyle = `rgba(200,120,255,${0.12 + (i % 3) * 0.04})`
-      g.beginPath(); g.ellipse(x + 16 + Math.sin(a) * 4, top + 8 + i * 6 + Math.cos(a * 1.3) * 3, 9, 3, a, 0, TAU); g.fill()
+      const a = t * (0.9 + i * 0.15) + i
+      g.fillStyle = `rgba(255,210,140,${0.12 + (i % 3) * 0.05})`
+      g.beginPath(); g.ellipse(cx + Math.sin(a) * 3, cy - 4 + i * 6 + Math.cos(a * 1.3) * 2, 7, 2.4, a, 0, TAU); g.fill()
     }
     g.restore()
-    glow(x + 16, top + 22, 34, '#b26bff', 0.45 + Math.sin(t * 4) * 0.1)
+    // Seams between the stones, lit from behind.
+    g.strokeStyle = `rgba(255,150,60,${0.5 + pulse * 0.4})`; g.lineWidth = 0.6
+    g.beginPath()
+    for (const a of [0.2, 0.4, 0.6, 0.8]) {
+      const ang = Math.PI + a * Math.PI
+      g.moveTo(cx + Math.cos(ang) * 10, cy + Math.sin(ang) * 10); g.lineTo(cx + Math.cos(ang) * 16, cy + Math.sin(ang) * 16)
+    }
+    for (let y = cy + 8; y < GROUND; y += 8) { g.moveTo(cx - 16, y); g.lineTo(cx - 10, y); g.moveTo(cx + 10, y); g.lineTo(cx + 16, y) }
+    g.stroke()
+    // Three runes: one on the keystone, one on each side.
+    for (const [rx, ry] of [[cx, cy - 13], [cx - 13, cy + 14], [cx + 13, cy + 14]]) {
+      glow(rx, ry, 4, '#ffb302', pulse + 0.2)
+      box(rx - 0.8, ry - 1.6, 1.6, 3.2, 0.6, '#ffe8a0')
+    }
   }
 
   /* ============================================================ characters */
   const flashOf = (n) => n > 0 && Math.floor(n * 30) % 2 === 0
 
+  /*
+   * The hero: the same cube-helmed adventurer as the avatar pictures — an
+   * ivory helmet with a dark visor and two green eyes, a sprout on top, an
+   * orange scarf and a purple tunic.
+   */
   function hero(h, t) {
     const hurt = flashOf(h.hurt)
     const C = (c) => (hurt ? mix(c, '#ff4d4d', 0.55) : c)
@@ -346,37 +375,45 @@ export function makeArt(g) {
     g.scale(h.face, 1)
     const walk = h.moving ? Math.sin(t * 14) : 0
     const bob = h.moving ? Math.abs(Math.cos(t * 14)) * 1 : Math.sin(t * 3) * 0.35
-    limb(-2.6, -13, 5, 13, walk * 0.6, C('#3e5fd8'), C('#243c99'), C('#3a2a20'))
-    limb(2.6, -13, 5, 13, -walk * 0.6, C('#4a6cf0'), C('#2a46b0'), C('#3a2a20'))
+    limb(-2.6, -13, 5, 13, walk * 0.6, C('#4a3560'), C('#2a1d3a'), C('#6b4426'))
+    limb(2.6, -13, 5, 13, -walk * 0.6, C('#57406f'), C('#33244a'), C('#6b4426'))
     g.translate(0, -bob)
-    limb(-5.5, -25, 4.4, 11, h.raise ? -2.6 : walk * 0.5 + 0.1, C('#e8b48a'), C('#c08560'))
-    // Shirt, belt.
-    box(-7, -27, 14, 15, 3, lin(-7, -27, 7, -12, C('#3fd0c8'), C('#178c93')))
-    box(-7, -15, 14, 2.2, 1, C('#5b3a1e'))
-    box(-1.2, -15.2, 2.4, 2.6, 0.6, '#e8c45a')
-    // Head.
-    box(-7.5, -41.5, 15, 15, 3.6, lin(-7.5, -41, 7.5, -26, C('#f5c8a0'), C('#cf9466')))
-    box(-8, -43, 16, 6, 3, lin(0, -43, 0, -37, C('#6b4426'), C('#3f2512')))
-    box(-8, -40, 4.5, 8, 2, C('#4a2d16'))
-    // A face that means it: eye, brow, mouth.
-    box(1.6, -36, 3.6, 3.4, 1, '#ffffff')
-    box(3.2, -35.4, 1.9, 2.4, 0.8, '#1d2a6b')
-    dot(3.8, -35, 0.45, '#ffffff')
-    g.strokeStyle = '#3f2512'; g.lineWidth = 1; g.lineCap = 'round'
-    g.beginPath(); g.moveTo(1.2, -37.6); g.lineTo(5.6, -38.4); g.stroke()
-    g.lineWidth = 0.7
-    g.beginPath(); g.moveTo(2.8, -30); g.lineTo(5.6, -30.4); g.stroke()
-    // Sword arm.
+    // The scarf's tail, streaming out behind.
+    const flap = Math.sin(t * 9) * 1.4
+    g.beginPath()
+    g.moveTo(-4, -28); g.quadraticCurveTo(-12, -28 + flap, -17, -23 + flap); g.lineTo(-15, -20 + flap)
+    g.quadraticCurveTo(-10, -24, -3, -25); g.closePath()
+    g.fillStyle = C('#ff8a3d'); g.fill()
+    limb(-5.5, -25, 4.4, 11, h.raise ? -2.6 : walk * 0.5 + 0.1, C('#7a4cc0'), C('#4a2a7e'), C('#efe3cc'))
+    // Tunic, belt, and the scarf round the neck.
+    box(-7, -27, 14, 15, 3, lin(-7, -27, 7, -12, C('#8a5ad0'), C('#4a2a7e')))
+    box(-7, -15, 14, 2.2, 1, C('#6b4426'))
+    box(-1.2, -15.2, 2.4, 2.6, 0.6, '#f2b544')
+    box(-7.5, -29.5, 15, 4.2, 2, lin(0, -29.5, 0, -25.3, C('#ffb05a'), C('#e5541e')))
+    // The helmet: a rounded ivory cube with a visor on the front.
+    box(-8, -45, 16, 16, 3.8, lin(-8, -45, 8, -29, C('#fffaf0'), C('#cdb994')))
+    box(-6, -44, 9, 2, 1, 'rgba(255,255,255,.6)')
+    box(-2.5, -40.5, 10.5, 7, 2.8, '#0e1430')
+    glow(4, -37, 6, '#7dffb0', 0.55)
+    box(0.6, -39.4, 1.9, 4, 0.95, '#7dffb0')
+    box(4.2, -39.4, 1.9, 4, 0.95, '#7dffb0')
+    // A sprout grows out of the top.
+    g.strokeStyle = '#2f8a45'; g.lineWidth = 1; g.lineCap = 'round'
+    g.beginPath(); g.moveTo(0, -45); g.quadraticCurveTo(-0.6, -47.5, 0.4, -49); g.stroke()
+    g.fillStyle = '#6be37a'
+    g.beginPath(); g.ellipse(2.6, -49.6, 2.6, 1.2, -0.4, 0, TAU); g.fill()
+    // Sword arm: a leaf-green blade with a wrapped hilt.
     const ang = h.raise ? -Math.PI / 2 - 0.2 : h.swing > 0 ? -2.3 + (1 - h.swing / 0.25) * 3.1 : -0.9
     g.save()
     g.translate(2, -24)
     g.rotate(ang)
-    box(-2.2, -2.2, 12, 4.4, 2, lin(0, -2, 0, 2, C('#f5c8a0'), C('#c08560')))
-    box(9.5, -3.5, 1.8, 7, 0.8, '#7a5230')
-    box(11, -1, 3, 2, 0.6, '#5b3a1e')
-    g.beginPath(); g.moveTo(13.5, -1.8); g.lineTo(31, -1); g.lineTo(34, 0); g.lineTo(31, 1); g.lineTo(13.5, 1.8); g.closePath()
-    g.fillStyle = lin(13, -2, 13, 2, '#e9ffff', '#5fe4f2', '#1aa7c4'); g.fill()
-    if (h.swing > 0 || h.raise) glow(24, 0, 12, '#7ff3ff', h.raise ? 0.5 : 0.8)
+    box(-2.2, -2.2, 12, 4.4, 2, lin(0, -2, 0, 2, C('#8a5ad0'), C('#4a2a7e')))
+    box(8, -2.4, 3, 4.8, 1.6, C('#efe3cc'))
+    box(10.2, -3.6, 1.8, 7.2, 0.8, '#f2b544')
+    box(11.6, -1.1, 3, 2.2, 0.6, '#ff8a3d')
+    g.beginPath(); g.moveTo(14, -2); g.quadraticCurveTo(24, -3.6, 33, 0); g.quadraticCurveTo(24, 3.2, 14, 2); g.closePath()
+    g.fillStyle = lin(14, -2, 14, 2, '#f0fff4', '#7dffb0', '#2fae6a'); g.fill()
+    if (h.swing > 0 || h.raise) glow(24, 0, 12, '#9dffc8', h.raise ? 0.5 : 0.8)
     g.restore()
     g.restore()
     if (h.swing > 0.03) {
@@ -386,14 +423,15 @@ export function makeArt(g) {
       g.translate(h.x + h.face * 2, GROUND + h.jump - 25)
       g.scale(h.face, 1)
       g.lineCap = 'round'
-      g.strokeStyle = `rgba(120,240,255,${a * 0.5})`; g.lineWidth = 5
+      g.strokeStyle = `rgba(125,255,176,${a * 0.5})`; g.lineWidth = 5
       g.beginPath(); g.arc(0, 0, 30, -1.3, 0.8); g.stroke()
-      g.strokeStyle = `rgba(235,255,255,${a})`; g.lineWidth = 1.6
+      g.strokeStyle = `rgba(235,255,240,${a})`; g.lineWidth = 1.6
       g.beginPath(); g.arc(0, 0, 30, -1.1, 0.7); g.stroke()
       g.restore()
     }
   }
 
+  /* The raiders: hooded, behind pale masks with slit eyes. The brute wears iron. */
   function raider(e, t, face, brute) {
     const s = brute ? 1.35 : 1
     const white = e.hit > 0
@@ -403,18 +441,24 @@ export function makeArt(g) {
     g.translate(e.x, GROUND)
     g.scale(face * s, s)
     const walk = e.moving ? Math.sin(t * 12 + e.x) : 0
-    limb(-2.5, -12, 4.6, 12, walk * 0.6, C('#3a3f4a'), C('#22252c'), C('#1a1a1a'))
-    limb(2.5, -12, 4.6, 12, -walk * 0.6, C('#454b57'), C('#2a2e36'), C('#1a1a1a'))
-    // Robe, with a sash; the brute wears iron.
-    box(-7, -27, 14, 17, 3, lin(-7, -27, 7, -10, C(brute ? '#7a2a2a' : '#4e5566'), C(brute ? '#3a0f12' : '#2a2f3a')))
-    if (brute) box(-7.5, -27, 15, 6, 2.5, lin(0, -27, 0, -21, C('#c9ced6'), C('#7b828c')))
-    else box(-7, -20, 14, 2, 0.8, C('#6b2a2a'))
-    // Grey head, long nose, one angry brow.
-    box(-6.5, -40, 13, 13.5, 3, lin(-6.5, -40, 6.5, -26, C('#b4bcb6'), C('#7d867f')))
-    box(5, -34.5, 4, 5.5, 1.6, C('#8f9891'))
-    g.fillStyle = '#1b1b1b'; g.fillRect(-1, -36.5, 7, 1.6)
-    box(1.3, -34.8, 2.4, 1.8, 0.6, '#ffffff')
-    dot(2.6, -33.9, 0.7, '#14202a')
+    limb(-2.5, -12, 4.6, 12, walk * 0.6, C('#3a2f2a'), C('#211a16'), C('#141010'))
+    limb(2.5, -12, 4.6, 12, -walk * 0.6, C('#463a33'), C('#2a211c'), C('#141010'))
+    box(-7, -27, 14, 17, 3, lin(-7, -27, 7, -10, C(brute ? '#3a3f4a' : '#8a3a24'), C(brute ? '#15181e' : '#4a1a10')))
+    if (brute) {
+      box(-7.5, -27, 15, 7, 2.5, lin(0, -27, 0, -20, C('#a7afba'), C('#5b636e')))
+      dot(-4, -23.5, 0.7, '#2a2e36'); dot(4, -23.5, 0.7, '#2a2e36')
+    } else box(-7, -20, 14, 2, 0.8, C('#2a1a12'))
+    // Hood, and the mask inside it.
+    box(-7.5, -42, 15, 16, 5, lin(-7.5, -42, 7.5, -26, C(brute ? '#4a525e' : '#5a2a1c'), C(brute ? '#20242b' : '#2a120c')))
+    if (brute) box(-7.5, -43.5, 15, 3, 1.5, C('#8c96a3'))
+    box(-1, -38.5, 7.5, 9.5, 2.6, C('#e8e0cc'))
+    g.fillStyle = '#ff3b2f'
+    for (const ex of [0.4, 3.6]) {
+      g.beginPath(); g.moveTo(ex, -35.8); g.lineTo(ex + 2.4, -35); g.lineTo(ex + 2.4, -33.8); g.lineTo(ex, -34.6); g.closePath(); g.fill()
+    }
+    glow(3, -34.6, 4, '#ff3b2f', 0.5)
+    g.strokeStyle = 'rgba(80,60,40,.5)'; g.lineWidth = 0.5
+    g.beginPath(); g.moveTo(1, -31.5); g.lineTo(5.5, -31.5); g.stroke()
     // The axe, raised when it swings.
     const lift = e.attack > 0 ? -1.4 : -0.35
     g.save()
@@ -427,53 +471,73 @@ export function makeArt(g) {
     g.restore()
   }
 
+  /* An ember wisp: a little living flame, with two sparks circling it. */
   function spirit(e, t) {
     const x = e.x
     const y = e.anchor + Math.sin(t * 3 + e.x) * 3
     const white = e.hit > 0
     glow(x, y, 26, '#ff8a1f', 0.55)
-    // Rods spin round it; the ones behind are drawn first and darker.
-    const rods = [0, 1, 2, 3].map((i) => {
-      const a = t * 3 + (i * TAU) / 4
-      return { a, z: Math.sin(a) }
-    }).sort((p, q) => p.z - q.z)
-    const rod = (r) => {
-      const rx = x + Math.cos(r.a) * 11
-      const ry = y + 6 + r.z * 2.5
-      box(rx - 1.6, ry - 5, 3.2, 10, 1.5, lin(rx, ry - 5, rx, ry + 5, r.z > 0 ? '#ffe28a' : '#d98a1f', r.z > 0 ? '#ff9a1f' : '#8a4a0f'))
-    }
-    rods.filter((r) => r.z <= 0).forEach(rod)
-    box(x - 6, y - 6, 12, 12, 3, white ? '#ffffff' : lin(x - 6, y - 6, x + 6, y + 6, '#fff3a0', '#ffb31f', '#e0700f'))
-    box(x - 3.5, y - 2, 2.4, 2.6, 0.6, '#3b1a00')
-    box(x + 1.1, y - 2, 2.4, 2.6, 0.6, '#3b1a00')
-    rods.filter((r) => r.z > 0).forEach(rod)
-    for (let i = 0; i < 3; i++) glow(x + Math.sin(t * 5 + i * 2) * 5, y - 8 - ((t * 20 + i * 6) % 14), 3, '#ffcf5a', 0.7)
+    const sparks = [0, 1].map((i) => {
+      const a = t * 3 + i * Math.PI
+      return { x: x + Math.cos(a) * 12, y: y + Math.sin(a) * 4, z: Math.sin(a) }
+    })
+    const spark = (p) => { glow(p.x, p.y, 3.5, '#ffcf5a', 0.9); dot(p.x, p.y, 1.3, '#fff3c0') }
+    sparks.filter((p) => p.z <= 0).forEach(spark)
+    const flick = Math.sin(t * 12 + x) * 1.5
+    g.beginPath()
+    g.moveTo(x + flick * 0.5, y - 15)
+    g.bezierCurveTo(x + 4, y - 9, x + 9, y - 3, x + 8, y + 3)
+    g.bezierCurveTo(x + 8, y + 10, x - 8, y + 10, x - 8, y + 3)
+    g.bezierCurveTo(x - 9, y - 3, x - 4, y - 9, x + flick * 0.5, y - 15)
+    g.fillStyle = white ? '#ffffff' : lin(x, y - 15, x, y + 9, '#fff3a0', '#ffb31f', '#e0500f'); g.fill()
+    g.beginPath()
+    g.moveTo(x, y - 6)
+    g.bezierCurveTo(x + 4, y - 2, x + 5, y + 3, x, y + 6)
+    g.bezierCurveTo(x - 5, y + 3, x - 4, y - 2, x, y - 6)
+    g.fillStyle = 'rgba(255,248,214,.75)'; g.fill()
+    dot(x - 2.6, y + 1.5, 1.2, '#3b1a00'); dot(x + 2.6, y + 1.5, 1.2, '#3b1a00')
+    g.strokeStyle = '#3b1a00'; g.lineWidth = 0.7; g.lineCap = 'round'
+    g.beginPath(); g.moveTo(-4.2 + x, y - 1); g.lineTo(-1.4 + x, y); g.moveTo(4.2 + x, y - 1); g.lineTo(1.4 + x, y); g.stroke()
+    sparks.filter((p) => p.z > 0).forEach(spark)
+    for (let i = 0; i < 3; i++) glow(x + Math.sin(t * 5 + i * 2) * 5, y - 12 - ((t * 20 + i * 6) % 14), 3, '#ffcf5a', 0.7)
   }
 
+  /* A shade from the Far Isle: an empty cloak that floats, with two cold eyes in the hood. */
   function shadowWalker(e, t, face) {
     if (e.blink > 0 && Math.floor(e.blink * 20) % 2) return
     const white = e.hit > 0
     const C = (c) => (white ? mix(c, '#ffffff', 0.8) : c)
-    shadow(e.x, 9, 0.5)
-    for (let i = 0; i < 5; i++) {
-      const a = t * 2 + i * 1.3
-      glow(e.x + Math.cos(a) * 9, GROUND - 22 + Math.sin(a * 1.4) * 14, 2.4, '#c25bff', 0.7)
+    const hover = Math.sin(t * 2.4 + e.x) * 1.5
+    shadow(e.x, 9, 0.35)
+    for (let i = 0; i < 4; i++) {
+      const a = t * 2 + i * 1.6
+      glow(e.x + Math.cos(a) * 11, GROUND - 22 + Math.sin(a * 1.3) * 12, 2.2, '#7ef0ff', 0.6)
     }
+    const base = GROUND - 6 + hover
     g.save()
-    g.translate(e.x, GROUND)
+    g.translate(e.x, base)
     g.scale(face, 1)
-    const sway = Math.sin(t * 2 + e.x) * 0.08
-    limb(-2, -24, 2.6, 24, sway, C('#211832'), C('#0a0712'))
-    limb(2, -24, 2.6, 24, -sway, C('#211832'), C('#0a0712'))
-    box(-5.5, -38, 11, 15, 2, lin(-5.5, -38, 5.5, -23, C('#261b3a'), C('#0a0712')))
-    limb(-6.5, -36, 2.4, 25, 0.12 + sway, C('#1d152b'), C('#08060d'))
-    limb(6.5, -36, 2.4, 25, -0.12 - sway, C('#1d152b'), C('#08060d'))
-    box(-6, -49, 12, 11, 2.5, lin(-6, -49, 6, -38, C('#2a1f40'), C('#0b0814')))
+    const sway = Math.sin(t * 3 + e.x) * 1.2
+    g.beginPath()
+    g.moveTo(-6, -34)
+    g.quadraticCurveTo(-10, -14, -12 + sway, 0)
+    g.lineTo(-8, -3); g.lineTo(-5 + sway * 0.5, 1); g.lineTo(-1, -3); g.lineTo(3 + sway * 0.5, 1); g.lineTo(7, -3); g.lineTo(11 + sway, 0)
+    g.quadraticCurveTo(9, -14, 6, -34)
+    g.closePath()
+    g.fillStyle = lin(0, -34, 0, 0, C('#2e2758'), C('#0a0818')); g.fill()
+    // Sleeves, drifting.
+    limb(-6, -31, 3.4, 16, 0.35 + sway * 0.05, C('#2a2350'), C('#110e24'))
+    limb(6, -31, 3.4, 16, -0.35 - sway * 0.05, C('#2a2350'), C('#110e24'))
+    // The hood, and the dark inside it.
+    g.beginPath(); g.moveTo(-7, -30); g.quadraticCurveTo(-7, -46, 1, -46); g.quadraticCurveTo(8, -46, 8, -31); g.closePath()
+    g.fillStyle = lin(0, -46, 0, -30, C('#3b3270'), C('#1a1538')); g.fill()
+    g.fillStyle = '#05040c'
+    g.beginPath(); g.ellipse(2.2, -36.5, 4.2, 5, 0, 0, TAU); g.fill()
     g.restore()
-    const ex = e.x + face * 1.5
-    for (const d of [-2.6, 2.6]) {
-      box(ex + d - 1.4, GROUND - 45, 2.8, 1.2, 0.5, '#f2b6ff')
-      glow(ex + d, GROUND - 44.4, 5, '#d24bff', 0.9)
+    const ex = e.x + face * 2.4
+    for (const d of [-1.7, 1.7]) {
+      glow(ex + d, base - 37, 5, '#7ef0ff', 0.9)
+      dot(ex + d, base - 37, 0.9, '#e6fdff')
     }
   }
 
@@ -580,35 +644,41 @@ export function makeArt(g) {
     g.restore()
 
     const [eyeX, eyeY] = toWorld(-34, -15.5)
-    box(eyeX - 2, eyeY - 1, 4, 2, 0.8, '#ffe6ff')
-    glow(eyeX, eyeY, 12, '#ff3df2', white ? 0.4 : 1)
+    box(eyeX - 2, eyeY - 1, 4, 2, 0.8, '#fff3c0')
+    glow(eyeX, eyeY, 12, '#ffb302', white ? 0.4 : 1)
 
     if (e.breath > 0) {
       const [mx, my] = toWorld(-44, -9)
-      glow(mx, my, 14, '#ff6bf0', e.breath)
+      glow(mx, my, 14, '#ffb84d', e.breath)
       for (let i = 0; i < 16; i++) {
         const d = i * 4.5 + (1 - e.breath) * 14
         const bx = mx + e.face * d
         const by = my + d * 0.62
-        glow(bx, by, 4 + i * 0.55, i % 2 ? '#c64bff' : '#ff6bf0', e.breath)
-        dot(bx, by, 1 + i * 0.12, `rgba(255,230,255,${e.breath * 0.8})`)
+        glow(bx, by, 4 + i * 0.55, i % 2 ? '#ff6bb5' : '#ffb84d', e.breath)
+        dot(bx, by, 1 + i * 0.12, `rgba(255,244,220,${e.breath * 0.8})`)
       }
     }
   }
 
+  const SKIN = ['#f1c7a0', '#c98a5e', '#8a5a3c', '#e8b98d', '#a8714a']
+  const HAIR = ['#3b2412', '#1a1a1a', '#c46a2a', '#5a3a1a', '#e8d07a']
+
   function villager(v, t) {
     const y = GROUND - Math.max(0, Math.sin(t * 6 + v.p) * 5)
+    const k = Math.round(v.p / 1.3) % 5
     shadow(v.x, 9, 0.35)
     g.save()
     g.translate(v.x, y)
     const cheer = Math.sin(t * 6 + v.p) > 0
-    limb(-5.5, -22, 3.6, 10, cheer ? -2.7 : 0.3, '#d8a57a', '#b47f56')
-    limb(5.5, -22, 3.6, 10, cheer ? 2.7 : -0.3, '#d8a57a', '#b47f56')
+    limb(-5.5, -22, 3.6, 10, cheer ? -2.7 : 0.3, SKIN[k], mix(SKIN[k], '#000000', 0.2))
+    limb(5.5, -22, 3.6, 10, cheer ? 2.7 : -0.3, SKIN[k], mix(SKIN[k], '#000000', 0.2))
     box(-6.5, -24, 13, 24, 3, lin(-6.5, -24, 6.5, 0, mix(v.c, '#ffffff', 0.2), mix(v.c, '#000000', 0.35)))
-    box(-6, -37, 12, 13, 3, lin(-6, -37, 6, -24, '#e8b98d', '#b98258'))
-    box(-1.6, -32, 3.2, 6, 1.4, '#a8714a')
-    g.fillStyle = '#3b2412'; g.fillRect(-4.5, -33.5, 9, 1.2)
-    dot(-2.6, -31.6, 0.8, '#2a3a1a'); dot(2.6, -31.6, 0.8, '#2a3a1a')
+    box(-6, -37, 12, 13, 3.5, lin(-6, -37, 6, -24, SKIN[k], mix(SKIN[k], '#000000', 0.18)))
+    box(-6.5, -38.5, 13, 5, 2.5, HAIR[k])
+    dot(-2.4, -31.2, 0.85, '#2a1a10'); dot(2.4, -31.2, 0.85, '#2a1a10')
+    dot(-3.6, -29, 1, 'rgba(255,120,120,.35)'); dot(3.6, -29, 1, 'rgba(255,120,120,.35)')
+    g.strokeStyle = '#5a2a1a'; g.lineWidth = 0.7; g.lineCap = 'round'
+    g.beginPath(); g.arc(0, -29.4, cheer ? 2.2 : 1.6, 0.2, Math.PI - 0.2); g.stroke()
     g.restore()
   }
 

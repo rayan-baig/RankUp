@@ -114,10 +114,10 @@ that level up:
 
 | Level | Becomes | Extra |
 |---|---|---|
-| 51 | Volcanic Crimson | Reveals the **Boarling** companion, which then stays for good |
-| 101 | Pale Cream (`#E5E3A7`) with purple shadows | |
-| 200 | Nether | Glitch transition on entry |
-| 300 | End Void | Glitch transition on entry |
+| 125 | The Ember Gate | Glitch transition on entry; **Sparkbit** the companion joins and stays |
+| 175 | The Ashlands | |
+| 250 | The Far Isle | Glitch transition on entry |
+| 399 | The Dragon | Opens Hero's Return once the dragon falls |
 
 ### The 5-tier avatar
 

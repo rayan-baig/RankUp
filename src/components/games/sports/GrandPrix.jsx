@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 /**
- * Formula 1: the start, then one flying lap.
+ * Grand Prix: the start, then one flying lap.
  *
  * Not a driving game. The two things that actually decide a Grand Prix and
  * fit in a phone-sized minigame are the launch — five lights out and your

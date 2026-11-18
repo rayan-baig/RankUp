@@ -194,7 +194,7 @@ localStorage.setItem('rankup.state.v1', JSON.stringify(s))
 location.reload()
 ```
 
-Block Craft at 125 becomes **The Nether Portal**; at 250, **The End**; at 399,
+Block Craft at 125 becomes **The Ember Gate**; at 250, **The Far Isle**; at 399,
 **The Dragon**. The others travel by light rather than geometry — see §9.
 
 ---
@@ -409,7 +409,7 @@ Elite multiplies all XP by **1.5**.
 
 ### Currency and caps
 
-- Coins are themed per world — Pink Crystals, V-Coins, Berberries, Star Shards…
+- Coins are themed per world — Pink Crystals, Drop Coins, Berberries, Star Shards…
 - **Arcade: `MAX_TOKENS = 5`, `DAILY_COIN_CAP = 15`.** A token comes from an
   approved chore and from nothing else; the daily cap stops the arcade becoming
   a coin faucet.
@@ -460,7 +460,7 @@ whichever scene is underneath.
 
 **Block Craft is the exception** — nine forms rather than five, and worlds that
 really are different drawings, because there the worlds *are* the story:
-Overworld → The Nether Portal (125) → Nether Rise (175) → The End (250) →
+the village → The Ember Gate (125) → The Ashlands (175) → The Far Isle (250) →
 The Dragon (399).
 
 ### The Block Craft story, battles and the dragon fight
@@ -476,9 +476,9 @@ something less pixelated):
 | Chapter | Opens at | Scene |
 |---|---|---|
 | Raid Night | level 1 | raiders at the village gate |
-| The Nether Portal | 125 | through the portal — **glitch** arrival |
-| Nether Rise | 175 | the raiders' fortress |
-| The End | 250 | shadow walkers — **glitch** arrival |
+| The Ember Gate | 125 | through the gate — **glitch** arrival |
+| The Ashlands | 175 | the raiders' fortress |
+| The Far Isle | 250 | cloaked shades — **glitch** arrival |
 | The Dragon | 399 | the boss fight, powered by chores |
 | Hero's Return | **when the dragon is beaten** | the village cheers you home |
 

@@ -6,8 +6,8 @@
  *
  * HOW MANY FORMS: five for most themes, but a theme can set its own ladder
  * in src/data/kidThemes.js. Block Craft runs to nine, because its later
- * levels are a story rather than a recolour — the portal, the Nether, the
- * End, the dragon — and stopping that at five would end the story halfway.
+ * levels are a story rather than a recolour — the portal, the Ashlands, the
+ * Far Isle, the dragon — and stopping that at five would end the story halfway.
  *
  * Everything that shows a form number asks the theme rather than assuming
  * five, so a child on Block Craft is told "form 6 of 9" and a child on

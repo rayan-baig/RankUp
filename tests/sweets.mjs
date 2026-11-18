@@ -36,12 +36,12 @@ console.log('\n=== Every impostor round has exactly one answer ===')
   ok('5000 rounds all generated', ungenerated === 0, `${ungenerated} gave up`)
   ok('every round has exactly one possible culprit', ambiguous === 0, `${ambiguous} ambiguous`)
   ok('and that culprit is the one the game blames', wrong === 0, `${wrong} disagreed`)
-  ok('all five crewmates get to be the impostor', caught.size === CREW.length, `${caught.size} of 5`)
+  ok('all five friends get to be the fibber', caught.size === CREW.length, `${caught.size} of 5`)
 }
 
-console.log('\n=== And the crew really do tell the truth ===')
+console.log('\n=== And the honest ones really do tell the truth ===')
 {
-  // The rule the player is told. If a crewmate could say something false,
+  // The rule the player is told. If an honest friend could say something false,
   // the puzzle is unsolvable by the stated rules even when it has one answer.
   let liars = 0
   for (let i = 0; i < 2000; i += 1) {
@@ -53,7 +53,7 @@ console.log('\n=== And the crew really do tell the truth ===')
       if (trueNow !== shouldBeTrue) liars += 1
     }
   }
-  ok('no crewmate ever lies, and the impostor always does', liars === 0, `${liars} bad statements`)
+  ok('no honest friend ever lies, and the fibber always does', liars === 0, `${liars} bad statements`)
 }
 
 console.log(fails === 0 ? '\nALL CHECKS PASSED' : `\n${fails} CHECK(S) FAILED`)
