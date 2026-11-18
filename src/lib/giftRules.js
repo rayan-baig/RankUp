@@ -235,6 +235,7 @@ export const GIFT_ERRORS = {
 
 /** What the gift checkout's refusals mean, for the buyer. */
 export const GIFT_CHECKOUT_ERRORS = {
+  demo: 'This is the demo, so nothing can be bought here. Leave the demo to buy a gift.',
   bad_plan: 'Choose Standard or Elite Pass.',
   bad_delivery: 'Choose how the gift is given.',
   bad_email: 'Your email, for the receipt and the code.',

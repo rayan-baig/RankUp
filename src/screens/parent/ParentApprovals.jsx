@@ -9,6 +9,7 @@ import { isElite } from '../../state/reducer.js'
 import { Screen, Card, Button, SectionTitle, EmptyState, Banner, Chip, TextInput, Modal } from '../../components/ui.jsx'
 import { STICKERS, STICKER_MAP } from '../../data/stickers.js'
 import { ThemeRequests } from '../../components/KidThemesParent.jsx'
+import EmptyNext from '../../components/EmptyNext.jsx'
 
 /**
  * The approval queue.
@@ -37,7 +38,9 @@ export default function ParentApprovals() {
       <Screen>
         <h1 className="font-display text-2xl font-extrabold mb-3">Review</h1>
         <ThemeRequests />
-        <EmptyState icon="✨" title={themeAsks ? 'No chores to review' : 'Nothing to review'} body="Chores your kids finish land here for you to accept." />
+        {themeAsks
+          ? <EmptyState icon="✨" title="No chores to review" body="Chores your kids finish land here for you to accept." />
+          : <EmptyNext which={state.kids.length ? 'review' : 'noKids'} />}
       </Screen>
     )
   }

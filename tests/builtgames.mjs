@@ -183,7 +183,7 @@ const policy = await page.evaluate(() => document.querySelector('meta[http-equiv
 ;/script-src 'self'/.test(policy)
   ? pass('it carries the production policy, so this is the real thing')
   : fail('production policy present', policy || 'no policy on the page')
-await page.getByRole('button', { name: /Have a look around/ }).click()
+await page.getByRole('button', { name: /See it live/ }).click()
 await page.waitForTimeout(1500)
 
 const play = async (game) => {

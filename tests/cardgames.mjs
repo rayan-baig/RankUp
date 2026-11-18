@@ -21,7 +21,7 @@ const ok = (label, cond, detail = '') => {
 
 const { browser, page, errors } = await launch()
 await page.goto(BASE, { waitUntil: 'networkidle' })
-await page.getByRole('button', { name: /Have a look around/ }).click()
+await page.getByRole('button', { name: /See it live/ }).click()
 await page.waitForFunction(() => document.body.innerText.includes('Rivera'), null, { timeout: 8000 })
 
 /**

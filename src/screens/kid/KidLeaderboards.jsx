@@ -80,7 +80,7 @@ export default function KidLeaderboards() {
 
   return (
     <Screen>
-      <button type="button" onClick={() => navigate('/kid')} className="text-sm text-muted mb-2">← Home</button>
+      <button type="button" onClick={() => navigate('/kid')} className="tap-link text-sm text-muted mb-1 -ml-1">← Home</button>
       <PageTitle sub="Race your family, your guild, or the world." right={<ModeBadge mode={mode} />}>
         <span data-testid="boards-title">Leaderboards</span>
       </PageTitle>
@@ -144,7 +144,12 @@ export default function KidLeaderboards() {
         </Card>
       )}
 
-      {!online && (
+      {!online && state.demo && (
+        <Banner tone="info" icon="🏠" title="The demo's family board" className="mb-3">
+          A real family also gets guild boards, and worldwide ones if a parent says yes.
+        </Banner>
+      )}
+      {!online && !state.demo && (
         <Banner tone="info" icon="🏠" title="Family board on this phone" className="mb-3">
           Worldwide and guild boards need the sync service. This is your family, worked out here.
         </Banner>

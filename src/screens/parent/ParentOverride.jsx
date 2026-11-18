@@ -4,8 +4,9 @@ import { activeLockout, overrideHasExpired } from '../../state/reducer.js'
 import { levelFromXp, formatXp } from '../../lib/xp.js'
 import { resolveKidTheme } from '../../data/kidThemes.js'
 import { relativeTime, formatDuration } from '../../lib/dates.js'
-import { Screen, Card, Button, SectionTitle, Field, TextInput, TextArea, Select, Banner, Chip, Modal, EmptyState } from '../../components/ui.jsx'
+import { Screen, Card, Button, SectionTitle, Field, TextInput, TextArea, Select, Banner, Chip, Modal } from '../../components/ui.jsx'
 import EliteGate from '../../components/EliteGate.jsx'
+import EmptyNext from '../../components/EmptyNext.jsx'
 
 /**
  * The Parental Consequence Engine — System Override Protocol.
@@ -89,7 +90,7 @@ export default function ParentOverride() {
       </header>
 
       {state.kids.length === 0 ? (
-        <EmptyState icon="👶" title="No kids to apply this to" />
+        <EmptyNext which="noKids" />
       ) : (
         <>
           <Field label="Kid">

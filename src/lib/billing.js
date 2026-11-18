@@ -218,6 +218,8 @@ export function giftsLive() {
  * answers with Stripe's page. `form` is checkGiftForm's `clean`.
  */
 export async function startGiftCheckout(form) {
+  // Never from the look-around: nothing in the demo reaches Stripe.
+  if (transport.isNetworkPaused()) return { ok: false, reason: 'demo', fields: [] }
   try {
     const res = await fetch(GIFT_CHECKOUT_URL, {
       method: 'POST',

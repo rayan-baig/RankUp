@@ -38,7 +38,7 @@ export default function KidSchool() {
             If your school plays, ask a grown-up to add you. Your chores will count for your school.
           </p>
         </Card>
-        <button type="button" className="w-full text-xs underline text-muted mt-4" onClick={() => navigate('/kid')}>Back</button>
+        <button type="button" className="tap-link justify-center w-full text-xs underline text-muted mt-3" onClick={() => navigate('/kid')}>Back</button>
       </Screen>
     )
   }

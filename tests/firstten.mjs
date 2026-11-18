@@ -3,7 +3,8 @@
  *
  * One parent, one phone, from the front door to the first chore accepted,
  * counting every tap and every box typed in. It was 28 (two of them typing a
- * URL, because Parent Mode had no way out to the child's side); it is 24. The
+ * URL, because Parent Mode had no way out to the child's side), then 24; with
+ * three starter chores one tap from the checklist it is 22. The
  * ceiling below is the number now, so a step that creeps back in fails here
  * rather than being noticed by the next family.
  *
@@ -19,7 +20,7 @@
 import { chromium } from 'playwright'
 import { reporter, finish, BASE, SHOT_DIR } from './helpers.mjs'
 
-const MAX_STEPS = 24
+const MAX_STEPS = 22
 
 const { fails, pass, fail } = reporter()
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined })
@@ -96,19 +97,31 @@ list && list.kid && !list.pair && !list.assign && !list.accept
   ? pass('the first-week list starts with the child ticked and the rest to do')
   : fail('checklist starts from real state', JSON.stringify(list))
 
-// Straight from the list: "Assign 3 chores" opens the packs, ready to add.
-await tap(page.locator('[data-step="assign"] button'), 700)
-;(await hash()).startsWith('#/parent/assign')
-  ? pass('"Assign 3 chores" opens the assign screen')
-  : fail('checklist links to assign', await hash())
-;(await page.getByRole('tab', { name: 'Quest packs', selected: true }).count()) === 1
-  ? pass('which opens on the ready-made packs for a family with no chores')
-  : fail('assign opens on packs', 'opened on the form')
-await tap(page.getByRole('button', { name: /Add all 7 to Ava/ }), 600)
-
-await tap(page.getByRole('button', { name: 'Home', exact: true }), 700)
+// Straight from the list: three starter chores in one tap, no other screen.
+;/Add a first chore/.test(await page.locator('[data-step="assign"]').innerText())
+  ? pass('the list asks for a first chore')
+  : fail('first chore step', await page.locator('[data-step="assign"]').innerText())
+await tap(page.locator('[data-step="assign"] [data-testid="starter-chores"]'), 700)
+;(await hash()) === '#/parent'
+  ? pass('"Add 3 starter chores" adds them right there, on the dashboard')
+  : fail('starter chores stay on the dashboard', await hash())
+const starter = (await store()).quests.map((q) => q.title)
+starter.length === 3 && starter[0] === 'Make your bed'
+  ? pass(`three ready-made chores for Ava: ${starter.join(', ')}`)
+  : fail('three starter chores', JSON.stringify(starter))
 list = await checklist()
-list?.assign ? pass('three chores assigned ticks itself') : fail('assign ticks', JSON.stringify(list))
+list?.assign ? pass('and the step ticks itself') : fail('assign ticks', JSON.stringify(list))
+;/Make your bed/.test(await page.getByTestId('starter-added').innerText().catch(() => ''))
+  ? pass('saying what was added')
+  : fail('starter added message', 'none')
+// The assign screen still opens on the packs for anyone who wants more.
+await page.evaluate(() => { location.hash = '/parent/assign' })
+await page.waitForTimeout(500)
+;(await page.getByRole('tab', { name: 'Quest packs' }).count()) === 1
+  ? pass('the packs are still one tab away on the assign screen')
+  : fail('packs tab', 'missing')
+await page.evaluate(() => { location.hash = '/parent' })
+await page.waitForTimeout(600)
 
 console.log('\n=== "How it works" is shown once ===')
 // Still there after a pack was added: it was in the way of nothing. Closing it
@@ -173,7 +186,7 @@ approved.length === 1 && after.kids[0].xp > 0
   ? pass(`the first chore is accepted and Ava has ${after.kids[0].xp} XP`)
   : fail('first chore accepted', JSON.stringify({ approved: approved.length, xp: after.kids[0].xp }))
 
-console.log(`\n  ${steps} taps and boxes from the front door to the first accepted chore (was 28)`)
+console.log(`\n  ${steps} taps and boxes from the front door to the first accepted chore (was 28, then 24)`)
 steps <= MAX_STEPS
   ? pass(`at most ${MAX_STEPS} steps`)
   : fail(`at most ${MAX_STEPS} steps`, String(steps))
@@ -199,10 +212,10 @@ await kid.getByRole('button', { name: 'Get my code' }).click()
 await kid.waitForTimeout(1500)
 const code = await kid.evaluate(() => JSON.parse(localStorage.getItem('rankup.state.v1.kid'))?.pendingPairing?.code)
 
-await page.locator('[data-step="pair"] button').click()
+await page.locator('[data-step="pair"] [data-testid="step-go"]').click()
 await page.waitForTimeout(700)
 ;(await hash()) === '#/parent/pair'
-  ? pass('"Pair a phone" opens the linking screen')
+  ? pass('"Link Ava\'s phone" opens the linking screen')
   : fail('checklist links to pairing', await hash())
 await page.locator('input[inputmode=numeric]').fill(code || '')
 await page.waitForTimeout(2500)

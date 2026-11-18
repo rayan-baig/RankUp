@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { guilds, guildError } from '../../lib/guilds.js'
 import { relativeTime } from '../../lib/dates.js'
-import { Screen, Card, Button, SectionTitle, Banner, TextInput, Select, Field, Chip, EmptyState } from '../../components/ui.jsx'
+import { Screen, Card, Button, SectionTitle, Banner, TextInput, Select, Field, Chip } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
 import { quickChatText } from '../../data/quickChat.js'
+import EmptyNext from '../../components/EmptyNext.jsx'
 
 /**
  * The parent's side of guilds.
@@ -105,7 +106,7 @@ export default function ParentGuilds() {
 
   return (
     <Screen>
-      <button type="button" onClick={() => navigate('/parent/settings')} className="text-sm text-muted mb-2">
+      <button type="button" onClick={() => navigate('/parent/settings')} className="tap-link text-sm text-muted mb-1 -ml-1">
         ← Settings
       </button>
       <h1 className="font-display text-2xl font-extrabold mb-1">Guilds</h1>
@@ -224,7 +225,7 @@ export default function ParentGuilds() {
             <Button variant="soft" className="w-full mt-2" onClick={() => setCreated(null)}>Done</Button>
           </Card>
         ) : state.kids.length === 0 ? (
-          <EmptyState icon="👶" title="Add a kid first" />
+          <EmptyNext which="noKids" />
         ) : (
           <Card>
             <Field label="For which kid">

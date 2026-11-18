@@ -4,7 +4,8 @@ import { potFor } from '../../state/reducer.js'
 import { fetchAllowance, mergeFrom, allowanceRecord } from '../../lib/allowance.js'
 import { formatMoney } from '../../lib/money.js'
 import { navigate } from '../../lib/router.js'
-import { Screen, Card, Button, EmptyState } from '../../components/ui.jsx'
+import { Screen, Card, Button } from '../../components/ui.jsx'
+import EmptyNext from '../../components/EmptyNext.jsx'
 
 /**
  * The pocket money record, one child at a time: what they are owed, what
@@ -35,7 +36,7 @@ export default function ParentMoney({ initialKidId = null }) {
     return (
       <Screen>
         <h1 className="font-display text-2xl font-extrabold mb-3">Pocket money record</h1>
-        <EmptyState icon="💷" title="No children yet" body="Add a child, then put a price on a chore when you assign it." />
+        <EmptyNext which="noKids" />
       </Screen>
     )
   }
@@ -82,7 +83,7 @@ export default function ParentMoney({ initialKidId = null }) {
       </Card>
 
       {record.lines.length === 0 ? (
-        <EmptyState icon="💷" title="Nothing yet" body="Put a price on a chore when you assign it, and what it earns is listed here." />
+        <EmptyNext which="money" />
       ) : (
         <Card className="p-0 mb-3">
           <ul>

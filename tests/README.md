@@ -46,10 +46,20 @@ then check what actually ended up in storage or in the database.
 
 **`firstten.mjs`** is a new family's first ten minutes on a fresh 390x844
 window: front door to the first accepted chore on one phone, counting every
-tap and typed box (at most 24), then "How RankUp works" shown once and
+tap and typed box (at most 22), then "How RankUp works" shown once and
 remembered, the first-week checklist ticking from real state and going once a
 second browser pairs as the child's phone, and the child's home putting the
 next quest above the fold.
+
+**`demolive.mjs`** is the first five minutes on a 375px phone: "See it live",
+the DEMO bar switching between the parent's and the children's views,
+accepting a chore and watching Ava level up, spending on a reward, the league,
+and not one request to the database, `/api` or Stripe whatever is tapped; then
+"Start for free" straight to the sign-up, and a new family's "Getting started"
+list, starter chores and rewards in one tap, and every empty screen's message
+and next step. **`firststeps.mjs`** (awards, plain Node) holds the list's
+logic, the empty states' words and links, the demo's fixed names, and proves
+that with the network paused no call reaches `fetch`.
 
 **`packs.mjs`** holds the starter chore packs to their rules: Boss only for
 teenagers, nothing Hard every day for under-12s, a day's chores near the

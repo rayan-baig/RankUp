@@ -35,7 +35,7 @@ const progressOf = (k) => JSON.stringify([k.xp, k.coins, k.streak, k.playTokens,
 const bgVar = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim())
 
 await page.goto(BASE, { waitUntil: 'networkidle' })
-await page.getByRole('button', { name: /Have a look around/ }).click()
+await page.getByRole('button', { name: /See it live/ }).click()
 await page.waitForTimeout(1500)
 await page.getByTestId('demo-tour').getByRole('button', { name: /See Ava's world/ }).click()
 await page.waitForTimeout(800)

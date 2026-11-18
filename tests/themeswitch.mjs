@@ -210,7 +210,7 @@ console.log('\n=== In the browser: tap Save to the new look, back and forth ==='
   const { launch, BASE, SHOT_DIR } = await import('./helpers.mjs')
   const { browser, page, errors } = await launch()
   await page.goto(BASE, { waitUntil: 'networkidle' })
-  await page.getByRole('button', { name: /Have a look around/ }).click()
+  await page.getByRole('button', { name: /See it live/ }).click()
   await page.waitForTimeout(1500)
   await page.getByTestId('demo-tour').getByRole('button', { name: /See Ava's world/ }).click()
   await page.waitForTimeout(800)
@@ -225,7 +225,7 @@ console.log('\n=== In the browser: tap Save to the new look, back and forth ==='
     await page.locator('input[type=password]').fill('1234')
     await page.getByRole('button', { name: 'Unlock' }).click()
     await page.waitForTimeout(250)
-    await page.locator('button[aria-pressed]').nth(i % 2 === 0 ? 4 : 1).click()
+    await page.locator('button[aria-pressed]:not(.demo-view)').nth(i % 2 === 0 ? 4 : 1).click()
     took.push(await page.evaluate(async () => {
       const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg')
       const save = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Save theme')

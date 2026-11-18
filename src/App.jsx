@@ -488,7 +488,7 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route === '/parent/pair') return <ParentPairKid />
   if (route === '/parent/plan') return <ParentPlan />
   if (route === '/parent/redeem') return <ParentRedeem />
-  if (route === '/parent/settings') return <ParentSettings />
+  if (route === '/parent/settings') return <ParentSettings open={queryParam(fullPath, 'open')} />
   if (route === '/parent/help') return <ParentHelp />
   if (route === '/parent/history') return <ParentHistory initialKidId={queryParam(fullPath, 'kid')} />
   if (route === '/parent/money') return <ParentMoney initialKidId={queryParam(fullPath, 'kid')} />

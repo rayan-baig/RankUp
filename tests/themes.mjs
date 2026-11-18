@@ -147,7 +147,7 @@ const { browser, page, errors } = await launch()
 
 await page.goto(BASE, { waitUntil: 'networkidle' })
 await page.waitForTimeout(700)
-await page.getByRole('button', { name: /Have a look around/ }).click()
+await page.getByRole('button', { name: /See it live/ }).click()
 await page.waitForTimeout(1600)
 
 // Every kid theme, on the screen with the most of a theme on it. Set directly

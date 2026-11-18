@@ -85,6 +85,7 @@ const SUITES = {
     { file: 'oncetap.mjs', weight: 25 },
     { file: 'pairing.mjs', weight: 58 },
     { file: 'firstten.mjs', weight: 45 },
+    { file: 'demolive.mjs', weight: 40 },
     { file: 'notifications.mjs', weight: 19 },
     { file: 'plans.mjs', weight: 25 },
     { file: 'referrals.mjs', weight: 20 },
@@ -151,6 +152,7 @@ const SUITES = {
     { file: 'crashreport.mjs' },
     { file: 'storagegrowth.mjs' },
     { file: 'upgradenudge.mjs' },
+    { file: 'firststeps.mjs' },
   ],
   // The server functions under workerd on :8788 (supabase/test/up.sh --cf).
   api: [

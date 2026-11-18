@@ -503,7 +503,7 @@ export default function ThemeGenesis({ kidId, editId = null, area = 'kid' }) {
 function Header({ area, onBack, backLabel }) {
   return (
     <header className="mb-3">
-      <button type="button" className="text-xs underline text-muted mb-2" onClick={onBack}>
+      <button type="button" className="tap-link text-xs underline text-muted mb-1 -ml-1" onClick={onBack}>
         {backLabel || (area === 'parent' ? '← Settings' : '← You')}
       </button>
       <p className="text-[11px] uppercase tracking-widest font-bold" style={{ color: STEPS[0].colour }}>Theme Genesis</p>

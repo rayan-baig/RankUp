@@ -7,6 +7,7 @@ import { choreHistory, historyTotals, byDay, OUTCOMES, HISTORY_NOTE_MAX } from '
 import { Screen, Card, Button, EmptyState, Modal, TextInput } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
 import { KEEP_DAYS } from '../../lib/prune.js'
+import EmptyNext from '../../components/EmptyNext.jsx'
 
 /**
  * Chore history: every chore each child has sent in, in one place.
@@ -71,8 +72,9 @@ export default function ParentHistory({ initialKidId = null }) {
       </div>
 
       {entries.length === 0 ? (
-        <EmptyState icon="📜" title="Nothing here yet"
-                    body={state.submissions.length ? 'Nothing matches. Try another child, or All.' : 'When a child taps “I did it!”, it is listed here.'} />
+        state.submissions.length
+          ? <EmptyState icon="📜" title="Nothing here yet" body="Nothing matches. Try another child, or All." />
+          : <EmptyNext which="history" />
       ) : (
         <>
           <Card flat className="mb-3 p-3">
@@ -113,11 +115,11 @@ export default function ParentHistory({ initialKidId = null }) {
                       {e.reason && <p className="text-xs mt-0.5">“{e.reason}”</p>}
                       {e.note && <p className="text-xs mt-0.5" style={{ color: 'var(--ink-muted)' }}>📝 {e.note}</p>}
                       {e.status === 'pending' ? (
-                        <button type="button" className="text-xs underline text-muted mt-0.5" onClick={() => navigate('/parent/approvals')}>
+                        <button type="button" className="tap-link -ml-1 text-xs underline text-muted" onClick={() => navigate('/parent/approvals')}>
                           Check it now
                         </button>
                       ) : (
-                        <button type="button" className="text-xs underline text-muted mt-0.5" onClick={() => openNote(e)}>
+                        <button type="button" className="tap-link -ml-1 text-xs underline text-muted" onClick={() => openNote(e)}>
                           {e.note ? 'Change note' : 'Add a note'}
                         </button>
                       )}

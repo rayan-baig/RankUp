@@ -52,7 +52,7 @@ export default function ParentLeaderboards() {
 
   return (
     <Screen>
-      <button type="button" onClick={() => navigate('/parent/settings')} className="text-sm text-muted mb-2">← Settings</button>
+      <button type="button" onClick={() => navigate('/parent/settings')} className="tap-link text-sm text-muted mb-1 -ml-1">← Settings</button>
       <h1 className="font-display text-2xl font-extrabold mb-1">Leaderboards</h1>
       <p className="text-sm text-muted mb-3">
         Each child plays in one of two modes. You choose; your child can always step back to Adventure.

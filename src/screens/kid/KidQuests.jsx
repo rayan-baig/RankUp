@@ -5,6 +5,7 @@ import { Screen, SectionTitle, Segmented, EmptyState } from '../../components/ui
 import HeroArt from '../../components/HeroArt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
 import { navigate } from '../../lib/router.js'
+import EmptyNext from '../../components/EmptyNext.jsx'
 
 const TABS = [
   { id: 'todo', name: 'To Do' },
@@ -45,11 +46,13 @@ export default function KidQuests() {
         label="Which quests"
       />
 
-      {list.length === 0 ? (
+      {list.length === 0 && tab === 'todo' && !lists.waiting.length && !lists.done.length ? (
+        <EmptyNext which="kidQuests" />
+      ) : list.length === 0 ? (
         <EmptyState
           icon={tab === 'done' ? '🏅' : '📭'}
           title={tab === 'todo' ? 'No quests to do' : tab === 'waiting' ? 'Nothing waiting' : 'No finished quests yet'}
-          body={tab === 'todo' ? 'Ask your parent to assign one.' : undefined}
+          body={tab === 'todo' ? 'Ask your grown-up for another one.' : undefined}
         />
       ) : (
         <>

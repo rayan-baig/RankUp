@@ -116,7 +116,7 @@ export default function PocketMoney({ kidId = null }) {
         </div>
       )}
 
-      <button type="button" className="text-xs underline text-muted mt-3"
+      <button type="button" className="tap-link -ml-1 text-xs underline text-muted mt-2"
               onClick={() => navigate(kidId ? `/parent/money?kid=${kidId}` : '/parent/money')}>
         See the whole record: what was paid, and when
       </button>

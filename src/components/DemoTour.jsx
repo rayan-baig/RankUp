@@ -25,15 +25,21 @@ export default function DemoTour() {
     {
       icon: '✅',
       title: waiting ? `Accept ${kid.name}'s ${chore ? `“${chore.title}”` : 'chore'}` : 'Accepted. That is the whole loop.',
-      line: waiting ? 'She tapped “I did it!”. Accept it and watch the XP land.' : `${kid.name} has her XP. Now see it from her side.`,
+      line: waiting ? 'She tapped “I did it!”. Accept it and watch her level up.' : `${kid.name} has her XP. Now see it from her side.`,
       go: waiting ? () => navigate('/parent/approvals') : null,
     },
     { icon: '🌍', title: `See ${kid.name}'s world`, line: 'Her avatar, her level, and a new battle to watch.', go: asKid('/kid') },
     { icon: '🎮', title: 'Play the arcade', line: 'Finished chores earn game tokens. Here they never run out.', go: asKid('/kid/arcade') },
   ]
 
+  const more = [
+    { icon: '🎁', label: 'Rewards', go: asKid('/kid/shop') },
+    { icon: '🏆', label: 'League', go: asKid('/kid/leaderboards') },
+    { icon: '📜', label: 'History', go: () => navigate('/parent/history') },
+  ]
+
   return (
-    <Card className="mb-3" style={{ borderColor: 'var(--accent)' }} data-testid="demo-tour">
+    <Card className="mb-3 tour-card" data-testid="demo-tour">
       <h2 className="font-display font-bold">Start here</h2>
       <p className="text-xs text-muted mb-2">The best of RankUp, in three taps.</p>
       <ol className="space-y-1.5">
@@ -61,6 +67,16 @@ export default function DemoTour() {
           )
         })}
       </ol>
+      {/* The rest of what a family uses, one tap each: what a child spends
+          on, the league they race in, and the record a parent keeps. */}
+      <p className="text-xs text-muted mt-2.5 mb-1">More to see</p>
+      <div className="flex flex-wrap gap-1.5" data-testid="demo-more">
+        {more.map((m) => (
+          <button key={m.label} type="button" onClick={m.go} className="chip tour-more text-xs">
+            <span aria-hidden="true">{m.icon}</span> {m.label}
+          </button>
+        ))}
+      </div>
     </Card>
   )
 }

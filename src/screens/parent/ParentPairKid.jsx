@@ -94,7 +94,7 @@ export default function ParentPairKid() {
 
   return (
     <Screen>
-      <button type="button" onClick={() => navigate('/parent/settings')} className="text-sm text-muted mb-2">
+      <button type="button" onClick={() => navigate('/parent/settings')} className="tap-link text-sm text-muted mb-1 -ml-1">
         ← Settings
       </button>
 
@@ -135,6 +135,24 @@ export default function ParentPairKid() {
           {busy ? 'Checking…' : 'Link device'}
         </Button>
       </Card>
+
+      {/* A family with one phone needs none of this, and should be told so
+          rather than wonder what they are missing. */}
+      {linkedKids.length === 0 && !state.settings?.sharedPhone && (
+        <Card flat className="mb-3 flex items-start gap-3" data-testid="shared-phone-card">
+          <span className="text-xl shrink-0" aria-hidden="true">🤝</span>
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-sm">Sharing one phone?</div>
+            <p className="text-xs text-muted">
+              You can skip this. Use “Hand to a kid” on the dashboard; your PIN keeps Parent Mode yours.
+            </p>
+            <button type="button" className="tap-link -ml-1 text-xs underline text-muted"
+              onClick={() => { dispatch({ type: 'UPDATE_SETTINGS', patch: { sharedPhone: true } }); navigate('/parent') }}>
+              We share one phone
+            </button>
+          </div>
+        </Card>
+      )}
 
       <Banner tone="info" icon="⏱️" title="Codes are short-lived on purpose">
         A code lasts {CODE_TTL_MS / 60000} minutes, stops working after {MAX_ATTEMPTS} wrong guesses, and can

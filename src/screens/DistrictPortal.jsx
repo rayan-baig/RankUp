@@ -264,7 +264,7 @@ function Register({ onDone, onBack }) {
       <Button className="w-full" disabled={busy || !accountReady} onClick={submit}>
         {busy ? 'Working…' : 'Sign the district up'}
       </Button>
-      <button type="button" className="w-full text-xs underline text-muted mt-3" onClick={onBack}>Back</button>
+      <button type="button" className="tap-link justify-center w-full text-xs underline text-muted mt-2" onClick={onBack}>Back</button>
     </Card>
   )
 }

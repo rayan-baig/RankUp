@@ -17,7 +17,7 @@
 import { reducer, potFor } from '../state/reducer.js'
 import { createInitialState, makeKid } from '../state/initialState.js'
 import { QUEST_PACKS } from '../data/questTemplates.js'
-import { DIFFICULTY } from './xp.js'
+import { DIFFICULTY, levelFromXp, totalXpForLevel } from './xp.js'
 import { dayKey } from './dates.js'
 
 const day = 86400000
@@ -26,7 +26,13 @@ const day = 86400000
  * Bump this whenever what the demo contains changes, so saved copies of
  * the old one are rebuilt instead of lingering for ever.
  */
-export const DEMO_VERSION = 4
+export const DEMO_VERSION = 5
+
+/**
+ * The only names in the demo. Made up, fixed, first names only: no real
+ * child is ever in it (tests/firststeps.mjs holds it to this list).
+ */
+export const DEMO_NAMES = Object.freeze({ family: 'The Rivera Family', parent: 'Sam', kids: ['Ava', 'Noah'] })
 
 /** Wind a timestamp back, so the demo does not look like it started today. */
 const ago = (days) => Date.now() - days * day
@@ -40,14 +46,14 @@ export function buildDemoFamily() {
    * later levels are a story rather than a recolour. A demo should show
    * the product at its best, and this is where the product looks best.
    */
-  const ava = makeKid({ name: 'Ava', themeId: 'blockcraft' })
-  const noah = makeKid({ name: 'Noah', themeId: 'blockcraft' })
+  const ava = makeKid({ name: DEMO_NAMES.kids[0], themeId: 'blockcraft' })
+  const noah = makeKid({ name: DEMO_NAMES.kids[1], themeId: 'blockcraft' })
 
   let s = createInitialState()
 
   s = run(s, {
     type: 'COMPLETE_ONBOARDING',
-    family: { name: 'The Rivera Family', parentName: 'Sam', pin: '1234' },
+    family: { name: DEMO_NAMES.family, parentName: DEMO_NAMES.parent, pin: '1234' },
     kid: ava,
     guildName: "Ava's Guild",
   })
@@ -132,6 +138,28 @@ export function buildDemoFamily() {
         onTime: true,
       },
     })
+  }
+
+  /*
+   * Accepting the waiting chore levels Ava up.
+   *
+   * The level-up is the moment a parent should see, and with the history
+   * above it landed somewhere in the middle of a level, so accepting showed
+   * a few XP and nothing else. Her XP is moved to just short of the next
+   * level, by less than the chore pays, so accepting it is the level-up.
+   * And enough coins for the cheapest reward, so "spend it" works too.
+   */
+  if (reading) {
+    const waiting = s.submissions.find((x) => x.status === 'pending' && x.kidId === ava.id)
+    const before = s.kids.find((k) => k.id === ava.id)
+    const tried = waiting && reducer(s, { type: 'APPROVE_SUBMISSION', submissionId: waiting.id, sticker: 'proud' })
+    const gain = tried ? tried.kids.find((k) => k.id === ava.id).xp - before.xp : 0
+    const level = levelFromXp(before.xp).level
+    if (gain > 1 && levelFromXp(before.xp + gain).level === level) {
+      const xp = totalXpForLevel(level + 1) - Math.max(1, Math.floor(gain / 2))
+      s = { ...s, kids: s.kids.map((k) => (k.id === ava.id ? { ...k, xp } : k)) }
+    }
+    s = { ...s, kids: s.kids.map((k) => (k.id === ava.id ? { ...k, coins: Math.max(k.coins || 0, 75) } : k)) }
   }
 
   /*
