@@ -135,7 +135,8 @@ function trialEndFor(billing, now = Date.now()) {
  * early.
  */
 function giftEndFor(billing, now = Date.now()) {
-  const until = new Date(billing.gift_until || 0).getTime()
+  // The end of the last gift: a second one of the other plan runs after the first.
+  const until = new Date(billing.gift_then_until || billing.gift_until || 0).getTime()
   if (!billing.gift_tier || !Number.isFinite(until) || until <= now + 2 * 86400000) return null
   return Math.floor(until / 1000)
 }

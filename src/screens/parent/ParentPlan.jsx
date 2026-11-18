@@ -134,8 +134,8 @@ export default function ParentPlan() {
           ? `You are trying ${TIERS[trialTier].name} free for ${trialDays} more ${trialDays === 1 ? 'day' : 'days'}. After that you are on ${TIERS[current].name} unless you choose a plan.`
           : `You are on ${TIERS[current].name}.`}
         {gift && (gift.pending
-          ? ` Your gift of ${gift.name} starts on ${giftDate(gift.startsAt)} and runs until ${giftDate(gift.until)}.`
-          : ` Your gift of ${gift.name} runs until ${giftDate(gift.until)}. A plan you choose now is first charged that day, never before.`)}
+          ? ` Your gift of ${gift.name} starts on ${giftDate(gift.startsAt)} and runs until ${giftDate(gift.until)}${gift.then ? `, then ${gift.then.name} until ${giftDate(gift.then.until)}` : ''}.`
+          : ` Your gift of ${gift.name} runs until ${giftDate(gift.until)}${gift.then ? `, then ${gift.then.name} until ${giftDate(gift.then.until)}` : ''}. A plan you choose now is first charged ${gift.then ? 'when the last gift ends' : 'that day'}, never before.`)}
       </p>
 
       {live ? (

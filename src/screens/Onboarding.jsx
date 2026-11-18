@@ -114,6 +114,9 @@ export default function Onboarding() {
     return (
       <Welcome
         wiped={state.deviceWiped}
+        // A phone set up (or being set up) as a child's: no gift or schools
+        // links, which are one tap from prices.
+        childPhone={state.device?.role === 'kid' || Boolean(state.pendingPairing) || Boolean(state.deviceWipedChild)}
         onLookAround={() => {
           dispatch({ type: 'START_DEMO', state: buildDemoFamily() })
           navigate('/parent')

@@ -52,6 +52,39 @@ const go = async (hash) => {
 const body = () => page.locator('body').innerText()
 const hash = (code) => createHash('sha256').update(code.replace(/[^A-Z0-9]/g, '')).digest('hex')
 
+console.log('\n=== Never on a child\'s phone: the front door shows nothing to buy ===')
+await page.goto(BASE, { waitUntil: 'networkidle' })
+await page.waitForTimeout(600)
+check('before anyone says who they are, the front door has the gift and schools links',
+  await page.getByTestId('give-link').count() === 1 && await page.getByTestId('schools-link').count() === 1)
+// The front door as this phone has it saved, then as a child's phone would.
+const fresh = await page.evaluate(() => JSON.parse(localStorage.getItem('rankup.state.v1') || '{}'))
+for (const [what, patch] of [
+  ['a phone waiting to be linked to a child', { pendingPairing: { code: '123456', expiresAt: Date.now() + 600000 } }],
+  ['a child\'s phone that was unlinked', { deviceWiped: 'unlinked', deviceWipedChild: true }],
+  ['a phone set up as a child\'s', { device: { role: 'kid', linkedKidId: null, familyName: null, pairedAt: null } }],
+]) {
+  // A phone of its own, with that saved before the app starts.
+  // eslint-disable-next-line no-await-in-loop
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  // eslint-disable-next-line no-await-in-loop
+  await ctx.addInitScript((st) => { if (!sessionStorage.getItem('t-set')) { localStorage.setItem('rankup.state.v1', st); sessionStorage.setItem('t-set', '1') } },
+    JSON.stringify({ ...fresh, onboarded: false, ...patch }))
+  // eslint-disable-next-line no-await-in-loop
+  const child = await ctx.newPage()
+  // eslint-disable-next-line no-await-in-loop
+  await child.goto(`${BASE}/#/welcome`, { waitUntil: 'networkidle' })
+  // eslint-disable-next-line no-await-in-loop
+  await child.waitForTimeout(800)
+  // eslint-disable-next-line no-await-in-loop
+  const seen = { gift: await child.getByTestId('give-link').count(), schools: await child.getByTestId('schools-link').count(),
+    // eslint-disable-next-line no-await-in-loop
+    front: await child.getByRole('button', { name: /I'm a parent|I'm a kid/ }).count() }
+  check(`${what}: no gift link and no schools link (both are one tap from prices)`, seen.gift === 0 && seen.schools === 0, JSON.stringify(seen))
+  // eslint-disable-next-line no-await-in-loop
+  await ctx.close()
+}
+
 console.log('\n=== The Give page, from the front door, with no account ===')
 await page.goto(BASE, { waitUntil: 'networkidle' })
 await page.waitForTimeout(600)

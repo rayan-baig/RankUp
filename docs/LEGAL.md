@@ -216,8 +216,12 @@ totals for whoever decides: students taking part, the share who did a chore,
 chores done, the average, the busiest week and the kinds of chore, for the
 school and for each house or class. A school can name houses or classes; a
 parent chooses which one their child is in. No numbers are shown for a group
-of fewer than 5 students, nor when the students left over would be fewer
-than 5 (so no group can be worked out by subtraction). Never a name, nothing
+of fewer than 5 students or from fewer than 3 families, no chore totals (nor
+an average, a busiest week or a kind of chore) unless at least 3 of them did
+a chore, and none when what is left over would break the same rule (so no
+group can be worked out by subtraction, and a parent cannot take their own
+children's numbers away to find another child's). The same rule is the
+school card's average, its league and its district's picture. Never a name, nothing
 typed, and there is no "what families said": families are asked for no
 rating. "Request a pilot" is emailed and not stored. The privacy policy now
 says a parent chooses the house and the school sees totals only; the terms

@@ -338,7 +338,7 @@ begin
     'claim_trial_reminder(uuid,text,timestamptz)', 'finish_trial_reminder(uuid,text,boolean)',
     'apply_school_refund(uuid,text,boolean,timestamptz,timestamptz)',
     'apply_school_subscription(uuid,text,text,text,text,jsonb,timestamptz,timestamptz)',
-    'record_school_payment(uuid,text,integer,text)', 'attach_school_customer(uuid,text)',
+    'record_school_payment(uuid,text,integer,text,text)', 'attach_school_customer(uuid,text)',
     'stripe_customer_for_school(uuid)', 'school_for_customer(text)',
     'due_digests_at(timestamptz,integer,integer)', 'due_reminders_at(timestamptz,integer)',
     'mark_reminder_sent_at(uuid,timestamptz)', 'claim_digest(uuid,text)',
@@ -379,7 +379,14 @@ begin
     'stripe_customer_for_district(uuid)', 'stripe_subscription_for_district(uuid)',
     'apply_district_subscription(uuid,text,text,text,text,jsonb,timestamptz,timestamptz,jsonb,boolean)',
     'apply_district_refund(uuid,text,boolean,timestamptz,timestamptz)',
-    'record_district_payment(uuid,text,integer,text)', 'record_district_quote(text)',
+    'record_district_payment(uuid,text,integer,text,text)', 'record_district_quote(text)',
+    -- Paying by invoice and paying once: Stripe's idempotency, the card
+    -- checkouts a plan by invoice closes, a second plan handed back, and a
+    -- school's own plan stopped when its district pays.
+    'bump_district_billing_version()', 'record_school_checkout(uuid,text)', 'open_school_checkouts(uuid)',
+    'forget_school_checkout(text)', 'mark_duplicate_plan(text,boolean,text[])', 'duplicate_plan(text)',
+    'duplicate_plan_payment(text[])', 'schools_paying_twice()', 'mark_district_takeover(uuid)',
+    'start_waiting_gift(uuid,timestamptz)',
     -- Pilots, the report and houses: what the operator's page, the reminder
     -- job and "Request a pilot" call with the service key, and the totals
     -- the school's card and the report are built from.
@@ -388,6 +395,9 @@ begin
     'create_school_pilot(text,text,integer,timestamptz)', 'withdraw_school_pilot(uuid)', 'operator_school_pilots()',
     'due_pilot_reminders(timestamptz)', 'claim_pilot_reminder(uuid)', 'finish_pilot_reminder(uuid,boolean)',
     'school_report_categories()', 'record_pilot_request(text)',
+    -- The rule for any group's numbers, and a school's month under it.
+    'school_min_families()', 'school_min_active()', 'school_group_shown(integer,integer)',
+    'school_chores_shown(integer,integer,integer)', 'school_month_ok(uuid,date)',
     -- Pause instead of cancel and the half-price month: what /api/keep-plan,
     -- the billing portal, the webhook and the reminder job call with the
     -- service key, and the console's count of each.

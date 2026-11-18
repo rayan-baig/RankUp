@@ -30,7 +30,7 @@ const dollars = (n) => `$${n.toFixed(2)}`
  * TRIAL_DAYS, the same numbers the plan screen and the server use, so the
  * door cannot quote a price the app does not charge (tests/lookaround.mjs).
  */
-export default function Welcome({ onLookAround, onParent, onKid, wiped = null }) {
+export default function Welcome({ onLookAround, onParent, onKid, wiped = null, childPhone = false }) {
   return (
     <div className="shell px-5 py-5 min-h-screen flex flex-col">
       {wiped && (
@@ -139,6 +139,8 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null })
             bought with no account (#/gift). Beside it, for heads of school and
             teachers, the School League's front page. One line, so the front
             door still fits one phone screen. */}
+        {/* Never on a phone that is a child's: both are one tap from prices. */}
+        {!childPhone && (
         <div className="flex justify-center flex-wrap gap-x-3 gap-y-1 mt-2.5 text-xs">
           <a href="#/gift" className="underline text-muted" data-testid="give-link">
             🎁 Give a year of RankUp as a gift
@@ -147,6 +149,7 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null })
             🏫 For schools
           </a>
         </div>
+        )}
       </div>
     </div>
   )

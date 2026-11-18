@@ -92,7 +92,15 @@ const stripeStandIn = http.createServer((req, res) => {
     if (sub) {
       const held = subs.get(sub[1])
       if (!held) return send(404, { error: { type: 'invalid_request_error', code: 'resource_missing', message: 'No such subscription' } })
-      if (req.method === 'GET') return send(200, held)
+      if (req.method === 'GET') {
+        // After the change it lost the answer to, it cannot say what it holds.
+        if (stripeMode === 'apply-then-fail-unclear' && held.answerLost) return send(500, { error: { type: 'api_error', message: 'cannot say' } })
+        // Discounts are ids unless expanded, as Stripe gives them.
+        const expanded = [...url.searchParams.entries()].some(([k, v]) => k.startsWith('expand') && v === 'discounts')
+        return send(200, expanded
+          ? { ...held, discounts: (held.discounts || []).map((d) => ({ id: d, object: 'discount', coupon: { id: String(d).replace(/^di_/, '') } })) }
+          : held)
+      }
       if (stripeMode === 'fail-updates') return send(500, { error: { type: 'api_error', message: 'could not update' } })
       if (params.has('pause_collection')) held.pause_collection = null
       if (params.has('pause_collection[behavior]')) {
@@ -100,6 +108,11 @@ const stripeStandIn = http.createServer((req, res) => {
       }
       const discounts = Object.values(nested(params).discounts || {})
       if (discounts.length) held.discounts = discounts.map((d) => d.discount || `di_${d.coupon}`)
+      // Stripe made the change, then its answer was lost.
+      if (stripeMode.startsWith('apply-then-fail')) {
+        held.answerLost = true
+        return send(500, { error: { type: 'api_error', message: 'answer lost' } })
+      }
       return send(200, held)
     }
     return send(404, { error: { type: 'invalid_request_error', message: 'no such route in the stand-in' } })
@@ -387,6 +400,33 @@ console.log('\n=== The half-price month: once per family, ever ===')
   ok('a pause in the half-price month is refused, so that invoice is not voided', pause.status === 409 && pause.error === 'half_price_month')
 }
 
+console.log('\n=== The half-price month, when Stripe\'s answer is lost ===')
+{
+  // Taken already above. As if it had not been, with nothing on the plan.
+  await db.query('update families set save_offer_used_at = null where id = $1', [FAMILY])
+  subs.get(SUB).discounts = ['di_alliance_prize']
+  const savedBefore = await today('plans_saved')
+  stripeMode = 'apply-then-fail'
+  const lost = await answer(await keep({ action: 'save' }, PARENT))
+  stripeMode = 'ok'
+  delete subs.get(SUB).answerLost
+  ok('Stripe applied it but its answer was lost: Stripe is asked, and it is taken',
+    lost.status === 200 && lost.saved && subs.get(SUB).discounts.includes('di_rankup-test-half-month'), JSON.stringify(lost))
+  ok('so the family cannot have it a second time', Boolean((await row(FAMILY)).save_offer_used_at)
+    && (await answer(await keep({ action: 'save' }, PARENT))).error === 'already_used' && (await today('plans_saved')) === savedBefore + 1)
+
+  await db.query('update families set save_offer_used_at = null where id = $1', [FAMILY])
+  subs.get(SUB).discounts = ['di_alliance_prize']
+  stripeMode = 'apply-then-fail-unclear'
+  const unclear = await answer(await keep({ action: 'save' }, PARENT))
+  stripeMode = 'ok'
+  ok('Stripe cannot say either way: kept as taken, and the parent is told plainly',
+    unclear.status === 503 && unclear.error === 'save_unconfirmed' && /kept it for you/.test(billingError(unclear.error))
+    && Boolean((await row(FAMILY)).save_offer_used_at), JSON.stringify(unclear))
+  subs.get(SUB).discounts = ['di_alliance_prize']
+  delete subs.get(SUB).answerLost
+}
+
 console.log('\n=== A yearly plan ===')
 {
   for (const action of ['pause', 'save']) {
@@ -408,7 +448,9 @@ console.log('\n=== Elite, and yearly, on Stripe\'s own confirm page ===')
     call?.body?.flow_data?.type === 'subscription_update_confirm'
     && call.body.flow_data.subscription_update_confirm.subscription === SUB
     && call.body.flow_data.subscription_update_confirm.items['0'].id === 'si_price_test_standard_only'
-    && call.body.flow_data.subscription_update_confirm.items['0'].price === 'price_test_elite_month',
+    && call.body.flow_data.subscription_update_confirm.items['0'].price === 'price_test_elite_month'
+    // Its own configuration, the only one that lets a plan be switched.
+    && call.body.configuration === 'bpc_test_plan_change',
     call ? [...call.params].join('&') : 'no call')
   ok('and back to the plan screen afterwards', call?.body?.flow_data?.after_completion?.redirect?.return_url === `${BASE}/#/parent/plan?changed=1`)
   // The half-price month was taken just above. Moving to yearly bills the
@@ -424,7 +466,8 @@ console.log('\n=== Elite, and yearly, on Stripe\'s own confirm page ===')
   const year = await answer(await portal({ flow: 'yearly' }, PARENT))
   const yearCall = lastCall('/v1/billing_portal/sessions')
   ok('"Switch to yearly" opens it for the same plan, yearly', year.status === 200
-    && yearCall?.body?.flow_data?.subscription_update_confirm?.items?.['0']?.price === 'price_test_standard_year')
+    && yearCall?.body?.flow_data?.subscription_update_confirm?.items?.['0']?.price === 'price_test_standard_year'
+    && yearCall?.body?.configuration === 'bpc_test_plan_change')
   ok('an unknown flow is refused', (await portal({ flow: 'refund' }, PARENT)).status === 400)
 
   // Stripe moved it to Elite: the webhook gives the plan.
@@ -450,6 +493,8 @@ console.log('\n=== Cancelling still works, paused or not ===')
   ok('coming back to the plan screen', call?.body?.flow_data?.after_completion?.redirect?.return_url === `${BASE}/#/parent/plan`)
   ok('the plain "Manage billing" still opens the portal\'s front page', (await portal({}, PARENT)).status === 200
     && !lastCall('/v1/billing_portal/sessions')?.body?.flow_data)
+  ok('in the default configuration, which allows no switching: never the plan-change one',
+    !lastCall('/v1/billing_portal/sessions')?.body?.configuration && !call?.body?.configuration)
   // The parent confirms in Stripe: the plan is set to stop.
   const cancelAt = clock + 20 * 86400
   ok('Stripe\'s news that it is set to stop is accepted', (await signed(subEvent('cancel', { cancel_at: cancelAt, pause_collection: null }))).status === 200)

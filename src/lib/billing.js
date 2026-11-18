@@ -299,6 +299,7 @@ export const BILLING_ERRORS = {
   pause_failed: 'Stripe could not pause your plan. Nothing has changed. Please try again.',
   resume_failed: 'Stripe could not start your plan again. Please try again.',
   save_failed: 'Stripe could not take half off your next month. Nothing has changed. Please try again.',
+  save_unconfirmed: 'Stripe did not confirm your half-price month, so we have kept it for you: it may already be on your next invoice. Check “Manage billing”, or write to us and we will sort it out.',
   already_elite: 'You are already on Elite Pass.',
   already_yearly: 'You already pay yearly.',
 }

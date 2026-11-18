@@ -74,7 +74,7 @@ const SERVER_OWNED = {
   // direct write anyway, but pushing it would fill the outbox with rejections.
   families: ['tier', 'subscription_status', 'stripe_customer_id', 'stripe_subscription_id',
              // A gift plan is written by redeem_gift_code alone.
-             'gift_tier', 'gift_starts_at', 'gift_until',
+             'gift_tier', 'gift_starts_at', 'gift_until', 'gift_then_tier', 'gift_then_until',
              // A pause and the half-price month: the pause functions and the
              // webhook alone (supabase/billing.sql).
              'paused_until', 'billing_cycle', 'save_offer_used_at'],

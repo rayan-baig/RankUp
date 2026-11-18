@@ -203,6 +203,13 @@ const fam = (await db.query(`insert into families (name, tier) values ('The Wobb
 const parentUser = (await db.query(`insert into auth.users (email) values ($1) returning id`, [`pilot-parent${stamp}@example.com`])).rows[0].id
 await db.query(`insert into parents (user_id, family_id, name) values ($1, $2, 'Wilma')`, [parentUser, fam])
 await db.query('select seed_consent($1, $2)', [fam, parentUser])
+// Five children of one family are that family's numbers (school_group_shown:
+// 5 students from 3 families), so at school the twelve count as three
+// households, round in turn; the last one is this parent's.
+const households = [fam]
+for (const name of ['The Wobblethorpes Two', 'The Wobblethorpes Three']) {
+  households.push((await db.query(`insert into families (name, tier) values ($1, 'standard') returning id`, [name])).rows[0].id)
+}
 // Twelve children: six in Kestrel, five in Otter, one in no house yet. Kestrel's did
 // two chores each, three of Otter's one each, and the one in no house one.
 const plan = [...Array(6).fill('Kestrel'), ...Array(5).fill('Otter'), 'Heron']
@@ -211,7 +218,7 @@ for (const [i, house] of plan.entries()) {
   const quest = (await db.query(`insert into quests (family_id, kid_id, title, category) values ($1, $2, 'Feed the axolotl', $3) returning id`,
     [fam, kid, house === 'Kestrel' ? 'kitchen' : 'pets'])).rows[0].id
   await db.query(`insert into school_members (kid_id, school_id, family_id, joined_at, group_id) values ($1, $2, $3, now() - interval '1 hour', $4)`,
-    [kid, schoolId, fam, house === 'Heron' ? null : groups[house]])
+    [kid, schoolId, i === plan.length - 1 ? fam : households[i % 3], house === 'Heron' ? null : groups[house]])
   const chores = house === 'Kestrel' ? 2 : house === 'Otter' && i < 9 ? 1 : house === 'Heron' ? 1 : 0
   for (let n = 0; n < chores; n += 1) {
     await db.query(`insert into submissions (family_id, quest_id, kid_id, status, decided_at, note) values ($1, $2, $3, 'approved', now(), 'my secret note')`,
@@ -283,8 +290,8 @@ ok('with 3 students left, the report shows how many joined and nothing else', /3
   && await page.getByTestId('report-chores').count() === 0 && !/Busiest week/.test(small), small)
 ok('and every house says too few', !/\d+%/.test(await page.getByTestId('report-groups').innerText()))
 
-await db.query('delete from families where id = $1', [fam])
 await db.query('delete from schools where id in ($1, $2)', [schoolId, secondId])
+await db.query('delete from families where id = any($1)', [households])
 await db.query(`delete from school_pilots where label in ($1, 'Too late', 'Spare')`, [`Example Academy ${stamp}`])
 await db.query('delete from auth.users where id = $1', [parentUser])
 await db.end()

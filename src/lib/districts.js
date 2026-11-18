@@ -153,7 +153,7 @@ function monthKey(offset = 0, now = new Date()) {
 
 const sampleMonth = (students, active, chores) => (students < SCHOOL_MIN_STUDENTS
   ? { students, shown: false }
-  : { students, shown: true, active, chores, score: Math.round((chores / students) * 10) / 10 })
+  : { students, shown: true, active, chores_shown: true, chores, score: Math.round((chores / students) * 10) / 10 })
 
 export function demoDistrict() {
   const schools = [
@@ -172,7 +172,7 @@ export function demoDistrict() {
       shown: shown.length,
       students: shown.reduce((n, s) => n + s[which].students, 0),
       active: shown.reduce((n, s) => n + s[which].active, 0),
-      chores: shown.reduce((n, s) => n + s[which].chores, 0),
+      chores: shown.filter((s) => s[which].chores_shown).reduce((n, s) => n + s[which].chores, 0),
       covered: schools.filter((s) => s.covered).length,
     }
   }

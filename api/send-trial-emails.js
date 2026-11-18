@@ -34,9 +34,11 @@
  * (api/_shared/errorReport.js): crashes and server errors since the last
  * one, with nothing in it that could point at a family.
  */
-import { recordRun, secretMatches, makeServiceRpc } from './_shared/job.js'
+import { recordRun, secretMatches, makeServiceRpc, reportError } from './_shared/job.js'
 import { emailSettings, emailConfigured, sendEmail, trialEmail, pauseReminderEmail, pilotReminderEmail } from './_shared/email.js'
 import { sendErrorReport } from './_shared/errorReport.js'
+import { endPlansDistrictPays } from './_shared/onePlan.js'
+import { makeStripe } from './_shared/stripe.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -183,6 +185,20 @@ export default async function handler(req, res) {
     pilots.failed += results.filter((x) => !x.ok).length
   }
 
+  // A school that pays for itself and whose district now pays for it too:
+  // its own plan stops at the end of its period, and its admins are told
+  // (api/_shared/onePlan.js). The webhook does this when the district's
+  // plan changes; this catches a school joining a district that already
+  // pays, which Stripe hears nothing about.
+  let takeover = null
+  if (process.env.STRIPE_SECRET_KEY) {
+    try {
+      takeover = await endPlansDistrictPays({ stripe: makeStripe(process.env.STRIPE_SECRET_KEY), serviceRpc, reportError, site: SITE })
+    } catch {
+      takeover = { failed: true }
+    }
+  }
+
   const errors = await sendErrorReport(serviceRpc, settings, { to: ERRORS_EMAIL, site: SITE })
   const problems = [
     failed ? `${failed} email(s) not sent` : '',
@@ -191,10 +207,11 @@ export default async function handler(req, res) {
     pilots.failed ? `${pilots.failed} pilot reminder(s) not sent` : '',
     pilotLookupFailed ? 'pilot reminders not looked up' : '',
     errors.configured && !errors.ok ? 'error report not sent' : '',
+    takeover?.failed ? 'schools paid for twice not looked up' : '',
   ].filter(Boolean)
   await recordRun(serviceRpc, 'send-trial-emails', problems.length === 0, problems.join('; ') || null)
   return res.status(200).json({
-    ok: true, due: reminders.length, sent, failed, pauses, pilots,
+    ok: true, due: reminders.length, sent, failed, pauses, pilots, ...(takeover ? { district_takeover: takeover } : {}),
     error_report: errors.configured ? { kinds: errors.kinds || 0, sent: errors.sent || 0, ...(errors.capped ? { capped: true } : {}) } : null,
   })
 }

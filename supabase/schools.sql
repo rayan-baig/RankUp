@@ -105,6 +105,10 @@ create table if not exists school_month_scores (
   ranked     boolean not null,
   primary key (school_id, month_key)
 );
+-- Whether the month's average may be shown at all (school_month_ok): a
+-- school not yet checked is not ranked, but its own staff still see its
+-- average when the rule allows. Null for a month closed before this column.
+alter table school_month_scores add column if not exists shown boolean;
 
 -- District Champion. One per district per month, and it is the payment record
 -- for the reward too: `applied_at` is set only once billing has given the
@@ -271,6 +275,70 @@ revoke all on districts, district_staff, district_schools, district_quote_attemp
 alter table schools add column if not exists group_kind text not null default 'house'
   check (group_kind in ('house', 'class'));
 
+-- ---------------------------------------------------------------------------
+-- Paying by invoice, and paying once. Here rather than with the billing
+-- functions further down because school_is_live and district_covers, near
+-- the top, read them.
+--
+-- COVER BEFORE PAYMENT. A plan by invoice (a district's, or a school's own
+-- with method 'invoice') is live at Stripe the day it is made, weeks before
+-- anybody pays. It covers its schools for at most 30 days before its first
+-- invoice is paid, once per district or school ever (cover_grace_from, set
+-- the first time and never again): cancelling and invoicing again does not
+-- start another 30 days. After that a plan covers only once an invoice of
+-- that same subscription has been paid (paid_subscription_id).
+--
+-- BILLING VERSION. Counts every change that makes "send the invoice" or
+-- "update the plan" a new request: a school added or taken off, a size or a
+-- suspension changed, any news from Stripe applied. It goes in Stripe's
+-- idempotency keys, so a second tap is the same request (and makes one plan)
+-- while A, then B, then A again, or a cancel and a new invoice the same day,
+-- are each a request of their own.
+-- ---------------------------------------------------------------------------
+alter table schools add column if not exists billing_status text;
+alter table schools add column if not exists billing_by_invoice boolean not null default false;
+alter table schools add column if not exists cover_grace_from timestamptz;
+alter table schools add column if not exists paid_subscription_id text;
+alter table schools add column if not exists billing_version int not null default 0;
+-- When the school's own plan was set to stop because its district pays for
+-- it (schools_paying_twice), and the admin was told.
+alter table schools add column if not exists district_takeover_at timestamptz;
+alter table districts add column if not exists cover_grace_from timestamptz;
+alter table districts add column if not exists paid_subscription_id text;
+alter table districts add column if not exists billing_version int not null default 0;
+
+/*
+ * Card checkouts a school's admin has opened (api/school-checkout.js), so a
+ * plan by invoice can close them: one left open in another tab would
+ * otherwise make a second plan. A checkout lasts 24 hours at Stripe; a row
+ * older than two days is gone the next time the school opens one.
+ */
+create table if not exists school_checkout_sessions (
+  session_id text primary key,
+  school_id  uuid not null references schools(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+create index if not exists school_checkout_sessions_school on school_checkout_sessions (school_id, created_at);
+
+/*
+ * A second plan a school paid for while it was already paid for (its own
+ * plan, or its district's): the webhook cancels it and hands the money back
+ * (api/stripe-webhook.js), once. payment_refs are the payments refunded, so
+ * that refund's news is not mistaken for the school's real plan refunded.
+ */
+create table if not exists school_duplicate_plans (
+  subscription_id text primary key,
+  school_id       uuid not null references schools(id) on delete cascade,
+  found_at        timestamptz not null default now(),
+  cancelled_at    timestamptz,
+  refunded_at     timestamptz,
+  payment_refs    text[] not null default '{}'
+);
+
+alter table school_checkout_sessions enable row level security;
+alter table school_duplicate_plans   enable row level security;
+revoke all on school_checkout_sessions, school_duplicate_plans from public, anon, authenticated;
+
 create table if not exists school_groups (
   id         uuid primary key default gen_random_uuid(),
   school_id  uuid not null references schools(id) on delete cascade,
@@ -376,6 +444,36 @@ revoke execute on function school_code(int) from public, anon, authenticated;
 create or replace function school_min_students()
 returns int language sql immutable as $$ select 5 $$;
 
+/*
+ * The rule for any group's numbers, everywhere (a school's card and league,
+ * its houses, its district's picture and its pilot report):
+ *
+ *   - its counts (students, the share who did a chore) only with at least
+ *     school_min_students() students from at least school_min_families()
+ *     different families: five children of one or two families are those
+ *     families' numbers, and a parent can take their own children's away;
+ *   - its chores (a total, an average, a busiest week, a kind of chore) only
+ *     when at least school_min_active() of them did one in that time: with
+ *     one or two, the total is those children's own.
+ */
+create or replace function school_min_families()
+returns int language sql immutable as $$ select 3 $$;
+
+create or replace function school_min_active()
+returns int language sql immutable as $$ select 3 $$;
+
+/** May a group's counts be shown: enough students, from enough families. */
+create or replace function school_group_shown(p_students int, p_families int)
+returns boolean language sql immutable set search_path = public as $$
+  select coalesce(p_students, 0) >= school_min_students() and coalesce(p_families, 0) >= school_min_families();
+$$;
+
+/** And its chores: the same, and enough of them did a chore. */
+create or replace function school_chores_shown(p_students int, p_families int, p_active int)
+returns boolean language sql immutable set search_path = public as $$
+  select school_group_shown(p_students, p_families) and coalesce(p_active, 0) >= school_min_active();
+$$;
+
 /**
  * Accepted chores a child can score in one day (UTC), at most. The School
  * League counts no more than this, and so do the leaderboards
@@ -408,6 +506,10 @@ returns boolean language sql stable security definer set search_path = public as
       join schools s on s.id = ds.school_id
      where ds.school_id = p_school
        and d.status = 'active'
+       -- Paid for, or in the district's one 30 days before its first
+       -- invoice is paid.
+       and (d.paid_subscription_id = d.stripe_subscription_id
+            or d.cover_grace_from > now() - interval '30 days')
        and s.status <> 'suspended'
        and (d.paid_all
             or (select count(*) from district_schools o join schools os on os.id = o.school_id
@@ -427,7 +529,13 @@ returns boolean language sql stable security definer set search_path = public as
   select exists (select 1 from schools s
                   where s.id = p_school
                     and s.status <> 'suspended'
-                    and (s.status = 'active'
+                    and ((s.status = 'active'
+                          -- By invoice: on its free trial at Stripe, paid
+                          -- for, or in its one 30 days before paying.
+                          and (not s.billing_by_invoice
+                               or s.billing_status = 'trialing'
+                               or s.paid_subscription_id = s.stripe_subscription_id
+                               or s.cover_grace_from > now() - interval '30 days'))
                          or (s.status = 'trial' and s.trial_ends_at > now())
                          or district_covers(s.id)));
 $$;
@@ -471,6 +579,19 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 /**
+ * May the school's average for the month be shown, or count in a league:
+ * the rule at school_group_shown (enough students, from enough families,
+ * enough of whom did a chore). Below it the average is a family's own.
+ */
+create or replace function school_month_ok(p_school uuid, p_month date)
+returns boolean language sql stable security definer set search_path = public as $$
+  select school_chores_shown(count(*)::int, count(distinct m.family_id)::int,
+                             (count(*) filter (where p.points > 0))::int)
+    from school_kid_points(p_school, p_month) p
+    join school_members m on m.kid_id = p.kid_id;
+$$;
+
+/**
  * One district's table for a month. Verified, live schools only — plus,
  * when asked for, one particular school, so an unverified school can still
  * see where it would stand.
@@ -480,12 +601,16 @@ create or replace function school_district_table(p_district_key text, p_month da
 returns table (school_id uuid, name text, city text, score numeric,
                students int, ranked boolean)
 language sql stable security definer set search_path = public as $$
-  select s.id, s.name, s.city, ms.score, ms.students,
+  select s.id, s.name, s.city,
+         -- No average below the rule (school_group_shown): it would be a
+         -- family's own.
+         case when ok.v then ms.score end, ms.students,
          -- The included school is shown even when it cannot be ranked (not yet
          -- checked, or its plan has ended), so it is marked as such here.
-         (s.verified and school_is_live(s.id) and ms.students >= school_min_students()) as ranked
+         (s.verified and school_is_live(s.id) and ok.v) as ranked
     from schools s
     cross join lateral school_month_score(s.id, p_month) ms
+    cross join lateral (select school_month_ok(s.id, p_month) as v) ok
    where s.district_key = p_district_key
      and ((s.verified and school_is_live(s.id)) or s.id = p_include)
      and s.status <> 'suspended';
@@ -724,8 +849,10 @@ returns jsonb language sql stable security definer set search_path = public as $
            'status', r.status,
            'asked_by_us', r.challenger_id = p_school,
            'rival', jsonb_build_object('name', o.name, 'city', o.city),
-           'our_score', (select score from school_month_score(p_school, date_trunc('month', now())::date)),
-           'their_score', (select score from school_month_score(o.id, date_trunc('month', now())::date)),
+           'our_score', (select score from school_month_score(p_school, date_trunc('month', now())::date)
+                          where school_month_ok(p_school, date_trunc('month', now())::date)),
+           'their_score', (select score from school_month_score(o.id, date_trunc('month', now())::date)
+                            where school_month_ok(o.id, date_trunc('month', now())::date)),
            'won',  (select count(*) from school_rivalry_results x where x.rivalry_id = r.id and x.winner_id = p_school),
            'lost', (select count(*) from school_rivalry_results x where x.rivalry_id = r.id and x.winner_id = o.id),
            'drawn', (select count(*) from school_rivalry_results x where x.rivalry_id = r.id and x.winner_id is null))
@@ -754,7 +881,10 @@ begin
   select * into v_s from schools where id = p_school;
   if not found then return null; end if;
   select score, students into v_score, v_kids from school_month_score(p_school, v_month);
-  v_ranked := v_s.verified and school_is_live(p_school) and v_kids >= school_min_students();
+  -- Below the rule (school_group_shown) there is no average to show: with
+  -- two students, or five from one family, it is a family's own number.
+  if not school_month_ok(p_school, v_month) then v_score := null; end if;
+  v_ranked := v_s.verified and school_is_live(p_school) and v_score is not null;
 
   select count(*) filter (where ranked),
          (select count(*) + 1 from school_district_table(v_s.district_key, v_month) o
@@ -1036,10 +1166,11 @@ begin
   -- only for them, so a second run cannot top up a Stars list that has had a
   -- child taken off it since (which put the same child on it twice).
   with closed as (
-    insert into school_month_scores (school_id, month_key, score, students, ranked)
+    insert into school_month_scores (school_id, month_key, score, students, ranked, shown)
     select s.id, v_key, ms.score, ms.students,
-           s.verified and ms.students >= school_min_students()
+           s.verified and ok.v, ok.v
       from schools s cross join lateral school_month_score(s.id, v_month) ms
+      cross join lateral (select school_month_ok(s.id, v_month) as v) ok
      where school_is_live(s.id)
     on conflict (school_id, month_key) do nothing
     returning school_id
@@ -1254,7 +1385,9 @@ begin
   return jsonb_build_object('ok', true, 'school_id', v_s.id, 'name', v_s.name,
                             'band', v_s.size_band, 'status', v_s.status,
                             'trial_ends_at', v_s.trial_ends_at,
-                            'has_customer', v_s.stripe_customer_id is not null);
+                            'has_customer', v_s.stripe_customer_id is not null,
+                            -- For Stripe's idempotency key (see billing_version).
+                            'billing_version', v_s.billing_version);
 end $$;
 
 create or replace function attach_school_customer(p_school_id uuid, p_customer_id text)
@@ -1372,6 +1505,22 @@ begin
     return jsonb_build_object('ok', true, 'status', v_s.status, 'ignored', 'refunded_period');
   end if;
 
+  -- A second plan for a school already paid for: its own plan is live, or
+  -- its district pays for it. Only a card checkout opened earlier (another
+  -- tab, before a plan by invoice or the district's) can make one, since
+  -- school_checkout_info refuses a new one. It is never taken as the
+  -- school's plan: written down for the webhook to cancel and refund.
+  if p_status in ('active', 'trialing', 'past_due') and p_subscription_id is not null
+     and p_subscription_id is distinct from v_s.stripe_subscription_id
+     and ((v_s.status = 'active' and v_s.stripe_subscription_id is not null
+           and coalesce(v_s.billing_status, 'active') in ('active', 'trialing', 'past_due'))
+          or district_covers(v_s.id)) then
+    insert into school_duplicate_plans (subscription_id, school_id) values (p_subscription_id, p_school_id)
+    on conflict (subscription_id) do nothing;
+    return jsonb_build_object('ok', true, 'status', v_s.status, 'ignored', 'duplicate_plan',
+                              'subscription_id', p_subscription_id);
+  end if;
+
   v_new := case
     when p_status in ('active', 'trialing', 'past_due') then 'active'
     when p_status in ('canceled', 'unpaid', 'incomplete_expired')
@@ -1401,7 +1550,19 @@ begin
              then coalesce(nullif(p_payload->>'ended_at', '')::timestamptz, now())
            when p_status in ('active', 'trialing', 'past_due')
              then nullif(p_payload->>'cancel_at', '')::timestamptz
-           else billing_ends_at end
+           else billing_ends_at end,
+         -- By invoice or by card, as the subscription says (kept when an
+         -- event does not say).
+         billing_by_invoice = case when p_payload ? 'collection'
+                                   then p_payload->>'collection' = 'send_invoice' else billing_by_invoice end,
+         -- The one 30 days of cover before a first invoice is paid starts
+         -- the first time a plan by invoice is live and not on its trial.
+         cover_grace_from = case
+           when cover_grace_from is null and p_status = 'active'
+                and (case when p_payload ? 'collection' then p_payload->>'collection' = 'send_invoice'
+                          else billing_by_invoice end)
+             then now() else cover_grace_from end,
+         billing_version = billing_version + 1
    where id = p_school_id;
   return jsonb_build_object('ok', true, 'status', v_new);
 end $$;
@@ -1460,14 +1621,24 @@ begin
 end $$;
 
 /** A school's invoice was paid: recorded with its amount, once. */
+-- Which subscription an invoice paid for came with cover before payment:
+-- a new argument, so the old function goes first.
+drop function if exists record_school_payment(uuid, text, int, text);
 create or replace function record_school_payment(p_school_id uuid, p_stripe_event text,
-                                                 p_amount_pence int, p_currency text)
+                                                 p_amount_pence int, p_currency text,
+                                                 p_subscription_id text default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_found boolean;
 begin
   insert into billing_events (school_id, stripe_event, type, payload, amount_pence, currency)
   values (p_school_id, p_stripe_event, 'school:invoice_paid', '{}'::jsonb, p_amount_pence, upper(p_currency))
   on conflict (stripe_event) do nothing;
-  return jsonb_build_object('ok', true, 'recorded', found);
+  v_found := found;
+  -- Money for this subscription: a plan by invoice covers from now on.
+  if coalesce(p_amount_pence, 0) > 0 and p_subscription_id is not null then
+    update schools set paid_subscription_id = p_subscription_id where id = p_school_id;
+  end if;
+  return jsonb_build_object('ok', true, 'recorded', v_found);
 end $$;
 
 grant execute on function school_checkout_info() to authenticated;
@@ -1477,7 +1648,7 @@ revoke execute on function school_band_of(uuid) from public, anon, authenticated
 revoke execute on function stripe_customer_for_school(uuid) from public, anon, authenticated;
 revoke execute on function apply_school_subscription(uuid, text, text, text, text, jsonb, timestamptz, timestamptz) from public, anon, authenticated;
 revoke execute on function apply_school_refund(uuid, text, boolean, timestamptz, timestamptz) from public, anon, authenticated;
-revoke execute on function record_school_payment(uuid, text, int, text) from public, anon, authenticated;
+revoke execute on function record_school_payment(uuid, text, int, text, text) from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- A family's right to see what is held. Called by export_family_data in
@@ -1763,7 +1934,8 @@ begin
     'name', v_s.name,
     'district', v_s.district,
     'month_key', p_month_key,
-    'score', v_score.score,
+    -- No average below the rule (school_group_shown).
+    'score', case when coalesce(v_score.shown, v_score.ranked) then v_score.score end,
     'students', coalesce(v_score.students, 0),
     'ranked', coalesce(v_score.ranked, false),
     'verified', v_s.verified,
@@ -1973,15 +2145,21 @@ $$;
 create or replace function district_school_month(p_school uuid, p_month date)
 returns jsonb language sql stable security definer set search_path = public as $$
   select case
-    when count(*) < school_min_students()
+    when not school_group_shown(count(*)::int, count(distinct m.family_id)::int)
       then jsonb_build_object('students', count(*), 'shown', false)
     else jsonb_build_object(
       'students', count(*), 'shown', true,
-      'active', count(*) filter (where points > 0),
-      'chores', coalesce(sum(points), 0),
-      'score', round(avg(points)::numeric, 1))
+      'active', count(*) filter (where p.points > 0),
+      -- Chores and the average only when enough of them did one: with one
+      -- or two, the total is those children's own.
+      'chores_shown', count(*) filter (where p.points > 0) >= school_min_active(),
+      'chores', case when count(*) filter (where p.points > 0) >= school_min_active()
+                     then coalesce(sum(p.points), 0) end,
+      'score', case when count(*) filter (where p.points > 0) >= school_min_active()
+                    then round(avg(p.points)::numeric, 1) end)
   end
-    from school_kid_points(p_school, p_month);
+    from school_kid_points(p_school, p_month) p
+    join school_members m on m.kid_id = p.kid_id;
 $$;
 
 /** The district's totals: only the schools whose numbers are shown. */
@@ -1992,7 +2170,8 @@ returns jsonb language sql immutable as $$
     'shown', count(*) filter (where (e->p_which->>'shown')::boolean),
     'students', coalesce(sum((e->p_which->>'students')::int) filter (where (e->p_which->>'shown')::boolean), 0),
     'active', coalesce(sum((e->p_which->>'active')::int) filter (where (e->p_which->>'shown')::boolean), 0),
-    'chores', coalesce(sum((e->p_which->>'chores')::int) filter (where (e->p_which->>'shown')::boolean), 0),
+    'chores', coalesce(sum((e->p_which->>'chores')::int) filter (where (e->p_which->>'chores_shown')::boolean), 0),
+    'chores_shown', count(*) filter (where (e->p_which->>'chores_shown')::boolean),
     'covered', count(*) filter (where (e->>'covered')::boolean))
     from jsonb_array_elements(coalesce(p_schools, '[]'::jsonb)) e;
 $$;
@@ -2317,11 +2496,13 @@ begin
   if v_d.status = 'active' and v_d.stripe_subscription_id is not null then
     return jsonb_build_object('ok', false, 'reason', 'already_paying',
                               'district_id', v_d.id, 'has_customer', v_d.stripe_customer_id is not null,
-                              'quote', v_q);
+                              'quote', v_q, 'billing_version', v_d.billing_version);
   end if;
   if not (v_q->>'ok')::boolean then return v_q; end if;
   return jsonb_build_object('ok', true, 'district_id', v_d.id, 'name', v_d.name, 'status', v_d.status,
-                            'has_customer', v_d.stripe_customer_id is not null, 'quote', v_q);
+                            'has_customer', v_d.stripe_customer_id is not null, 'quote', v_q,
+                            -- For Stripe's idempotency keys (see billing_version).
+                            'billing_version', v_d.billing_version);
 end $$;
 
 create or replace function attach_district_customer(p_district_id uuid, p_customer_id text)
@@ -2425,7 +2606,11 @@ begin
              then coalesce(nullif(p_payload->>'ended_at', '')::timestamptz, now())
            when p_status in ('active', 'trialing', 'past_due')
              then nullif(p_payload->>'cancel_at', '')::timestamptz
-           else billing_ends_at end
+           else billing_ends_at end,
+         -- The district's one 30 days of cover before a first invoice is
+         -- paid: from the first time any plan of its is live, never again.
+         cover_grace_from = case when v_new = 'active' then coalesce(cover_grace_from, now()) else cover_grace_from end,
+         billing_version = billing_version + 1
    where id = p_district_id;
   return jsonb_build_object('ok', true, 'status', v_new);
 end $$;
@@ -2475,14 +2660,24 @@ begin
 end $$;
 
 /** A district's invoice was paid: recorded with its amount, once per invoice. */
+-- Which subscription an invoice paid for came with cover before payment:
+-- a new argument, so the old function goes first.
+drop function if exists record_district_payment(uuid, text, int, text);
 create or replace function record_district_payment(p_district_id uuid, p_stripe_event text,
-                                                   p_amount_pence int, p_currency text)
+                                                   p_amount_pence int, p_currency text,
+                                                   p_subscription_id text default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_found boolean;
 begin
   insert into billing_events (district_id, stripe_event, type, payload, amount_pence, currency)
   values (p_district_id, p_stripe_event, 'district:invoice_paid', '{}'::jsonb, p_amount_pence, upper(p_currency))
   on conflict (stripe_event) do nothing;
-  return jsonb_build_object('ok', true, 'recorded', found);
+  v_found := found;
+  -- Money for this subscription: its schools are covered from now on.
+  if coalesce(p_amount_pence, 0) > 0 and p_subscription_id is not null then
+    update districts set paid_subscription_id = p_subscription_id where id = p_district_id;
+  end if;
+  return jsonb_build_object('ok', true, 'recorded', v_found);
 end $$;
 
 /**
@@ -2506,6 +2701,118 @@ begin
   insert into district_quote_attempts (ip_key, kind) values (left(coalesce(p_ip_key, ''), 64), 'quote') returning id into v_id;
   return jsonb_build_object('ok', true, 'id', v_id);
 end $$;
+
+/**
+ * A change that makes "send the invoice" or "update the plan" a new request
+ * moves the district's billing_version on (see the columns at the top): a
+ * school added or taken off, or one of its schools changing size or being
+ * suspended.
+ */
+create or replace function bump_district_billing_version() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_table_name = 'district_schools' then
+    update districts set billing_version = billing_version + 1
+     where id = case when tg_op = 'DELETE' then old.district_id else new.district_id end;
+  elsif new.size_band is distinct from old.size_band or new.status is distinct from old.status then
+    update districts d set billing_version = billing_version + 1
+      from district_schools ds where ds.school_id = new.id and d.id = ds.district_id;
+  end if;
+  return null;
+end $$;
+drop trigger if exists district_schools_billing_version on district_schools;
+create trigger district_schools_billing_version after insert or delete on district_schools
+  for each row execute function bump_district_billing_version();
+drop trigger if exists schools_district_billing_version on schools;
+create trigger schools_district_billing_version after update of size_band, status on schools
+  for each row execute function bump_district_billing_version();
+
+-- ---------------------------------------------------------------------------
+-- No school paying twice.
+-- ---------------------------------------------------------------------------
+
+/** A card checkout the school's admin opened (api/school-checkout.js). */
+create or replace function record_school_checkout(p_school_id uuid, p_session_id text)
+returns void language sql security definer set search_path = public as $$
+  delete from school_checkout_sessions where school_id = p_school_id and created_at < now() - interval '2 days';
+  insert into school_checkout_sessions (session_id, school_id) values (p_session_id, p_school_id)
+  on conflict (session_id) do nothing;
+$$;
+
+/** The card checkouts that may still be open for a school: the ones a plan by invoice closes. */
+create or replace function open_school_checkouts(p_school_id uuid)
+returns text[] language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(session_id order by created_at), '{}')
+    from school_checkout_sessions
+   where school_id = p_school_id and created_at > now() - interval '25 hours';
+$$;
+
+/** A checkout closed (or found already closed): not asked about again. */
+create or replace function forget_school_checkout(p_session_id text)
+returns void language sql security definer set search_path = public as $$
+  delete from school_checkout_sessions where session_id = p_session_id;
+$$;
+
+/**
+ * A second plan the webhook cancelled and refunded (apply_school_subscription
+ * found it): what was done, and the payments handed back.
+ */
+create or replace function mark_duplicate_plan(p_subscription_id text, p_cancelled boolean,
+                                               p_refunds text[] default '{}')
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  update school_duplicate_plans
+     set cancelled_at = case when p_cancelled then coalesce(cancelled_at, now()) else cancelled_at end,
+         refunded_at = case when cardinality(coalesce(p_refunds, '{}')) > 0 then coalesce(refunded_at, now()) else refunded_at end,
+         payment_refs = (select coalesce(array_agg(distinct r), '{}') from unnest(payment_refs || coalesce(p_refunds, '{}')) r)
+   where subscription_id = p_subscription_id;
+  return jsonb_build_object('ok', found);
+end $$;
+
+/** Is this subscription a second plan the webhook is handing back? With what was done so far. */
+create or replace function duplicate_plan(p_subscription_id text)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('school_id', school_id, 'cancelled', cancelled_at is not null,
+                            'refunded', refunded_at is not null, 'payment_refs', to_jsonb(payment_refs))
+    from school_duplicate_plans where subscription_id = p_subscription_id;
+$$;
+
+/** Was this payment handed back as a second plan's? Then its refund is not the school's plan refunded. */
+create or replace function duplicate_plan_payment(p_refs text[])
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from school_duplicate_plans where payment_refs && coalesce(p_refs, '{}'));
+$$;
+
+/**
+ * Schools with a paid plan of their own that their district now pays for
+ * (and has paid for: cover before payment is not enough to stop a school's
+ * own plan), not yet set to stop. The webhook and the hourly job set each
+ * one's own plan to stop at the end of its period, and tell its admins once.
+ */
+create or replace function schools_paying_twice()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'school_id', s.id, 'name', s.name, 'subscription_id', s.stripe_subscription_id,
+           'period_end', s.billing_period_end, 'district', d.name,
+           'told', s.district_takeover_at is not null,
+           'recipients', (select coalesce(jsonb_agg(u.email order by st.joined_at), '[]'::jsonb)
+                            from school_staff st join auth.users u on u.id = st.user_id
+                           where st.school_id = s.id and st.role = 'admin' and u.email like '%@%'))
+           order by s.id), '[]'::jsonb)
+    from schools s
+    join district_schools ds on ds.school_id = s.id
+    join districts d on d.id = ds.district_id
+   where s.status = 'active' and s.stripe_subscription_id is not null and s.billing_ends_at is null
+     and coalesce(s.billing_status, 'active') in ('active', 'trialing', 'past_due')
+     and d.paid_subscription_id = d.stripe_subscription_id
+     and district_covers(s.id);
+$$;
+
+/** The school's own plan is set to stop, and its admins were told. */
+create or replace function mark_district_takeover(p_school_id uuid)
+returns void language sql security definer set search_path = public as $$
+  update schools set district_takeover_at = coalesce(district_takeover_at, now()) where id = p_school_id;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Grants. Postgres grants EXECUTE to PUBLIC on every new function, and
@@ -2545,8 +2852,17 @@ revoke execute on function stripe_customer_for_district(uuid) from public, anon,
 revoke execute on function stripe_subscription_for_district(uuid) from public, anon, authenticated;
 revoke execute on function apply_district_subscription(uuid, text, text, text, text, jsonb, timestamptz, timestamptz, jsonb, boolean) from public, anon, authenticated;
 revoke execute on function apply_district_refund(uuid, text, boolean, timestamptz, timestamptz) from public, anon, authenticated;
-revoke execute on function record_district_payment(uuid, text, int, text) from public, anon, authenticated;
+revoke execute on function record_district_payment(uuid, text, int, text, text) from public, anon, authenticated;
 revoke execute on function record_district_quote(text) from public, anon, authenticated;
+revoke execute on function bump_district_billing_version() from public, anon, authenticated;
+revoke execute on function record_school_checkout(uuid, text) from public, anon, authenticated;
+revoke execute on function open_school_checkouts(uuid) from public, anon, authenticated;
+revoke execute on function forget_school_checkout(text) from public, anon, authenticated;
+revoke execute on function mark_duplicate_plan(text, boolean, text[]) from public, anon, authenticated;
+revoke execute on function duplicate_plan(text) from public, anon, authenticated;
+revoke execute on function duplicate_plan_payment(text[]) from public, anon, authenticated;
+revoke execute on function schools_paying_twice() from public, anon, authenticated;
+revoke execute on function mark_district_takeover(uuid) from public, anon, authenticated;
 
 -- ===========================================================================
 -- Pilots, the report for the school office, and houses.
@@ -2579,10 +2895,13 @@ revoke execute on function record_district_quote(text) from public, anon, authen
  * count as school_kid_points, for any window rather than a month, with the
  * house each is in.
  */
+-- The family each student is in came with the rule at school_group_shown:
+-- a new column of the result, so the old function goes first.
+drop function if exists school_points_between(uuid, timestamptz, timestamptz);
 create or replace function school_points_between(p_school uuid, p_from timestamptz, p_to timestamptz)
-returns table (kid_id uuid, group_id uuid, points int)
+returns table (kid_id uuid, group_id uuid, family_id uuid, points int)
 language sql stable security definer set search_path = public as $$
-  select m.kid_id, m.group_id,
+  select m.kid_id, m.group_id, m.family_id,
          coalesce((
            select sum(d.n) from (
              select least(count(*), school_daily_chores()) as n
@@ -2601,64 +2920,102 @@ $$;
 /**
  * Each house's totals between two moments, for the board and the report.
  *
- * A house is shown only with at least school_min_students() taking part.
- * And because the school's own total is shown too, the students left over
- * (in no house, or in a house too small to show) must not be between 1 and
- * the minimum either, or the school's total less the houses shown would be
- * those few children's numbers. So while they are, the smallest house shown
- * is hidden as well, until what is left over is none or enough. The same
- * reason the district totals add up only the schools shown.
+ * By the rule at school_group_shown: a house's counts only with at least 5
+ * students from at least 3 families; its chores and average only when at
+ * least 3 of them did one.
+ *
+ * And because the school's own numbers are shown too, what is left over
+ * must pass the same rule, or the school's numbers less the houses shown
+ * would be those few children's:
+ *   - the students in no house shown are none, or 5 or more from 3 or more
+ *     families; while they are not, the smallest house shown is hidden too;
+ *   - the students in no house whose chores are shown include none, or 3 or
+ *     more, who did a chore; while they do not, the smallest house's chores
+ *     are hidden too.
+ * The same reason the district totals add up only the schools shown.
  */
 create or replace function school_group_totals(p_school uuid, p_from timestamptz, p_to timestamptz)
 returns jsonb language plpgsql stable security definer set search_path = public as $$
 declare
-  v_min    int := school_min_students();
-  v_total  int;
+  v_kid    uuid[];
+  v_grp    uuid[];
+  v_fam    uuid[];
+  v_pts    int[];
   v_groups jsonb;
-  v_ids    uuid[];
-  v_sizes  int[];
-  v_pool   int;
-  i        int := 1;
+  v_shown  uuid[];
+  v_chores uuid[];
+  v_n      int;
+  v_f      int;
+  v_a      int;
 begin
-  with k as (select * from school_points_between(p_school, p_from, p_to)),
-  g as (select g.id, g.name, x.students, x.active, x.chores
-          from school_groups g
-          cross join lateral (select count(*)::int as students,
-                                     count(*) filter (where k.points > 0)::int as active,
-                                     coalesce(sum(k.points), 0)::int as chores
-                                from k where k.group_id = g.id) x
-         where g.school_id = p_school)
-  select (select count(*) from k)::int,
-         coalesce((select jsonb_agg(jsonb_build_object('id', g.id, 'name', g.name, 'students', g.students,
-                                                       'active', g.active, 'chores', g.chores)
-                                    order by g.name, g.id) from g), '[]'::jsonb)
-    into v_total, v_groups;
+  select coalesce(array_agg(k.kid_id), '{}'), coalesce(array_agg(k.group_id), '{}'),
+         coalesce(array_agg(k.family_id), '{}'), coalesce(array_agg(k.points), '{}')
+    into v_kid, v_grp, v_fam, v_pts
+    from school_points_between(p_school, p_from, p_to) k;
 
-  -- The houses big enough to show, smallest first.
-  select coalesce(array_agg((e->>'id')::uuid order by (e->>'students')::int, e->>'name'), '{}'),
-         coalesce(array_agg((e->>'students')::int order by (e->>'students')::int, e->>'name'), '{}')
-    into v_ids, v_sizes
-    from jsonb_array_elements(v_groups) e where (e->>'students')::int >= v_min;
-  v_pool := v_total - coalesce((select sum(x) from unnest(v_sizes) x), 0);
-  while v_pool between 1 and v_min - 1 and i <= coalesce(array_length(v_ids, 1), 0) loop
-    v_pool := v_pool + v_sizes[i];
-    i := i + 1;
+  select coalesce(jsonb_agg(jsonb_build_object('id', g.id, 'name', g.name, 'students', x.students,
+                                               'families', x.families, 'active', x.active, 'chores', x.chores)
+                            order by g.name, g.id), '[]'::jsonb)
+    into v_groups
+    from school_groups g
+    cross join lateral (
+      select count(*)::int as students, count(distinct u.f)::int as families,
+             (count(*) filter (where u.pt > 0))::int as active, coalesce(sum(u.pt), 0)::int as chores
+        from unnest(v_grp, v_fam, v_pts) as u(g, f, pt)
+       where u.g = g.id) x
+   where g.school_id = p_school;
+
+  -- The houses whose counts may be shown, and of those, whose chores.
+  select coalesce(array_agg((e->>'id')::uuid), '{}') into v_shown
+    from jsonb_array_elements(v_groups) e
+   where school_group_shown((e->>'students')::int, (e->>'families')::int);
+  select coalesce(array_agg((e->>'id')::uuid), '{}') into v_chores
+    from jsonb_array_elements(v_groups) e
+   where (e->>'id')::uuid = any (v_shown) and (e->>'active')::int >= school_min_active();
+
+  -- What is left over, for counts: none, or a group the rule allows.
+  loop
+    select count(*)::int, count(distinct u.f)::int into v_n, v_f
+      from unnest(v_grp, v_fam) as u(g, f)
+     where u.g is null or not (u.g = any (v_shown));
+    exit when v_n = 0 or school_group_shown(v_n, v_f) or cardinality(v_shown) = 0;
+    -- Hide the smallest house shown (then by name), and its chores with it.
+    v_shown := array_remove(v_shown, (
+      select (e->>'id')::uuid from jsonb_array_elements(v_groups) e
+       where (e->>'id')::uuid = any (v_shown)
+       order by (e->>'students')::int, e->>'name', e->>'id' limit 1));
+    v_chores := array(select c from unnest(v_chores) c where c = any (v_shown));
   end loop;
-  v_ids := v_ids[i:];
+
+  -- What is left over, for chores: nobody who did one, or enough of them.
+  loop
+    select (count(*) filter (where u.pt > 0))::int into v_a
+      from unnest(v_grp, v_pts) as u(g, pt)
+     where u.g is null or not (u.g = any (v_chores));
+    exit when v_a = 0 or v_a >= school_min_active() or cardinality(v_chores) = 0;
+    v_chores := array_remove(v_chores, (
+      select (e->>'id')::uuid from jsonb_array_elements(v_groups) e
+       where (e->>'id')::uuid = any (v_chores)
+       order by (e->>'active')::int, (e->>'students')::int, e->>'name', e->>'id' limit 1));
+  end loop;
 
   return coalesce((
-    select jsonb_agg(case when (e->>'id')::uuid = any (v_ids)
-             then jsonb_build_object('id', e->'id', 'name', e->'name', 'shown', true,
-                                     'students', (e->>'students')::int,
-                                     'active', (e->>'active')::int,
-                                     'chores', (e->>'chores')::int,
-                                     'share_pct', round(100.0 * (e->>'active')::int / (e->>'students')::int)::int,
-                                     'average', round((e->>'chores')::numeric / (e->>'students')::int, 1))
+    select jsonb_agg(case
+             when (e->>'id')::uuid = any (v_shown)
+               then jsonb_build_object('id', e->'id', 'name', e->'name', 'shown', true,
+                                       'students', (e->>'students')::int,
+                                       'active', (e->>'active')::int,
+                                       'share_pct', round(100.0 * (e->>'active')::int / (e->>'students')::int)::int,
+                                       'chores_shown', (e->>'id')::uuid = any (v_chores),
+                                       'chores', case when (e->>'id')::uuid = any (v_chores) then (e->>'chores')::int end,
+                                       'average', case when (e->>'id')::uuid = any (v_chores)
+                                                       then round((e->>'chores')::numeric / (e->>'students')::int, 1) end)
              else jsonb_build_object('id', e->'id', 'name', e->'name', 'shown', false) end
-           -- Shown houses best first, by the average (as the league ranks
-           -- schools); then the rest by name.
-           order by ((e->>'id')::uuid = any (v_ids)) desc,
-                    case when (e->>'id')::uuid = any (v_ids)
+           -- Houses with an average, best first (as the league ranks
+           -- schools); then the others shown, then the rest, by name.
+           order by case when (e->>'id')::uuid = any (v_chores) then 0
+                         when (e->>'id')::uuid = any (v_shown) then 1 else 2 end,
+                    case when (e->>'id')::uuid = any (v_chores)
                          then (e->>'chores')::numeric / (e->>'students')::int end desc nulls last,
                     e->>'name')
       from jsonb_array_elements(v_groups) e), '[]'::jsonb);
@@ -2985,6 +3342,7 @@ declare
   v_from   timestamptz;
   v_to     timestamptz;
   v_n      int;
+  v_fams   int;
   v_active int;
   v_chores int;
   v_min    int := school_min_students();
@@ -3001,29 +3359,39 @@ begin
   v_to := least(now(), v_s.trial_ends_at);
   if v_to <= v_from then v_to := now(); end if;
 
-  select count(*), count(*) filter (where points > 0), coalesce(sum(points), 0)
-    into v_n, v_active, v_chores
+  select count(*), count(distinct family_id), count(*) filter (where points > 0), coalesce(sum(points), 0)
+    into v_n, v_fams, v_active, v_chores
     from school_points_between(v_s.id, v_from, v_to);
 
-  if v_n >= v_min then
+  -- The rule at school_group_shown: counts with 5 students from 3 families,
+  -- chores only when 3 or more of them did one.
+  if school_group_shown(v_n, v_fams) and v_active < school_min_active() then
     v_totals := jsonb_build_object('shown', true, 'students', v_n, 'active', v_active,
-                                   'share_pct', round(100.0 * v_active / v_n)::int,
+                                   'share_pct', round(100.0 * v_active / v_n)::int, 'chores_shown', false);
+  elsif school_group_shown(v_n, v_fams) then
+    v_totals := jsonb_build_object('shown', true, 'students', v_n, 'active', v_active,
+                                   'share_pct', round(100.0 * v_active / v_n)::int, 'chores_shown', true,
                                    'chores', v_chores, 'average', round(v_chores::numeric / v_n, 1));
     -- The busiest week (Monday to Sunday, UTC), counted the way the league
-    -- counts: at most school_daily_chores() a day for each student.
+    -- counts: at most school_daily_chores() a day for each student. Only a
+    -- week in which 3 or more students did a chore: in a week with one or
+    -- two, the number is theirs.
     select jsonb_build_object('starts', w.wk, 'chores', w.n) into v_week from (
       select date_trunc('week', d.day)::date as wk, sum(d.n)::int as n
-        from (select (s.decided_at at time zone 'UTC')::date as day, least(count(*), school_daily_chores()) as n
+        from (select s.kid_id, (s.decided_at at time zone 'UTC')::date as day, least(count(*), school_daily_chores()) as n
                 from submissions s join school_members m on m.kid_id = s.kid_id
                where m.school_id = v_s.id and s.status = 'approved'
                  and s.decided_at >= greatest(v_from, m.joined_at) and s.decided_at < v_to
-               group by s.kid_id, 1) d
-       group by 1 order by 2 desc, 1 limit 1) w;
-    -- The three kinds of chore done most, as a share of the chores counted.
+               group by s.kid_id, 2) d
+       group by 1 having count(distinct d.kid_id) >= school_min_active()
+       order by 2 desc, 1 limit 1) w;
+    -- The three kinds of chore done most, as a share of the chores counted,
+    -- each only if 3 or more students did one.
     select coalesce(jsonb_agg(jsonb_build_object('kind', k.category, 'share_pct', k.pct) order by k.n desc, k.category), '[]'::jsonb)
       into v_kinds
-      from (select c.category, c.n, round(100.0 * c.n / sum(c.n) over ())::int as pct
-              from (select q.category, count(*) as n
+      from (select c.category, c.n, c.pct
+              from (select q.category, count(*) as n, count(distinct s.kid_id) as kids,
+                           round(100.0 * count(*) / sum(count(*)) over ())::int as pct
                       from submissions s
                       join school_members m on m.kid_id = s.kid_id
                       join quests q on q.id = s.quest_id
@@ -3031,6 +3399,7 @@ begin
                        and s.decided_at >= greatest(v_from, m.joined_at) and s.decided_at < v_to
                        and q.category = any (school_report_categories())
                      group by q.category) c
+             where c.kids >= school_min_active()
              order by c.n desc, c.category limit 3) k;
   else
     -- How many joined is on the school's page already; nothing else is shown.
@@ -3049,6 +3418,8 @@ begin
     'status', v_s.status,
     'paid', v_s.status = 'active' or district_covers(v_s.id),
     'min_students', v_min,
+    'min_families', school_min_families(),
+    'min_active', school_min_active(),
     'totals', v_totals,
     'busiest_week', v_week,
     'kinds', coalesce(v_kinds, '[]'::jsonb),
@@ -3104,6 +3475,13 @@ revoke execute on function school_pilot_report() from public, anon;
 
 -- The server's alone.
 revoke execute on function school_points_between(uuid, timestamptz, timestamptz) from public, anon, authenticated;
+-- The rule for any group's numbers (school_group_shown), and the school's
+-- month under it: the server's, like the counts they guard.
+revoke execute on function school_min_families() from public, anon, authenticated;
+revoke execute on function school_min_active() from public, anon, authenticated;
+revoke execute on function school_group_shown(int, int) from public, anon, authenticated;
+revoke execute on function school_chores_shown(int, int, int) from public, anon, authenticated;
+revoke execute on function school_month_ok(uuid, date) from public, anon, authenticated;
 revoke execute on function school_group_totals(uuid, timestamptz, timestamptz) from public, anon, authenticated;
 revoke execute on function school_house_board(uuid, timestamptz, timestamptz) from public, anon, authenticated;
 revoke execute on function school_max_groups() from public, anon, authenticated;

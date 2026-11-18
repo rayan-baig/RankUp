@@ -123,6 +123,10 @@ insert into school_members (kid_id, school_id, family_id, group_id) values
 insert into school_pilots (code_hash, label, days, code_expires_at, school_id, redeemed_at, ends_at) values
   (encode(sha256('t31-pilot'::bytea), 'hex'), 'T31 School', 90, now() + interval '1 day', '31a00000-0000-4000-8000-0000000005c1', now(), now() + interval '90 days');
 insert into school_pilot_attempts (user_id) values ('31d00000-0000-4000-8000-0000000000d1');
+-- A card checkout the school opened, and a second plan it was refunded for.
+-- The server's alone: no family may read either.
+insert into school_checkout_sessions (session_id, school_id) values ('cs_t31_school', '31a00000-0000-4000-8000-0000000005c1');
+insert into school_duplicate_plans (subscription_id, school_id) values ('sub_t31_twice', '31a00000-0000-4000-8000-0000000005c1');
 -- A Season that has started, with a theme in it: official, the same for every
 -- family. Removed again at the end of this file, so the app's tests that run
 -- on this database afterwards do not open on a "New Season!" moment.

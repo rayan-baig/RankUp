@@ -166,6 +166,15 @@ fix: a suspended school, left off a district's bill, takes none of the
 places the district's plan pays for; a pause keeps the renewal date it
 started with, so resuming early after a renewal fell inside it gives back
 the days paid for and no more (`plan_pause_credit`, the server's alone).
+Then the follow-up: a group's numbers only with 5 students from 3 families,
+and its chores, average, busiest week and kinds only with 3 who did one, on
+the school card, the district picture, the houses (with nothing worked out
+from what is left over) and the report; a waiting gift starting when the paid
+plan really ends; two gifts each their own plan, the better first; 30 days of
+cover before a first invoice is paid, once ever; the billing version moving
+on with every real change; a second plan for a school refused and written
+down for the webhook to refund; a school paying for itself and through a
+district that has paid, listed to stop its own plan.
 
 `57-pauses.sql` — pause instead of cancel and the half-price month: only an
 active, monthly, paid plan that is not ending pauses, for 1, 2 or 3 months,

@@ -453,6 +453,36 @@ export function pilotReminderEmail(p, { site, replyTo } = {}) {
 }
 
 /**
+ * A school that pays for its own plan and whose district now pays for it
+ * too (api/_shared/onePlan.js): its own plan has been set to stop at the end
+ * of the period already paid for, so it is never paid for twice. To the
+ * school's admins, once. `t` is a row of schools_paying_twice
+ * (supabase/schools.sql): the school, its district, and the period's end.
+ */
+export function districtTakeoverEmail(t, { site, replyTo } = {}) {
+  const when = t.period_end ? dayName(t.period_end) : ''
+  const subject = `${t.district || 'Your district'} now pays for ${t.name}`
+  const base = site ? site.replace(/\/+$/, '') : ''
+  const paragraphs = [
+    'Hello,',
+    `${t.district || 'Your district'} now pays for ${t.name}'s RankUp School League plan, so the school does not need its own.`,
+    when
+      ? `We have set the school's own plan to stop on ${when}, the end of the time already paid for. It will not renew, and nothing more is charged to the school.`
+      : 'We have set the school\'s own plan to stop at the end of the time already paid for. It will not renew, and nothing more is charged to the school.',
+    'Nothing else changes: your students keep their points and the school stays in its league, paid for by the district.',
+    'If the district stops paying, the school can choose a plan of its own again on the school\'s page.',
+  ]
+  const link = base ? { url: `${base}/#/school`, label: "Open the school's page" } : null
+  const help = helpLine(replyTo)
+  const foot = [
+    PRODUCT_OF,
+    'You get this because you are the admin of a school on RankUp. One email, when the district started paying for the school.',
+  ]
+  const text = [...paragraphs, ...(link ? [`${link.label}: ${link.url}`] : []), help, '--', ...foot].join('\n\n')
+  return { subject, text, html: toHtml(paragraphs, link, help, foot) }
+}
+
+/**
  * "Request a pilot", from the School League's front page, to whoever runs
  * RankUp. What the person typed, already checked (src/lib/pilotRules.js);
  * this email is the only copy of it.

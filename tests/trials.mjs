@@ -108,7 +108,24 @@ console.log('\n=== A gift plan: the app and the database agree on that too ===')
   ok('a running gift lifts a free family', effectiveTier({ tier: 'starter', giftTier: 'elite', giftStartsAt: Date.now() - 1000, giftUntil: Date.now() + 8.64e7 }) === 'elite')
   ok('one waiting for the paid plan to end does not, yet', effectiveTier({ tier: 'standard', giftTier: 'elite', giftStartsAt: Date.now() + 8.64e7, giftUntil: Date.now() + 9e9 }) === 'standard')
   ok('and one past gift_until is over', effectiveTier({ tier: 'starter', giftTier: 'elite', giftStartsAt: Date.now() - 9e9, giftUntil: Date.now() - 1000 }) === 'starter')
-  await db.query('update families set gift_tier = null, gift_starts_at = null, gift_until = null where id = $1', [FAMILY])
+  // Two gifts stacked: Elite Pass first, then Standard. The app and the
+  // database agree before, during and after each.
+  const stackOff = []
+  for (const [elitePast, thenLeft] of [[-1, 5000], [-5000, 300], [-9000, -1], [300, 9000]]) {
+    const until = new Date(Date.now() + elitePast * 3600000)
+    const thenUntil = new Date(Date.now() + thenLeft * 3600000)
+    await db.query(`update families set tier = 'starter', trial_tier = null, trial_ends_at = null, gift_tier = 'elite',
+                      gift_starts_at = now() - interval '400 days', gift_until = $1, gift_then_tier = 'standard', gift_then_until = $2
+                     where id = $3`, [until, thenUntil, FAMILY])
+    const fromDb = (await db.query('select effective_tier($1) as t', [FAMILY])).rows[0].t
+    const fromApp = effectiveTier({ tier: 'starter', giftTier: 'elite', giftStartsAt: Date.now() - 400 * 8.64e7, giftUntil: until.getTime(),
+      giftThenTier: 'standard', giftThenUntil: thenUntil.getTime() })
+    if (fromDb !== fromApp) stackOff.push(`${elitePast}h/${thenLeft}h app=${fromApp} db=${fromDb}`)
+  }
+  ok('two gifts stacked: the app and the database agree, Elite Pass first, then Standard', stackOff.length === 0, stackOff.join('; '))
+  ok('after the Elite Pass year the second gift is Standard', effectiveTier({ tier: 'starter', giftTier: 'elite',
+    giftStartsAt: Date.now() - 9e9, giftUntil: Date.now() - 1000, giftThenTier: 'standard', giftThenUntil: Date.now() + 8.64e7 }) === 'standard')
+  await db.query('update families set gift_tier = null, gift_starts_at = null, gift_until = null, gift_then_tier = null, gift_then_until = null where id = $1', [FAMILY])
 }
 
 console.log('\n=== A paused plan: the app and the database agree on that too ===')

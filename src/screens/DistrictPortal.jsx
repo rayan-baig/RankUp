@@ -275,14 +275,16 @@ function Numbers({ month, min }) {
   if (!month?.shown) {
     return (
       <p className="text-xs text-muted">
-        {month?.students || 0} taking part. Numbers show once {min} or more students take part.
+        {month?.students || 0} taking part. Numbers show once {min} or more students, from 3 or more families, take part.
       </p>
     )
   }
   const share = month.students ? Math.round((month.active / month.students) * 100) : 0
   return (
     <div className="grid grid-cols-4 gap-1 text-center">
-      {[[month.students, 'taking part'], [`${share}%`, 'did a chore'], [month.chores, 'chores'], [month.score, 'average']].map(([v, l]) => (
+      {/* Chores and the average only once 3 or more students did one: with
+          one or two, they are those children's own. */}
+      {[[month.students, 'taking part'], [`${share}%`, 'did a chore'], [month.chores ?? '—', 'chores'], [month.score ?? '—', 'average']].map(([v, l]) => (
         <div key={l} className="card-flat py-1">
           <div className="font-display font-extrabold text-sm">{v}</div>
           <div className="text-[10px] uppercase tracking-wider text-muted">{l}</div>
@@ -316,7 +318,7 @@ function Totals({ district }) {
       </div>
       <p className="text-xs text-muted">
         {label}. Totals only, never a child. {t.shown < t.schools
-          ? `${t.schools - t.shown} of your schools ${t.schools - t.shown === 1 ? 'has' : 'have'} fewer than ${district.min_students} students taking part, so ${t.schools - t.shown === 1 ? 'it is' : 'they are'} left out of these numbers.`
+          ? `${t.schools - t.shown} of your schools ${t.schools - t.shown === 1 ? 'has' : 'have'} too few students taking part (${district.min_students}, from 3 families), so ${t.schools - t.shown === 1 ? 'it is' : 'they are'} left out of these numbers.`
           : 'Every school is counted.'}
       </p>
     </Card>

@@ -343,6 +343,7 @@ let stripeMode = 'ok'
 // The subscriptions this stand-in Stripe holds, by id: listed by customer,
 // retrieved, and cancelled (DELETE), as Stripe does.
 const stripeSubs = new Map()
+const stripeInvoices = new Map()
 const stripeStandIn = http.createServer((req, res) => {
   let raw = ''
   req.on('data', (c) => { raw += c })
@@ -356,6 +357,16 @@ const stripeStandIn = http.createServer((req, res) => {
     if (url.pathname === '/v1/checkout/sessions') {
       return send(200, { id: `cs_test_${stripeCalls.length}`, object: 'checkout.session', url: `https://checkout.stripe.test/${stripeCalls.length}` })
     }
+    // Closing a card checkout a plan by invoice makes unnecessary.
+    const expire = url.pathname.match(/^\/v1\/checkout\/sessions\/([^/]+)\/expire$/)
+    if (expire && req.method === 'POST') return send(200, { id: expire[1], object: 'checkout.session', status: 'expired' })
+    // An invoice, by id, as the tests set it up; and refunds.
+    const inv = url.pathname.match(/^\/v1\/invoices\/([^/]+)$/)
+    if (inv && req.method === 'GET') {
+      const held = stripeInvoices.get(inv[1])
+      return held ? send(200, held) : send(404, { error: { type: 'invalid_request_error', code: 'resource_missing', message: 'No such invoice' } })
+    }
+    if (url.pathname === '/v1/refunds' && req.method === 'POST') return send(200, { id: `re_test_${stripeCalls.length}`, object: 'refund', status: 'succeeded' })
     if (url.pathname === '/v1/billing_portal/sessions') return send(200, { id: 'bps_test', object: 'billing_portal.session', url: 'https://billing.stripe.test/portal' })
     // A district's plan: a customer, and a subscription invoiced by email.
     if (url.pathname === '/v1/customers' && req.method === 'POST') return send(200, { id: `cus_test_${stripeCalls.length}`, object: 'customer' })
@@ -1033,6 +1044,24 @@ console.log('\n=== A school district: its plan by invoice, and nobody else\'s ==
     && upd?.params.get('items[0][id]') === 'si_api_d1' && upd?.params.get('items[1][id]') === 'si_api_d2'
     && upd?.params.get('items[2][price]') === 'price_test_district_small_10' && upd?.params.get('items[2][quantity]') === '1',
     upd ? [...upd.params].join('&') : `status ${updated.status}`)
+  const firstUpdateKey = upd?.idempotencyKey
+  // Pine taken off and the plan updated, then Pine back and updated again:
+  // the same plan as the first update, which Stripe must not answer from
+  // its cache of that first one.
+  const pine = (await db.query(`select s.id from schools s join district_schools ds on ds.school_id = s.id
+                                 where ds.district_id = $1 and s.name = 'API Pine'`, [DISTRICT])).rows[0].id
+  await rpc('remove_district_school', { p_school_id: pine }, OFFICE)
+  await asUser('/api/district-billing', { action: 'update' }, OFFICE)
+  await rpc('add_district_school', { p_name: 'API Pine', p_city: 'Apiville', p_students: 250 }, OFFICE)
+  const backFrom = stripeCalls.length
+  const back = await asUser('/api/district-billing', { action: 'update' }, OFFICE)
+  const backUpd = stripeCalls.slice(backFrom).find((c) => c.method === 'POST' && c.path === `/v1/subscriptions/sub_api_district_${RUN}`)
+  ok('A, then B, then A again: the third update is a request of its own, never the first one\'s cached answer',
+    back.status === 200 && backUpd && backUpd.idempotencyKey !== firstUpdateKey, `${firstUpdateKey} then ${backUpd?.idempotencyKey}`)
+  const tapFrom = stripeCalls.length
+  await asUser('/api/district-billing', { action: 'update' }, OFFICE)
+  const tapUpd = stripeCalls.slice(tapFrom).find((c) => c.method === 'POST' && c.path === `/v1/subscriptions/sub_api_district_${RUN}`)
+  ok('while a second tap with nothing changed is the same request, so Stripe makes it once', tapUpd?.idempotencyKey === backUpd?.idempotencyKey)
   const portal = await asUser('/api/district-billing', { action: 'portal' }, OFFICE)
   ok('the admin reaches its invoices and cancelling, coming back to the district page',
     portal.status === 200 && lastCall('/v1/billing_portal/sessions')?.params.get('customer') === customerId
@@ -1047,6 +1076,11 @@ console.log('\n=== A school district: its plan by invoice, and nobody else\'s ==
   const kept = (await db.query('select count(*)::int n from district_schools where district_id = $1', [DISTRICT])).rows[0].n
   ok('when the plan ends the district lapses, and its schools are all still there, on their own',
     ended.status === 200 && after.status === 'lapsed' && kept === 4, `${after.status}, ${kept}`)
+  const reFrom = stripeCalls.length
+  const reinvoiced = await asUser('/api/district-billing', { action: 'invoice', email: 'accounts@api-district.example' }, OFFICE)
+  const reSub = stripeCalls.slice(reFrom).find((c) => c.path === '/v1/subscriptions' && c.method === 'POST')
+  ok('cancelled and invoiced again the same day: a new plan, under a key of its own',
+    reinvoiced.status === 200 && reSub && reSub.idempotencyKey !== subCall?.idempotencyKey, `${subCall?.idempotencyKey} then ${reSub?.idempotencyKey}`)
 
   stripeMode = 'error500'
   const down = await asUser('/api/district-billing', { action: 'invoice', email: 'accounts@api-district.example' }, OFFICE)
@@ -1130,20 +1164,31 @@ console.log('\n=== School pilots: codes from the operator, used once, never on t
   const kestrel = card.houses.groups.find((g) => g.name === 'Kestrel')
   ok('the admin names houses, on the school\'s board', card.houses.kind === 'house' && card.houses.groups.length === 2 && card.pilot?.days === 90)
   // Seven children of one family: five in Kestrel, two in no house yet.
-  const fam = (await db.query(`insert into families (name, tier) values ('API Pilot Family', 'standard') returning id`)).rows[0].id
-  const parentUser = (await db.query(`insert into auth.users (email) values ($1) returning id`, [`api-pilot-parent-${RUN}@example.com`])).rows[0].id
-  await db.query(`insert into parents (user_id, family_id, name) values ($1, $2, 'Pilot Parent')`, [parentUser, fam])
-  await db.query('select seed_consent($1, $2)', [fam, parentUser])
+  // Three families (no numbers show for children of fewer), each with a
+  // parent of its own; the first family's is the one this test looks through.
+  const households = []
+  for (let f = 1; f <= 3; f += 1) {
+    const id = (await db.query(`insert into families (name, tier) values ($1, 'standard') returning id`, [`API Pilot Family ${f}`])).rows[0].id
+    const user = (await db.query(`insert into auth.users (email) values ($1) returning id`, [`api-pilot-parent-${f}-${RUN}@example.com`])).rows[0].id
+    await db.query(`insert into parents (user_id, family_id, name) values ($1, $2, 'Pilot Parent')`, [user, id])
+    await db.query('select seed_consent($1, $2)', [id, user])
+    households.push({ id, user })
+  }
+  const parentUser = households[0].user
   const joinCode = card.join_code
   const kids = []
+  const parentOf = new Map()
   for (let n = 1; n <= 7; n += 1) {
-    const kid = (await db.query(`insert into kids (family_id, name) values ($1, $2) returning id`, [fam, `Pilotkid${n} Secretname`])).rows[0].id
+    // Children 1, 4 and 7 in the first family; 2 and 5, 3 and 6 in the others.
+    const home = households[(n - 1) % 3]
+    const kid = (await db.query(`insert into kids (family_id, name) values ($1, $2) returning id`, [home.id, `Pilotkid${n} Secretname`])).rows[0].id
     kids.push(kid)
-    await rpc('join_school', { p_kid_id: kid, p_join_code: joinCode, p_show_name: false }, parentUser)
-    const quest = (await db.query(`insert into quests (family_id, kid_id, title, category) values ($1, $2, 'Secret chore words', 'kitchen') returning id`, [fam, kid])).rows[0].id
-    await db.query(`insert into submissions (family_id, quest_id, kid_id, status, decided_at) values ($1, $2, $3, 'approved', now())`, [fam, quest, kid])
+    parentOf.set(kid, home.user)
+    await rpc('join_school', { p_kid_id: kid, p_join_code: joinCode, p_show_name: false }, home.user)
+    const quest = (await db.query(`insert into quests (family_id, kid_id, title, category) values ($1, $2, 'Secret chore words', 'kitchen') returning id`, [home.id, kid])).rows[0].id
+    await db.query(`insert into submissions (family_id, quest_id, kid_id, status, decided_at) values ($1, $2, $3, 'approved', now())`, [home.id, quest, kid])
   }
-  for (const kid of kids.slice(0, 5)) await rpc('set_kid_school_group', { p_kid_id: kid, p_group_id: kestrel.id }, parentUser)
+  for (const kid of kids.slice(0, 5)) await rpc('set_kid_school_group', { p_kid_id: kid, p_group_id: kestrel.id }, parentOf.get(kid))
   const report = await rpc('school_pilot_report', {}, HEAD)
   ok('the report: 7 taking part, all did a chore, 7 chores, 1.0 each',
     report.ok && report.kind === 'pilot' && report.totals.students === 7 && report.totals.share_pct === 100
@@ -1151,8 +1196,8 @@ console.log('\n=== School pilots: codes from the operator, used once, never on t
   const k = report.groups.groups.find((g) => g.name === 'Kestrel')
   ok('Kestrel shows (5), and the two in no house are not a group anyone can work out: so it is hidden too',
     k && k.shown === false && !('chores' in k), JSON.stringify(report.groups))
-  await rpc('set_kid_school_group', { p_kid_id: kids[5], p_group_id: kestrel.id }, parentUser)
-  await rpc('set_kid_school_group', { p_kid_id: kids[6], p_group_id: kestrel.id }, parentUser)
+  await rpc('set_kid_school_group', { p_kid_id: kids[5], p_group_id: kestrel.id }, parentOf.get(kids[5]))
+  await rpc('set_kid_school_group', { p_kid_id: kids[6], p_group_id: kestrel.id }, parentOf.get(kids[6]))
   const report2 = await rpc('school_pilot_report', {}, HEAD)
   const k2 = report2.groups.groups.find((g) => g.name === 'Kestrel')
   const o2 = report2.groups.groups.find((g) => g.name === 'Otter')
@@ -1179,6 +1224,10 @@ console.log('\n=== School pilots: codes from the operator, used once, never on t
   ok('once per pilot', ours().length === 1)
 
   console.log('\n=== A school paying by invoice ===')
+  // A card checkout opened first, and left in another tab.
+  const cardTab = await asUser('/api/school-checkout', { cycle: 'month' }, HEAD)
+  const cardSession = (await db.query('select session_id from school_checkout_sessions where school_id = $1', [PILOT_SCHOOL])).rows[0]?.session_id
+  ok('(a card checkout opened and left, remembered for the school)', cardTab.status === 200 && Boolean(cardSession))
   const before = stripeCalls.length
   ok('the invoice needs an address', (await asUser('/api/school-checkout', { method: 'invoice', email: 'nope' }, HEAD)).status === 400)
   ok('and the school\'s admin', (await asUser('/api/school-checkout', { method: 'invoice', email: 'office@example.test' }, OUTSIDER)).status === 403)
@@ -1196,8 +1245,56 @@ console.log('\n=== School pilots: codes from the operator, used once, never on t
     Math.abs(Number(sub?.params.get('trial_end')) * 1000 - (Date.now() + 13 * 86400000)) < 300000)
   ok('to a customer for the school alone', cust?.params.get('metadata[school_id]') === PILOT_SCHOOL && cust?.params.get('email') === 'office@example-academy.example'
     && (await db.query('select stripe_customer_id from schools where id = $1', [PILOT_SCHOOL])).rows[0].stripe_customer_id)
+  ok('the card checkout the admin opened first is closed, so it cannot make a second plan',
+    stripeCalls.slice(before).some((c) => c.method === 'POST' && c.path === `/v1/checkout/sessions/${cardSession}/expire`)
+    && (await db.query('select count(*)::int n from school_checkout_sessions where school_id = $1', [PILOT_SCHOOL])).rows[0].n === 0,
+    cardSession)
+  const firstKey = sub?.idempotencyKey
 
-  await db.query('delete from families where id = $1', [fam])
+  console.log('\n=== A school paid for twice: the second plan cancelled and refunded ===')
+  const schoolCustomer = (await db.query('select stripe_customer_id from schools where id = $1', [PILOT_SCHOOL])).rows[0].stripe_customer_id
+  const schoolSub = (id, extra = {}) => ({ id, object: 'subscription', status: 'active', customer: schoolCustomer,
+    metadata: { school_id: PILOT_SCHOOL, kind: 'school', band: 'medium', cycle: 'year' },
+    items: { object: 'list', data: [{ id: `si_${id}`, price: { id: 'price_test_school_medium_year', recurring: { interval: 'year' } } }] }, ...extra })
+  ok('(the plan by invoice is live)', (await signed({ id: `evt_api_inv_${RUN}_1`, type: 'customer.subscription.created', created: tick(),
+    data: { object: schoolSub(`sub_api_inv_${RUN}`, { collection_method: 'send_invoice' }) } })).status === 200
+    && (await db.query('select stripe_subscription_id from schools where id = $1', [PILOT_SCHOOL])).rows[0].stripe_subscription_id === `sub_api_inv_${RUN}`)
+  // A card checkout from before is paid all the same.
+  stripeSubs.set(`sub_api_card_${RUN}`, schoolSub(`sub_api_card_${RUN}`))
+  stripeInvoices.set(`in_api_card_${RUN}`, { id: `in_api_card_${RUN}`, object: 'invoice', status: 'paid', amount_paid: 5900,
+    payment_intent: `pi_api_card_${RUN}`, subscription: `sub_api_card_${RUN}` })
+  const dupFrom = stripeCalls.length
+  const dupRes = await signed({ id: `evt_api_card_${RUN}_1`, type: 'customer.subscription.created', created: tick(),
+    data: { object: schoolSub(`sub_api_card_${RUN}`, { collection_method: 'charge_automatically', latest_invoice: `in_api_card_${RUN}` }) } })
+  const dupCalls = stripeCalls.slice(dupFrom)
+  ok('the second plan is not taken as the school\'s', dupRes.status === 200
+    && (await db.query('select stripe_subscription_id from schools where id = $1', [PILOT_SCHOOL])).rows[0].stripe_subscription_id === `sub_api_inv_${RUN}`)
+  ok('it is cancelled at once, and its payment refunded in full',
+    dupCalls.some((c) => c.method === 'DELETE' && c.path === `/v1/subscriptions/sub_api_card_${RUN}`)
+    && dupCalls.some((c) => c.method === 'POST' && c.path === '/v1/refunds' && c.params.get('payment_intent') === `pi_api_card_${RUN}`
+                            && c.idempotencyKey === `duplicate-plan-refund:in_api_card_${RUN}`),
+    dupCalls.map((c) => `${c.method} ${c.path}`).join(', '))
+  ok('and the owner is told, in plain words', /already paid for, so a second plan .* was cancelled and its payment refunded in full/
+    .test(JSON.stringify(emails.filter((e) => e.body.to?.includes('errors@example.test')).map((e) => e.body.text)))
+    || (await db.query(`select count(*)::int n from server_errors where message like '%second plan%'`)).rows[0].n > 0)
+  const refundNews = await signed({ id: `evt_api_card_${RUN}_2`, type: 'charge.refunded', created: tick(),
+    data: { object: { id: `ch_api_card_${RUN}`, object: 'charge', customer: schoolCustomer, amount: 5900, amount_refunded: 5900,
+      refunded: true, payment_intent: `pi_api_card_${RUN}`, metadata: { school_id: PILOT_SCHOOL } } } })
+  ok('that refund\'s news is not the school\'s own plan refunded: it stays paid for',
+    refundNews.status === 200 && (await db.query('select status from schools where id = $1', [PILOT_SCHOOL])).rows[0].status === 'active')
+
+  // Cancelled, then invoiced again the same day: a new plan, not Stripe's cached answer.
+  await signed({ id: `evt_api_inv_${RUN}_2`, type: 'customer.subscription.deleted', created: tick(),
+    data: { object: schoolSub(`sub_api_inv_${RUN}`, { status: 'canceled', collection_method: 'send_invoice' }) } })
+  const againFrom = stripeCalls.length
+  const again = await asUser('/api/school-checkout', { method: 'invoice', email: 'office@example-academy.example' }, HEAD)
+  const againSub = stripeCalls.slice(againFrom).find((c) => c.method === 'POST' && c.path === '/v1/subscriptions')
+  ok('a plan cancelled and invoiced again the same day is a new request to Stripe, with a key of its own',
+    again.status === 200 && againSub && againSub.idempotencyKey !== firstKey && /^school-invoice:/.test(againSub.idempotencyKey || ''),
+    `${firstKey} then ${againSub?.idempotencyKey}`)
+
+  await db.query('delete from families where id = any($1)', [households.map((h) => h.id)])
+  await db.query('delete from auth.users where id = any($1)', [households.map((h) => h.user)])
   await db.query('delete from schools where id in ($1, $2, $3)', [PILOT_SCHOOL, paying.school_id, other.school_id])
   await db.query('delete from school_pilots where label like $1', [`%${RUN}`])
   await db.query('delete from auth.users where id in ($1, $2, $3, $4)', [HEAD, PAYING_HEAD, OTHER_HEAD, parentUser])

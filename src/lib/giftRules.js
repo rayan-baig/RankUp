@@ -119,11 +119,24 @@ const time = (value) => {
  *   daysLeft whole days until it ends (at least 1 while it runs)
  */
 export function giftState(family, now = Date.now()) {
-  const tier = family?.giftTier ?? family?.gift_tier
-  const until = time(family?.giftUntil ?? family?.gift_until)
-  const starts = time(family?.giftStartsAt ?? family?.gift_starts_at)
+  let tier = family?.giftTier ?? family?.gift_tier
+  let until = time(family?.giftUntil ?? family?.gift_until)
+  let starts = time(family?.giftStartsAt ?? family?.gift_starts_at)
+  // Two gifts of different plans run one after the other (the better
+  // first): once the first has ended, the second is the gift.
+  const thenTier = family?.giftThenTier ?? family?.gift_then_tier
+  const thenUntil = time(family?.giftThenUntil ?? family?.gift_then_until)
+  let then = TIERS[thenTier] && Number.isFinite(thenUntil) && Number.isFinite(until) && thenUntil > until
+    ? { tier: thenTier, name: TIERS[thenTier].name, until: thenUntil } : null
+  if (then && until <= now) {
+    starts = until
+    tier = then.tier
+    until = then.until
+    then = null
+  }
   if (!TIERS[tier] || !Number.isFinite(until) || until <= now) return null
   const pending = Number.isFinite(starts) && starts > now
+  const lastUntil = then ? then.until : until
   return {
     tier,
     name: TIERS[tier].name,
@@ -131,7 +144,10 @@ export function giftState(family, now = Date.now()) {
     startsAt: Number.isFinite(starts) ? starts : null,
     active: !pending,
     pending,
-    daysLeft: Math.max(1, Math.ceil((until - now) / DAY)),
+    // The gift after this one, if any, and when the last of them ends.
+    then,
+    lastUntil,
+    daysLeft: Math.max(1, Math.ceil((lastUntil - now) / DAY)),
   }
 }
 
@@ -142,9 +158,10 @@ export const giftDate = (ms) => new Date(ms).toLocaleDateString('en-GB', { day: 
 export function giftLine(family, now = Date.now()) {
   const gift = giftState(family, now)
   if (!gift) return null
+  const then = gift.then ? `, then ${gift.then.name} until ${giftDate(gift.then.until)}` : ''
   return gift.pending
-    ? `Gift plan: ${gift.name} from ${giftDate(gift.startsAt)} until ${giftDate(gift.until)}`
-    : `Gift plan: ${gift.name} until ${giftDate(gift.until)}`
+    ? `Gift plan: ${gift.name} from ${giftDate(gift.startsAt)} until ${giftDate(gift.until)}${then}`
+    : `Gift plan: ${gift.name} until ${giftDate(gift.until)}${then}`
 }
 
 /**

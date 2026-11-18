@@ -35,7 +35,9 @@ export function SchoolHeadline({ school, demo = false }) {
           <div className="text-[10px] text-muted">in the district</div>
         </div>
         <div className="card-flat p-2">
-          <div className="font-display font-extrabold text-xl">{Number(school.score).toFixed(1)}</div>
+          {/* No average until enough students from enough families, enough
+              of whom did a chore, take part: below that it is a family's own. */}
+          <div className="font-display font-extrabold text-xl">{score(school.score)}</div>
           <div className="text-[10px] text-muted">points per student</div>
         </div>
         <div className="card-flat p-2">
@@ -52,7 +54,7 @@ export function SchoolHeadline({ school, demo = false }) {
       )}
       {school.verified && !school.ranked && (
         <p className="text-xs text-muted mt-3">
-          Ranked once {school.min_students} students have joined. {school.students} so far.
+          Ranked once {school.min_students} students from 3 or more families take part, and 3 have done a chore. {school.students} so far.
         </p>
       )}
       {school.verified && school.live === false && (
@@ -108,7 +110,7 @@ export function LeagueTable({ league, demo = false }) {
                 {s.city ? `${s.city} · ` : ''}{s.students} students{s.ranked ? '' : ' · not ranked yet'}
               </span>
             </div>
-            <span className="font-display font-bold text-sm shrink-0">{Number(s.score).toFixed(1)}</span>
+            <span className="font-display font-bold text-sm shrink-0">{score(s.score)}</span>
           </div>
         ))}
       </Card>
@@ -143,11 +145,11 @@ export function RivalryList({ rivalries = [], actions = null }) {
               <>
                 <div className="grid grid-cols-2 gap-3 text-[11px]">
                   <span>
-                    <span className="block mb-1">Us · {Number(r.our_score).toFixed(1)}</span>
+                    <span className="block mb-1">Us · {score(r.our_score)}</span>
                     <ProgressBar value={Number(r.our_score)} max={max} height={7} label="Our score" />
                   </span>
                   <span>
-                    <span className="block mb-1">Them · {Number(r.their_score).toFixed(1)}</span>
+                    <span className="block mb-1">Them · {score(r.their_score)}</span>
                     <ProgressBar value={Number(r.their_score)} max={max} height={7} tone="var(--ink-muted)" label="Their score" />
                   </span>
                 </div>
@@ -217,6 +219,9 @@ export function StarList({ stars = [], monthKey, staff = false, leaveOut = [], o
   )
 }
 
+/** An average, or a dash where there is none to show (too few taking part). */
+const score = (v) => (v == null || v === '' ? '—' : Number(v).toFixed(1))
+
 /**
  * The school's own board: its houses (or classes) this month, best average
  * first. Totals only, from school_house_board(); a house too small to show
@@ -234,13 +239,16 @@ export function HouseBoard({ houses, mine = [], title = null }) {
       <SectionTitle>{title || `${groupWord(houses.kind, { plural: true })} this month`}</SectionTitle>
       <Card className="p-0 overflow-hidden mb-3" data-testid="house-board">
         {groups.map((g, i) => {
-          if (g.shown) place += 1
+          // Placed only with an average: its chores show once enough of its
+          // students did one.
+          const ranked = g.shown && g.average != null
+          if (ranked) place += 1
           const yours = mine.includes(g.id)
           return (
             <div key={g.id}
                  className={`flex items-center gap-3 px-3.5 py-3 ${i < groups.length - 1 ? 'border-b border-line' : ''} ${yours ? 'bg-surface2' : ''}`}>
-              <span className={`w-6 text-center font-display font-extrabold text-sm ${g.shown && place === 1 ? 'text-accent' : 'text-muted'}`}>
-                {g.shown ? medal(place - 1) : '·'}
+              <span className={`w-6 text-center font-display font-extrabold text-sm ${ranked && place === 1 ? 'text-accent' : 'text-muted'}`}>
+                {ranked ? medal(place - 1) : '·'}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
@@ -249,18 +257,19 @@ export function HouseBoard({ houses, mine = [], title = null }) {
                 </div>
                 <span className="block text-[11px] text-muted">
                   {g.shown
-                    ? `${g.students} students · ${g.share_pct}% did a chore · ${g.chores} chores`
+                    ? `${g.students} students · ${g.share_pct}% did a chore${g.chores != null ? ` · ${g.chores} chores` : ''}`
                     : 'Too few students taking part to show, yet'}
                 </span>
               </div>
-              <span className="font-display font-bold text-sm shrink-0">{g.shown ? Number(g.average).toFixed(1) : '—'}</span>
+              <span className="font-display font-bold text-sm shrink-0">{ranked ? Number(g.average).toFixed(1) : '—'}</span>
             </div>
           )
         })}
       </Card>
       <p className="text-xs text-muted -mt-1 mb-3">
         Points per student, so a small {groupWord(houses.kind, { lower: true })} can beat a big one. Totals only: nobody
-        sees who is in which, and {words} show numbers once {min} or more of their students take part.
+        sees who is in which, and {words} show numbers once {min} or more of their students, from 3 or more families,
+        take part, and chores once 3 of them have done one.
       </p>
     </>
   )
