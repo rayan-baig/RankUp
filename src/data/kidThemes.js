@@ -135,17 +135,16 @@ export const KID_THEMES = [
      * child here is told "form 6 of 9" and nobody on another theme is
      * measured against it.
      *
-     * One hue per rung, following the hero's own gear (the pictures are
-     * drawn by scripts/draw-blockcraft-avatars.mjs): the sprout, the
-     * scarf, copper guards, the cape, the runes, then the Ember Gate, the
-     * Ashlands, the Far Isle's crystal, and the crown.
+     * One hue per rung, matching the nine pictures in src/assets/art:
+     * the greens and metals of the first forms, then the Ember Gate reds,
+     * the Far Isle purples, and the dragon.
      */
     tiers: [1, 10, 25, 50, 100, 125, 175, 250, 399],
     avatar: {
       motif: 'block',
       hues: [
-        '#8bd450', '#ff9a4a', '#d98a4e', '#ff6a4d', '#7dffb0',
-        '#ffb302', '#ff3b5c', '#d6b4ff', '#ffd36b',
+        '#8bd450', '#c9d1d9', '#f5c542', '#26d0c8', '#7ef0ff',
+        '#ff5c4d', '#b4202a', '#b06bff', '#6b21a8',
       ],
     },
     /**

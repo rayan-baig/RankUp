@@ -39,16 +39,10 @@ The full list of ids is in `src/data/minigames.js`.
 list in `src/data/kidThemes.js` gives (five forms at 1, 10, 25, 50 and 100
 unless a theme says otherwise):
 
-    avatar-blockcraft-1.svg
-    avatar-blockcraft-10.svg
+    avatar-blockcraft-1.jpg
+    avatar-blockcraft-10.jpg
     ...
-    avatar-blockcraft-399.svg
-
-Block Craft's nine are drawn by `scripts/draw-blockcraft-avatars.mjs`; change
-that script and run it rather than editing the SVGs by hand.
-
-Every picture here has to be our own. Nothing that copies a character, a
-creature or the look of another company's game, and no brand names.
+    avatar-blockcraft-399.jpg
 
 Theme ids are in `src/data/kidThemes.js`: matrixblocks, blockcraft,
 tactical, apex, aura, coquette, poparena, pegasus, sugarrush, glam,

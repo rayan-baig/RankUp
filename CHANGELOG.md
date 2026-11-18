@@ -5,6 +5,10 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.20.2 — 2026-11-18
+
+- **Block Craft's avatar pictures are back.** The owner's nine uploaded pictures are used again for the nine forms, and the rings round the avatar use their colours again. The level 1 hero has paler skin, messier light brown hair, brighter blue eyes and a white shirt that says ZOMBIE SLAYER in green. Everything else from 0.20.1 stays: the new names, the theme picker lines, the battle scenes and the arcade changes.
+
 ## 0.20.1 — 2026-11-18
 
 Our own artwork and names throughout.
