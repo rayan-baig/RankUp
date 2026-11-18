@@ -109,8 +109,9 @@ export default function SchoolReport() {
             <div className="grid grid-cols-2 gap-2">
               <Stat value={t.students} label="students taking part" testId="report-students" />
               <Stat value={`${t.share_pct}%`} label="did at least one chore" testId="report-share" />
-              <Stat value={Number(t.chores).toLocaleString()} label="chores done" testId="report-chores" />
-              <Stat value={Number(t.average).toFixed(1)} label="chores per student, on average" testId="report-average" />
+              {/* Chores only once 3 or more students did one. */}
+              <Stat value={t.chores != null ? Number(t.chores).toLocaleString() : '—'} label="chores done" testId="report-chores" />
+              <Stat value={t.average != null ? Number(t.average).toFixed(1) : '—'} label="chores per student, on average" testId="report-average" />
             </div>
             {report.busiest_week && (
               <p className="text-sm mt-3" data-testid="report-week">
@@ -128,7 +129,7 @@ export default function SchoolReport() {
         ) : (
           <p className="text-sm" data-testid="report-too-few">
             {t.students} {t.students === 1 ? 'student has' : 'students have'} joined so far. Numbers show once {min} or more
-            take part, so that no total is ever one child’s.
+            from 3 or more families take part, so that no total is ever one family’s.
           </p>
         )}
         <p className="text-xs text-muted mt-2">
@@ -158,8 +159,8 @@ export default function SchoolReport() {
                       <>
                         <td className="py-1.5 px-1 text-right">{g.students}</td>
                         <td className="py-1.5 px-1 text-right">{g.share_pct}%</td>
-                        <td className="py-1.5 px-1 text-right">{Number(g.chores).toLocaleString()}</td>
-                        <td className="py-1.5 pl-1 text-right">{Number(g.average).toFixed(1)}</td>
+                        <td className="py-1.5 px-1 text-right">{g.chores != null ? Number(g.chores).toLocaleString() : '—'}</td>
+                        <td className="py-1.5 pl-1 text-right">{g.average != null ? Number(g.average).toFixed(1) : '—'}</td>
                       </>
                     ) : (
                       <td className="py-1.5 pl-1 text-right text-muted" colSpan={4}>Too few to show</td>

@@ -239,6 +239,14 @@ select ('56c00000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
        (select v from t56 where k = case when n <= 6 then 'oak' else 'pine' end)::uuid,
        '56f00000-0000-4000-8000-000000000001', true, date_trunc('month', now())
   from generate_series(1, 8) n;
+-- Five children of one family are that family's numbers (school_group_shown:
+-- 5 students from 3 families): the eight live in three households.
+insert into families (id, name, tier) values
+  ('56f00000-0000-4000-8000-000000000002', 'The Quillfeathers Two', 'standard'),
+  ('56f00000-0000-4000-8000-000000000003', 'The Quillfeathers Three', 'standard');
+update kids k set family_id = ('56f00000-0000-4000-8000-00000000000' || (1 + n % 3)::text)::uuid
+  from generate_series(1, 8) n where k.id = ('56c00000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid;
+update school_members m set family_id = k.family_id from kids k where m.kid_id = k.id and k.name like 'Zebedee%';
 insert into submissions (family_id, quest_id, kid_id, status, decided_at, note)
 select '56f00000-0000-4000-8000-000000000001', ('56e00000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
        ('56c00000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid, 'approved', now(), 'A note a child typed'
@@ -507,6 +515,6 @@ end $$;
 -- Tidy up: the app's tests run against this database afterwards.
 delete from schools where id in (select v::uuid from t56 where k in ('oak', 'pine', 'elm'))
    or name in ('Ash School');
-delete from families where id = '56f00000-0000-4000-8000-000000000001';
+delete from families where id in ('56f00000-0000-4000-8000-000000000001', '56f00000-0000-4000-8000-000000000002', '56f00000-0000-4000-8000-000000000003');
 delete from auth.users where id in (select t56_user(n) from generate_series(1, 9) n);
 drop function t56_user(int);

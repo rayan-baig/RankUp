@@ -723,7 +723,11 @@ function Dashboard({ school, league, demo, onChange, flash = null }) {
             </>
           ) : (
             <>
-              <p className="text-xs text-muted mb-2">Has your district bought RankUp for its schools? Type the code it gave you.</p>
+              <p className="text-xs text-muted mb-2">
+                Has your district bought RankUp for its schools? Type the code it gave you. If the district pays
+                for your school and the school has a plan of its own, that plan stops at the end of the time
+                already paid for, so you never pay twice. We email you when it does.
+              </p>
               <div className="flex gap-2">
                 <TextInput value={districtCode} onChange={(e) => setDistrictCode(e.target.value.toUpperCase())} maxLength={8}
                            aria-label="District code" placeholder="District code" className="field font-mono tracking-widest" />

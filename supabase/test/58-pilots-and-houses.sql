@@ -59,8 +59,8 @@ insert into school_staff (user_id, school_id, name, role) values
   (t58_user(8), '58b00000-0000-4000-8000-00000000000d', 'Ms Suspended', 'admin'),
   (t58_user(9), '58b00000-0000-4000-8000-00000000000e', 'Dr Lapsed', 'admin');
 -- The district that pays for District Day School: a plan set up by hand.
-insert into districts (id, name, district_key, status, paid_all) values
-  ('58d00000-0000-4000-8000-000000000001', 'T58 Unified', 't58 district', 'active', true);
+insert into districts (id, name, district_key, status, paid_all, stripe_subscription_id, paid_subscription_id) values
+  ('58d00000-0000-4000-8000-000000000001', 'T58 Unified', 't58 district', 'active', true, 'sub_t58', 'sub_t58');
 insert into district_schools (school_id, district_id) values
   ('58b00000-0000-4000-8000-00000000000c', '58d00000-0000-4000-8000-000000000001');
 
@@ -79,8 +79,30 @@ select t58_kid(n), case when n <= 12 then '58f00000-0000-4000-8000-000000000001'
        'Zephyrine' || n || ' Quillon'
   from generate_series(1, 15) n;
 update kids set user_id = t58_user(4) where id = t58_kid(1);
+-- Five children of one family are that family's numbers (school_group_shown:
+-- 5 students from 3 families), so the twelve live in four households: the
+-- Quillons have children 1, 5 and 9, and so on round.
+insert into families (id, name, tier) values
+  ('58f00000-0000-4000-8000-000000000003', 'The Quillons Two', 'standard'),
+  ('58f00000-0000-4000-8000-000000000004', 'The Quillons Three', 'standard'),
+  ('58f00000-0000-4000-8000-000000000005', 'The Quillons Four', 'standard');
+create or replace function t58_fam_of(p_n int) returns uuid language sql immutable as $$
+  select case when p_n > 12 then '58f00000-0000-4000-8000-000000000002'::uuid
+              when p_n % 4 = 1 then '58f00000-0000-4000-8000-000000000001'::uuid
+              when p_n % 4 = 2 then '58f00000-0000-4000-8000-000000000003'::uuid
+              when p_n % 4 = 3 then '58f00000-0000-4000-8000-000000000004'::uuid
+              else '58f00000-0000-4000-8000-000000000005'::uuid end $$;
+update kids k set family_id = t58_fam_of(n) from generate_series(1, 15) n where k.id = t58_kid(n);
+-- Each of the three new households has a parent of its own (users 21 to 23).
+insert into auth.users (id, email) select t58_user(n), 't58-user-' || n || '@example.com' from generate_series(21, 23) n;
+insert into parents (user_id, family_id, name) values
+  (t58_user(21), '58f00000-0000-4000-8000-000000000003', 'Quilla'),
+  (t58_user(22), '58f00000-0000-4000-8000-000000000004', 'Quincy'),
+  (t58_user(23), '58f00000-0000-4000-8000-000000000005', 'Quorra');
+create or replace function t58_parent_of(p_n int) returns uuid language sql immutable as $$
+  select case p_n % 4 when 1 then t58_user(3) when 2 then t58_user(21) when 3 then t58_user(22) else t58_user(23) end $$;
 insert into school_members (kid_id, school_id, family_id, joined_at)
-select t58_kid(n), '58b00000-0000-4000-8000-00000000000a', '58f00000-0000-4000-8000-000000000001', now() - interval '30 days'
+select t58_kid(n), '58b00000-0000-4000-8000-00000000000a', t58_fam_of(n), now() - interval '30 days'
   from generate_series(1, 12) n;
 insert into school_members (kid_id, school_id, family_id, joined_at)
 select t58_kid(n), '58b00000-0000-4000-8000-00000000000e', '58f00000-0000-4000-8000-000000000002', now() - interval '30 days'
@@ -294,9 +316,10 @@ begin
   perform become(t58_user(10));
   perform ok('nor can another family''s parent', set_kid_school_group(t58_kid(1), (select v from t58 where k = 'red')::uuid)->>'reason' = 'not_in_one');
   perform ok('and a house from another school is not one', set_kid_school_group(t58_kid(13), (select v from t58 where k = 'red')::uuid)->>'reason' = 'no_such_group');
-  perform become(t58_user(3));
-  for n in 1 .. 6 loop perform set_kid_school_group(t58_kid(n), (select v from t58 where k = 'red')::uuid); end loop;
-  for n in 7 .. 11 loop perform set_kid_school_group(t58_kid(n), (select v from t58 where k = 'blue')::uuid); end loop;
+  -- Each child's own parent.
+  for n in 1 .. 6 loop perform become(t58_parent_of(n)); perform set_kid_school_group(t58_kid(n), (select v from t58 where k = 'red')::uuid); end loop;
+  for n in 7 .. 11 loop perform become(t58_parent_of(n)); perform set_kid_school_group(t58_kid(n), (select v from t58 where k = 'blue')::uuid); end loop;
+  perform become(t58_parent_of(12));
   r := set_kid_school_group(t58_kid(12), (select v from t58 where k = 'green')::uuid);
   perform ok('the parent puts each child in a house', (r->>'ok')::boolean
     and (select count(*) from school_members where group_id = (select v from t58 where k = 'red')::uuid) = 6, r::text);
@@ -365,8 +388,10 @@ begin
   perform ok('the busiest week is the one eight days ago, with 18',
     (r->'busiest_week'->>'starts')::date = date_trunc('week', (now() - interval '8 days') at time zone 'UTC')::date
     and (r->'busiest_week'->>'chores')::int = 18, r->>'busiest_week');
-  perform ok('the most popular kinds: kitchen, then bedroom, then pets',
-    r->'kinds' = '[{"kind": "kitchen", "share_pct": 83}, {"kind": "bedroom", "share_pct": 13}, {"kind": "pets", "share_pct": 4}]'::jsonb,
+  -- Pets, done by one child, is not listed: a kind done by one or two is
+  -- theirs (school_group_shown).
+  perform ok('the most popular kinds: kitchen, then bedroom; not pets, which one child did',
+    r->'kinds' = '[{"kind": "kitchen", "share_pct": 83}, {"kind": "bedroom", "share_pct": 13}]'::jsonb,
     r->>'kinds');
   perform ok('ending with the price for its size', (r->'price'->>'monthly_cents')::int = 5900 and r->'price'->>'label' = 'Medium school');
 
@@ -385,7 +410,7 @@ begin
   perform ok('never a child: no name, nothing typed, no chore''s words',
     r::text !~ 'Zephyrine|Quillon|typed by a child|Secret chore' and r::text !~ '58c00000');
 
-  perform become(t58_user(3));
+  perform become(t58_parent_of(12));
   perform set_kid_school_group(t58_kid(12), (select v from t58 where k = 'red')::uuid);
   perform become(t58_user(1));
   r := school_pilot_report();
@@ -411,7 +436,7 @@ begin
   perform ok('a house removed leaves its children in the school, in no house', (r->>'ok')::boolean
     and not exists (select 1 from school_groups where id = (select v from t58 where k = 'green')::uuid)
     and (select count(*) from school_members where school_id = '58b00000-0000-4000-8000-00000000000a') = 12);
-  perform become(t58_user(3));
+  perform become(t58_parent_of(12));
   perform set_kid_school_group(t58_kid(12), null);
   perform ok('a parent can take their child out of a house', (select group_id from school_members where kid_id = t58_kid(12)) is null);
 end $$;
@@ -516,6 +541,9 @@ delete from schools where id::text like '58b00000-%';
 delete from families where id::text like '58f00000-%';
 delete from school_pilot_attempts where user_id in (select t58_user(n) from generate_series(1, 10) n);
 delete from auth.users where id in (select t58_user(n) from generate_series(1, 10) n);
+delete from auth.users where id in (select t58_user(n) from generate_series(21, 23) n);
 drop function t58_user(int);
 drop function t58_kid(int);
+drop function t58_fam_of(int);
+drop function t58_parent_of(int);
 drop function t58_hash(text);

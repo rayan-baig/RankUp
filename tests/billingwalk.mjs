@@ -495,7 +495,7 @@ await db.query(`insert into submissions (id, family_id, quest_id, kid_id, status
 
 /** What the gift family would notice: the plan, the screens, the child's phone, the XP, a second child. */
 async function giftFamily() {
-  const row = (await db.query(`select tier, gift_tier, gift_starts_at, gift_until, effective_tier(id) as effective
+  const row = (await db.query(`select tier, gift_tier, gift_starts_at, gift_until, gift_then_tier, gift_then_until, effective_tier(id) as effective
                                  from families where id = $1`, [GIFT_FAMILY])).rows[0]
   const parentPhone = reducer({ ...createInitialState(), onboarded: true },
     { type: 'MERGE_SNAPSHOT', snapshot: await rpcAs('family_snapshot', GIFT_PARENT, { p_since: 0 }), pending: [] })
@@ -642,29 +642,37 @@ console.log('\n=== Gift 4. Redeeming gives 12 months, and the plan check honours
   const stacked = await asUser('/api/redeem-gift', { code: thirdCode }, GIFT_PARENT)
   const s = await stacked.json().catch(() => ({}))
   g = await giftFamily()
-  const expected = new Date(before); expected.setUTCMonth(expected.getUTCMonth() + 12)
-  ok('a second gift adds 12 months to the end of the first', stacked.status === 200 && s.stacked === true
-    && new Date(g.row.gift_until).getTime() === expected.getTime(), JSON.stringify(s))
-  ok('at the better plan: Elite now, and a chore pays Elite\'s XP', g.row.effective === 'elite' && g.kidTier === 'elite' && g.xp === ELITE_XP,
+  // Each gift keeps its own plan for its own 12 months, the better first:
+  // Elite Pass now for 12 months, then what was left of the Standard year.
+  const eliteEnds = new Date(); eliteEnds.setUTCMonth(eliteEnds.getUTCMonth() + 12)
+  const standardLeft = before - Date.now()
+  ok('a second gift, Elite Pass, runs first: 12 months of Elite Pass from today', stacked.status === 200 && s.stacked === true
+    && g.row.gift_tier === 'elite' && Math.abs(new Date(g.row.gift_until).getTime() - eliteEnds.getTime()) < 120000, JSON.stringify(s))
+  ok('then the rest of the Standard year, as Standard, not Elite Pass',
+    g.row.gift_then_tier === 'standard'
+    && Math.abs(new Date(g.row.gift_then_until).getTime() - (new Date(g.row.gift_until).getTime() + standardLeft)) < 120000
+    && Math.abs(Date.parse(s.until) - new Date(g.row.gift_then_until).getTime()) < 2000, JSON.stringify(g.row))
+  ok('Elite now, and a chore pays Elite\'s XP', g.row.effective === 'elite' && g.kidTier === 'elite' && g.xp === ELITE_XP,
     `${g.row.effective} ${g.xp}`)
 
   // Choosing a plan while the gift runs: the first charge is the day it ends.
-  // Two years of gift is longer than Stripe will wait for a first payment.
+  // More than two years of gift is longer than Stripe will wait.
+  await db.query("update families set gift_then_until = now() + interval '800 days' where id = $1", [GIFT_FAMILY])
   const tooLong = await asUser('/api/create-checkout', { tier: 'elite', cycle: 'year' }, GIFT_PARENT)
   ok('with two years of gift ahead, a plan cannot be lined up yet (Stripe waits two years at most): refused, never charged early',
     tooLong.status === 409 && (await tooLong.json()).error === 'gift_too_long', `status ${tooLong.status}`)
-  await db.query("update families set gift_until = now() + interval '300 days' where id = $1", [GIFT_FAMILY])
+  await db.query("update families set gift_until = now() + interval '100 days', gift_then_until = now() + interval '300 days' where id = $1", [GIFT_FAMILY])
   g = await giftFamily()
   const checkout = await asUser('/api/create-checkout', { tier: 'elite', cycle: 'year' }, GIFT_PARENT)
   const call = lastCall('/v1/checkout/sessions')
-  ok('a plan chosen during the gift is first charged the day the gift ends, never before',
-    checkout.status === 200 && Number(call?.params.get('subscription_data[trial_end]')) === Math.floor(new Date(g.row.gift_until).getTime() / 1000),
+  ok('a plan chosen during the gifts is first charged the day the last of them ends, never before',
+    checkout.status === 200 && Number(call?.params.get('subscription_data[trial_end]')) === Math.floor(new Date(g.row.gift_then_until).getTime() / 1000),
     `status ${checkout.status} trial_end ${call?.params.get('subscription_data[trial_end]')}`)
 }
 
 console.log('\n=== Gift 5. The reminder, 30 days before it ends ===')
 {
-  await db.query("update families set gift_until = now() + interval '40 days' where id = $1", [GIFT_FAMILY])
+  await db.query("update families set gift_until = now() + interval '40 days', gift_then_tier = null, gift_then_until = null where id = $1", [GIFT_FAMILY])
   let g = await giftFamily()
   ok('40 days left: no reminder yet', giftNotice(g.parentPhone.family) === null)
   await db.query("update families set gift_until = now() + interval '20 days' where id = $1", [GIFT_FAMILY])

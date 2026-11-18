@@ -22,7 +22,7 @@
 import { readFileSync } from 'node:fs'
 import {
   trialEmail, pauseReminderEmail, schoolMonthEmail, errorReportEmail, giftReceiptEmail, giftEmail, districtQuoteEmail,
-  pilotReminderEmail, pilotRequestEmail,
+  pilotReminderEmail, pilotRequestEmail, districtTakeoverEmail,
 } from '../api/_shared/email.js'
 import { TIERS } from '../src/state/initialState.js'
 import { PRODUCT_OF } from '../src/data/legalText.js'
@@ -146,6 +146,18 @@ for (const site of [SITE, '']) {
     }
   }
 
+  // A school whose district now pays: its own plan set to stop, with and
+  // without the day and the help address.
+  for (const full of [true, false]) {
+    for (const replyTo of [HELP, '']) {
+      add(`district takeover, ${full ? 'everything known' : 'nothing optional'}, ${replyTo ? 'with' : 'without'} help, ${site ? 'with' : 'without'} a site`,
+        districtTakeoverEmail({
+          name: 'Example "Oak" & <Elm> Academy', district: full ? 'North <Valley> Unified' : '',
+          period_end: full ? '2026-12-30T00:00:00Z' : null,
+        }, { site, replyTo }))
+    }
+  }
+
   // "Request a pilot", every way it can be filled in.
   for (const full of [true, false]) {
     add(`pilot request, ${full ? 'everything filled in' : 'nothing optional'}, ${site ? 'with' : 'without'} a site`,
@@ -170,8 +182,8 @@ console.log('\n=== Every email RankUp sends itself is rendered here ===')
 const source = readFileSync(new URL('../api/_shared/email.js', import.meta.url), 'utf8')
 const builders = [...source.matchAll(/^export function (\w+Email)\(/gm)].map((m) => m[1])
 const rendered = ['trialEmail', 'pauseReminderEmail', 'schoolMonthEmail', 'errorReportEmail', 'giftReceiptEmail', 'giftEmail', 'districtQuoteEmail',
-  'pilotReminderEmail', 'pilotRequestEmail']
-ok(`the builders in api/_shared/email.js are the nine rendered here (${builders.join(', ')})`,
+  'pilotReminderEmail', 'pilotRequestEmail', 'districtTakeoverEmail']
+ok(`the builders in api/_shared/email.js are the ten rendered here (${builders.join(', ')})`,
   builders.length === rendered.length && builders.every((b) => rendered.includes(b)),
   `a new one needs its variants added to tests/emails.mjs: ${builders.filter((b) => !rendered.includes(b)).join(', ')}`)
 ok(`${emails.length} emails rendered`, emails.length > 100)

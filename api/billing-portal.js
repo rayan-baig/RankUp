@@ -41,6 +41,17 @@ const PRICES = {
  */
 const FLOWS = new Set(['cancel', 'upgrade', 'yearly'])
 
+/*
+ * The portal configuration for changing plan (bpc_...), its own: the only
+ * one that lets a customer switch price, used for the Elite and yearly
+ * confirm pages alone. The default configuration, which the front page and
+ * "Cancel my plan" open, does not allow switching, so the half-price
+ * month's coupon can never land on a yearly charge made from there (the
+ * yearly flow itself waits out that month). docs/PAYMENTS.md, "The customer
+ * portal's two configurations".
+ */
+const PLAN_CHANGE_CONFIG = process.env.STRIPE_PORTAL_PLAN_CHANGE_CONFIG || ''
+
 /** Which plan, and which period, a subscription's price is. */
 function planOf(sub) {
   const item = sub?.items?.data?.[0]
@@ -79,8 +90,9 @@ async function flowData(stripe, status, flow, origin) {
   if (flow === 'upgrade' && tier === 'elite') return { error: 'already_elite', code: 409 }
   if (flow === 'yearly' && cycle === 'year') return { error: 'already_yearly', code: 409 }
   const price = flow === 'upgrade' ? PRICES[cycle].elite : PRICES.year[tier]
-  if (!price) return { error: 'not_configured', code: 503 }
+  if (!price || !PLAN_CHANGE_CONFIG) return { error: 'not_configured', code: 503 }
   return {
+    configuration: PLAN_CHANGE_CONFIG,
     flow: {
       type: 'subscription_update_confirm',
       subscription_update_confirm: { subscription: subscriptionId, items: [{ id: item.id, price, quantity: 1 }] },
@@ -199,16 +211,21 @@ export default async function handler(req, res) {
 
     // Straight to cancelling, or to a change of plan, when asked for one.
     let flow = null
+    let configuration = null
     if (body?.flow !== undefined && body?.flow !== null) {
       if (!FLOWS.has(body.flow)) return res.status(400).json({ error: 'bad_request' })
       const made = await flowData(stripe, status, body.flow, origin)
       if (made.error) return res.status(made.code).json({ error: made.error })
       flow = made.flow
+      configuration = made.configuration || null
     }
 
     const portal = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${origin}/#/parent/plan`,
+      // Elite and yearly: the plan-change configuration. Everything else:
+      // the default, which allows no switching.
+      ...(configuration ? { configuration } : {}),
       ...(flow ? { flow_data: flow } : {}),
     })
     return res.status(200).json({ url: portal.url })

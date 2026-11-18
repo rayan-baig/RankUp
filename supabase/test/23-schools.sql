@@ -211,6 +211,23 @@ end $$;
 reset role;
 select verify_school(id, true) from schools where name in ('Oakridge Elementary', 'Pine Hill School');
 update school_members set joined_at = now() - interval '3 months';
+-- Five children of one family are that family's numbers, and no school shows
+-- them (school_group_shown: 5 students from 3 families). Each school's last
+-- two children live in households of their own.
+insert into families (id, name, tier) values
+  ('5c222222-0000-0000-0000-000000000004', 'The Alders',  'standard'),
+  ('5c222222-0000-0000-0000-000000000005', 'The Aspens',  'standard'),
+  ('5c222222-0000-0000-0000-000000000006', 'The Beeches', 'standard'),
+  ('5c222222-0000-0000-0000-000000000007', 'The Bays',    'standard');
+update kids set family_id = case id
+    when '5c444441-0000-0000-0000-000000000004' then '5c222222-0000-0000-0000-000000000004'::uuid
+    when '5c444441-0000-0000-0000-000000000005' then '5c222222-0000-0000-0000-000000000005'::uuid
+    when '5c444442-0000-0000-0000-000000000004' then '5c222222-0000-0000-0000-000000000006'::uuid
+    when '5c444442-0000-0000-0000-000000000005' then '5c222222-0000-0000-0000-000000000007'::uuid end
+ where id in ('5c444441-0000-0000-0000-000000000004', '5c444441-0000-0000-0000-000000000005',
+              '5c444442-0000-0000-0000-000000000004', '5c444442-0000-0000-0000-000000000005');
+update quests q set family_id = k.family_id from kids k where q.kid_id = k.id and q.family_id <> k.family_id;
+update school_members m set family_id = k.family_id from kids k where m.kid_id = k.id and m.family_id <> k.family_id;
 set role app_user;
 
 -- ---------- nothing is readable directly ----------
@@ -517,7 +534,8 @@ begin
   perform become('5c111111-0000-0000-0000-000000000002');
   r := export_family_data()->'school_league';
   perform ok('downloading my data includes each child''s school',
-    jsonb_array_length(r) = 5 and (r->0->>'school') = 'Pine Hill School'
+    -- Three: Ben4 and Ben5 live in households of their own (see above).
+    jsonb_array_length(r) = 3 and (r->0->>'school') = 'Pine Hill School'
     and (r->0->>'first_name_shown_to_school')::boolean);
   begin
     perform export_family_school_data('5c222222-0000-0000-0000-000000000001');

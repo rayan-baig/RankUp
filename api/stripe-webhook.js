@@ -27,6 +27,7 @@ import { reportError } from './_shared/job.js'
 import { applyReferralRewards, referralInvoicePaid, referralPaymentReversed } from './_shared/referralReward.js'
 import { giftPaid } from './_shared/gifts.js'
 import { districtIdOf, paidBands } from './_shared/districtBilling.js'
+import { handBackDuplicatePlan, refundLateDuplicatePayment, endPlansDistrictPays, invoiceSubscriptionId } from './_shared/onePlan.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -380,8 +381,16 @@ export default async function handler(req, res) {
             p_stripe_event: `invoice:${object.id}`,
             p_amount_pence: paid,
             p_currency: String(object.currency || 'usd'),
+            // Which plan was paid for: a plan covers before payment for 30
+            // days at most, once (supabase/schools.sql, cover_grace_from).
+            p_subscription_id: invoiceSubscriptionId(object),
           })
         }
+      }
+      // A district that has paid may now pay for a school that also pays for
+      // itself: that school's own plan stops at the end of its period.
+      if (event.type.startsWith('customer.subscription.') || event.type === 'invoice.paid' || event.type === 'invoice.payment_succeeded') {
+        await endPlansDistrictPays({ stripe, serviceRpc, reportError })
       }
       // An unpaid invoice needs nothing here: the subscription events that
       // follow say whether the plan survived it.
@@ -395,20 +404,33 @@ export default async function handler(req, res) {
       if (event.type === 'checkout.session.completed') {
         if (customerId) await serviceRpc('attach_school_customer', { p_school_id: schoolId, p_customer_id: customerId })
       } else if (event.type.startsWith('customer.subscription.')) {
-        await serviceRpc('apply_school_subscription', {
+        const applied = await serviceRpc('apply_school_subscription', {
           p_school_id: schoolId,
           p_status: event.type === 'customer.subscription.deleted' ? 'canceled' : object.status,
           p_customer_id: customerId || null,
           p_subscription_id: object.id,
           p_stripe_event: event.id,
-          p_payload: { type: event.type, ...endDates(event, object) },
+          // By invoice or by card: a plan by invoice covers before it is paid
+          // for 30 days at most, once.
+          p_payload: { type: event.type, ...endDates(event, object),
+            ...(object.collection_method ? { collection: object.collection_method } : {}) },
           // Stripe does not deliver in order: older news than the school's
           // latest is ignored, as it is for a family.
           p_event_created: eventTime(event),
           p_period_end: periodEnd(object),
         })
+        // A second plan for a school already paid for: cancelled, refunded.
+        if (applied?.ignored === 'duplicate_plan') {
+          const handed = await handBackDuplicatePlan({ stripe, serviceRpc, reportError, schoolId, subscription: object })
+          return res.status(200).json({ received: true, school: true, duplicate_plan: handed })
+        }
         if (event.type !== 'customer.subscription.deleted') await keepSchoolOnItsBand(stripe, schoolId, object)
       } else if (event.type === 'charge.refunded') {
+        // The refund of a second plan's payment (handBackDuplicatePlan) is
+        // not the school's real plan refunded.
+        if (await serviceRpc('duplicate_plan_payment', { p_refs: [object.id, idOf(object.payment_intent)].filter(Boolean) })) {
+          return res.status(200).json({ received: true, school: true, ignored: 'duplicate_plan_refund' })
+        }
         // Answered and dropped before this: a school refunded in full stayed
         // in the league as a paying school. See apply_school_refund.
         await serviceRpc('apply_school_refund', {
@@ -420,9 +442,14 @@ export default async function handler(req, res) {
         })
       } else if (event.type === 'invoice.paid' || event.type === 'invoice.payment_succeeded') {
         const paid = Number(object.amount_paid ?? object.amount_due ?? 0)
+        // Paid on a second plan that was found and cancelled: refunded too.
+        if (paid > 0 && await refundLateDuplicatePayment({ stripe, serviceRpc, reportError, invoice: object })) {
+          return res.status(200).json({ received: true, school: true, ignored: 'duplicate_plan_payment' })
+        }
         if (paid > 0) {
           await serviceRpc('record_school_payment', {
             p_school_id: schoolId,
+            p_subscription_id: invoiceSubscriptionId(object),
             // The invoice, not the event: Stripe sends both invoice.paid and
             // invoice.payment_succeeded for one payment, and each has its own
             // event id, so keying on the event counted every invoice twice.

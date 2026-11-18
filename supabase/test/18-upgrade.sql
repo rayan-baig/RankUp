@@ -158,7 +158,10 @@ begin
                              'school_groups', 'school_pilots', 'school_pilot_attempts',
                              -- Pauses: /api/keep-plan, the webhook and the reminder
                              -- job reach them, with the service key (billing.sql).
-                             'plan_pauses');
+                             'plan_pauses',
+                             -- Paying once: a school's open card checkouts and a
+                             -- second plan handed back, the server's alone (schools.sql).
+                             'school_checkout_sessions', 'school_duplicate_plans');
   perform ok('no table is left locked with no policy at all', coalesce(bare, '') = '',
              'bare: ' || coalesce(bare, ''));
 end $$;

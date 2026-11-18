@@ -101,7 +101,12 @@ export default async function handler(req, res) {
         // An invoice now for what was added, for the rest of the year; what
         // was taken off is credited against the next invoice.
         proration_behavior: 'always_invoice',
-      }, { idempotencyKey: `district-update:${info.district_id}:${itemsKey(items)}` })
+      }, {
+        // The district's billing version moves on with every real change
+        // (a school added or taken off, Stripe's news), so A, then B, then A
+        // again is three requests, while a second tap is the same one.
+        idempotencyKey: `district-update:${info.district_id}:v${Number(info.billing_version) || 0}:${itemsKey(items)}`,
+      })
       return res.status(200).json({ ok: true, schools: info.quote.schools })
     }
 
@@ -130,7 +135,6 @@ export default async function handler(req, res) {
     }
 
     const metadata = { district_id: info.district_id, kind: 'district' }
-    const day = new Date().toISOString().slice(0, 10)
     const subscription = await stripe.subscriptions.create({
       customer,
       items,
@@ -139,8 +143,10 @@ export default async function handler(req, res) {
       description: `RankUp School League for ${info.name}, ${info.quote.schools} schools, one year`,
       metadata,
     }, {
-      // Two taps on the button, or a retry after a timeout, make one plan.
-      idempotencyKey: `district-plan:${info.district_id}:${day}:${itemsKey(items)}`,
+      // Two taps on the button, or a retry after a timeout, make one plan;
+      // a plan cancelled and invoiced again (the billing version moved on
+      // with the cancel) is a new one, the same day or not.
+      idempotencyKey: `district-plan:${info.district_id}:v${Number(info.billing_version) || 0}:${itemsKey(items)}`,
     })
     return res.status(200).json({ ok: true, sent_to: email, status: subscription.status || null, schools: info.quote.schools })
   } catch (err) {

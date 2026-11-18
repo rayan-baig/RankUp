@@ -483,6 +483,12 @@ end $$;
 alter table families add column if not exists gift_tier text check (gift_tier in ('standard','elite'));
 alter table families add column if not exists gift_starts_at timestamptz;
 alter table families add column if not exists gift_until timestamptz;
+-- Two gifts of different plans, stacked: each keeps its own plan for its own
+-- months, the better one first. gift_tier runs from gift_starts_at to
+-- gift_until; then gift_then_tier (always Standard, after Elite) until
+-- gift_then_until. Null when there is nothing after the first.
+alter table families add column if not exists gift_then_tier text check (gift_then_tier in ('standard','elite'));
+alter table families add column if not exists gift_then_until timestamptz;
 
 /*
  * A paid plan on pause (billing.sql, start_plan_pause): Stripe takes no
@@ -522,6 +528,10 @@ returns text language sql stable security definer set search_path = public as $$
            case when f.gift_tier is not null and f.gift_until > now()
                      and coalesce(f.gift_starts_at, '-infinity'::timestamptz) <= now()
                 then case f.gift_tier when 'elite' then 2 when 'standard' then 1 else 0 end
+                else 0 end,
+           -- The second gift, once the first has run out.
+           case when f.gift_then_tier is not null and f.gift_until <= now() and f.gift_then_until > now()
+                then case f.gift_then_tier when 'elite' then 2 when 'standard' then 1 else 0 end
                 else 0 end)
          when 2 then 'elite' when 1 then 'standard' else 'starter' end
   from families f where f.id = p_family_id;

@@ -40,6 +40,7 @@ exec npx wrangler pages dev dist --port "$PORT" --compatibility-flags nodejs_com
   --binding STRIPE_PRICE_ELITE_YEAR=price_test_elite_year \
   --binding STRIPE_PRICE_FLASH_5=price_test_flash_5 \
   --binding STRIPE_SAVE_COUPON=rankup-test-half-month \
+  --binding STRIPE_PORTAL_PLAN_CHANGE_CONFIG=bpc_test_plan_change \
   --binding STRIPE_PRICE_GIFT_STANDARD_YEAR=price_test_gift_standard_year \
   --binding STRIPE_PRICE_GIFT_ELITE_YEAR=price_test_gift_elite_year \
   --binding GIFT_CODE_SECRET=test-gift-code-secret-local-only \

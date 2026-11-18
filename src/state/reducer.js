@@ -127,6 +127,11 @@ export function effectiveTier(family) {
   const giftStarts = family?.giftStartsAt ?? null
   if (gift && giftUntil && giftUntil > now && (giftStarts == null || giftStarts <= now)
       && (TIER_RANK[gift] ?? 0) > (TIER_RANK[best] ?? 0)) best = gift
+  // A second gift of the other plan, once the first has run out.
+  const then = family?.giftThenTier
+  const thenUntil = family?.giftThenUntil
+  if (then && thenUntil && giftUntil && giftUntil <= now && thenUntil > now
+      && (TIER_RANK[then] ?? 0) > (TIER_RANK[best] ?? 0)) best = then
   return best
 }
 
@@ -154,7 +159,8 @@ export function trialDaysLeft(family) {
 export function onGift(state) {
   const f = state?.family
   const paid = paidTierNow(f)
-  const running = effectiveTier({ tier: 'starter', giftTier: f?.giftTier, giftStartsAt: f?.giftStartsAt, giftUntil: f?.giftUntil })
+  const running = effectiveTier({ tier: 'starter', giftTier: f?.giftTier, giftStartsAt: f?.giftStartsAt, giftUntil: f?.giftUntil,
+                                  giftThenTier: f?.giftThenTier, giftThenUntil: f?.giftThenUntil })
   return running !== 'starter' && TIER_RANK[running] > TIER_RANK[paid] && running === effectiveTier(f)
 }
 
@@ -408,6 +414,9 @@ function reduce(state, action) {
             giftTier: family.gift_tier || null,
             giftStartsAt: family.gift_starts_at ? Date.parse(family.gift_starts_at) : null,
             giftUntil: family.gift_until ? Date.parse(family.gift_until) : null,
+            // A second gift of the other plan, after the first (stacked).
+            giftThenTier: family.gift_then_tier || null,
+            giftThenUntil: family.gift_then_until ? Date.parse(family.gift_then_until) : null,
             // A paid plan on pause (start_plan_pause), beside the paid tier
             // for the same reason: when it ends, what they pay for is back.
             // A pause with no end date (made in Stripe's dashboard) is kept
@@ -463,7 +472,10 @@ function reduce(state, action) {
      * nobody: whoever picks the phone up next learns nothing from it.
      */
     case 'DEVICE_WIPED':
-      return { ...createInitialState(), deviceWiped: action.reason === 'removed' ? 'removed' : 'unlinked' }
+      // Whether it was a child's phone is kept, and only that: its front
+      // door then shows nothing to buy (Welcome's gift and schools links).
+      return { ...createInitialState(), deviceWiped: action.reason === 'removed' ? 'removed' : 'unlinked',
+               deviceWipedChild: state.device?.role === 'kid' }
 
     /* ---------- device pairing ---------- */
 

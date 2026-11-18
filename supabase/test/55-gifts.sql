@@ -243,11 +243,17 @@ begin
   select gift_until into v_before from families where id = t55_fam(1);
   v := redeem_gift_code(t55_fam(1), 'STACK2345678', 'ip-home');
   select gift_until into v_after from families where id = t55_fam(1);
-  perform ok('a second gift adds 12 months to the end of the first', (v->>'stacked')::boolean
-    and v_after = v_before + interval '12 months', v::text);
-  perform ok('at the better of the two plans, for the whole time',
-    (select gift_tier = 'elite' from families where id = t55_fam(1)) and effective_tier(t55_fam(1)) = 'elite');
-  perform ok('still one gift on the family: one end date', (select gift_starts_at <= now() from families where id = t55_fam(1)));
+  -- Each gift keeps its own plan for its own 12 months, the better first:
+  -- the Elite Pass year running now, then the Standard year after it.
+  perform ok('a second gift is 12 more months, after the first', (v->>'stacked')::boolean
+    and (v->>'until')::timestamptz = v_before + interval '12 months', v::text);
+  perform ok('the Elite Pass year runs first, to the day it was going to end',
+    v_after = v_before and (select gift_tier = 'elite' from families where id = t55_fam(1))
+    and effective_tier(t55_fam(1)) = 'elite');
+  perform ok('then the Standard year: Standard, not Elite Pass, for its 12 months',
+    (select gift_then_tier = 'standard' and gift_then_until = v_before + interval '12 months'
+       from families where id = t55_fam(1)));
+  perform ok('still started: the first gift runs now', (select gift_starts_at <= now() from families where id = t55_fam(1)));
 end $$;
 
 -- ---------- a family that already pays ----------

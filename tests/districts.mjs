@@ -75,7 +75,7 @@ const schoolsText = await page.getByTestId('district-schools').innerText()
 ok('both schools are listed, each with its invite until it is used', schoolsText.includes(`Oak Primary ${stamp}`)
   && schoolsText.includes(oakInvite) && schoolsText.includes(`Elm Middle ${stamp}`))
 ok('each says how it is paid for: a free trial, for now', /Free trial, \d+ days left/.test(schoolsText))
-ok('and shows no numbers while too few students take part', /Numbers show once 5 or more students take part/.test(schoolsText))
+ok('and shows no numbers while too few students take part', /Numbers show once 5 or more students, from 3 or more families, take part/.test(schoolsText))
 const plan = await page.getByTestId('district-plan').innerText()
 const two = districtPrice([420, 900])
 ok(`the plan is the database's price: ${dollars(two.yearlyCents)} a year for two schools`, plan.includes(dollars(two.yearlyCents)), plan.slice(0, 300))
@@ -111,10 +111,16 @@ const parentUser = (await db.query(`insert into auth.users (email) values ($1) r
 await db.query(`insert into parents (user_id, family_id, name) values ($1, $2, 'Wilma')`, [parentUser, fam])
 await db.query('select seed_consent($1, $2)', [fam, parentUser])
 const oakId = (await db.query('select id from schools where name = $1', [`Oak Primary ${stamp}`])).rows[0].id
+// At school the six count as three households (school_group_shown: 5
+// students from 3 families), round in turn.
+const households = [fam]
+for (const name of ['The Wobblethorpes Two', 'The Wobblethorpes Three']) {
+  households.push((await db.query(`insert into families (name, tier) values ($1, 'standard') returning id`, [name])).rows[0].id)
+}
 for (let n = 1; n <= 6; n += 1) {
   const kid = (await db.query(`insert into kids (family_id, name) values ($1, $2) returning id`, [fam, `Wobblethorpe Kid${n}`])).rows[0].id
   const quest = (await db.query(`insert into quests (family_id, kid_id, title) values ($1, $2, 'Feed the axolotl') returning id`, [fam, kid])).rows[0].id
-  await db.query(`insert into school_members (kid_id, school_id, family_id, show_name, joined_at) values ($1, $2, $3, true, date_trunc('month', now()))`, [kid, oakId, fam])
+  await db.query(`insert into school_members (kid_id, school_id, family_id, show_name, joined_at) values ($1, $2, $3, true, date_trunc('month', now()))`, [kid, oakId, households[n % 3]])
   if (n <= 4) {
     await db.query(`insert into submissions (family_id, quest_id, kid_id, status, decided_at, note)
                     values ($1, $2, $3, 'approved', now(), 'my secret note'), ($1, $2, $3, 'approved', now(), 'my secret note')`, [fam, quest, kid])
@@ -127,7 +133,7 @@ const totals = await page.getByTestId('district-totals').innerText()
 const listed = await page.getByTestId('district-schools').innerText()
 ok('Oak\'s numbers show once six students take part: 6 taking part, 67% did a chore, 8 chores',
   /\b6\b[\s\S]*taking part/i.test(listed) && listed.includes('67%') && /\b8\b\s*\n?\s*chores/i.test(listed), listed.slice(0, 400))
-ok('the district totals count Oak, and leave out Elm (too few)', /\b6\b/.test(totals) && /1 of your schools has fewer than 5/.test(totals), totals)
+ok('the district totals count Oak, and leave out Elm (too few)', /\b6\b/.test(totals) && /1 of your schools has too few students taking part/.test(totals), totals)
 ok('the principal shows as signed up', listed.includes('Principal signed up'))
 const all = await body(page)
 ok('never a child: no name, no note, no chore', !/Wobblethorpe|Kid1|secret note|axolotl|Wilma/.test(all))
@@ -170,7 +176,8 @@ await visitor.getByTestId('district-ladder').waitFor({ timeout: 10000 })
 ok('the School League\'s front page leads to the district page', visitor.url().endsWith('#/district'))
 await fresh.close()
 
-await db.query('delete from families where id = $1', [fam])
+await db.query('delete from school_members where school_id = $1', [oakId])
+await db.query('delete from families where id = any($1)', [households])
 await db.query('delete from auth.users where id = $1', [parentUser])
 await db.end()
 await finish(errors, fails, browser)

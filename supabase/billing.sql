@@ -86,6 +86,35 @@ exception when others then
 end $$;
 revoke execute on function count_plan_change(text) from public, anon, authenticated;
 
+/**
+ * A gift redeemed while a cancelled paid plan ran to its end waits for that
+ * end (redeem_gift_code). When the paid plan really ends sooner (a refund in
+ * full, a cancel at once), the gift starts then instead, and every date of
+ * it moves the same amount earlier, so the family has all of it and never a
+ * day on Starter in between. Never before the gift was redeemed, nor later
+ * than it would have started.
+ */
+create or replace function start_waiting_gift(p_family_id uuid, p_ended_at timestamptz)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_fam   families;
+  v_at    timestamptz;
+  v_shift interval;
+begin
+  select * into v_fam from families where id = p_family_id for update;
+  if not found or v_fam.gift_starts_at is null then return; end if;
+  v_at := greatest(least(coalesce(p_ended_at, now()), now()),
+                   coalesce((select max(redeemed_at) from gift_orders where redeemed_by = p_family_id), '-infinity'));
+  if v_at >= v_fam.gift_starts_at then return; end if;
+  v_shift := v_fam.gift_starts_at - v_at;
+  update families
+     set gift_starts_at = v_at,
+         gift_until = gift_until - v_shift,
+         gift_then_until = gift_then_until - v_shift
+   where id = p_family_id;
+end $$;
+revoke execute on function start_waiting_gift(uuid, timestamptz) from public, anon, authenticated;
+
 drop function if exists apply_subscription_change(uuid, text, text, text, text, timestamptz, text, jsonb);
 create or replace function apply_subscription_change(
   p_family_id uuid,
@@ -208,6 +237,15 @@ begin
          billing_cycle = case when p_payload->>'cycle' in ('month', 'year') then p_payload->>'cycle'
                               else billing_cycle end
    where id = p_family_id;
+
+  -- A gift waiting for this paid plan to end starts the day it really
+  -- ended: a refund or a cancel at once ends it before the date the gift
+  -- was told to wait for.
+  if p_status in ('canceled', 'unpaid', 'incomplete_expired', 'refunded') then
+    perform start_waiting_gift(p_family_id,
+      case when p_status = 'refunded' then now()
+           else coalesce(nullif(p_payload->>'ended_at', '')::timestamptz, now()) end);
+  end if;
 
   -- A pause (pause_collection), as Stripe sees it, or the plan ending under
   -- one. Only subscription events say either; a refund says neither.
@@ -549,6 +587,9 @@ begin
     'gift_tier', v_family.gift_tier,
     'gift_starts_at', v_family.gift_starts_at,
     'gift_until', v_family.gift_until,
+    -- A second gift of the other plan, after the first (redeem_gift_code).
+    'gift_then_tier', v_family.gift_then_tier,
+    'gift_then_until', v_family.gift_then_until,
     -- A pause (start_plan_pause): when billing starts again, or null.
     'paused_until', case when v_family.paused_until > now() then v_family.paused_until end,
     -- Monthly or yearly: only a monthly plan is offered a pause, the
@@ -1013,8 +1054,9 @@ end $$;
  *   - single use: a code that has been redeemed is `used`, for everyone;
  *   - two years from purchase: then `expired`;
  *   - refunded in full before it was used: `refunded`;
- *   - one gift per family at a time: another gift adds 12 months to the end
- *     of the one running (stacked), at the better of the two plans;
+ *   - gifts stack: each keeps its own plan for its own 12 months, the
+ *     better plan first (Standard + Elite Pass is 12 months of Elite Pass,
+ *     then 12 of Standard), from the day the first started or now;
  *   - a family whose paid plan is set to renew is told to turn renewal off
  *     first (`subscription_renews`) and the code is not spent: the gift then
  *     starts the day the paid plan ends, so no day is paid for twice. A paid
@@ -1033,6 +1075,9 @@ declare
   v_tier   text;
   v_stacked boolean := false;
   v_fail   text;
+  v_elite  interval;
+  v_std    interval;
+  v_elite_end timestamptz;
 begin
   select * into v_family from families where id = p_family_id for update;
   if not found then
@@ -1071,12 +1116,45 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'subscription_renews');
   end if;
 
-  if v_family.gift_until is not null and v_family.gift_until > now() then
-    -- Stacked: twelve more months on the end of the gift already there.
+  if coalesce(v_family.gift_then_until, v_family.gift_until) > now() then
+    -- Stacked: each gift keeps its own plan for its own 12 months, the
+    -- better plan first. What is left of the gifts already there is laid
+    -- out again from the same start (now, or the day a paid plan ends):
+    -- all the Elite Pass time, then all the Standard time.
     v_stacked := true;
-    v_start := coalesce(v_family.gift_starts_at, now());
-    v_until := v_family.gift_until + interval '12 months';
-    v_tier := case when v_family.gift_tier = 'elite' or v_order.plan = 'elite' then 'elite' else 'standard' end;
+    v_start := greatest(coalesce(v_family.gift_starts_at, now()), now());
+    v_elite := interval '0';
+    v_std := interval '0';
+    if v_family.gift_until > v_start then
+      if v_family.gift_tier = 'elite' then
+        v_elite := v_elite + (v_family.gift_until - greatest(v_family.gift_starts_at, v_start));
+      else
+        v_std := v_std + (v_family.gift_until - greatest(v_family.gift_starts_at, v_start));
+      end if;
+    end if;
+    if v_family.gift_then_tier is not null and v_family.gift_then_until > v_start then
+      if v_family.gift_then_tier = 'elite' then
+        v_elite := v_elite + (v_family.gift_then_until - greatest(v_family.gift_until, v_start));
+      else
+        v_std := v_std + (v_family.gift_then_until - greatest(v_family.gift_until, v_start));
+      end if;
+    end if;
+    v_elite_end := v_start + v_elite + case when v_order.plan = 'elite' then interval '12 months' else interval '0' end;
+    v_until := v_elite_end + v_std + case when v_order.plan = 'standard' then interval '12 months' else interval '0' end;
+    if v_elite_end > v_start then
+      v_tier := 'elite';
+      update families
+         set gift_tier = 'elite', gift_starts_at = v_start, gift_until = v_elite_end,
+             gift_then_tier = case when v_until > v_elite_end then 'standard' end,
+             gift_then_until = case when v_until > v_elite_end then v_until end
+       where id = p_family_id;
+    else
+      v_tier := 'standard';
+      update families
+         set gift_tier = 'standard', gift_starts_at = v_start, gift_until = v_until,
+             gift_then_tier = null, gift_then_until = null
+       where id = p_family_id;
+    end if;
   else
     -- A paid plan cancelled and still running: the gift begins where it ends.
     v_start := case
@@ -1085,11 +1163,12 @@ begin
       else now() end;
     v_until := v_start + interval '12 months';
     v_tier := v_order.plan;
+    update families
+       set gift_tier = v_tier, gift_starts_at = v_start, gift_until = v_until,
+           gift_then_tier = null, gift_then_until = null
+     where id = p_family_id;
   end if;
 
-  update families
-     set gift_tier = v_tier, gift_starts_at = v_start, gift_until = v_until
-   where id = p_family_id;
   update gift_orders set redeemed_at = now(), redeemed_by = p_family_id where id = v_order.id;
   insert into gift_redeem_attempts (family_id, ip_key, ok) values (p_family_id, p_ip_key, true);
 

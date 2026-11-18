@@ -85,6 +85,25 @@ function renewalVoided(sub) {
   return Boolean(invoice && typeof invoice === 'object' && invoice.status === 'void')
 }
 
+/**
+ * Whether the subscription carries the half-price coupon now: true, false,
+ * or null when Stripe cannot be asked. Discounts come back as ids unless
+ * expanded; a discount names its coupon as `coupon` (an object or an id) or,
+ * in newer API versions, under `source`.
+ */
+async function saveCouponOn(stripe, subscriptionId) {
+  try {
+    const sub = await stripe.subscriptions.retrieve(subscriptionId, { expand: ['discounts'] })
+    const couponOf = (d) => {
+      const c = d?.coupon ?? d?.source?.coupon
+      return typeof c === 'string' ? c : c?.id || null
+    }
+    return (sub?.discounts || []).some((d) => d && typeof d === 'object' && couponOf(d) === SAVE_COUPON)
+  } catch {
+    return null
+  }
+}
+
 const HOUR = 3600000
 
 /**
@@ -235,6 +254,21 @@ export default async function handler(req, res) {
       { idempotencyKey: `rankup-save-${familyId}-${String(claim.claimed_at || '').slice(0, 19)}` })
   } catch (err) {
     await reportError('keep-plan:save', err)
+    // Stripe may have applied it and lost its answer (a timeout, its own
+    // error after the change). Giving the month back then would let the
+    // family take it a second time: ask Stripe what the subscription carries,
+    // and give it back only if the coupon is really not on it.
+    const applied = stripeUnavailable(err) ? await saveCouponOn(stripe, subscriptionId) : false
+    if (applied === true) {
+      await rpc('finish_save_offer', { p_family_id: familyId, p_ok: true }).catch(() => {})
+      return res.status(200).json({ ok: true, saved: true })
+    }
+    if (applied === null) {
+      // Stripe could not say either way. The month stays taken (it may be on
+      // the next invoice); the parent is told to check, or write to us.
+      await reportError('keep-plan:save', `half-price month for family ${familyId} not confirmed by Stripe; kept as taken`)
+      return res.status(503).json({ error: 'save_unconfirmed' })
+    }
     await rpc('finish_save_offer', { p_family_id: familyId, p_ok: false }).catch(() => {})
     const [code, why] = failed(err)
     return res.status(code).json({ error: why || 'save_failed' })

@@ -431,8 +431,16 @@ calls `redeem_gift_code`, which only the server may call.
   the family falls back to what it pays for, or Starter; nothing a child
   earned is touched.
 - **12 months from redemption.**
-- **One gift per family at a time; more stack.** Another code adds 12 months
-  to the end, at the better of the two plans for the whole time.
+- **More than one stacks, each its own plan.** Each gift keeps its own plan
+  for its own 12 months, the better plan first: a Standard gift and an Elite
+  Pass gift are 12 months of Elite Pass, then 12 of Standard
+  (`families.gift_then_tier` / `gift_then_until` hold the second), whichever
+  was redeemed first. What is left of a running Standard gift moves after the
+  new Elite Pass year.
+- **A gift waiting for a cancelled paid plan starts when the plan really
+  ends.** Redeemed while a paid plan runs to its end, a gift starts that day;
+  if the paid plan ends sooner (a refund in full, a cancel at once), the gift
+  starts then instead, with all its months (`start_waiting_gift`).
 - **Settings** says "Gift plan: Elite Pass until <date>". The parent's
   dashboard reminds them **30 days before it ends**, in the app only: no
   email, and nothing on a child's screen. A family that has already lined up
@@ -594,7 +602,12 @@ already has (an Alliance prize, say), with the idempotency key
 `rankup-save-<family>-<time>`. Once per family, ever:
 `families.save_offer_used_at`, set by `claim_save_offer` **before** Stripe is
 asked, so two taps cannot both have it, and given back by
-`finish_save_offer` only if Stripe did not apply it. Not on a yearly plan
+`finish_save_offer` only if Stripe did not apply it. When Stripe's answer is
+unclear (a timeout, its own error), `/api/keep-plan` asks Stripe what the
+subscription carries (its discounts, expanded) before giving anything back:
+the coupon is on it, so the month is taken; it is not, so it is given back;
+Stripe cannot say, so it stays taken (`save_unconfirmed`, "we have kept it for
+you") and the owner is told, rather than risk a second half-price month. Not on a yearly plan
 (half off the next invoice would be half a year), not while paused, not for a
 plan already ending. Without the setting the offer is not made at all.
 
@@ -657,9 +670,47 @@ are on (`flow: 'yearly'`). Not in the 31 days after the half-price month
 (`half_price_yearly`): yearly bills the year at once, and that month's coupon
 takes half off the next invoice, whatever it is, which would be half a year.
 
-Both need "Customers can switch plans" in the portal's settings, with the four
-prices. A subscription on a price RankUp does not know (one made by hand) is
-told to write to us (`custom_plan`).
+Both open Stripe's portal with a configuration of their own,
+`STRIPE_PORTAL_PLAN_CHANGE_CONFIG`; unset, they answer "not set up". A
+subscription on a price RankUp does not know (one made by hand) is told to
+write to us (`custom_plan`).
+
+### The customer portal's two configurations
+
+The half-price month's coupon takes 50% off the next invoice, whatever it is,
+and moving to yearly bills a whole year at once. So switching plan is allowed
+only on the confirm pages RankUp opens itself (which wait out the half-price
+month), never on the portal's front page. In Stripe's dashboard:
+
+1. **Settings → Billing → Customer portal** (the default configuration, the
+   one "Manage billing" and "Cancel my plan" open): under **Subscriptions**,
+   keep **Customers can cancel subscriptions** on, and turn **Customers can
+   switch plans** (or "update subscriptions") **off**. Save.
+2. Make a second configuration for changing plan. The dashboard does not
+   list extra configurations, so make it once with the API (a test key first,
+   then the live one):
+
+       curl https://api.stripe.com/v1/billing_portal/configurations \
+         -u "$STRIPE_SECRET_KEY:" \
+         -d "business_profile[headline]=Change your RankUp plan" \
+         -d "features[subscription_update][enabled]=true" \
+         -d "features[subscription_update][default_allowed_updates][]=price" \
+         -d "features[subscription_update][proration_behavior]=create_prorations" \
+         -d "features[subscription_update][products][0][product]=prod_STANDARD" \
+         -d "features[subscription_update][products][0][prices][]=price_STANDARD_MONTH" \
+         -d "features[subscription_update][products][0][prices][]=price_STANDARD_YEAR" \
+         -d "features[subscription_update][products][1][product]=prod_ELITE" \
+         -d "features[subscription_update][products][1][prices][]=price_ELITE_MONTH" \
+         -d "features[subscription_update][products][1][prices][]=price_ELITE_YEAR" \
+         -d "features[subscription_cancel][enabled]=false" \
+         -d "features[invoice_history][enabled]=true"
+
+   with the two products and the four prices in `STRIPE_PRICE_STANDARD`,
+   `_STANDARD_YEAR`, `STRIPE_PRICE_ELITE` and `_ELITE_YEAR`.
+3. Put the configuration's id (`bpc_...`) in `STRIPE_PORTAL_PLAN_CHANGE_CONFIG`
+   on the server, and redeploy.
+4. Check: "Manage billing" shows no way to change plan; the Elite nudge and
+   "Switch to yearly" open Stripe's confirm page with the new price.
 
 **Children never see either**, nor any price, offer or anything to buy: the
 cards are on Parent Mode screens only, behind the PIN, and a child's phone has
@@ -921,8 +972,10 @@ A free pilot, usually a semester, for a school that wants longer than the
    printable page of totals (students taking part, the share who did a chore,
    chores done, the average per student, the busiest week, the most popular
    kinds of chore, the same per house or class), the price for its size and how
-   to buy. Never a child's name or anything typed, and no numbers for a group
-   of fewer than 5 students. There is no "what families said": RankUp asks
+   to buy. Never a child's name or anything typed; no numbers for a group of
+   fewer than 5 students or from fewer than 3 families; and its chores, the
+   average, the busiest week and a kind of chore only when 3 or more students
+   did one (`school_group_shown`). There is no "what families said": RankUp asks
    families for no rating.
 5. **14 days before it ends** each of the school's admins gets one email (the
    hourly `/api/send-trial-emails` job, `due_pilot_reminders`): when it ends,
@@ -1057,6 +1110,16 @@ alone.
 
 ### When a district stops paying, or cancels
 
+- **Cover before payment: 30 days, once.** A plan by invoice is live at
+  Stripe the day it is made, weeks before anybody pays. It covers the
+  district's schools for at most 30 days before its first invoice is paid,
+  once per district ever (`districts.cover_grace_from`): cancelling and
+  invoicing again does not start another 30 days. After that a plan covers
+  only once an invoice of that same subscription is paid
+  (`paid_subscription_id`, from `invoice.paid`). A school paying for itself
+  by invoice is held to the same rule (`schools.cover_grace_from`); a plan by
+  card is paid at checkout, and a plan on its free trial at Stripe counts as
+  before.
 - An invoice paid late (`past_due`) keeps the schools covered while Stripe
   chases it, and the district page says the invoice is overdue.
 - A plan that ends (cancelled, unpaid after Stripe's settings give up, or a
@@ -1071,6 +1134,35 @@ alone.
   it signed up if it never paid, and never a school.
 - Events are applied once, older news is ignored, and a refunded year stays
   refunded, by the same rules as a school's.
+
+### Never paying twice
+
+- **"Send the invoice" and "Update the plan"** carry Stripe idempotency keys
+  with the district's (or school's) `billing_version`, which moves on with
+  every real change: a school added or taken off, a school's size or
+  suspension, any news from Stripe applied (a cancel included). A second tap
+  is the same request and makes one plan; A, then B, then A again, or a plan
+  cancelled and invoiced again the same day, are each a request of their own,
+  never Stripe's cached answer to an earlier one.
+- **A school with two plans of its own.** A card checkout a school's admin
+  opens is remembered (`school_checkout_sessions`); asking for a plan by
+  invoice closes every one still open (`checkout.sessions.expire`). If one is
+  paid all the same, or a card plan is paid while the district already pays
+  for the school, the webhook does not take it as the school's plan
+  (`apply_school_subscription`, `duplicate_plan`): it cancels that
+  subscription at once, refunds its payment in full (and any payment on it
+  that arrives later), logs it and tells the owner in the error report. That
+  refund's news is not mistaken for the school's real plan refunded
+  (`duplicate_plan_payment`).
+- **A school paying for itself and through its district.** When a district
+  that has paid for its plan covers a school with a plan of its own
+  (`schools_paying_twice`), the school's own subscription is set to stop at
+  the end of the period already paid for (`cancel_at_period_end`), and its
+  admins get one email saying so in plain words (`districtTakeoverEmail`).
+  The webhook does it when the district's plan or payment changes; the hourly
+  `/api/send-trial-emails` job catches a school joining a district that
+  already pays. A district still in its 30 days before paying stops nobody's
+  plan.
 
 ### Get a quote
 
@@ -1092,9 +1184,11 @@ Totals only (`district_overview`): for each school and the district, this
 month and last, students taking part, the share who did a chore, chores done
 and the average per student, and how each school is paid for. Never a child's
 name, nickname, numbers or anything typed; no numbers at all for a school with
-fewer than 5 students taking part; and the district's totals add up only the
-schools shown, so a small school's number cannot be worked out by
-subtraction. A school's own rules (its Stars, its verification, its codes)
+fewer than 5 students, or from fewer than 3 families, taking part, and no
+chores or average until 3 or more of them did one; and the district's totals
+add up only what is shown, so a small school's number cannot be worked out
+by subtraction. The same rule (`school_group_shown`, supabase/schools.sql)
+is each school's own card, its league, its houses and its report. A school's own rules (its Stars, its verification, its codes)
 are unchanged and not the district's to see.
 
 ---
