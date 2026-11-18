@@ -83,10 +83,10 @@ const ended = () => page.evaluate(() => /\d+ points/.test(document.body.innerTex
 console.log('\n=== The hub ===')
 await openArcade()
 const hub = await text()
-const NAMES = ['Snake', '2048', 'Brick Breaker', 'Minesweeper', 'Sky Hop',
+const NAMES = ['Snake', 'Number Merge', 'Brick Breaker', 'Minesweeper', 'Sky Hop',
   'Four in a Row', 'Slide Puzzle', 'Colour Chain', 'Lights Out', 'Star Catcher',
   'Stacker', 'Memory Match', 'SportsMania', 'Turbo Ball', 'Block Drop',
-  'Sweet Swap', 'Find the Impostor']
+  'Sweet Swap', 'Find the Fibber']
 const hasFeatured = /today.s pick/i.test(hub)
 const missing = NAMES.filter((n) => !hub.includes(n))
 missing.length === 0
@@ -139,19 +139,19 @@ await page.waitForTimeout(1200)
 await ended() ? pass('and it finishes') : fail('Slide Puzzle ends', (await text()).slice(0, 160))
 ;(await coinsNow()) >= beforeSlide ? pass('and settles up') : fail('Slide pays', 'coins went down')
 
-console.log('\n=== 2048 opens and can be cashed in ===')
+console.log('\n=== Number Merge opens and can be cashed in ===')
 // The rule that a dead move must not hand out a free tile is proved exactly
 // in tests/merge.mjs against the board logic itself — guessing at it through
 // a browser would pass on a board where the move happened to be legal.
-await playGame('2048')
+await playGame('Number Merge')
 ;(await text()).includes('Biggest tile')
   ? pass('it opens')
-  : fail('2048 opens', (await text()).slice(0, 160))
+  : fail('Number Merge opens', (await text()).slice(0, 160))
 await page.getByRole('button', { name: 'Left', exact: true }).click()
 await page.waitForTimeout(250)
 await page.getByRole('button', { name: /cash in/ }).click()
 await page.waitForTimeout(1200)
-await ended() ? pass('cashing in ends the round') : fail('2048 ends', (await text()).slice(0, 160))
+await ended() ? pass('cashing in ends the round') : fail('Number Merge ends', (await text()).slice(0, 160))
 
 console.log('\n=== Minesweeper: the first tap is never a mine ===')
 await playGame('Minesweeper')

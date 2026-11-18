@@ -3,7 +3,7 @@ import { useArrowKeys, swipeHandlers, DPad } from './controls.jsx'
 import { N, TOP, EMPTY, spawn, move, same, stuck } from './mergeBoard.js'
 
 /**
- * 2048. Slide the board, equal tiles merge, try to build a big one.
+ * Number Merge. Slide the board, equal tiles merge, try to build a big one.
  *
  * The deepest game in the arcade and the one most likely to be played by a
  * parent who picked up the phone. There is no clock and no reflex in it at
@@ -72,7 +72,7 @@ export default function Merge({ onDone }) {
       <div
         {...swipeHandlers(push)}
         role="application"
-        aria-label="2048. Swipe or use the arrow keys to slide the board."
+        aria-label="Number Merge. Swipe or use the arrow keys to slide the board."
         className="grid gap-2 mx-auto p-2"
         style={{
           maxWidth: 300,

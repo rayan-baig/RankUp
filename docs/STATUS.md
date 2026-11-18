@@ -43,7 +43,7 @@ one phone, with no account (see "On one phone only" below).
 | Seasons | ✅ needs a backend | A parent can send a child's finished theme to RankUp (one a child a month, theme only, optional credit). The operator picks on `#/operator`; on the Season's first day every family's picker has it and a child sees "New Season!" once. Declined and unpicked go after 90 days |
 | Avatar with five forms | ✅ | Tap it and it reacts |
 | Worlds that change with level | ✅ | Four per theme at levels 10/25/50/100, each with its own colours, sky and line of story |
-| Block Craft's nine forms, story and battles | ✅ | Overworld to The Dragon (399). A battle scene per chapter; worlds stay secret until reached |
+| Block Craft's nine forms, story and battles | ✅ | The village to The Dragon (399). A battle scene per chapter; worlds stay secret until reached |
 | Dragon boss fight | ✅ | Accepted chores hit the dragon; chores sent back, 48 idle hours and specials hit back. Worked out from synced chores and held by the server |
 | Arcade | ✅ | 24 games. Tokens come only from finished chores (at most 5 held); at most 15 coins a day from games, counted on the family's day. The look-around family has unlimited tokens. The arcade tells a child, in plain words, how many tokens they have, how many coins they can still win today, and that winnings come back at midnight |
 | Sunday Market and Flash Tickets | ✅ | Cosmetic skins on Sundays only, no countdown, every skin comes back. Flash Tickets are bought by a parent; prices fixed on the server |

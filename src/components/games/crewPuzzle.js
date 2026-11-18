@@ -1,9 +1,11 @@
 /**
- * The impostor puzzle, generated so that it always has exactly one answer.
+ * The fibber puzzle, generated so that it always has exactly one answer.
+ * (The code still calls the fibber `impostor`; that is the game's id, kept
+ * so saved scores still line up.)
  *
- * Five crewmates, one impostor. Everybody makes one statement about somebody
+ * Five friends, one fibber. Everybody makes one statement about somebody
  * else: either an accusation ("it was them") or a vouch ("it was not them").
- * The crew tell the truth. The impostor lies.
+ * The honest ones tell the truth. The fibber does not.
  *
  * The puzzle is built by picking an impostor, writing statements that fit,
  * and then testing all five candidates against those statements. If more
@@ -14,19 +16,19 @@
  */
 
 export const CREW = [
-  { id: 0, name: 'Red', colour: '#ef4444' },
-  { id: 1, name: 'Blue', colour: '#3b82f6' },
-  { id: 2, name: 'Green', colour: '#22c55e' },
-  { id: 3, name: 'Yellow', colour: '#eab308' },
-  { id: 4, name: 'Purple', colour: '#a855f7' },
+  { id: 0, name: 'Fox', face: '🦊', colour: '#f97316' },
+  { id: 1, name: 'Owl', face: '🦉', colour: '#a16207' },
+  { id: 2, name: 'Frog', face: '🐸', colour: '#22c55e' },
+  { id: 3, name: 'Bear', face: '🐻', colour: '#92400e' },
+  { id: 4, name: 'Cat', face: '🐱', colour: '#eab308' },
 ]
 
 /** Is a statement true, if `suspect` is the impostor? */
 const holds = (s, suspect) => (s.kind === 'accuse' ? s.about === suspect : s.about !== suspect)
 
 /**
- * Could `suspect` be the impostor? Only if every crewmate's statement is
- * true and the impostor's own statement is false.
+ * Could `suspect` be the fibber? Only if every honest friend's statement is
+ * true and the fibber's own statement is false.
  */
 export function consistent(statements, suspect) {
   return statements.every((s) => (
@@ -71,5 +73,5 @@ export const sentence = (s) => {
   const about = CREW[s.about].name
   return s.kind === 'accuse'
     ? `It was ${about}. I saw them.`
-    : `${about} is not the impostor — they were with me.`
+    : `${about} didn't do it — they were with me.`
 }

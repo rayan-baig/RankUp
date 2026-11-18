@@ -44,7 +44,7 @@ export const MINIGAMES = [
     name: 'SportsMania',
     icon: '🏆',
     category: 'sports',
-    blurb: 'Ten sports in one. Football, golf, F1, cricket, hockey and more.',
+    blurb: 'Ten sports in one. Football, golf, racing, cricket, hockey and more.',
     howTo: 'Pick a sport, then play one event.',
     minutes: 3,
   },
@@ -92,11 +92,11 @@ export const MINIGAMES = [
   {
     id: 'impostor',
     minMs: 3000,
-    name: 'Find the Impostor',
+    name: 'Find the Fibber',
     icon: '🕵️',
     category: 'brain',
-    blurb: 'Five crewmates. The crew tell the truth. One of them does not.',
-    howTo: 'Read what each crewmate says and find the one who is lying.',
+    blurb: 'Five friends, one empty cookie jar. One of them is fibbing.',
+    howTo: 'Read what each friend says and find the one who is fibbing.',
     minutes: 4,
   },
   {
@@ -172,7 +172,7 @@ export const MINIGAMES = [
   {
     id: 'merge',
     minMs: 60000,
-    name: '2048',
+    name: 'Number Merge',
     icon: '🔢',
     category: 'puzzle',
     blurb: 'Slide the board. Matching numbers join. Build the biggest tile.',

@@ -2,15 +2,14 @@ import { useRef, useState } from 'react'
 import { CREW, makePuzzle, sentence } from './crewPuzzle.js'
 
 /**
- * Find the Impostor. Five crewmates, one of them is lying.
+ * Find the Fibber. Five friends, and the cookie jar is empty. One of them
+ * is fibbing about it.
  *
- * The real game is a game about talking to people, and a single-player
- * version of that would be a pretence. So this is the part that survives
- * being played alone: the meeting. Everybody says one thing, the crew tell
- * the truth, the impostor does not, and exactly one answer fits.
+ * A logic puzzle: everybody says one thing, the honest ones tell the
+ * truth, the fibber does not, and exactly one answer fits.
  *
  * Every round is generated and then solved by brute force, and thrown away
- * unless exactly one crewmate could be guilty. A deduction game that is
+ * unless exactly one friend could be guilty. A deduction game that is
  * sometimes unfair is worse than no deduction game: a child who reasons
  * correctly and is told they are wrong learns that thinking does not pay.
  */
@@ -51,15 +50,15 @@ export default function Impostor({ onDone }) {
   return (
     <div className="text-center">
       <p className="text-sm text-muted mb-1">
-        Meeting {round} of {ROUNDS} · {right} caught
+        Case {round} of {ROUNDS} · {right} caught
       </p>
       <p className="font-display font-extrabold mb-1" style={{ fontSize: 20 }}>
         {revealed
           ? chosen === puzzle.impostor ? 'Caught them.' : `It was ${CREW[puzzle.impostor].name}.`
-          : 'One of them is lying.'}
+          : 'Who emptied the cookie jar?'}
       </p>
       <p className="text-xs text-muted mb-3">
-        The crew always tell the truth. The impostor never does.
+        The honest ones always tell the truth. The fibber never does.
       </p>
 
       <div className="space-y-2">
@@ -87,16 +86,19 @@ export default function Impostor({ onDone }) {
             >
               <span
                 aria-hidden="true"
+                className="grid place-items-center text-lg leading-none"
                 style={{
-                  width: 26, height: 30, borderRadius: '13px 13px 9px 9px',
-                  background: who.colour, flex: '0 0 auto',
-                  boxShadow: 'inset -4px -3px 0 rgb(0 0 0 / 0.18)',
+                  width: 32, height: 32, borderRadius: '50%',
+                  background: `color-mix(in srgb, ${who.colour} 30%, transparent)`, flex: '0 0 auto',
+                  border: `2px solid ${who.colour}`,
                 }}
-              />
+              >
+                {who.face}
+              </span>
               <span className="min-w-0">
                 <span className="block font-semibold text-sm">
                   {who.name}
-                  {guilty && <span style={{ color: 'var(--bad)' }}> — the impostor</span>}
+                  {guilty && <span style={{ color: 'var(--bad)' }}> — the fibber</span>}
                 </span>
                 <span className="block text-xs text-muted">&ldquo;{sentence(s)}&rdquo;</span>
               </span>

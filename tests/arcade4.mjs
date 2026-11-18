@@ -1,12 +1,12 @@
 /**
- * SportsMania, Turbo Ball, Block Drop and Find the Impostor, played in a
+ * SportsMania, Turbo Ball, Block Drop and Find the Fibber, played in a
  * real browser.
  *
  * Sweet Swap and Trackstar used to be here too. They are supplied HTML
  * games now rather than React, so they are tested through their frame in
  * tests/embedded.mjs instead.
  *
- * The generator behind the impostor rounds is checked exhaustively in
+ * The generator behind the fibber rounds is checked exhaustively in
  * tests/sweets.mjs; what is checked here is the part maths cannot prove —
  * that each one opens, responds to a tap, and reaches an ending that pays.
  * A game that cannot be finished costs a child a token they earned by doing
@@ -91,7 +91,7 @@ console.log('\n=== SportsMania offers every sport ===')
 await playGame('SportsMania')
 const sports = await text()
 const WANTED = ['Football', 'Tennis', 'Table Tennis', 'Volleyball', 'Ice Hockey',
-  'Basketball', 'Golf', 'American Football', 'Cricket', 'Baseball', 'Formula 1']
+  'Basketball', 'Golf', 'American Football', 'Cricket', 'Baseball', 'Grand Prix']
 const absent = WANTED.filter((s) => !sports.includes(s))
 absent.length === 0
   ? pass(`all ${WANTED.length} sports are on the picker`)
@@ -116,9 +116,9 @@ await ended()
   ? pass('nine holes played and it settles up')
   : fail('SportsMania ends', (await text()).slice(0, 200))
 
-console.log('\n=== Formula 1 punishes a jump start, and still ends ===')
+console.log('\n=== Grand Prix punishes a jump start, and still ends ===')
 await playGame('SportsMania')
-await page.getByRole('button', { name: /Formula 1/ }).click()
+await page.getByRole('button', { name: /Grand Prix/ }).click()
 await page.waitForTimeout(500)
 // Tapping immediately, before the lights are out, must be a penalty.
 await page.getByRole('button', { name: /GO when they go out/ }).click()
@@ -163,22 +163,22 @@ for (let i = 0; i < 90; i += 1) {
 await page.screenshot({ path: `${SHOT_DIR}/game-blocks.png` })
 await ended() ? pass('and it reaches an ending') : fail('Block Drop ends', (await text()).slice(0, 160))
 
-console.log('\n=== Find the Impostor ===')
-await playGame('Find the Impostor')
+console.log('\n=== Find the Fibber ===')
+await playGame('Find the Fibber')
 const meeting = await text()
-meeting.includes('Meeting 1 of 3')
+meeting.includes('Case 1 of 3')
   ? pass('it opens on the first meeting')
   : fail('Impostor opens', meeting.slice(0, 200))
 const statements = await page.evaluate(() =>
   (document.body.innerText.match(/“|"/g) || []).length)
 statements >= 5
-  ? pass('all five crewmates have said something')
+  ? pass('all five friends have said something')
   : fail('five statements', String(statements))
 
 for (let i = 0; i < 6; i += 1) {
   if (await ended()) break
   // eslint-disable-next-line no-await-in-loop
-  await page.getByRole('button', { name: /Red/ }).first().click({ timeout: 2000 }).catch(() => {})
+  await page.getByRole('button', { name: /Fox/ }).first().click({ timeout: 2000 }).catch(() => {})
   // eslint-disable-next-line no-await-in-loop
   await page.waitForTimeout(2400)
 }

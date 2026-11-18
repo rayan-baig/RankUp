@@ -503,8 +503,8 @@ function Handheld({ c }) {
 /**
  * What is in the sky.
  *
- * Block Craft travels by changing scene outright — the Overworld, the
- * Nether and the End are three different drawings. The other fourteen
+ * Block Craft travels by changing scene outright — the village, the
+ * Ashlands and the Far Isle are three different drawings. The other fourteen
  * themes cannot do that: a theme IS its shape language, and a Coquette
  * world built out of Cyber Grid wireframes stops being Coquette.
  *

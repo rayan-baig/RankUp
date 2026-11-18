@@ -75,7 +75,7 @@ export const SPORTS = [
     good: 'Out of the park.', bad: 'Swing and a miss.',
   },
   {
-    id: 'f1', name: 'Formula 1', icon: '🏎️', kind: 'f1',
+    id: 'f1', name: 'Grand Prix', icon: '🏎️', kind: 'f1',
     blurb: 'The start, then one flying lap.',
     howTo: 'Tap when the lights go out, then tap in the green zone to brake.',
   },
