@@ -251,7 +251,7 @@ function PilotRequestForm({ onBack }) {
         <p className="text-sm text-muted">
           A person reads it and replies to {form.email.trim()} with your pilot code. Nothing you typed is kept on this site.
         </p>
-        <button type="button" className="w-full text-xs underline text-muted mt-3" onClick={onBack}>Back to the School League</button>
+        <button type="button" className="tap-link justify-center w-full text-xs underline text-muted mt-2" onClick={onBack}>Back to the School League</button>
       </Card>
     )
   }
@@ -287,7 +287,7 @@ function PilotRequestForm({ onBack }) {
       <p className="text-xs text-muted mt-2">
         {configured ? 'What you type goes to us by email and is not kept on this site.' : 'Pilots open when RankUp launches.'}
       </p>
-      <button type="button" className="w-full text-xs underline text-muted mt-3" onClick={onBack}>Back</button>
+      <button type="button" className="tap-link justify-center w-full text-xs underline text-muted mt-2" onClick={onBack}>Back</button>
     </Card>
   )
 }
@@ -431,7 +431,7 @@ function Register({ onDone, students = '', onBack }) {
       <Button className="w-full" disabled={busy || !accountReady} onClick={submit}>
         {busy ? 'Working…' : asStaff ? 'Join my school' : 'Sign the school up'}
       </Button>
-      <button type="button" className="w-full text-xs underline text-muted mt-3" onClick={onBack}>Back</button>
+      <button type="button" className="tap-link justify-center w-full text-xs underline text-muted mt-2" onClick={onBack}>Back</button>
     </Card>
   )
 }

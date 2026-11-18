@@ -5,6 +5,20 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.20.0 — 2026-11-18
+
+The first five minutes: a demo anyone can open, a shorter start, and no blank screens.
+
+- **"See it live"** on the front door opens a pretend family (the Riveras: Sam, Ava and Noah, always the same made-up first names) with no account and no email. A bar on every screen says **DEMO**, switches between the parent's view and each child's ("See it as: Parent · Ava · Noah"), and has **"Start for free"**, which clears the demo and opens the sign-up straight away instead of the front door again.
+- **The demo shows the whole loop.** Accepting Ava's waiting chore now levels her up, she has enough to spend on a reward, and "Start here" adds one-tap links to Rewards, the league and the chore history. The league says plainly what a real family also gets.
+- **Nothing in the demo leaves the phone.** On top of the existing network switch, a gift's checkout, a pilot request and a district's quote (the three calls that need no sign-in) now refuse in the demo with a plain message, so the demo never reaches Stripe or sends an email.
+- **"Getting started"** (was "Your first week"): add a child, link their phone, add a first chore, accept a finished chore. Still ticked only from real state, and gone when done or hidden. "Add 3 starter chores" (make your bed, read for 20 minutes, load the dishwasher; three from the adaptive pack for a child who needs it) is one tap on the list, and "We share one phone" finishes the phone step for a family with one phone. The pairing screen says the same. Sign-up to the first accepted chore is 22 taps (was 24).
+- **Starter rewards.** A family with no rewards sees "No rewards yet" on the dashboard with three to add in one tap (a film pick, a later bedtime, a day out), or "Make my own", which opens Settings on the rewards. Settings offers the same three when the list is empty.
+- **No blank screens.** Review, chore history, pocket money, recent activity, a child's quests and rewards, and the tools with no child yet each say what will appear there and offer the one next step. The words are in one place (`src/data/emptyStates.js`).
+- **Setup words.** Shorter and plainer on the family and child screens (the PIN, adaptive quests, picking a world); "First name only" for a child.
+- **On a phone.** Small text links (Manage, Chore history, Hide this list, back links, Add a note, the front door's gift and schools links) are now at least 40px tall to tap. Every main screen was checked at 375px wide with nothing scrolling sideways.
+- No SQL change, no new setting. Tests: new `tests/demolive.mjs` (smoke) and `tests/firststeps.mjs` (awards); `tests/lookaround.mjs` and `tests/firstten.mjs` updated, and the tests that open the demo now tap "See it live".
+
 ## 0.19.2 — 2026-11-18
 
 The rest of the pre-launch review: money that could be taken twice or not at all, and numbers that could give a family away.

@@ -11,7 +11,7 @@ import { TIERS } from '../../state/initialState.js'
 import { priceTag } from '../../lib/plans.js'
 import { guildsEnabled } from '../../lib/guilds.js'
 import Avatar from '../../components/Avatar.jsx'
-import { Screen, Card, Button, SectionTitle, Stat, ProgressBar, EmptyState, Banner, Chip } from '../../components/ui.jsx'
+import { Screen, Card, Button, SectionTitle, Stat, ProgressBar, Banner, Chip } from '../../components/ui.jsx'
 import SyncBadge from '../../components/SyncBadge.jsx'
 import { navigate, navigateThen } from '../../lib/router.js'
 import TrialBanner from '../../components/TrialBanner.jsx'
@@ -26,6 +26,9 @@ import HowItWorks from '../../components/HowItWorks.jsx'
 import FirstWeek from '../../components/FirstWeek.jsx'
 import DemoTour from '../../components/DemoTour.jsx'
 import UpgradeNudge from '../../components/UpgradeNudge.jsx'
+import EmptyNext from '../../components/EmptyNext.jsx'
+import { EMPTY_STATES } from '../../data/emptyStates.js'
+import { STARTER_REWARDS } from '../../lib/firstWeek.js'
 
 export default function ParentDashboard() {
   const { state, dispatch } = useApp()
@@ -162,12 +165,12 @@ export default function ParentDashboard() {
         </Card>
       )}
 
-      <SectionTitle action={<button type="button" className="text-xs text-muted underline" onClick={() => navigate('/parent/kids')}>Manage</button>}>
+      <SectionTitle action={<button type="button" className="tap-link text-xs text-muted underline" onClick={() => navigate('/parent/kids')}>Manage</button>}>
         Kids
       </SectionTitle>
 
       {state.kids.length === 0 ? (
-        <EmptyState icon="👶" title="No kids yet" action={<Button onClick={() => navigate('/parent/kids')}>Add a kid</Button>} />
+        <EmptyNext which="noKids" />
       ) : (
         state.kids.map((kid) => {
           const { level, progress } = levelFromXp(kid.xp)
@@ -207,6 +210,9 @@ export default function ParentDashboard() {
           )
         })
       )}
+
+      {/* Nothing for a child to save up for yet: three to start, one tap. */}
+      {state.kids.length > 0 && (state.rewards || []).length === 0 && <StarterRewards />}
 
       {state.familyGoal && (
         <>
@@ -273,14 +279,17 @@ export default function ParentDashboard() {
       <div className="flex items-baseline justify-between">
         <SectionTitle>Recent activity</SectionTitle>
         {state.submissions.length > 0 && (
-          <button type="button" className="text-xs underline text-muted" onClick={() => navigate('/parent/history')}>
+          <button type="button" className="tap-link text-xs underline text-muted" onClick={() => navigate('/parent/history')}>
             Chore history
           </button>
         )}
       </div>
       <Card>
         {feed.length === 0 ? (
-          <p className="text-sm text-muted">Nothing yet.</p>
+          <div data-testid="empty-activity">
+            <p className="text-sm font-semibold">{EMPTY_STATES.activity.title}</p>
+            <p className="text-xs text-muted">{EMPTY_STATES.activity.body}</p>
+          </div>
         ) : (
           <ul className="space-y-2">
             {[...feed].reverse().slice(0, 8).map((e) => {
@@ -296,6 +305,38 @@ export default function ParentDashboard() {
         )}
       </Card>
     </Screen>
+  )
+}
+
+/**
+ * "No rewards yet", on the dashboard, with the three starter rewards one tap
+ * away. Rewards used to live only in a closed section of Settings, so a new
+ * family's child opened Rewards to "Ask your parent" and the parent had no
+ * idea where to go.
+ */
+function StarterRewards() {
+  const { dispatch } = useApp()
+  const e = EMPTY_STATES.rewards
+  return (
+    <Card className="mb-3" data-testid="empty-rewards">
+      <div className="flex items-start gap-3">
+        <span className="text-2xl shrink-0" aria-hidden="true">{e.icon}</span>
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-sm">{e.title}</div>
+          <p className="text-xs text-muted">{e.body}</p>
+          <p className="text-xs text-muted mt-1">{STARTER_REWARDS.map((r) => `${r.icon} ${r.name}`).join(' · ')}</p>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 mt-2.5">
+        <Button className="min-h-[44px] text-sm" data-testid="starter-rewards"
+          onClick={() => STARTER_REWARDS.forEach((reward) => dispatch({ type: 'ADD_REWARD', reward: { ...reward } }))}>
+          {e.action.label}
+        </Button>
+        <button type="button" className="tap-link text-xs underline text-muted" onClick={() => navigate(e.action.to)}>
+          Make my own
+        </button>
+      </div>
+    </Card>
   )
 }
 

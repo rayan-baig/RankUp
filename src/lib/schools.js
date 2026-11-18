@@ -266,6 +266,8 @@ const PILOT_REQUEST_URL = import.meta.env?.VITE_PILOT_REQUEST_URL || '/api/pilot
 export async function requestPilot(form) {
   const { ok, errors, clean } = checkPilotRequest(form)
   if (!ok) return { ok: false, reason: 'invalid', errors }
+  // Never from the look-around: nothing in the demo is sent anywhere.
+  if (transport.isNetworkPaused()) return { ok: false, reason: 'demo' }
   try {
     const res = await fetch(PILOT_REQUEST_URL, {
       method: 'POST',
@@ -281,6 +283,7 @@ export async function requestPilot(form) {
 }
 
 export const PILOT_REQUEST_ERRORS = {
+  demo: 'This is the demo, so nothing is sent. Leave the demo to send a request.',
   too_many_requests: 'We have had a few requests from here this hour. Please try again later.',
   busy: 'We have had a lot of requests this hour. Please try again later.',
   not_configured: 'Pilot requests are not set up on this site yet.',

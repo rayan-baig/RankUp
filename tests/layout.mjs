@@ -244,7 +244,7 @@ for (const [width, height] of [[390, 844], [360, 740]]) {
   {
     const { ctx, page } = await context(width, height)
     await page.goto(BASE, { waitUntil: 'networkidle' })
-    await page.getByRole('button', { name: /Have a look around/ }).click()
+    await page.getByRole('button', { name: /See it live/ }).click()
     await page.waitForTimeout(1200)
     await walk(page, PARENT_ROUTES, `busy ${width} parent`)
     if (width === 390) {

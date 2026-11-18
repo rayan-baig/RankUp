@@ -28,7 +28,9 @@ export default function Onboarding() {
   const { state, dispatch } = useApp()
   // null until someone says whose phone this is. A parent sets up the family;
   // a kid's phone joins one with a pairing code and never creates an account.
-  const [mode, setMode] = useState(null)
+  // "Start for free" in the look-around opens straight on the parent's
+  // sign-up (#/welcome?start=parent): they have already read the front door.
+  const [mode, setMode] = useState(() => (/[?&]start=parent\b/.test(window.location.hash) ? 'parent' : null))
   const [step, setStep] = useState(0)
   // With a backend configured the parent needs a real account before anything
   // can sync. Without one the app is device-only and there is nothing to join.
@@ -96,10 +98,17 @@ export default function Onboarding() {
   const toggleSupport = (s) =>
     setKid((k) => ({ ...k, supports: k.supports.includes(s) ? k.supports.filter((x) => x !== s) : [...k.supports, s] }))
 
+  // Back to the front door, leaving "?start=parent" behind so a reload there
+  // shows the door rather than the sign-up again.
+  const toDoor = () => {
+    setMode(null)
+    if (window.location.hash.includes('start=parent')) navigate('/welcome')
+  }
+
   if (mode === 'kid') return <KidDeviceSetup onBack={() => setMode(null)} />
 
   if (mode === 'parent' && !signedIn) {
-    return <SignIn onDone={() => setSignedIn(true)} onBack={() => setMode(null)} />
+    return <SignIn onDone={() => setSignedIn(true)} onBack={toDoor} />
   }
 
   if (mode === 'parent' && signedIn && joining) {
@@ -154,7 +163,7 @@ export default function Onboarding() {
           <Field label="Family name" hint="Shown on the dashboard and the guild.">
             <TextInput value={family.name} onChange={(e) => setFamily({ ...family, name: e.target.value })} placeholder="e.g. The Rivera family" />
           </Field>
-          <Field label="Parent PIN" hint="4+ digits. Stops a kid opening Parent Mode or changing their theme on their own.">
+          <Field label="Parent PIN" hint="4 or more numbers. Keeps kids out of Parent Mode, so they cannot accept their own chores.">
             <TextInput
               value={family.pin}
               onChange={(e) => setFamily({ ...family, pin: e.target.value.replace(/\D/g, '').slice(0, 8) })}
@@ -187,7 +196,7 @@ export default function Onboarding() {
       {step === 1 && (
         <div className="anim-slide-up">
           <h1 className="font-display text-2xl font-extrabold mb-1">Add your first kid</h1>
-          <p className="text-muted text-sm mb-4">You can add more later — there is no limit.</p>
+          <p className="text-muted text-sm mb-4">First name only. You can add more children later.</p>
           <Field label="Kid's name">
             <TextInput value={kid.name} onChange={(e) => setKid({ ...kid, name: e.target.value })} placeholder="e.g. Ava" autoFocus />
           </Field>
@@ -201,10 +210,9 @@ export default function Onboarding() {
                 className="mt-1 w-5 h-5 accent-[var(--accent)]"
               />
               <span>
-                <span className="block font-semibold text-sm">This kid has a physical or mental disability</span>
+                <span className="block font-semibold text-sm">This child has a disability or extra needs</span>
                 <span className="block text-xs text-muted mt-0.5">
-                  Turns on adaptive quests: same XP and currency, but the difficulty and the definition of
-                  "done" are set around what this kid can do rather than a fixed standard.
+                  Turns on adaptive quests: the same rewards, but you set what “done” means for them.
                 </span>
               </span>
             </label>
@@ -243,8 +251,7 @@ export default function Onboarding() {
         <div className="anim-slide-up mt-2">
           <h2 className="font-display text-xl font-extrabold mb-1">{kid.name.trim() || 'Your kid'} picks a world</h2>
           <p className="text-muted text-sm mb-4">
-            The theme changes the background, the avatar and what the currency is called. Once chosen it is
-            locked — changing it later needs your PIN.
+            It sets the look, the avatar and what the coins are called. Changing it later needs your PIN.
           </p>
           <ThemePicker value={themeId} onChange={setThemeId} />
         </div>
@@ -265,7 +272,7 @@ export default function Onboarding() {
           paddingRight: '1rem',
         }}
       >
-        <Button variant="ghost" onClick={() => (step === 0 ? setMode(null) : setStep((s) => s - 1))}>
+        <Button variant="ghost" onClick={() => (step === 0 ? toDoor() : setStep((s) => s - 1))}>
           Back
         </Button>
         <Button

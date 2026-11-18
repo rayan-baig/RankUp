@@ -193,6 +193,15 @@ export function pauseNetwork(on) {
   paused = Boolean(on)
 }
 
+/**
+ * Is the look-around on? For the few calls that use fetch with no sign-in
+ * (a gift's checkout, a pilot request, a district's quote): they never pass
+ * through `request` or `freshAccessToken`, so they ask here before sending.
+ */
+export function isNetworkPaused() {
+  return paused
+}
+
 class NetworkPaused extends Error {
   constructor() {
     super('RankUp is in look-around mode; nothing is sent to a server.')
@@ -204,6 +213,7 @@ class NetworkPaused extends Error {
 export const transport = {
   isConfigured,
   pauseNetwork,
+  isNetworkPaused,
 
   /** Call a Postgres function. */
   rpc: (fn, args = {}) =>

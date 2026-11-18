@@ -27,7 +27,7 @@ const openDemo = async (ctx) => {
   page.on('pageerror', (e) => errors.push(e.message))
   await page.goto(BASE, { waitUntil: 'networkidle' })
   await page.waitForTimeout(700)
-  await page.getByRole('button', { name: /Have a look around/ }).click()
+  await page.getByRole('button', { name: /See it live/ }).click()
   await page.waitForTimeout(1500)
   return page
 }
@@ -99,7 +99,7 @@ console.log('\n=== With motion turned off ===')
     : fail('no running animations', `${running} still running`)
 
   // And the number must be right immediately rather than counting to it.
-  await page.getByRole('button', { name: /Have a look around/ }).click()
+  await page.getByRole('button', { name: /See it live/ }).click()
   await page.waitForTimeout(1200)
   await page.evaluate(() => { window.location.hash = '/switch' })
   await page.waitForTimeout(500)

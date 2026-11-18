@@ -36,7 +36,7 @@ await page.waitForTimeout(800)
 await page.screenshot({ path: `${SHOT_DIR}/welcome.png` })
 
 const door = await page.evaluate(() => document.body.innerText)
-;/have a look around/i.test(door)
+;/see it live/i.test(door)
   ? pass('the first thing offered costs nothing')
   : fail('look-around offered', door.slice(0, 200))
 ;/no account, no email/i.test(door)
@@ -84,7 +84,7 @@ firstBeat && secondBeat && firstBeat !== secondBeat
   : fail('loop preview advances', `${firstBeat} then ${secondBeat}`)
 
 console.log('\n=== Looking around ===')
-await page.getByRole('button', { name: /Have a look around/ }).click()
+await page.getByRole('button', { name: /See it live/ }).click()
 await page.waitForTimeout(1800)
 await page.screenshot({ path: `${SHOT_DIR}/lookaround.png` })
 
@@ -150,8 +150,8 @@ for (const route of ROUTES) {
 console.log('\n=== And it is inert ===')
 // The banner is the safety rail: a visitor must never think this is theirs.
 const banner = await page.evaluate(() => document.body.innerText)
-;/looking around the Rivera family/i.test(banner)
-  ? pass('every screen says whose family this is')
+;/DEMO/.test(banner) && /Rivera family is pretend/i.test(banner)
+  ? pass('every screen says this is a demo, and whose family it is')
   : fail('demo banner shown', banner.slice(0, 160))
 
 demo.syncQueue?.length === 0
@@ -165,9 +165,9 @@ calls.length === 0
 console.log('\n=== Starting a real one ===')
 await page.evaluate(() => { window.location.hash = '/parent' })
 await page.waitForTimeout(600)
-await page.getByRole('button', { name: 'Start mine' }).first().click()
+await page.getByRole('button', { name: 'Start for free' }).first().click()
 await page.waitForTimeout(500)
-await page.getByRole('button', { name: 'Start mine' }).last().click()
+await page.getByRole('button', { name: 'Start for free' }).last().click()
 await page.waitForTimeout(1500)
 
 const after = await state()
@@ -178,9 +178,9 @@ const after = await state()
   ? pass("and takes nobody else's children into the real family")
   : fail('demo leaves nothing behind', JSON.stringify({ onboarded: after.onboarded, kids: after.kids?.length }))
 const back = await page.evaluate(() => document.body.innerText)
-;/have a look around/i.test(back)
-  ? pass('landing them back at the front door')
-  : fail('back at the door', back.slice(0, 160))
+;(await page.locator('input[type=email]').count()) === 1
+  ? pass('landing them straight on making an account, not back at the front door')
+  : fail('straight to sign-up', back.slice(0, 160))
 
 console.log('\n=== A visitor who already has an account cannot touch it from the demo ===')
 {
@@ -190,8 +190,7 @@ console.log('\n=== A visitor who already has an account cannot touch it from the
   page.on('request', (r) => {
     if (/\/api\/|\/rest\/v1\/|\/auth\/v1\//.test(r.url())) sent.push(`${r.method()} ${r.url()}`)
   })
-  await page.getByRole('button', { name: /I'm a parent/ }).click()
-  await page.waitForTimeout(300)
+  // "Start for free" left them on the sign-up already.
   await page.locator('input[type=email]').fill(`visitor${Date.now()}@example.com`)
   await page.locator('input[type=password]').fill('correct-horse-battery')
   await page.getByRole('button', { name: 'Create account' }).click()
@@ -200,7 +199,7 @@ console.log('\n=== A visitor who already has an account cannot touch it from the
   session ? pass('(the visitor is signed in)') : fail('visitor signed in', 'no session')
   await page.getByRole('button', { name: 'Back' }).click()
   await page.waitForTimeout(400)
-  await page.getByRole('button', { name: /Have a look around/ }).click()
+  await page.getByRole('button', { name: /See it live/ }).click()
   await page.waitForTimeout(1200)
   sent.length = 0
 

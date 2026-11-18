@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import { formatXp } from '../../lib/xp.js'
 import { relativeTime } from '../../lib/dates.js'
-import { Screen, Card, Button, SectionTitle, EmptyState, Chip } from '../../components/ui.jsx'
+import { Screen, Card, Button, SectionTitle, Chip } from '../../components/ui.jsx'
 import HeroArt from '../../components/HeroArt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
 import { isMarketOpen, nextOpeningLabel } from '../../data/marketSkins.js'
 import { navigate } from '../../lib/router.js'
 import { rewardLeftThisWeek, rewardFreesUpAt } from '../../state/reducer.js'
+import EmptyNext from '../../components/EmptyNext.jsx'
 
 export default function KidShop() {
   const { state, dispatch } = useApp()
@@ -119,7 +120,7 @@ export default function KidShop() {
 
       <SectionTitle>Catalogue</SectionTitle>
       {state.rewards.length === 0 ? (
-        <EmptyState icon="🎁" title="No rewards yet" body="Ask your parent to add some in Parent Mode." />
+        <EmptyNext which="kidRewards" />
       ) : (
         state.rewards.map((r) => {
           // The parent's weekly limit, as the server counts it. Null: none.

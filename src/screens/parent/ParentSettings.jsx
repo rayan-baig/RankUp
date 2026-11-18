@@ -21,8 +21,9 @@ import { navigate } from '../../lib/router.js'
 import { APP_VERSION } from '../../lib/version.js'
 import { PRODUCT_OF } from '../../data/legalText.js'
 import { SUPPORT_EMAIL } from '../../lib/support.js'
+import { STARTER_REWARDS } from '../../lib/firstWeek.js'
 
-export default function ParentSettings() {
+export default function ParentSettings({ open = null }) {
   const { state, dispatch } = useApp()
   const [reset, setReset] = useState(false)
   // A pack being opened at Stripe: one tap opens one checkout, not two.
@@ -90,7 +91,7 @@ export default function ParentSettings() {
       <p className="text-xs text-muted mt-2">Visual only — parent themes never change how anything works.</p>
       </Section>
 
-      <Section title="Rewards catalogue" icon="🎁"
+      <Section title="Rewards catalogue" icon="🎁" defaultOpen={open === 'rewards'}
         summary={`${state.rewards.length} reward${state.rewards.length === 1 ? '' : 's'}${
           state.redemptions.filter((r) => r.status === 'requested').length
             ? ` · ${state.redemptions.filter((r) => r.status === 'requested').length} waiting to be given` : ''}`}>
@@ -98,6 +99,12 @@ export default function ParentSettings() {
         <p className="text-sm text-muted mb-3">
           What kids can spend their currency on. Real-world things work best.
         </p>
+        {state.rewards.length === 0 && (
+          <Button variant="soft" className="w-full mb-3 min-h-[44px]" data-testid="settings-starter-rewards"
+            onClick={() => STARTER_REWARDS.forEach((r) => dispatch({ type: 'ADD_REWARD', reward: { ...r } }))}>
+            ✨ Add 3 starter rewards
+          </Button>
+        )}
         {state.rewards.map((r) => (
           <div key={r.id} className="py-2" style={{ borderBottom: '1px solid var(--line)' }}>
             <div className="flex items-center gap-2">

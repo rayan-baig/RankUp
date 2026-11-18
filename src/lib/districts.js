@@ -60,6 +60,8 @@ export const districts = {
 export async function sendQuote(form) {
   const { ok, errors, clean } = checkQuoteForm(form)
   if (!ok) return { ok: false, reason: 'invalid', errors }
+  // Never from the look-around: nothing in the demo is sent anywhere.
+  if (transport.isNetworkPaused()) return { ok: false, reason: 'demo' }
   try {
     const res = await fetch(QUOTE_URL, {
       method: 'POST',
@@ -75,6 +77,7 @@ export async function sendQuote(form) {
 }
 
 export const QUOTE_ERRORS = {
+  demo: 'This is the demo, so nothing is sent. Leave the demo to send a request.',
   too_many_quotes: 'We have had a few requests from here this hour. Please try again later.',
   busy: 'We have had a lot of requests this hour. Please try again later.',
   not_configured: 'Quotes are not set up on this site yet.',

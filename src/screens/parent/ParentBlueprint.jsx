@@ -4,9 +4,10 @@ import { lastSevenDays, shortDayName } from '../../lib/dates.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
 import { formatXp, levelFromXp, liveStreak } from '../../lib/xp.js'
 import { DailyBars, StackedBars, HorizontalBars, StatTile } from '../../components/charts/Charts.jsx'
-import { Screen, Card, SectionTitle, Select, Field, Banner, EmptyState, Chip } from '../../components/ui.jsx'
+import { Screen, Card, SectionTitle, Select, Field, Banner, Chip } from '../../components/ui.jsx'
 import EliteGate from '../../components/EliteGate.jsx'
 import { activityFeed } from '../../lib/activity.js'
+import EmptyNext from '../../components/EmptyNext.jsx'
 
 const SLOTS = [
   { id: 'morning', label: 'Morning', from: 5, to: 12 },
@@ -103,7 +104,7 @@ export default function ParentBlueprint({ initialKidId }) {
     return (
       <Screen>
         <h1 className="font-display text-2xl font-extrabold mb-3">Behaviour Blueprint</h1>
-        <EmptyState icon="👶" title="No kids yet" />
+        <EmptyNext which="noKids" />
       </Screen>
     )
   }

@@ -20,7 +20,7 @@ const dollars = (n) => `$${n.toFixed(2)}`
  * the point where it starts being worth something — when they want the app to
  * hold their own children rather than somebody else's.
  *
- * The three doors are deliberately not equal. Looking around is the one most
+ * The three doors are deliberately not equal. "See it live" is the one most
  * people should take and it is styled like it; the other two are for people
  * who already know what they are doing.
  *
@@ -94,13 +94,13 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null, c
         <button
           type="button"
           onClick={onLookAround}
-          className="btn btn-primary anim-shine w-full font-display font-extrabold"
-          style={{ fontSize: 16, paddingTop: 12, paddingBottom: 12 }}
+          className="btn btn-primary anim-shine w-full font-display font-extrabold text-base py-3"
+          data-testid="see-it-live"
         >
-          Have a look around →
+          See it live: try a demo family →
         </button>
         <p className="text-xs text-muted text-center mt-1.5 mb-3">
-          A real family, already set up. No account, no email, nothing to cancel.
+          A pretend family, already set up. Be the parent or the kid. No account, no email, nothing to cancel.
         </p>
 
         <p className="section-title text-center">Or set yours up</p>
@@ -141,11 +141,11 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null, c
             door still fits one phone screen. */}
         {/* Never on a phone that is a child's: both are one tap from prices. */}
         {!childPhone && (
-        <div className="flex justify-center flex-wrap gap-x-3 gap-y-1 mt-2.5 text-xs">
-          <a href="#/gift" className="underline text-muted" data-testid="give-link">
+        <div className="flex justify-center flex-wrap gap-x-3 mt-1 text-xs">
+          <a href="#/gift" className="tap-link underline text-muted" data-testid="give-link">
             🎁 Give a year of RankUp as a gift
           </a>
-          <a href="#/school" className="underline text-muted" data-testid="schools-link">
+          <a href="#/school" className="tap-link underline text-muted" data-testid="schools-link">
             🏫 For schools
           </a>
         </div>
