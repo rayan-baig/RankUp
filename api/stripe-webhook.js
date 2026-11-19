@@ -28,6 +28,7 @@ import { applyReferralRewards, referralInvoicePaid, referralPaymentReversed } fr
 import { giftPaid } from './_shared/gifts.js'
 import { districtIdOf, paidBands } from './_shared/districtBilling.js'
 import { handBackDuplicatePlan, refundLateDuplicatePayment, endPlansDistrictPays, invoiceSubscriptionId } from './_shared/onePlan.js'
+import { timedFetch } from './_shared/http.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -73,7 +74,7 @@ async function rawBody(req) {
 }
 
 async function serviceRpc(fn, args) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+  const res = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

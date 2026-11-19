@@ -12,6 +12,7 @@
 import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
 import { reportError, userHeaders } from './_shared/job.js'
 import { returnOrigin } from './_shared/site.js'
+import { timedFetch } from './_shared/http.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -102,7 +103,7 @@ async function flowData(stripe, status, flow, origin) {
 }
 
 async function serviceRpc(fn, args) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+  const res = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
     body: JSON.stringify(args),
@@ -114,7 +115,7 @@ async function serviceRpc(fn, args) {
 
 async function schoolPortal(req, res, token) {
   try {
-    const infoRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/school_checkout_info`, {
+    const infoRes = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/school_checkout_info`, {
       method: 'POST',
       headers: userHeaders(token),
       body: '{}',
@@ -125,7 +126,7 @@ async function schoolPortal(req, res, token) {
     if (!info?.ok && info?.reason !== 'already_paying') return res.status(403).json({ error: info?.reason || 'not_school_admin' })
     if (!info.has_customer) return res.status(400).json({ error: 'no_subscription' })
 
-    const customerRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/stripe_customer_for_school`, {
+    const customerRes = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/stripe_customer_for_school`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
       body: JSON.stringify({ p_school_id: info.school_id }),
@@ -172,7 +173,7 @@ export default async function handler(req, res) {
   try {
     // billing_status runs as the caller, so it can only ever describe their own
     // family — the customer id comes from the database, never from the request.
-    const statusRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/billing_status`, {
+    const statusRes = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/billing_status`, {
       method: 'POST',
       headers: userHeaders(token),
       body: '{}',
@@ -184,7 +185,7 @@ export default async function handler(req, res) {
 
     // The customer id itself is fetched with the service key, so the browser
     // never has to hold or send it.
-    const customerRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/stripe_customer_for_family`, {
+    const customerRes = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/stripe_customer_for_family`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

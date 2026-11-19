@@ -24,6 +24,7 @@ import { reportError } from './_shared/job.js'
 import { returnOrigin } from './_shared/site.js'
 import { checkGiftForm, giftPlan } from '../src/lib/giftRules.js'
 import { ipKey } from './_shared/gifts.js'
+import { timedFetch } from './_shared/http.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -36,7 +37,7 @@ const GIFT_PRICES = {
 }
 
 async function serviceRpc(fn, args) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+  const res = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
     body: JSON.stringify(args),

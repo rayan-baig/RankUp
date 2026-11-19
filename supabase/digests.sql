@@ -273,10 +273,24 @@ begin
              select 1 from digest_sends s
               where s.family_id = x.id and s.week_key = to_char(x.week_start, 'IYYY-"W"IW')
                 and (not s.pending or s.claimed_at > p_now - v_lease))
+       -- Nothing happened and nothing happened last week either: say
+       -- nothing. Asked here, with one look at the index for each family,
+       -- before any digest is worked out: most families are quiet in any
+       -- given fortnight, and working out each quiet one's whole week (a
+       -- dozen counts) made a run read every family's chores. 50,000
+       -- families took 7 seconds a call, close to the database's time limit
+       -- for one request, and growing with every family (docs/PERFORMANCE.md).
+       -- The same two weeks the digest counts: from the family's own Monday
+       -- midnight a week ago to the next one.
+       and exists (
+             select 1 from submissions s
+              where s.family_id = x.id and s.status = 'approved'
+                and s.decided_at >= ((x.week_start - 7)::timestamp at time zone x.zone)
+                and s.decided_at < ((x.week_start + 7)::timestamp at time zone x.zone))
      order by x.id
   loop
     v_d := family_week_digest(f.id, f.week_start);
-    -- Nothing happened and nothing happened last week either: say nothing.
+    -- The same question, asked of the digest itself, in case the two ever differ.
     if coalesce((v_d->>'approved')::int, 0) = 0 and coalesce((v_d->>'approved_last_week')::int, 0) = 0 then
       v_after := f.id;
       continue;

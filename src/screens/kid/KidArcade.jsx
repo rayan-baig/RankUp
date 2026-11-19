@@ -235,6 +235,8 @@ export default function KidArcade() {
                 src={picture}
                 alt=""
                 aria-hidden="true"
+                loading="lazy"
+                decoding="async"
                 className="absolute inset-0 w-full h-full"
                 style={{ objectFit: 'cover' }}
               />

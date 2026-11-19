@@ -104,11 +104,22 @@ async function keepShell() {
   ])
 }
 
+/**
+ * Typefaces come in one file per alphabet (src/styles/fonts.css), and a phone
+ * downloads only the ones its screens use. Fetching every alphabet in the
+ * background would add about 300 KB nobody reads, so only the basic Latin
+ * ones are kept ahead of time; any other one a screen used was kept as it
+ * was fetched (answerAsset).
+ */
+function worthKeepingAhead(path) {
+  return !/\.woff2$/.test(path) || /-latin-wght-normal-[^/]*\.woff2$/.test(path)
+}
+
 /** Every file this version has, fetched only if not already kept. */
 async function keepEverything() {
   const cache = await caches.open(CACHE)
   const missing = []
-  for (const path of BUILD.files) {
+  for (const path of BUILD.files.filter(worthKeepingAhead)) {
     const url = inScope(path)
     if (!(await cache.match(url, MATCH))) missing.push(url)
   }

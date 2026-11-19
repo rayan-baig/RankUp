@@ -58,6 +58,8 @@ const SUITES = {
     { file: 'genesiswords.mjs' },
     { file: 'leaderboardwords.mjs' },
     { file: 'quickchat.mjs' },
+    { file: 'failsoft.mjs' },
+    { file: 'speed.mjs' },
   ],
   // The app in a real browser, against the dev server on :5173 and the mock
   // API on :54321 (supabase/test/up.sh starts both).

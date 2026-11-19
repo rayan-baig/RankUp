@@ -132,6 +132,8 @@ domain) is listed in [LAUNCH.md, section 1a](docs/LAUNCH.md#1a-the-address-ranku
 | [docs/LEGAL.md](docs/LEGAL.md) | COPPA, Kids Category, Play Families |
 | **[docs/LAUNCH.md](docs/LAUNCH.md)** | **The checklist to get live — start here** |
 | [docs/IF-SOMETHING-BREAKS.md](docs/IF-SOMETHING-BREAKS.md) | What each health signal means, and the first thing to do |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | The three health addresses, the uptime monitors to set up, and "If the app is down" |
+| [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | How fast the first load is on a slow phone, and the database's slow spots, with numbers |
 | [docs/BACKUPS.md](docs/BACKUPS.md) | Backups, and how to practise a restore |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | What is left, in order |
 | [docs/GAME-DESIGN.md](docs/GAME-DESIGN.md) | XP curve, themes, tiers, guilds and quick chat, leaderboards (Adventure and Arena) |

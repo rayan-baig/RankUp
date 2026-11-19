@@ -70,6 +70,39 @@ function withExpiry(session) {
 }
 
 /**
+ * How long one request may take before it counts as the network failing.
+ *
+ * A phone on a weak signal can open a connection and then hear nothing back,
+ * and the browser may wait minutes before it gives up. The sync engine sends
+ * one request at a time, so a single hung request used to stop every pull and
+ * every change behind it until the app was closed. Now it fails like a
+ * dropped connection: the change stays waiting and is sent again on the next
+ * try, which every write here is already safe to do. Thirty seconds is far
+ * longer than a slow 3G pull from zero takes, so only a request that is
+ * really stuck is cut off. tests/failsoft.mjs holds it.
+ */
+export const REQUEST_TIMEOUT_MS = 30_000
+
+/** fetch, and its answer read to the end, within `ms`; rejects otherwise. */
+export async function fetchWithin(url, options = {}, ms = REQUEST_TIMEOUT_MS) {
+  const controller = typeof AbortController === 'function' ? new AbortController() : null
+  let timer
+  const timeout = new Promise((resolve, reject) => {
+    timer = setTimeout(() => {
+      try { controller?.abort() } catch { /* nothing to stop */ }
+      reject(new Error('No answer from the server in time (timed out).'))
+    }, ms)
+  })
+  try {
+    const res = await Promise.race([fetch(url, controller ? { ...options, signal: controller.signal } : options), timeout])
+    const text = await Promise.race([res.text(), timeout])
+    return { res, text }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
  * Keeping the sign-in alive.
  *
  * A Supabase access token lasts an hour. Nothing here ever renewed it, so an
@@ -97,12 +130,13 @@ async function refreshSession({ force = false } = {}) {
   if (!refreshing) {
     refreshing = (async () => {
       try {
-        const res = await fetch(`${BASE}/auth/v1/token?grant_type=refresh_token`, {
+        const { res, text } = await fetchWithin(`${BASE}/auth/v1/token?grant_type=refresh_token`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', apikey: ANON },
           body: JSON.stringify({ refresh_token: session.refresh_token }),
         })
-        const body = await res.json().catch(() => null)
+        let body = null
+        try { body = text ? JSON.parse(text) : null } catch { body = null }
         // Signed out, or signed in as somebody else, while this was in flight:
         // the answer belongs to a session that no longer exists.
         if (getSession()?.refresh_token !== session.refresh_token) return getSession()
@@ -157,13 +191,13 @@ class HttpError extends Error {
 async function request(path, { extra, auth = true, ...options } = {}, retried = false) {
   if (auth) await refreshSession()
   let res
+  let text
   try {
-    res = await fetch(`${BASE}${path}`, { ...options, headers: headers(extra) })
+    ({ res, text } = await fetchWithin(`${BASE}${path}`, { ...options, headers: headers(extra) }))
   } catch (err) {
-    // No network at all — always worth retrying.
+    // No network at all, or no answer in time — always worth retrying.
     throw new HttpError(0, { message: err.message })
   }
-  const text = await res.text()
   let body = null
   try { body = text ? JSON.parse(text) : null } catch { body = { message: text } }
   if (res.status === 401 && auth && !retried && getSession()?.refresh_token) {

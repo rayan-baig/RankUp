@@ -29,3 +29,12 @@
 
 /sw.js
   Cache-Control: no-cache, no-store, must-revalidate
+
+# Everything under /assets/ has a fingerprint of its contents in its name, so a
+# name never means two different files: a phone may keep each one for a year
+# without asking again. Without this, a second visit asked the server about
+# every file again (about twenty round trips on a slow connection). The page
+# itself and sw.js are never cached like this, so a new version is always
+# found. tests/speed.mjs checks this matches vercel.json.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

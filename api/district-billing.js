@@ -29,6 +29,7 @@ import { districtItems, districtUpdate, itemsKey, invoiceDays } from './_shared/
 import { reportError, userHeaders, makeServiceRpc } from './_shared/job.js'
 import { returnOrigin } from './_shared/site.js'
 import { cleanEmail } from '../src/lib/quoteRules.js'
+import { timedFetch } from './_shared/http.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -37,7 +38,7 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 /** Which district, according to the caller's own token. */
 async function callerDistrict(token) {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/district_checkout_info`, {
+    const res = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/district_checkout_info`, {
       method: 'POST',
       headers: userHeaders(token),
       body: '{}',

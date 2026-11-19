@@ -134,6 +134,8 @@ export default function ThemePicker({ value, onChange, previewLevel = 1, showEvo
                     src={art(`avatar-${theme.id}`)}
                     alt=""
                     aria-hidden="true"
+                    loading="lazy"
+                    decoding="async"
                     className="relative"
                     style={{ height: '100%', width: 'auto', objectFit: 'contain' }}
                   />

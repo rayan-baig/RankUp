@@ -172,7 +172,8 @@ between phones ([SYNC.md](SYNC.md)).
 | You hear about crashes on other people's phones | `supabase/crashes.sql`: the screen and the error, never a name |
 | A scheduled job that stops being called | `/api/health` with the `CRON_SECRET`: each of the seven jobs `ok`, `stale` or `never_run` |
 | A deleted family's subscription still not cancelled | The same check: `billing_cancellations_overdue` |
-| One address to point a monitor at | `GET /api/health` → `{"ok":true,"version":"…"}`, or 503 |
+| One address to point a monitor at | `GET /api/health` → `{"ok":true,"version":"…"}`, or 503; `/api/healthz` without the database; `/api/ready` also 503 when a job has gone quiet or a required setting is missing ([OPERATIONS.md](OPERATIONS.md)) |
+| An outside service hanging | Every call out has a time limit: the database (10 s, 25 s for a job), Stripe (10 s, one retry), email (20 s), push (10 s), a phone's sync (30 s). `tests/failsoft.mjs` |
 | What to do when one of them is red | [IF-SOMETHING-BREAKS.md](IF-SOMETHING-BREAKS.md) |
 
 None of this fixes a bug for you. It means you hear about it from a dashboard

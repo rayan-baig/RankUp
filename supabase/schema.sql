@@ -130,6 +130,13 @@ create table if not exists kids (
 
 create index if not exists kids_family_idx on kids(family_id);
 
+-- The adults of one family: the adult list in Settings (family_adults,
+-- coparents.sql), the "last parent" checks, the data export, and every family
+-- deleted. Without it each of those read every parent of every family: the
+-- adult list took half a second with 50,000 families, and grew with each one
+-- that signed up (docs/PERFORMANCE.md).
+create index if not exists parents_family_idx on parents(family_id);
+
 -- ---------------------------------------------------------------------------
 -- Quests and submissions
 -- ---------------------------------------------------------------------------
@@ -1581,6 +1588,9 @@ alter table rewards add constraint rewards_weekly_limit_range
   check (weekly_limit between 1 and 50);
 -- What that count reads: one child's redemptions of one reward, newest first.
 create index if not exists redemptions_kid_reward_idx on redemptions (kid_id, reward_id, created_at desc);
+-- A reward taken off the list keeps its purchases (their reward_id is set to
+-- null), which without this meant reading every purchase of every family.
+create index if not exists redemptions_reward_idx on redemptions (reward_id);
 
 -- A parent's note on a chore in its history (set_history_note, sync.sql). The
 -- one thing about a past chore that can change; see that function for why.

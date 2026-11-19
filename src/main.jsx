@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { reportEnvironment } from './lib/env.js'
 import { keepAppForOffline } from './lib/offline.js'
 import { listenForInstall } from './lib/installPrompt.js'
+import './styles/fonts.css'
 import './styles/index.css'
 
 // Shout about a half-configured deploy at start-up rather than letting it fail

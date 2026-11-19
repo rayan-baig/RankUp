@@ -21,6 +21,7 @@ import { invoiceDays } from './_shared/districtBilling.js'
 import { reportError, userHeaders, makeServiceRpc } from './_shared/job.js'
 import { returnOrigin } from './_shared/site.js'
 import { cleanEmail } from '../src/lib/quoteRules.js'
+import { timedFetch } from './_shared/http.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -35,7 +36,7 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 async function existingCustomer(schoolId) {
   if (!SERVICE_KEY) return null
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/stripe_customer_for_school`, {
+    const res = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/stripe_customer_for_school`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
       body: JSON.stringify({ p_school_id: schoolId }),
@@ -49,7 +50,7 @@ async function existingCustomer(schoolId) {
 /** Which school, according to the caller's own token. Admins only. */
 async function callerSchool(token) {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/school_checkout_info`, {
+    const res = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/school_checkout_info`, {
       method: 'POST',
       headers: userHeaders(token),
       body: '{}',

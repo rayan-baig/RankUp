@@ -353,6 +353,33 @@ end $$;
 
 drop function t34_digests(timestamptz);
 
+-- A quiet family's week is never worked out. Most families are quiet in any
+-- given fortnight, and the batched job (claim_due_digests_at) used to work out
+-- every due family's whole week before finding it had nothing to say: with
+-- 50,000 families one call took 7 seconds (docs/PERFORMANCE.md). At 02:30 UTC
+-- on Monday it is Sunday evening in Los Angeles (a chore on Wednesday) and in
+-- New York (no chore at all): family_week_digest must run for exactly the
+-- families that get a digest. Counted by Postgres itself (track_functions),
+-- and undone afterwards so the claims do not reach the tests below.
+do $$
+declare v jsonb; v_calls bigint;
+begin
+  set local track_functions = 'pl';
+  begin
+    v := claim_due_digests_at('2026-11-09 02:30+00', 7, 18, 100000, null, 300)->'digests';
+    select coalesce(sum(calls), 0) into v_calls from pg_stat_xact_user_functions where funcname = 'family_week_digest';
+    perform ok('the digest job reaches Los Angeles, which had a chore',
+      exists (select 1 from jsonb_array_elements(v) d where d->>'family_id' = '34a00000-0000-4000-8000-0000000000f3'));
+    perform ok('not New York, which had none',
+      not exists (select 1 from jsonb_array_elements(v) d where d->>'family_id' = '34a00000-0000-4000-8000-0000000000f2'));
+    perform ok('and works out a week only for the families it sends one to, never a quiet one',
+      v_calls = jsonb_array_length(v), format('%s weeks worked out for %s digests', v_calls, jsonb_array_length(v)));
+    raise exception 't34_undo';
+  exception when raise_exception then
+    if sqlerrm <> 't34_undo' then raise; end if;
+  end;
+end $$;
+
 -- The job claims before it sends: two runs that overlap cannot both send.
 do $$ begin
   perform ok('claim_digest is the server''s, not a browser''s',

@@ -31,8 +31,9 @@ function contentSecurityPolicy(env) {
   const policy = () => [
     "default-src 'self'",
     `script-src 'self' ${gameScriptSources(root).join(' ')}`,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
+    "style-src 'self' 'unsafe-inline'",
+    // The typefaces are this site's own files (src/styles/fonts.css).
+    "font-src 'self'",
     // data: for the small pictures the build inlines. Not blob:, which was
     // for previewing a photo before it was sent; RankUp takes none.
     "img-src 'self' data:",
@@ -166,6 +167,28 @@ function vendorChunk(id) {
 }
 
 /**
+ * The artwork in src/assets/art is never written into the JavaScript.
+ *
+ * Vite copies a picture under 4 KB into the code as text, which saves a
+ * request when the picture is on the screen that loads it. But data/art.js
+ * finds every picture in that folder at once, so all of them (sixty-odd
+ * avatars, arcade tiles, banners and icons) landed in the first file every
+ * phone downloads before anything appears, a third of it, for pictures on
+ * screens most visits never open. As files of their own, each is fetched
+ * only when it is shown, cached for good (public/_headers), and kept for
+ * offline by the service worker like everything else in assets/.
+ *
+ * Nor is a typeface: the policy above allows fonts from this site only, not
+ * data:, and the smallest of them (an alphabet nobody here may ever need)
+ * would otherwise be copied into the stylesheet. tests/speed.mjs holds both.
+ */
+export function inlineAsset(file) {
+  if (/[\\/]src[\\/]assets[\\/]art[\\/]/.test(String(file))) return false
+  if (/\.woff2?$/i.test(String(file))) return false
+  return undefined // Vite's usual rule for everything else
+}
+
+/**
  * The version, from package.json, built into the app as __APP_VERSION__ (read
  * through src/lib/version.js). Never typed anywhere by hand: bump
  * package.json and add its CHANGELOG.md entry, and Settings → About and
@@ -287,6 +310,7 @@ export default defineConfig(({ mode }) => {
     build: {
       target: BROWSER_TARGET,
       outDir: 'dist',
+      assetsInlineLimit: inlineAsset,
       rollupOptions: { output: { manualChunks: vendorChunk } },
     },
   }

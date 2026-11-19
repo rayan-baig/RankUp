@@ -465,6 +465,9 @@ async function top(limit) {
 const JOBS = [
   ['due_digests (Sunday 19:00, every family due)',
     `select length(due_digests_at(date_trunc('week', now()) + interval '6 days 19 hours', 7, 18)::text)`],
+  // What /api/send-digests actually calls: one batch, the first 100 phones.
+  ['claim_due_digests (one batch, Sunday 19:00)',
+    `select length(claim_due_digests_at(date_trunc('week', now()) + interval '6 days 19 hours', 7, 18, 100, null, 300)::text)`],
   ['due_reminders', 'select length(due_reminders_at(now(), 120)::text)'],
   ['due_trial_reminders', 'select length(due_trial_reminders_at(now())::text)'],
   ['settle_alliances (last month)', `select length(settle_alliances(date_trunc('month', now() - interval '1 month')::date)::text)`],

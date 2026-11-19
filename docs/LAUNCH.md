@@ -307,11 +307,13 @@ quiet. Silence is how these fail: no error, just reminders that stop arriving.
 
 ```
 GET https://rankup.mtrxhorizyn.com/api/health                                        -> {"ok":true,"version":"…"}, or 503
-GET https://rankup.mtrxhorizyn.com/api/health  (Authorization: Bearer CRON_SECRET)   -> the detail, 503 if anything is wrong
+GET https://rankup.mtrxhorizyn.com/api/ready                                         -> the same, 503 if anything below is wrong
+GET https://rankup.mtrxhorizyn.com/api/ready   (Authorization: Bearer CRON_SECRET)   -> the detail, 503 if anything is wrong
 ```
 
-Point a free uptime monitor at the first. It is public on purpose and says
-nothing useful to a stranger. The second lists each job (`ok`, `stale`, or
+Point a free uptime monitor at the first, and after launch a second at
+`/api/ready` ([OPERATIONS.md](OPERATIONS.md) has the steps). Both are public on
+purpose and say nothing useful to a stranger. The detail lists each job (`ok`, `stale`, or
 `never_run`), crashes in the last 24 hours, deleted families whose Stripe
 cancellation is more than a day overdue, and which settings are present (as
 yes/no, never the values). What each one means and what to do:
@@ -507,9 +509,10 @@ secret-shaped value in a `VITE_` name, and `tests/bundle.mjs` builds the app
 with every server setting given a fake value and checks none of them reached
 the phone.
 
-**Check the deploy instead of guessing:** `GET /api/health` with the
-`CRON_SECRET` lists `database`, `payments`, `push`, `scheduled_jobs` and
-`site_url` as true or false.
+**Check the deploy instead of guessing:** `GET /api/ready` with the
+`CRON_SECRET` lists `database`, `public_key`, `payments`, `push`, `email`,
+`scheduled_jobs` and `site_url` as true or false, and `missing_settings`
+names the required ones that are not set (an empty list when all is well).
 
 ## 5. Fill in the placeholders
 
