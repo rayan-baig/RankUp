@@ -18,6 +18,7 @@ import webpush from 'web-push'
 import { sendPush, failureFor } from './_shared/push.js'
 import { reportError, userHeaders } from './_shared/job.js'
 import { NOTICES, PUSH_KINDS, VALUE_MAX, reminderPush } from '../src/data/noticeWords.js'
+import { timedFetch } from './_shared/http.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -79,7 +80,7 @@ function configured() {
 }
 
 async function rpc(fn, args, token) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+  const res = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: 'POST',
     // The service key speaks for itself; a person's token goes with the
     // project's public key (see userHeaders).

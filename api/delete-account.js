@@ -22,6 +22,7 @@
 import { makeStripe } from './_shared/stripe.js'
 import { makeServiceRpc, reportError, userHeaders } from './_shared/job.js'
 import { cancelPendingBilling } from './_shared/cancelBilling.js'
+import { timedFetch } from './_shared/http.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -42,7 +43,7 @@ export default async function handler(req, res) {
 
   let result
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/delete_family_account`, {
+    const r = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/delete_family_account`, {
       method: 'POST',
       headers: userHeaders(token),
       body: JSON.stringify({ p_confirm: String(body?.confirm ?? '') }),

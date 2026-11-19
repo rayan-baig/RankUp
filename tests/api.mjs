@@ -155,6 +155,22 @@ ok('and that version is package.json\'s', shallow.version === PACKAGE_VERSION, `
 const deep = await (await fetch(`${BASE}/api/health`, { headers: { Authorization: `Bearer ${CRON}` } })).json()
 ok('while the operator sees the jobs', Boolean(deep.jobs), `keys: ${Object.keys(deep).join(', ')}`)
 ok('and the version too', deep.version === PACKAGE_VERSION, String(deep.version))
+// The cheapest check (no database) and the whole one (settings and jobs
+// too), through the same runtime. tests/failsoft.mjs drives every case of
+// both; here, that Cloudflare serves them and they keep the same split.
+const live = await fetch(`${BASE}/api/healthz`)
+const liveBody = await live.json()
+ok('/api/healthz answers 200 with only ok and the version', live.status === 200
+  && Object.keys(liveBody).sort().join(',') === 'ok,version' && liveBody.version === PACKAGE_VERSION, JSON.stringify(liveBody))
+ok('and nothing in between may keep it', live.headers.get('cache-control') === 'no-store')
+const readyPublic = await fetch(`${BASE}/api/ready`)
+const readyBody = await readyPublic.json()
+ok('/api/ready answers 200 or 503 with only ok and the version', [200, 503].includes(readyPublic.status)
+  && Object.keys(readyBody).sort().join(',') === 'ok,version' && readyBody.ok === (readyPublic.status === 200), `${readyPublic.status} ${JSON.stringify(readyBody)}`)
+const readyDeep = await (await fetch(`${BASE}/api/ready`, { headers: { Authorization: `Bearer ${CRON}` } })).json()
+ok('with the secret it lists the jobs, and no required setting is missing here',
+  Boolean(readyDeep.jobs) && Array.isArray(readyDeep.missing_settings) && readyDeep.missing_settings.length === 0, JSON.stringify(readyDeep.missing_settings))
+ok('and never a setting\'s value', !JSON.stringify(readyDeep).includes(CRON) && !JSON.stringify(readyDeep).includes('service-role-key'))
 
 console.log('\n=== An error is a short JSON answer, never the inside of the server ===')
 for (const path of ['/api/no-such-function', '/api/constructor', '/api/__proto__', '/api/health/extra']) {

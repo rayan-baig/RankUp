@@ -24,6 +24,7 @@
 
 import { recordRun, reportError } from './_shared/job.js'
 import { makeStripe } from './_shared/stripe.js'
+import { timedFetch, JOB_TIMEOUT_MS } from './_shared/http.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -34,7 +35,7 @@ const CRON_SECRET = process.env.CRON_SECRET || ''
 const DISCOUNT_PERCENT = 20
 
 async function serviceRpc(fn, args) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+  const res = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -42,7 +43,7 @@ async function serviceRpc(fn, args) {
       Authorization: `Bearer ${SERVICE_KEY}`,
     },
     body: JSON.stringify(args),
-  })
+  }, JOB_TIMEOUT_MS)
   if (!res.ok) throw new Error(`${fn} failed: ${res.status}`)
   const text = await res.text()
   return text ? JSON.parse(text) : null

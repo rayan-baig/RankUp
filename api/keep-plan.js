@@ -32,6 +32,7 @@
 
 import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
 import { makeServiceRpc, reportError, userHeaders } from './_shared/job.js'
+import { timedFetch } from './_shared/http.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -43,7 +44,7 @@ const ACTIONS = new Set(['pause', 'resume', 'save'])
 /** The caller's own family, as billing_status tells a parent. */
 async function callerBilling(token) {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/billing_status`, {
+    const res = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/billing_status`, {
       method: 'POST',
       headers: userHeaders(token),
       body: '{}',

@@ -33,6 +33,7 @@ const ROUTES = {
   'district-quote': () => import('../../api/district-quote.js'),
   'gift-checkout': () => import('../../api/gift-checkout.js'),
   health: () => import('../../api/health.js'),
+  healthz: () => import('../../api/healthz.js'),
   'keep-plan': () => import('../../api/keep-plan.js'),
   'redeem-gift': () => import('../../api/redeem-gift.js'),
   'refresh-leaderboards': () => import('../../api/refresh-leaderboards.js'),
@@ -47,6 +48,7 @@ const ROUTES = {
   'operator-schools': () => import('../../api/operator-schools.js'),
   'operator-themes': () => import('../../api/operator-themes.js'),
   'pilot-request': () => import('../../api/pilot-request.js'),
+  ready: () => import('../../api/ready.js'),
   'school-checkout': () => import('../../api/school-checkout.js'),
   'stripe-webhook': () => import('../../api/stripe-webhook.js'),
 }

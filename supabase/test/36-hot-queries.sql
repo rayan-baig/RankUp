@@ -130,6 +130,11 @@ begin
     t36_plan(format('select count(*) from submissions s where s.kid_id = %L and s.status = ''approved'' and s.decided_at >= %L and s.decided_at < %L',
                     '36c00000-0000-4000-8000-000000000001', v_month, v_month + interval '1 month')),
     'submissions_kid_decided_idx');
+  -- family_adults (coparents.sql), the adult list in Settings. Without the
+  -- index this read every parent of every family: half a second at 50,000.
+  perform t36_check('the adult list reads one family''s adults, not every family''s',
+    t36_plan('select count(*) from parents p where p.family_id = ''36f00000-0000-4000-8000-000000000001'''),
+    'parents_family_idx');
   perform t36_check('a child''s chores are read by child',
     t36_plan('select * from quests where kid_id = ''36c00000-0000-4000-8000-000000000001'' and status = ''assigned'''),
     'quests_kid_status_idx');

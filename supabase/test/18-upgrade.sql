@@ -55,6 +55,23 @@ begin
              'missing: ' || missing);
 end $$;
 
+-- ---------- the indexes added since the first release ----------
+--
+-- `create index if not exists` is how each one reaches a live database when
+-- its file is run again. A later file that dropped one by name, or a rename
+-- that left the old name behind, would put a slow query back with nothing on
+-- screen to say so (docs/PERFORMANCE.md says what each is for).
+do $$
+declare missing text := '';
+        want text;
+begin
+  foreach want in array array['parents_family_idx', 'redemptions_reward_idx', 'allowance_entries_family_idx',
+                              'redemptions_kid_reward_idx', 'events_kid_type_day_idx'] loop
+    if to_regclass('public.' || want) is null then missing := missing || want || ' '; end if;
+  end loop;
+  perform ok('every index added since the first release is present', missing = '', 'missing: ' || missing);
+end $$;
+
 -- ---------- the widened constraints came with them ----------
 do $$
 begin

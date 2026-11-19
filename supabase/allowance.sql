@@ -45,6 +45,10 @@ end $$;
 
 create index if not exists allowance_entries_kid_idx
   on allowance_entries (kid_id, created_at desc);
+-- A family deleted takes its ledger with it; without this, finding those
+-- rows read the whole ledger of every family (docs/PERFORMANCE.md).
+create index if not exists allowance_entries_family_idx
+  on allowance_entries (family_id);
 
 alter table allowance_entries enable row level security;
 

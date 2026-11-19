@@ -12,7 +12,7 @@
  *   - no server-only setting is read by the app's code (a name may appear in
  *     a sentence telling the operator where to set it, and that is listed);
  *   - the policy is exactly the list below: the game scripts by hash, the one
- *     Three.js file Tennis Tour imports, the fonts, the database it talks to.
+ *     Three.js file Tennis Tour imports, the database it talks to.
  *     Anything added to it fails here until it is added to this list too.
  *
  *   npm run test:built       (this, then the games under the policy)
@@ -109,8 +109,9 @@ function readEnvLocal(key) {
 const THREE = 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js'
 const expected = {
   'default-src': ["'self'"],
-  'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-  'font-src': ["'self'", 'https://fonts.gstatic.com'],
+  'style-src': ["'self'", "'unsafe-inline'"],
+  // The typefaces are served from this site (src/styles/fonts.css), not Google.
+  'font-src': ["'self'"],
   'img-src': ["'self'", 'data:'],
   'connect-src': ["'self'", ...(supabase ? [supabase] : [])],
   'worker-src': ["'self'"],
@@ -183,6 +184,26 @@ for (const [name, re] of [
 }
 const randomUuid = shipped.filter((t) => /randomUUID\(\)/.test(t.text) && !/crypto\.randomUUID\)return crypto\.randomUUID\(\)|&&crypto\.randomUUID\)return crypto\.randomUUID\(\)/.test(t.text))
 ok('crypto.randomUUID only behind a check', randomUuid.length === 0, randomUuid.map((t) => t.f).join(', '))
+
+/*
+ * What a phone downloads before the first screen (docs/PERFORMANCE.md). The
+ * first file held every picture in src/assets/art as text, a third of it,
+ * and the page waited on a stylesheet from Google; tests/speed.mjs holds
+ * the causes, this the result.
+ */
+console.log('\n=== The first load stays light ===')
+const { gzipSync } = await import('node:zlib')
+const entry = (html.match(/<script type="module" crossorigin src="\/(assets\/index-[^"]+\.js)"/) || [])[1]
+const entryText = entry ? readFileSync(join(dir, entry), 'utf8') : ''
+const entryZipped = gzipSync(entryText).length
+ok('the first file has no picture written into it', entry && !/data:image\//.test(entryText), entry || 'no entry script found')
+ok(`the first file is under 260 KB, 82 KB compressed (now ${Math.round(entryText.length / 1024)} KB, ${Math.round(entryZipped / 1024)} KB)`,
+  entryText.length < 260 * 1024 && entryZipped < 82 * 1024)
+ok('the page loads no stylesheet or script from another site, Google\'s fonts included',
+  !/<link[^>]+href="https?:\/\//.test(html.replace(/<link rel="(preconnect|dns-prefetch)"[^>]*>/g, '')) && !/fonts\.(googleapis|gstatic)/.test(html))
+const css = texts.filter((t) => t.f.endsWith('.css')).map((t) => t.text).join('\n')
+ok('the typefaces are files under assets/, never written into the stylesheet',
+  /url\(\/assets\/inter-latin-wght-normal-[^)]+\.woff2\)/.test(css) && !/data:font|data:application\/font/.test(css))
 
 console.log(fails === 0 ? '\nALL CHECKS PASSED' : `\n${fails} FAILED`)
 process.exit(fails === 0 ? 0 : 1)

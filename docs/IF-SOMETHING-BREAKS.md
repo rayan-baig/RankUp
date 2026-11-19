@@ -8,7 +8,10 @@ You need three logins to hand: your **host** (Cloudflare or Vercel),
 
 ---
 
-## The two checks to set up once
+## The checks to set up once
+
+Step by step, with what each alert means: [OPERATIONS.md](OPERATIONS.md),
+"If the app is down". In short:
 
 **1. A free uptime monitor** (UptimeRobot, Better Stack, or similar) pointed at
 
@@ -19,13 +22,20 @@ https://rankup.mtrxhorizyn.com/api/health
 It answers `{"ok":true,"version":"…"}` when the site is up and can reach the
 database, and an error (503) when it cannot. The version is the one in
 `package.json` and `CHANGELOG.md`, so it also tells you which build is live. It
-is safe to leave public; it says nothing else.
+is safe to leave public; it says nothing else. `/api/healthz` is the same
+without the database: when it is fine and `/api/health` is not, the problem is
+Supabase, not the host.
 
-**2. The detailed check**, which needs your `CRON_SECRET`. Open a terminal and
+**2. After launch, a second monitor on `/api/ready`.** It answers 503 when
+anything below needs you (a job gone quiet, a missing setting, an overdue
+cancellation), still with nothing else in the answer, so the monitor tells you
+the day a schedule stops instead of you finding out a month later.
+
+**3. The detailed check**, which needs your `CRON_SECRET`. Open a terminal and
 run (or give your monitor the same header):
 
 ```bash
-curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://rankup.mtrxhorizyn.com/api/health
+curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://rankup.mtrxhorizyn.com/api/ready
 ```
 
 It answers 200 when all is well and 503 when anything below needs you, with the
@@ -42,7 +52,7 @@ own error messages go to the host's function logs, never into an answer.
 | Detailed check: a job is **`stale`** | A scheduled job has not succeeded for longer than it should (reminders 2 hours, leaderboards 1 hour, retention 3 days, digests 9 days, the monthly ones 45 days) | Check the schedule still exists (Vercel: Settings → Cron Jobs; Cloudflare: your scheduling Worker or outside scheduler). Then run that job once by hand: `curl -X POST -H "Authorization: Bearer YOUR_CRON_SECRET" https://rankup.mtrxhorizyn.com/api/send-reminders` (or the job's name). |
 | Detailed check: a job is **`never_run`** | That job has never once succeeded | Before launch, normal. After launch, its schedule was never set up: [LAUNCH.md](LAUNCH.md) section 2b. |
 | A job shows a **`last_error`** and a growing **`fail_count`** | It is being called, and failing | `not_configured`: a setting is missing (see the next row). `lookup_failed`: it could not reach the database; check Supabase is up. A `401` when you run it by hand: the scheduler's secret and the site's `CRON_SECRET` differ. |
-| Detailed check: **`configured`** has a `false` | A setting is missing on the host: `database`, `payments`, `push`, `scheduled_jobs` or `site_url` | Add it on the host ([LAUNCH.md](LAUNCH.md) section 4) and deploy again; settings are read when the site starts. |
+| Detailed check: **`missing_settings`** lists a name, or **`configured`** has a `false` | A setting is missing on the host. `missing_settings` is the ones the site cannot do without (`database`, `public_key`, `scheduled_jobs`, `site_url`, and `payments` once billing is on), and makes `/api/ready` 503; `configured` also shows the optional `push` and `email` | Add it on the host ([LAUNCH.md](LAUNCH.md) section 4) and deploy again; settings are read when the site starts. |
 | **`billing_cancellations_overdue`** above 0 | A family deleted their account more than a day ago and Stripe has not confirmed their subscription is cancelled. **They may be charged again.** | In Stripe, find the customer and cancel the subscription by hand. Then check `STRIPE_SECRET_KEY` is set. The count clears on the next daily run. |
 | **`crashes_24h`** above 0 | A screen crashed on somebody's phone. The rest of the app kept working. | In Supabase → Table Editor → `crash_reports`: each row has the screen's address and the error, never a name. One crash is noise; the same screen many times is a bug to report. |
 | **`server_errors_24h`** above 0, or an **error report** arrives | One of the server functions failed (a checkout that could not start, Stripe or the database not answering, a scheduled run that failed) | In Supabase → Table Editor → `server_errors`: the function's name and its error, with names, emails and ids taken out. Set `ERRORS_EMAIL` and these come to you once an hour, with crashes, instead of you having to look. One is usually the outside service having a bad minute; the same one every hour is a bug, or a setting (the next rows). |

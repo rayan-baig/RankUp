@@ -80,8 +80,6 @@ const policy = Object.fromEntries(policyText.split(';').map((d) => d.trim()).fil
 ok('a policy was written', Object.keys(policy).length > 5, policyText)
 const THIRD_PARTIES = new Set([
   'https://abcdefghijkl.supabase.co',
-  'https://fonts.googleapis.com',
-  'https://fonts.gstatic.com',
   'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js',
 ])
 const sources = Object.entries(policy).flatMap(([d, list]) => list.map((s) => [d, s]))
@@ -91,7 +89,7 @@ const schemes = sources.filter(([d, s]) => /^[a-z][a-z0-9+.-]*:$/i.test(s) && !(
 ok('no bare scheme such as https:, which would allow every site', schemes.length === 0, schemes.map((x) => x.join(' ')).join(', '))
 const hosts = sources.filter(([, s]) => /^[a-z][a-z0-9+.-]*:\/\//i.test(s) || /^[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(s))
 const unknown = hosts.filter(([, s]) => !THIRD_PARTIES.has(s))
-ok("every address named is the database, the fonts or the one Three.js file; this site is only 'self'",
+ok("every address named is the database or the one Three.js file; this site is only 'self'",
   unknown.length === 0, unknown.map((x) => x.join(' ')).join(', '))
 for (const sibling of SIBLINGS) {
   const host = new URL(sibling).host

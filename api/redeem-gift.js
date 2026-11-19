@@ -14,13 +14,14 @@
  */
 import { reportError, userHeaders } from './_shared/job.js'
 import { ipKey } from './_shared/gifts.js'
+import { timedFetch } from './_shared/http.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
 async function callerFamily(token) {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/billing_status`, {
+    const res = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/billing_status`, {
       method: 'POST',
       headers: userHeaders(token),
       body: '{}',
@@ -52,7 +53,7 @@ export default async function handler(req, res) {
   if (!familyId) return res.status(403).json({ error: 'no_family' })
 
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/redeem_gift_code`, {
+    const r = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/redeem_gift_code`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
       body: JSON.stringify({

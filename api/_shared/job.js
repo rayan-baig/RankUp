@@ -6,6 +6,7 @@
  * see supabase/health.sql. It is best-effort on purpose: failing to write the
  * bookkeeping must never turn a successful run into a failed one.
  */
+import { timedFetch, DB_TIMEOUT_MS } from './http.js'
 
 /** Timing-safe, so the secret cannot be discovered one character at a time. */
 export function secretMatches(given, expected) {
@@ -38,9 +39,14 @@ export function userHeaders(token) {
   return { 'Content-Type': 'application/json', apikey: anon || token, Authorization: `Bearer ${token}` }
 }
 
-export function makeServiceRpc(supabaseUrl, serviceKey) {
+/**
+ * Call a database function with the service key. `ms` is how long to wait
+ * (api/_shared/http.js): DB_TIMEOUT_MS by default, where a person is waiting;
+ * the scheduled jobs pass JOB_TIMEOUT_MS.
+ */
+export function makeServiceRpc(supabaseUrl, serviceKey, ms = DB_TIMEOUT_MS) {
   return async function serviceRpc(fn, args) {
-    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/${fn}`, {
+    const res = await timedFetch(`${supabaseUrl}/rest/v1/rpc/${fn}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -48,7 +54,7 @@ export function makeServiceRpc(supabaseUrl, serviceKey) {
         Authorization: `Bearer ${serviceKey}`,
       },
       body: JSON.stringify(args),
-    })
+    }, ms)
     if (!res.ok) throw new Error(`${fn} failed: ${res.status}`)
     const text = await res.text()
     return text ? JSON.parse(text) : null

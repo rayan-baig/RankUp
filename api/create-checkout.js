@@ -14,6 +14,7 @@
 import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
 import { reportError, userHeaders } from './_shared/job.js'
 import { returnOrigin } from './_shared/site.js'
+import { timedFetch } from './_shared/http.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -76,7 +77,7 @@ const PRODUCTS = {
  */
 async function callerBilling(token) {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/billing_status`, {
+    const res = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/billing_status`, {
       method: 'POST',
       headers: userHeaders(token),
       body: '{}',
@@ -98,7 +99,7 @@ async function callerBilling(token) {
 async function existingCustomer(familyId) {
   if (!SERVICE_KEY) return null
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/stripe_customer_for_family`, {
+    const res = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/stripe_customer_for_family`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
       body: JSON.stringify({ p_family_id: familyId }),

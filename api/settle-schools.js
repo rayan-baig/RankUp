@@ -25,6 +25,7 @@ import { recordRun, reportError, secretMatches, makeServiceRpc } from './_shared
 import { makeStripe } from './_shared/stripe.js'
 import { championReward } from './_shared/schoolBilling.js'
 import { emailSettings, emailConfigured, sendEmail, schoolMonthEmail } from './_shared/email.js'
+import { JOB_TIMEOUT_MS } from './_shared/http.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -54,7 +55,7 @@ export default async function handler(req, res) {
   // A missed month may be named, so it can be closed late. Never a winner.
   const month = /^\d{4}-\d{2}-01$/.test(body?.month || '') ? body.month : lastMonth()
 
-  const serviceRpc = makeServiceRpc(SUPABASE_URL, SERVICE_KEY)
+  const serviceRpc = makeServiceRpc(SUPABASE_URL, SERVICE_KEY, JOB_TIMEOUT_MS)
   let settled
   let owed
   try {

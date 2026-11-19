@@ -23,6 +23,7 @@
 import { recordRun, secretMatches, makeServiceRpc } from './_shared/job.js'
 import { sendInBatches, batchLimits, topicFor } from './_shared/pushBatch.js'
 import { digestNotice } from '../src/data/noticeWords.js'
+import { JOB_TIMEOUT_MS } from './_shared/http.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -55,7 +56,7 @@ export default async function handler(req, res) {
   const given = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
   if (!secretMatches(given, CRON_SECRET)) return res.status(401).json({ error: 'no' })
 
-  const serviceRpc = makeServiceRpc(SUPABASE_URL, SERVICE_KEY)
+  const serviceRpc = makeServiceRpc(SUPABASE_URL, SERVICE_KEY, JOB_TIMEOUT_MS)
 
   const vapid = { subject: VAPID_SUBJECT, publicKey: VAPID_PUBLIC, privateKey: VAPID_PRIVATE }
   let result

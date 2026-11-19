@@ -100,7 +100,11 @@ hasFeatured
 // The shelves have to actually narrow the list, or they are decoration.
 await page.getByRole('button', { name: /Versus/ }).click()
 await page.waitForTimeout(400)
-const versus = await text()
+// Only the shelf itself, below "All games": "Today's pick" above it changes
+// with the date, and on a day it is Memory Match it is on the page whatever
+// shelf is chosen.
+const versusAll = await text()
+const versus = versusAll.slice(Math.max(0, versusAll.search(/all games/i)))
 const shelved = versus.includes('Four in a Row') && !versus.includes('Memory Match')
 shelved
   ? pass('the Versus shelf shows only the versus game')
