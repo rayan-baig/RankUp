@@ -136,17 +136,19 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null, c
           <span aria-hidden="true" className="text-muted">›</span>
         </button>
 
-        {/* One line, so the front door still fits one phone screen: for
+        {/* One line, so the front door still fits one phone screen (no
+            emoji: their width differs from one phone's fonts to another's,
+            and a second line pushed the door past one screen). For
             grandparents, aunts and uncles a year of RankUp as a gift (#/gift,
             no account), for schools the School League's front page, and the
             small print a parent deciding looks for (Privacy, Terms, Contact),
             readable with no account. The gift and schools links are never on
             a phone that is a child's: both are one tap from prices. */}
-        <nav className="flex justify-center flex-wrap gap-x-2.5 mt-1 text-xs" aria-label="More" data-testid="front-footer">
+        <nav className="flex justify-center flex-wrap gap-x-1 mt-1 text-xs whitespace-nowrap" aria-label="More" data-testid="front-footer">
           {!childPhone && (
             <>
-              <a href="#/gift" className="tap-link underline text-muted" data-testid="give-link">🎁 Give a year</a>
-              <a href="#/school" className="tap-link underline text-muted" data-testid="schools-link">🏫 Schools</a>
+              <a href="#/gift" className="tap-link underline text-muted" data-testid="give-link">Give a year</a>
+              <a href="#/school" className="tap-link underline text-muted" data-testid="schools-link">Schools</a>
             </>
           )}
           <a href="#/legal/privacy" className="tap-link underline text-muted">Privacy</a>
