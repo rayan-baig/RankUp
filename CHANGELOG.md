@@ -5,6 +5,35 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.22.0 — 2026-11-20
+
+Fixes from the product review: money in the right currency, legal pages fit to show, no spending pressure on a child's screens, plain names, and a better way to link a child's phone.
+
+- **Money in dollars, not pounds.** Pocket money showed "£" to every family, because every family was made with British pounds and nothing could change it. New families start in US dollars, or in the money of the parent's phone region (a UK phone gets pounds, a German one euros). Settings → Parent account has "Pocket money is shown in" to change it; it only changes the sign, nothing is converted. Every existing family still on the old pound default moves to dollars when `schema.sql` is run again; a family that picks a currency is marked as having chosen, so running the file again never changes it back.
+- **The legal pages are fit to show.** The public privacy policy and terms no longer show a "Not finished" banner or a "[YOUR POSTAL ADDRESS]" placeholder. Both pages end with "Contact us" and help@mtrxhorizyn.com; the postal address is added there once the company has one. The reminder to fill it in is now the owner's only: on the operator page and in docs/LAUNCH.md. "Back" on those pages takes a visitor who is not signed in to the front door (it went to Settings). The front door has Privacy, Terms and Contact at the foot, and sign-up says "By creating an account you agree to the Terms and the Privacy Policy".
+- **The consent notice describes only what is on.** Version 2026-12 is 2026-11 without the guild section, because guilds are switched off. It collects less, so nobody signs again. Switching guilds on later needs a new version that describes them (docs/LEGAL.md).
+- **No spending pressure on a child's screens.**
+  - The Sunday Market is now the **Skin Market**: always open, no opening hours, no countdown, no Common/Rare/Legendary labels. A child saves up and buys when they have enough.
+  - A child's phone never shows a Flash Ticket's price or a ticket count of zero; tickets a parent has given show up only when there are some.
+  - No "Elite Pass only" locked items on a child's profile: the frames simply are not there on a plan without them. A full guild says "Your guild is full", with no plan or button to one.
+  - The daily bonus is the **daily chore bonus**: offered once the child has sent a chore that day, never just for opening the app. The database refuses it too.
+  - In Parent Mode, Flash Tickets are described as an occasional treat, never as the way round not saving enough.
+- **No bright stripe across Block Craft.** The ground in Block Craft's background started halfway up the screen with a bright light-blue row, which drew a stripe behind every card. The ground now sits along the bottom in a quiet shade. The owner's own Block Craft avatar pictures are unchanged.
+- **Plain names.** "System Override Protocol" and "the Consequence Engine" are now **Pause and limits**, with calm words: take back some coins, a short break, pause until I lift it. A child sees "Taking a short break" or "The app is resting", not "Red Security Lockdown". The plan screens no longer sell lock-outs or taking coins as a perk. "The 20% Discount Tournament" is **Parent Alliances**, "Megacluster Guilds" are 10-player guilds. The trial banner says what the plan gives instead of what would be lost ("XP would drop back"). No price changed.
+- **Linking a child's phone, the better way round.** In Parent Mode, Link a kid's device, tap "Code for Ava": the parent's phone shows six digits, and the child's phone types only those. It never types a name or picks a world, so there is no second "Ava" from a misspelling, and the world is the one the parent chose. Same rules as before: ten minutes, five wrong tries, once, and every failed try counts against the phone. The old way (the child's phone makes the code) is still there, one tap away, and **its bug is fixed**: the phone's world no longer overwrites the world the parent had chosen for that child.
+- **Smaller things.**
+  - Buying a reward asks first: "Get Pick the film? It costs 50 of your 120 Gems."
+  - The level-up and the child's home show the next goal they can reach (the nearer of the next form and the next secret world), not "Next secret at level 125".
+  - Quest cards show the XP and coins a chore really pays, with the Elite boost, a surprise double and the streak.
+  - The Parent PIN boxes in setup and Settings hide the digits.
+  - Texas Hold'em, Blackjack and Royal Draw (draw poker) are gone from the arcade; Go Fish and Wildfire stay. The server no longer pays for them.
+  - The demo no longer says "Stripe is not configured", "Add (test)" or "Payments are switched off": it says nothing is charged because this is the pretend family.
+  - The demo's "Rewards" and "League" buttons open the parent's own screens.
+  - On a computer, the three plans sit side by side.
+  - Settings is in six groups: Your family, Your kids' phones and worlds, Reminders and alerts, Look and feel, Plan and extras, Help and your data.
+- **Before deploying:** run `supabase/schema.sql`, `supabase/sync.sql`, `supabase/allowance.sql` and `supabase/consent.sql` again on the live database, in that order. New: the column `families.currency_chosen`, the table `child_link_codes`, the functions `upgrade_family_currency` (server only), `create_child_link_code`, `redeem_child_link_code` and `set_family_currency`, and consent notice 2026-12. No new setting.
+- Tests: new `tests/reviewfixes.mjs` (smoke: every item above in a real browser, and a child's phone linked with a parent's code against the real backend), `tests/reviewrules.mjs` (awards) and `supabase/test/60-product-review.sql`; `07-consent.sql`, `09-minigames.sql`, `18-upgrade.sql`, `27-family-day.sql`, `31-every-table.sql`, `32-definer-functions.sql`, `tests/trialbanner.mjs`, `tests/familyday.mjs`, `tests/cardgames.mjs` and the tests that buy a reward or link a phone updated.
+
 ## 0.21.0 — 2026-11-19
 
 Fast and solid: a lighter first load on a slow phone, no request that can hang for ever, and health checks a free monitor can watch.

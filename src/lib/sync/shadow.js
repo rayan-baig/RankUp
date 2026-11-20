@@ -301,6 +301,8 @@ export function pendingRows(ops, state = null) {
     else if (op.type === 'rpc' && op.fn === 'set_kid_look' && op.args?.p_kid_id) pending.add(`kids:${op.args.p_kid_id}`)
     // A goal this phone has just set must not be put back by an older copy.
     else if (op.type === 'rpc' && op.fn === 'set_family_goal') pending.add('family_goals')
+    // A money sign just chosen in Settings: an older pull must not put the old one back.
+    else if (op.type === 'rpc' && op.fn === 'set_family_currency') pending.add('family_currency')
     // A parent sending a child's theme to RankUp: an older pull would show
     // the request as still waiting, and invite a second tap.
     else if (op.type === 'rpc' && op.fn === 'submit_kid_theme' && op.args?.p_theme_id) pending.add(`kid_themes:${op.args.p_theme_id}`)

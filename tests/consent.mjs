@@ -110,7 +110,7 @@ const recorded = await page.evaluate(async (MOCK) => {
 recorded.consents === 1
   ? pass(`the consent is on the server, signed "${recorded.signed}"`)
   : fail('consent recorded server-side', JSON.stringify(recorded))
-recorded.version === CONSENT_VERSION && CONSENT_VERSION === '2026-11'
+recorded.version === CONSENT_VERSION && CONSENT_VERSION === '2026-12'
   ? pass(`against the notice in force, ${CONSENT_VERSION}`)
   : fail('signed the current version', JSON.stringify(recorded))
 

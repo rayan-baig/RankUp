@@ -44,8 +44,16 @@ ok('a two-child family is',
   [{ name: 'Ava' }, { name: 'Noah' }].length > paid.limits.maxKids)
 ok('and no photo check is mentioned, because RankUp has none',
   !/photo/i.test(readFileSync('src/components/TrialBanner.jsx', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')))
-ok('and the XP drop is real, because Elite really is 1.5×',
+ok('and the XP it names is real, because Elite really is 1.5×',
   plan.xpMultiplier > paid.xpMultiplier)
+
+console.log('\n=== It says what the plan gives, never what would be lost (0.22.0) ===')
+{
+  const code = readFileSync('src/components/TrialBanner.jsx', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+  ok('no "would drop back", no "put on hold", no "lose"', !/drop back|on hold|\blos(e|ing)\b/i.test(code))
+  ok('it names what the plan gives', /gives you/.test(code))
+  ok('and is never a warning colour, whatever the days left', !/tone=\{?['"]?warn/.test(code) && !/urgent/.test(code))
+}
 
 console.log('\n=== And it makes no claim it cannot check ===')
 // Guild membership is fetched by the guild screen and never reaches app state,

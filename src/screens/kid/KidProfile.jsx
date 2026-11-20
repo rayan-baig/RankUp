@@ -196,14 +196,13 @@ export default function KidProfile() {
         </Card>
       )}
 
+      {/* Only when the family's plan has them. A child is never shown
+          something locked behind a plan, or told what a plan is: that is
+          the parent's business, in Parent Mode. */}
+      {elite && (<>
       <SectionTitle>Profile customisation</SectionTitle>
       <Card className="mb-3">
-        {!elite && (
-          <Banner tone="warn" icon="🔮" title="Elite Pass only">
-            Animated frames and rare drop selectors are part of Elite. Standard accounts keep the plain card.
-          </Banner>
-        )}
-        <div className={`mt-3 ${elite ? '' : 'opacity-50 pointer-events-none'}`}>
+        <div>
           <span className="label">Card frame</span>
           <div className="flex flex-wrap gap-2 mb-3">
             {PROFILE_FRAMES.map((f) => (
@@ -218,7 +217,7 @@ export default function KidProfile() {
               </button>
             ))}
           </div>
-          <span className="label">Rare drop selector</span>
+          <span className="label">Reward pop-up style</span>
           <div className="flex flex-wrap gap-2">
             {DROP_SELECTORS.map((d) => (
               <button
@@ -237,6 +236,7 @@ export default function KidProfile() {
           </p>
         </div>
       </Card>
+      </>)}
 
       <SectionTitle>Theme</SectionTitle>
       <Card className="mb-3">

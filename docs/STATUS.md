@@ -30,7 +30,7 @@ one phone, with no account (see "On one phone only" below).
 | Family goal | ✅ | Shared XP towards one reward, counted from when it was set. The same goal and bar on both parents' and every child's phone ([SYNC.md](SYNC.md#the-family-goal)) |
 | Daily login bonus | ✅ | Once a day, on the family's day |
 | Pocket money | ✅ | A chore can carry a real price; a ledger of what is owed, payouts and gifts. RankUp never holds money: the parent pays and records it |
-| System Override Protocol | ✅ | Currency Tax, Dimension Lockout, Red Security Lockdown. Never takes away XP, levels or streaks |
+| Pause and limits (was System Override Protocol) | ✅ | Take back some coins, a short break, pause until lifted. Never takes away XP, levels or streaks |
 | Behaviour Blueprints | ✅ | Charts from this family's real, synced chores |
 | A child's phone has no Parent Mode | ✅ | Not behind a PIN: not there at all |
 
@@ -46,7 +46,7 @@ one phone, with no account (see "On one phone only" below).
 | Block Craft's nine forms, story and battles | ✅ | The village to The Dragon (399). A battle scene per chapter; worlds stay secret until reached |
 | Dragon boss fight | ✅ | Accepted chores hit the dragon; chores sent back, 48 idle hours and specials hit back. Worked out from synced chores and held by the server |
 | Arcade | ✅ | 24 games. Tokens come only from finished chores (at most 5 held); at most 15 coins a day from games, counted on the family's day. The look-around family has unlimited tokens. The arcade tells a child, in plain words, how many tokens they have, how many coins they can still win today, and that winnings come back at midnight |
-| Sunday Market and Flash Tickets | ✅ | Cosmetic skins on Sundays only, no countdown, every skin comes back. Flash Tickets are bought by a parent; prices fixed on the server |
+| Skin Market and Flash Tickets | ✅ | Cosmetic skins, always open, no rarity labels, no countdown, no real-money price on a child's phone. Flash Tickets are bought by a parent; prices fixed on the server |
 | Elite cosmetics (frames, drop selectors) | ✅ | |
 | 10 parent dashboard themes | ✅ | Colours only, by design |
 
@@ -82,7 +82,7 @@ one phone, with no account (see "On one phone only" below).
 | Guilds | ✅ built, **off by default** | Invite codes, rosters, a weekly goal, and chat that is **quick chat only**: a child taps one of 101 ready-made messages (seven tabs) or a big emoji, and only its id is sent and stored. There is no text box, and the server refuses typed text and any id not on the list, so no child can type to a child in another family. At most one message every 3 seconds and 8 a minute, held by the server. Report (hides it, both families' parents see it), mute on the child's own phone, and parents' remove and block stay. Messages typed before 0.13.0 are not shown to children. **A child joins only once a parent on each side approves.** On only if `VITE_GUILDS_ENABLED=true`: much safer than before, and still the owner's decision |
 | Leaderboards | ✅ needs a backend | Chores, XP, highest level, longest and current streak, badges, arcade high scores per game, Season themes, rising stars, and top guilds; by worldwide, country, guild and family, and this week (resets Monday), this month (the 1st), all time, at midnight UTC. Podium, rank arrows, the child's own row and place even far down. Ranked every 10 minutes by `/api/refresh-leaderboards` and read from what it stored ([GAME-DESIGN.md](GAME-DESIGN.md#leaderboards)). Without a backend, a family board worked out on the phone |
 | Adventure and Arena | ✅ | Every child starts in **Adventure**: on no public board and shown none; family and guild boards only. A **parent** switches a child into **Arena** (Settings → Leaderboards); a parent or the child switches back, and they are off every public board at once. In Arena strangers see a nickname built from word lists (80 × 80 × 100, once a week, never typed), a flag from the parent's list, and numbers; never a name, family, school or town. Deleting a child removes them from every board at once. Guild boards need guilds on |
-| Parent Alliance and the 20% Discount Tournament | ✅ with Stripe | Real families, scores counted on the server. `api/settle-alliances.js` gives the winner a real Stripe credit monthly; **you have to schedule it** |
+| Parent Alliances (a monthly contest, 20% off for the winner) | ✅ with Stripe | Real families, scores counted on the server. `api/settle-alliances.js` gives the winner a real Stripe credit monthly; **you have to schedule it** |
 | The School League | ✅ built, charging once Stripe is connected | See below |
 
 ### The School League

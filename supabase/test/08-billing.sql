@@ -254,7 +254,7 @@ begin
   set local role app_user;
   perform become('f1111111-1111-1111-1111-111111111111');
 
-  -- The table here must match RARITY in src/data/marketSkins.js.
+  -- The table here must match each skin's tickets in src/data/marketSkins.js.
   res := buy_market_skin('f4444444-0000-0000-0000-000000000001', 'ember', 0, true);
   perform ok('a common skin costs one ticket', (res->>'tickets_spent')::int = 1);
 

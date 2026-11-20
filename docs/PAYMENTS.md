@@ -832,7 +832,7 @@ longer than feels comfortable.
 
 ---
 
-## The 20% Discount Tournament — one thing you must schedule
+## Parent Alliances (the 20% monthly contest) — one thing you must schedule
 
 Parent Alliances are real: `supabase/alliances.sql` counts each member family's
 approved quests for the month, and `api/settle-alliances.js` gives the winner

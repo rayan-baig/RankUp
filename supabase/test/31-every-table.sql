@@ -72,6 +72,8 @@ begin
     insert into trial_reminder_sends (family_id, kind, trial_ends_at) values (f.fam, 'three_days', now());
     insert into plan_pauses (family_id, months, resumes_at) values (f.fam, 1, now() + interval '1 month');
     insert into push_sends (family_id) values (f.fam);
+    insert into child_link_codes (code, kid_id, family_id, expires_at)
+      values (lpad((abs(hashtext(f.tag)) % 1000000)::text, 6, '0'), f.kid, f.fam, now() + interval '10 minutes');
     insert into crash_reports (family_id, where_at, message) values (f.fam, 'T31', 'T31');
     insert into rpc_receipts (id, kid_id, fn, result) values (gen_random_uuid(), f.kid, 'T31', '{}');
     -- Theme Genesis: a child's own theme, and one sent to RankUp.

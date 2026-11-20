@@ -404,7 +404,9 @@ begin
     'stripe_subscription_for_family(uuid)', 'start_plan_pause(uuid,integer,text)', 'finish_plan_pause(bigint,boolean)',
     'end_plan_pause(uuid)', 'plan_pause_credit(uuid)', 'sync_plan_pause(uuid,timestamptz,boolean,timestamptz)', 'claim_save_offer(uuid,text)',
     'finish_save_offer(uuid,boolean)', 'due_pause_reminders(timestamptz)', 'claim_pause_reminder(bigint)',
-    'finish_pause_reminder(bigint,boolean)', 'count_plan_change(text)']
+    'finish_pause_reminder(bigint,boolean)', 'count_plan_change(text)',
+    -- The money sign's one-time move from pounds to dollars (0.22.0).
+    'upgrade_family_currency()']
   loop
     if to_regprocedure(f) is null then
       v_open := v_open || (f || ' (no longer exists — update this list)');

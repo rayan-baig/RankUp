@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { syncAdapter, canSyncAcrossDevices } from '../../lib/sync/index.js'
-import { claimErrorMessage, isCompleteCode, MAX_ATTEMPTS, CODE_TTL_MS } from '../../lib/pairing.js'
+import { claimErrorMessage, isCompleteCode, MAX_ATTEMPTS, CODE_TTL_MS, formatCode, makeCodeError } from '../../lib/pairing.js'
+import { formatDuration } from '../../lib/dates.js'
 import { Screen, Card, Button, Banner, SectionTitle, Chip } from '../../components/ui.jsx'
 import CodeInput from '../../components/CodeInput.jsx'
 import { navigate } from '../../lib/router.js'
@@ -20,6 +21,50 @@ export default function ParentPairKid() {
   const [linked, setLinked] = useState(null)
 
   const linkedKids = state.kids.filter((k) => k.pairedDeviceAt)
+  const waitingKids = state.kids.filter((k) => !k.pairedDeviceAt)
+  /*
+   * A code this phone made for one child (0.22.0): { kidId, code, expiresAt }.
+   * The child's phone types only these six digits, so it never types a name
+   * or picks a world: no second profile from a misspelt name, and the world
+   * is the one chosen here.
+   */
+  const [made, setMade] = useState(null)
+  const [making, setMaking] = useState(null)
+  const [makeError, setMakeError] = useState('')
+  const [, tick] = useState(0)
+  const madeKid = made && state.kids.find((k) => k.id === made.kidId)
+
+  const makeCode = async (kid) => {
+    if (making) return
+    setMaking(kid.id)
+    setMakeError('')
+    const r = await syncAdapter.makeChildCode({
+      kidId: kid.id, kidName: kid.name, themeId: kid.themeId, familyName: state.family.name || 'your family',
+    })
+    setMaking(null)
+    if (!r.ok) { setMakeError(makeCodeError(r.reason)); return }
+    setMade({ kidId: kid.id, code: r.code, expiresAt: r.expiresAt })
+  }
+
+  // The countdown, and hearing that the phone has joined: through the sync
+  // (the child's row now has a phone) or, with no server, the code's record.
+  useEffect(() => {
+    if (!made) return undefined
+    const t = setInterval(() => tick((n) => n + 1), 1000)
+    const stop = syncAdapter.watchChildCode(made.code, (record) => {
+      if (record?.usedAt && madeKid) {
+        dispatch({ type: 'ADOPT_PAIRED_KID', kid: { id: madeKid.id, name: madeKid.name, themeId: madeKid.themeId }, byId: true })
+      }
+    })
+    return () => { clearInterval(t); stop() }
+  }, [made, madeKid, dispatch])
+
+  useEffect(() => {
+    if (made && madeKid?.pairedDeviceAt) {
+      setLinked({ ...madeKid, namesake: false })
+      setMade(null)
+    }
+  }, [made, madeKid])
 
   const submit = async (value = code) => {
     if (!isCompleteCode(value) || busy) return
@@ -99,6 +144,48 @@ export default function ParentPairKid() {
       </button>
 
       <h1 className="font-display text-2xl font-extrabold mb-1">Link a kid's device</h1>
+
+      {/* First: a code made here for one child. */}
+      {waitingKids.length > 0 && (
+        <Card className="mb-4" data-testid="make-code-card">
+          <SectionTitle>Make a code for your child</SectionTitle>
+          {made && madeKid ? (
+            <div className="text-center" data-testid="made-code">
+              <p className="text-sm text-muted">On {madeKid.name}&apos;s phone, open RankUp, tap <strong>“I&apos;m a kid”</strong> and type:</p>
+              <div className="font-mono font-extrabold tracking-[0.12em] text-4xl py-3 text-accent"
+                   aria-label={`The code is ${made.code.split('').join(' ')}`}>
+                {formatCode(made.code)}
+              </div>
+              {made.expiresAt > Date.now() ? (
+                <p className="text-xs text-muted">Waiting for {madeKid.name}&apos;s phone · runs out in {formatDuration(made.expiresAt - Date.now())}</p>
+              ) : (
+                <p className="text-xs text-muted">This code has run out. Make a new one.</p>
+              )}
+              <div className="flex gap-2 mt-3">
+                <Button variant="soft" className="flex-1" onClick={() => makeCode(madeKid)} disabled={Boolean(making)}>New code</Button>
+                <Button variant="ghost" className="flex-1" onClick={() => setMade(null)}>Done</Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-muted mb-2">
+                Pick the child. Their phone then types only the code: no name to spell, no world to pick.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {waitingKids.map((k) => (
+                  <Button key={k.id} variant="soft" className="py-2 min-h-0 text-sm" disabled={Boolean(making)}
+                    onClick={() => makeCode(k)} data-testid={`make-code-${k.name}`}>
+                    {making === k.id ? 'Making…' : `Code for ${k.name}`}
+                  </Button>
+                ))}
+              </div>
+            </>
+          )}
+          {makeError && <p className="text-sm mt-2 text-bad" role="alert">{makeError}</p>}
+        </Card>
+      )}
+
+      <SectionTitle>Or type the code from their phone</SectionTitle>
       {/*
         * Three steps, each one thing to tap or type, in the words on the
         * child's screen. It used to be one sentence, and a parent finding
@@ -106,7 +193,7 @@ export default function ParentPairKid() {
         * new phone would join that profile rather than start a second one.
         */}
       <ol className="text-sm text-muted mb-4 space-y-1.5 list-decimal list-inside" data-testid="pair-steps">
-        <li>On your child's phone, open RankUp and tap <strong>“I'm a kid”</strong>.</li>
+        <li>On your child's phone, open RankUp, tap <strong>“I'm a kid”</strong>, then <strong>“No code? Make one on this phone instead”</strong>.</li>
         <li>
           They type their first name, pick a world and tap <strong>“Get my code”</strong>.
           {state.kids.some((k) => !k.pairedDeviceAt) && (

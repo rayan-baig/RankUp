@@ -2,6 +2,7 @@ import Logo, { SLOGAN } from '../components/Logo.jsx'
 import LoopPreview from '../components/LoopPreview.jsx'
 import { Words } from '../components/Motion.jsx'
 import { TIERS, TRIAL_DAYS } from '../state/initialState.js'
+import { OPERATOR } from '../data/legalText.js'
 
 /* "$5.99", never "$5.990" or "$6". */
 const dollars = (n) => `$${n.toFixed(2)}`
@@ -151,6 +152,14 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null, c
         </div>
         )}
       </div>
+
+      {/* The small print, where a parent deciding looks for it. Readable with
+          no account; "back" on those pages comes here. */}
+      <footer className="mt-auto pt-4 flex justify-center flex-wrap gap-x-4 text-xs text-muted" data-testid="front-footer">
+        <a href="#/legal/privacy" className="tap-link underline">Privacy</a>
+        <a href="#/legal/terms" className="tap-link underline">Terms</a>
+        <a href={`mailto:${OPERATOR.email}`} className="tap-link underline">Contact</a>
+      </footer>
     </div>
   )
 }

@@ -187,22 +187,6 @@ await ended()
   ? pass('three meetings and it settles up')
   : fail('Impostor ends', (await text()).slice(0, 200))
 
-console.log('\n=== Royal Draw: the hand rankings are checked in tests/cards.mjs ===')
-await playGame('Royal Draw')
-;(await text()).includes('Royal Draw')
-  ? pass('it opens')
-  : fail('Royal Draw opens', (await text()).slice(0, 160))
-for (let i = 0; i < 30; i += 1) {
-  if (await ended()) break
-  // eslint-disable-next-line no-await-in-loop
-  await page.getByRole('button', { name: /^Deal$|Swap the other|Keep them all/ })
-    .click({ timeout: 1500 }).catch(() => {})
-  // eslint-disable-next-line no-await-in-loop
-  await page.waitForTimeout(700)
-}
-await page.screenshot({ path: `${SHOT_DIR}/game-royal.png` })
-await ended() ? pass('five hands played out') : fail('Royal Draw ends', (await text()).slice(0, 160))
-
 console.log('\n=== Wildfire ===')
 await playGame('Wildfire')
 const fire = await text()

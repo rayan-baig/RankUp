@@ -114,12 +114,17 @@ function Tetrominoes({ c }) {
   )
 }
 
+/* Where Block Craft's ground starts (% of the screen), and how it is drawn. */
+export const VOXEL_GROUND = 82
+const VOXEL_ROWS = 4
+export const VOXEL_TOP_ROW_OPACITY = 0.35
+
 function Voxel({ c, variant }) {
   const sky = { base: c.bg, top: c.surface2 }
   return (
     <>
       <rect width="100" height="100" fill={sky.base} />
-      <rect width="100" height="46" fill={sky.top} opacity="0.55" />
+      <rect width="100" height={VOXEL_GROUND} fill={sky.top} opacity="0.55" />
       {variant === 'nether' && (
         <g opacity="0.5">
           {Array.from({ length: 26 }, (_, i) => (
@@ -138,19 +143,26 @@ function Voxel({ c, variant }) {
           ))}
         </g>
       )}
-      {/* Pixelated soil strata */}
-      {Array.from({ length: 12 }, (_, row) =>
+      {/*
+        Pixelated soil strata, along the bottom of the screen.
+
+        They used to start at 46% with a top row of the theme's light blue at
+        0.9 opacity, which drew a bright stripe straight across the middle of
+        every Block Craft screen, behind the cards. Now the ground starts low
+        (VOXEL_GROUND) and its top row is a quiet, darker shade.
+      */}
+      {Array.from({ length: VOXEL_ROWS }, (_, row) =>
         Array.from({ length: 13 }, (_, col) => {
           const shade = ((row * 7 + col * 3) % 5) / 14
           return (
             <rect
               key={`${row}-${col}`}
               x={col * 8}
-              y={46 + row * 4.6}
+              y={VOXEL_GROUND + row * 4.6}
               width="8"
               height="4.6"
-              fill={row < 1 ? (variant === 'volcanic' ? c.accent : c.accent2) : c.surface}
-              opacity={row < 1 ? 0.9 : 0.55 + shade}
+              fill={row < 1 ? (variant === 'volcanic' ? c.accent : c.surface2) : c.surface}
+              opacity={row < 1 ? VOXEL_TOP_ROW_OPACITY : 0.55 + shade}
             />
           )
         }),

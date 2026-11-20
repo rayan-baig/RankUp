@@ -51,6 +51,10 @@ begin
                   where table_name = 'family_goals' and column_name = 'rev') then
     missing := missing || 'family_goals.rev ';
   end if;
+  if not exists (select 1 from information_schema.columns
+                  where table_name = 'families' and column_name = 'currency_chosen') then
+    missing := missing || 'families.currency_chosen ';
+  end if;
   perform ok('every column added since the first release is present', missing = '',
              'missing: ' || missing);
 end $$;
@@ -150,7 +154,7 @@ begin
                              'schools','school_staff','school_members','school_rivalries',
                              'school_month_scores','school_awards','school_rivalry_results',
                              'school_top_students', 'push_sends',
-                             'pairing_codes','pairing_claim_attempts',
+                             'pairing_codes','pairing_claim_attempts','child_link_codes',
                              'reminder_schedules','digest_sends','trial_reminder_sends','job_runs',
                              'crash_reports','billing_events','push_subscriptions',
                              'parental_consents','deletions','referrals',
@@ -219,4 +223,16 @@ begin
 
   select count(*) into v_count from upgrade_check.objects where pass = 'second' and kind = 'function';
   perform ok(format('%s functions among them, each with its grants and settings', v_count), v_count > 100);
+end $$;
+
+-- ---------- the money sign (0.22.0) ----------
+-- Re-running schema.sql calls upgrade_family_currency again: a family that
+-- chose pounds keeps them, and new families start in dollars.
+do $$
+begin
+  perform ok('families start in US dollars, not British pounds',
+    (select column_default from information_schema.columns
+      where table_name = 'families' and column_name = 'currency') like '%USD%');
+  perform ok('no family is left on the old pound default without having chosen it',
+    not exists (select 1 from families where currency = 'GBP' and not currency_chosen));
 end $$;

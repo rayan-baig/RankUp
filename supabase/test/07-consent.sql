@@ -53,7 +53,7 @@ begin
   end;
 
   -- A signature is required, and it has to be a real one.
-  res := record_parental_consent('2026-11', 'payment_card', ' ');
+  res := record_parental_consent('2026-12', 'payment_card', ' ');
   perform ok('an empty signature is refused', res->>'reason' = 'signature_required');
 
   res := record_parental_consent('does-not-exist', 'payment_card', 'Dana Example');
@@ -61,14 +61,17 @@ begin
     res->>'reason' = 'unknown_version');
 
   -- The notice in force is the one a new parent signs.
-  perform ok('the notice new parents are shown is 2026-11', current_consent_version() = '2026-11');
+  perform ok('the notice new parents are shown is 2026-12', current_consent_version() = '2026-12');
   res := record_parental_consent('2026-01', 'payment_card', 'Dana Example');
   perform ok('a NEW consent to the superseded 2026-01 wording is refused, and names the current one',
-    res->>'reason' = 'outdated_version' and res->>'current' = '2026-11');
+    res->>'reason' = 'outdated_version' and res->>'current' = '2026-12');
+  res := record_parental_consent('2026-11', 'payment_card', 'Dana Example');
+  perform ok('and so is a NEW consent to 2026-11, which still described guilds',
+    res->>'reason' = 'outdated_version' and res->>'current' = '2026-12');
   perform ok('and records nothing',
     not exists (select 1 from parental_consents where family_id = 'd2222222-0000-0000-0000-000000000001'));
 
-  res := record_parental_consent('2026-11', 'payment_card', 'Dana Example');
+  res := record_parental_consent('2026-12', 'payment_card', 'Dana Example');
   perform ok('a parent can give consent', (res->>'ok')::boolean);
   perform ok('and it is now on file',
     t07_consent_on_file('d2222222-0000-0000-0000-000000000001'));
@@ -79,7 +82,7 @@ begin
 
   perform ok('the exact wording agreed to is kept, by version',
     (select version from parental_consents
-      where family_id = 'd2222222-0000-0000-0000-000000000001') = '2026-11');
+      where family_id = 'd2222222-0000-0000-0000-000000000001') = '2026-12');
 end $$;
 
 -- The two published notices: what each says, and that neither can be edited.
@@ -96,6 +99,13 @@ begin
   perform ok('2026-11 mentions no AI check, no Anthropic, and no photograph taken in the app',
     v_new not like '%AI %' and v_new not ilike '%Anthropic%' and v_new not ilike '%photo check%'
     and v_new not ilike '%takes in the app%' and v_new not ilike '%proof%');
+  perform ok('2026-12 describes no guild and no chat, because guilds are switched off',
+    (select body from consent_notices where version = '2026-12') not ilike '%guild chat%'
+    and (select body from consent_notices where version = '2026-12') not ilike '%short messages%'
+    and (select body from consent_notices where version = '2026-12') like '%Guilds are switched off%');
+  perform ok('2026-12 was published after 2026-11',
+    (select published_at from consent_notices where version = '2026-12')
+      >= (select published_at from consent_notices where version = '2026-11'));
   perform ok('2026-11 was published after 2026-01',
     (select published_at from consent_notices where version = '2026-11')
       >= (select published_at from consent_notices where version = '2026-01'));
@@ -116,8 +126,8 @@ reset role;
 set role app_user;
 do $$
 begin
-  perform ok('re-applying the schema leaves 2026-01 and 2026-11 as they were, and 2026-11 current',
-    (select count(*) from consent_notices) = 2 and current_consent_version() = '2026-11'
+  perform ok('re-applying the schema leaves the three notices as they were, and 2026-12 current',
+    (select count(*) from consent_notices) = 3 and current_consent_version() = '2026-12'
     and (select body from consent_notices where version = '2026-01') like '%AI photo check%');
 end $$;
 

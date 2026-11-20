@@ -22,6 +22,35 @@ export function billingLive() {
   return STRIPE_ENABLED && transport.isConfigured()
 }
 
+/**
+ * What to say where payments are not taken: in the demo, and on a copy of
+ * RankUp with Stripe not set up (a developer's, or a test).
+ *
+ * The demo said "Stripe is not configured", "Add (test)" and "Payments are
+ * switched off": a developer's words, on the screen a parent sees first. In
+ * the demo it now says plainly that nothing is charged because this is the
+ * pretend family. Elsewhere it says payments are not set up, without naming
+ * the company that would take them.
+ */
+export function noPaymentsWords(state, where = 'plan') {
+  if (state?.demo) {
+    const body = {
+      plan: 'This is the pretend family, so nothing is charged. Switch between the plans to see what each one gives.',
+      elite: 'This is the pretend family, so nothing is charged. Switch to Elite to try it.',
+      gift: 'This is the pretend family, so gifts cannot be bought from here. Start for free to give one.',
+      flash: 'This is the pretend family, so these add tickets for free. A real family buys them here.',
+    }[where]
+    return { title: 'Nothing is charged in the demo', body, button: 'Try it free' }
+  }
+  const body = {
+    plan: 'Switch between the plans and try any of them. No card is asked for and nothing is charged.',
+    elite: 'You can turn Elite on and try it. Nothing is charged and no card is asked for.',
+    gift: 'Gifts cannot be bought on this copy of RankUp. Everything else on this page works.',
+    flash: 'Payments are not set up on this copy of RankUp, so these add tickets without charging anything.',
+  }[where]
+  return { title: 'Payments are not set up here', body, button: 'Add free' }
+}
+
 async function post(url, body) {
   const token = await freshAccessToken()
   if (!token) return { ok: false, reason: 'signed_out' }
@@ -56,7 +85,7 @@ export async function startCheckout(tier, cycle = 'month') {
 /**
  * Flash Tickets: a one-off purchase, not a subscription.
  *
- * A ticket claims one skin from the Sunday Market without spending the child's
+ * A ticket claims one skin from the Skin Market without spending the child's
  * currency, so a child who did not save enough that week is not shut out of it.
  *
  * Bought by a PARENT, in Parent Mode, behind the PIN. A child can spend a
@@ -77,8 +106,8 @@ export async function startCheckout(tier, cycle = 'month') {
  * genuinely better for the family too rather than just for the operator.
  */
 export const FLASH_TICKET_PACKS = [
-  { id: 'flash_2', tickets: 2, price: 2.99, note: 'A common skin, or half of a legendary' },
-  { id: 'flash_5', tickets: 5, price: 5.99, best: true, note: 'A legendary and a common, with one over' },
+  { id: 'flash_2', tickets: 2, price: 2.99, note: 'Two of the smaller skins, or one mid-price one' },
+  { id: 'flash_5', tickets: 5, price: 5.99, best: true, note: 'The dearest skin and a mid-price one' },
   { id: 'flash_12', tickets: 12, price: 11.99, note: 'Every skin in the shop, with one spare' },
 ]
 

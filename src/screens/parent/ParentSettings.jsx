@@ -5,7 +5,9 @@ import { clearState, storageUsageBytes } from '../../lib/storage.js'
 import { relativeTime } from '../../lib/dates.js'
 import { canSyncAcrossDevices } from '../../lib/sync/index.js'
 import { isElite, planSummary } from '../../state/reducer.js'
-import { billingLive, buyFlashTickets, billingError, FLASH_TICKET_PACKS, perTicket, packSaving } from '../../lib/billing.js'
+import { billingLive, buyFlashTickets, billingError, FLASH_TICKET_PACKS, perTicket, packSaving, noPaymentsWords } from '../../lib/billing.js'
+import { CURRENCIES, familyCurrency } from '../../lib/money.js'
+import { MARKET_NAME } from '../../data/marketSkins.js'
 import { guildsEnabled } from '../../lib/guilds.js'
 import { saveReminderSchedule } from '../../lib/notifications.js'
 import { transport } from '../../lib/sync/transport.js'
@@ -50,47 +52,53 @@ export default function ParentSettings({ open = null }) {
   return (
     <Screen>
       <h1 className="font-display text-2xl font-extrabold mb-1">Settings</h1>
-      <p className="text-sm text-muted mb-4">Tap a section to open it.</p>
+      <p className="text-sm text-muted mb-2">Tap a section to open it.</p>
 
+      <h2 className="section-title mt-5 mb-2" data-testid="settings-group-family">Your family</h2>
       <AdultsCard />
-      {/* Paying monthly: a year for less, from the plan list's two prices. */}
-      <YearlySwitchCard />
-      <InviteCard />
-      <GiftPlanCard />
+      <Section title="Parent account" icon="👤"
+        summary={`${state.family.name || 'Your family'} · ${planSummary(state)} · ${familyCurrency(state.family)}`}>
+      <Card flat>
+        <Field label="Family name">
+          <TextInput
+            value={state.family.name}
+            onChange={(e) => dispatch({ type: 'UPDATE_FAMILY', patch: { name: e.target.value } })}
+          />
+        </Field>
+        <Field label="Parent PIN" hint="Used to open Parent Mode and to change a kid's theme. Hidden as you type.">
+          <TextInput
+            type="password"
+            autoComplete="new-password"
+            value={state.family.pin}
+            onChange={(e) => dispatch({ type: 'UPDATE_FAMILY', patch: { pin: e.target.value.replace(/\D/g, '').slice(0, 8) } })}
+            inputMode="numeric"
+            data-testid="settings-pin"
+          />
+        </Field>
+        <Field label="Pocket money is shown in" hint="Only the sign in front of the amounts. Nothing is converted.">
+          <Select
+            value={familyCurrency(state.family)}
+            onChange={(e) => dispatch({ type: 'SET_FAMILY_CURRENCY', currency: e.target.value })}
+            data-testid="settings-currency"
+          >
+            {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.label} ({c.symbol})</option>)}
+          </Select>
+        </Field>
+        <Field label="Weekly chores come back" hint="A chore set to repeat every week returns on this day.">
+          <Select
+            value={state.family.weekResetsOn ?? ''}
+            onChange={(e) => dispatch({ type: 'SET_WEEK_RESET_DAY', day: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">Seven days after it was done</option>
+            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((name, i) => (
+              <option key={name} value={i + 1}>Every {name}</option>
+            ))}
+          </Select>
+        </Field>
+        <Chip data-testid="plan-chip">Plan: {planSummary(state)}</Chip>
+      </Card>
 
-      <KidThemesSection />
-
-      <Section title="Dashboard theme" icon="🎨"
-        summary={PARENT_THEMES.find((t) => t.id === state.family.parentThemeId)?.name || 'Choose a look'}>
-      <div className="grid grid-cols-2 gap-2.5">
-        {PARENT_THEMES.map((t) => {
-          const active = state.family.parentThemeId === t.id
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => dispatch({ type: 'SET_PARENT_THEME', themeId: t.id })}
-              aria-pressed={active}
-              className="text-left p-2.5 transition-transform active:scale-[0.97]"
-              style={{
-                background: t.colors.surface,
-                color: t.colors.ink,
-                border: `2px solid ${active ? t.colors.accent : t.colors.line}`,
-                borderRadius: 'var(--radius)',
-              }}
-            >
-              <div className="h-8 mb-2 rounded" style={{ background: t.colors.bg, border: `1px solid ${t.colors.line}` }}>
-                <div className="h-full w-1/3" style={{ background: t.colors.accent, opacity: 0.7 }} />
-              </div>
-              <div className="text-[13px] font-bold leading-tight">{t.icon} {t.name}</div>
-              <div className="text-[10px] leading-tight mt-0.5" style={{ color: t.colors.inkMuted }}>{t.blurb}</div>
-            </button>
-          )
-        })}
-      </div>
-      <p className="text-xs text-muted mt-2">Visual only — parent themes never change how anything works.</p>
       </Section>
-
       <Section title="Rewards catalogue" icon="🎁" defaultOpen={open === 'rewards'}
         summary={`${state.rewards.length} reward${state.rewards.length === 1 ? '' : 's'}${
           state.redemptions.filter((r) => r.status === 'requested').length
@@ -168,7 +176,6 @@ export default function ParentSettings({ open = null }) {
         )}
       </Card>
       </Section>
-
       <Section title="Family goal" icon="🎯"
         summary={state.familyGoal ? state.familyGoal.name : 'Not set'}>
       <Card flat>
@@ -195,7 +202,6 @@ export default function ParentSettings({ open = null }) {
         </div>
       </Card>
       </Section>
-
       <Section title="Notes to your kid" icon="✉️"
         summary={`${state.notes.length} sent`}>
       <Card flat>
@@ -231,19 +237,7 @@ export default function ParentSettings({ open = null }) {
       </Card>
 
       </Section>
-
-      <Section title="Notifications" icon="🔔" summary="When this phone buzzes you">
-        <NotificationSettings />
-      </Section>
-
-      <Section title="Daily reminders" icon="⏰"
-        summary={`${state.settings.reminders.filter((r) => r.on).length} of ${state.settings.reminders.length} on`}>
-      <Card flat>
-        <ReminderList reminders={state.settings.reminders} dispatch={dispatch} />
-      </Card>
-
-      </Section>
-
+      <h2 className="section-title mt-5 mb-2" data-testid="settings-group-kids">Your kids&apos; phones and worlds</h2>
       <Section title="Family sync" icon="🔗"
         summary={linkedCount ? `${linkedCount} device${linkedCount === 1 ? '' : 's'} linked` : 'No devices linked yet'}>
       <Card flat>
@@ -314,7 +308,49 @@ export default function ParentSettings({ open = null }) {
       </Card>
 
       </Section>
+      <KidThemesSection />
+      <h2 className="section-title mt-5 mb-2" data-testid="settings-group-notify">Reminders and alerts</h2>
+      <Section title="Notifications" icon="🔔" summary="When this phone buzzes you">
+        <NotificationSettings />
+      </Section>
+      <Section title="Daily reminders" icon="⏰"
+        summary={`${state.settings.reminders.filter((r) => r.on).length} of ${state.settings.reminders.length} on`}>
+      <Card flat>
+        <ReminderList reminders={state.settings.reminders} dispatch={dispatch} />
+      </Card>
 
+      </Section>
+      <h2 className="section-title mt-5 mb-2" data-testid="settings-group-look">Look and feel</h2>
+      <Section title="Dashboard theme" icon="🎨"
+        summary={PARENT_THEMES.find((t) => t.id === state.family.parentThemeId)?.name || 'Choose a look'}>
+      <div className="grid grid-cols-2 gap-2.5">
+        {PARENT_THEMES.map((t) => {
+          const active = state.family.parentThemeId === t.id
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => dispatch({ type: 'SET_PARENT_THEME', themeId: t.id })}
+              aria-pressed={active}
+              className="text-left p-2.5 transition-transform active:scale-[0.97]"
+              style={{
+                background: t.colors.surface,
+                color: t.colors.ink,
+                border: `2px solid ${active ? t.colors.accent : t.colors.line}`,
+                borderRadius: 'var(--radius)',
+              }}
+            >
+              <div className="h-8 mb-2 rounded" style={{ background: t.colors.bg, border: `1px solid ${t.colors.line}` }}>
+                <div className="h-full w-1/3" style={{ background: t.colors.accent, opacity: 0.7 }} />
+              </div>
+              <div className="text-[13px] font-bold leading-tight">{t.icon} {t.name}</div>
+              <div className="text-[10px] leading-tight mt-0.5" style={{ color: t.colors.inkMuted }}>{t.blurb}</div>
+            </button>
+          )
+        })}
+      </div>
+      <p className="text-xs text-muted mt-2">Visual only — parent themes never change how anything works.</p>
+      </Section>
       <Section title="Overdrive" icon="✨"
         summary={
           !isElite(state) ? 'Elite Pass'
@@ -353,7 +389,6 @@ export default function ParentSettings({ open = null }) {
         )}
       </Card>
       </Section>
-
       <Section title="Accessibility & motion" icon="♿"
         summary={state.settings.reduceMotion ? 'Reduced motion on' : 'Full animation'}>
       <Card flat>
@@ -366,50 +401,22 @@ export default function ParentSettings({ open = null }) {
       </Card>
 
       </Section>
-
-      <Section title="Parent account" icon="👤"
-        summary={`${state.family.name || 'Your family'} · ${planSummary(state)}`}>
-      <Card flat>
-        <Field label="Family name">
-          <TextInput
-            value={state.family.name}
-            onChange={(e) => dispatch({ type: 'UPDATE_FAMILY', patch: { name: e.target.value } })}
-          />
-        </Field>
-        <Field label="Parent PIN" hint="Used to open Parent Mode and to change a kid's theme.">
-          <TextInput
-            value={state.family.pin}
-            onChange={(e) => dispatch({ type: 'UPDATE_FAMILY', patch: { pin: e.target.value.replace(/\D/g, '').slice(0, 8) } })}
-            inputMode="numeric"
-          />
-        </Field>
-        <Field label="Weekly chores come back" hint="A chore set to repeat every week returns on this day.">
-          <Select
-            value={state.family.weekResetsOn ?? ''}
-            onChange={(e) => dispatch({ type: 'SET_WEEK_RESET_DAY', day: e.target.value ? Number(e.target.value) : null })}
-          >
-            <option value="">Seven days after it was done</option>
-            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((name, i) => (
-              <option key={name} value={i + 1}>Every {name}</option>
-            ))}
-          </Select>
-        </Field>
-        <Chip data-testid="plan-chip">Plan: {planSummary(state)}</Chip>
-      </Card>
-
-      </Section>
-
+      <h2 className="section-title mt-5 mb-2" data-testid="settings-group-plan">Plan and extras</h2>
+      {/* Paying monthly: a year for less, from the plan list's two prices. */}
+      <YearlySwitchCard />
+      <InviteCard />
+      <GiftPlanCard />
       <Section title="Flash Tickets" icon="🎟️"
         summary={`${state.family.flashTickets || 0} left · from $${FLASH_TICKET_PACKS[0].price}`}>
       <Card flat>
         <p className="text-sm text-muted mb-3">
-          The Sunday Market opens for four hours a week and sells cosmetic skins for the currency
-          your child earns. Flash Tickets claim one without spending any — for the week they did not
-          save quite enough. Rarer skins cost more tickets; the whole shop is eleven.
+          Your children save up for skins in the {MARKET_NAME} with the coins their chores earn, and
+          that is the point: saving up is how they get one. A Flash Ticket is an occasional treat from
+          you, like a birthday surprise, never something they need to keep up.
         </p>
         <Banner tone="info" icon="🧒" title="Skins are paint">
           Nothing sold in the market affects XP, levelling or how much a chore pays. A child who
-          never opens it is never behind one who buys every week.
+          never opens it is never behind one who has every skin.
         </Banner>
         <div className="flex items-baseline gap-2 mt-3 mb-2">
           <span className="font-display font-extrabold text-lg leading-none">
@@ -443,7 +450,7 @@ export default function ParentSettings({ open = null }) {
                 <span className="block text-xs text-muted mt-0.5">{pack.note}</span>
               </span>
               <span className="font-display font-extrabold text-sm shrink-0">
-                {buying === pack.id ? 'Opening Stripe…' : billingLive() ? `$${pack.price}` : 'Add (test)'}
+                {buying === pack.id ? 'Opening the payment page…' : billingLive() ? `$${pack.price}` : noPaymentsWords(state, 'flash').button}
               </span>
             </button>
           )
@@ -451,9 +458,7 @@ export default function ParentSettings({ open = null }) {
 
         {buyError && <p className="text-sm mt-1" style={{ color: 'var(--bad)' }} role="alert">{buyError}</p>}
         {!billingLive() && (
-          <p className="text-xs text-muted mt-1">
-            Stripe is not configured, so these add tickets locally without charging anything.
-          </p>
+          <p className="text-xs text-muted mt-1">{noPaymentsWords(state, 'flash').body}</p>
         )}
         <p className="text-xs text-muted mt-2">
           Only you can buy these. Your child's phone can spend a ticket and can see how many are
@@ -461,7 +466,7 @@ export default function ParentSettings({ open = null }) {
         </p>
       </Card>
       </Section>
-
+      <h2 className="section-title mt-5 mb-2" data-testid="settings-group-help">Help and your data</h2>
       <Section title="Help & about" icon="❓" summary={`Help, your plan · RankUp ${APP_VERSION}`}>
         <Card flat>
           <button
@@ -512,10 +517,23 @@ export default function ParentSettings({ open = null }) {
           </p>
         </Card>
       </Section>
-
       <Section title="Your data" icon="🗂️" summary="Download it, or delete the account">
         <DataRights />
       </Section>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
       <Button variant="ghost" className="w-full mt-4" onClick={() => setReset(true)}>
         Erase local data on this device only

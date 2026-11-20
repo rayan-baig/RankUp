@@ -547,8 +547,6 @@ language sql immutable as $$
     when 'tennis'    then 30000   -- a match, best of three sets
     when 'sky'       then 15000   -- every gate, at the game's own speed
     -- Rounds the game paces itself, with pauses between hands or turns.
-    when 'holdem'    then 8000    -- five hands, two seconds between each
-    when 'blackjack' then 8000    -- six hands, over a second and a half apart
     when 'chain'     then 8000    -- ten playbacks of a growing sequence
     when 'blocks'    then 8000    -- ten lines is at least 25 pieces
     when 'bricks'    then 8000    -- thirty-five bricks off one ball
@@ -557,7 +555,6 @@ language sql immutable as $$
     when 'track'     then 10000
     when 'sweets'    then 10000
     when 'sports'    then 5000
-    when 'royal'     then 5000    -- five hands, deal and draw
     when 'wildfire'  then 5000    -- seven cards played, with turns between
     when 'gofish'    then 5000
     when 'memory'    then 4000    -- sixteen flips
@@ -639,8 +636,8 @@ begin
     'stack', 'memory', 'chain', 'lights', 'catch',
     'snake', 'merge', 'bricks', 'sweeper', 'sky', 'four', 'slide',
     'sports', 'blocks', 'sweets', 'impostor', 'turbo',
-    'track', 'wildfire', 'royal', 'tennis',
-    'holdem', 'blackjack', 'gofish'
+    'track', 'wildfire', 'tennis',
+    'gofish'
   ) then
     return jsonb_build_object('ok', false, 'reason', 'no_game');
   end if;
@@ -789,6 +786,13 @@ begin
   v_day := family_today(v_kid.family_id, p_tz);
   if v_kid.last_login_bonus >= v_day then
     return jsonb_build_object('ok', false, 'reason', 'already_claimed');
+  end if;
+  -- The daily chore bonus (0.22.0): paid for doing a chore, not for opening
+  -- the app. Any chore sent in the last day counts, so a phone that offers it
+  -- for a chore sent "today" (its own day) is never refused.
+  if not exists (select 1 from submissions
+                  where kid_id = p_kid_id and submitted_at > now() - interval '24 hours') then
+    return jsonb_build_object('ok', false, 'reason', 'no_chore_today');
   end if;
 
   update kids

@@ -3,6 +3,7 @@ import { Screen, Card, Button, SectionTitle, Banner, Field, TextInput, Chip } fr
 import { districtLabel } from '../lib/schools.js'
 import { schoolChecks } from '../lib/schoolChecks.js'
 import OperatorThemes from './OperatorThemes.jsx'
+import { UNFILLED } from '../data/legalText.js'
 import { PILOT_DEFAULT_DAYS, PILOT_MIN_DAYS, PILOT_MAX_DAYS, PILOT_CODE_VALID_DAYS } from '../lib/pilotRules.js'
 
 /**
@@ -396,6 +397,13 @@ export default function OperatorSchools() {
           Sign out
         </button>
       </header>
+      {/* The owner's reminder, here and in docs/LAUNCH.md: never on the public legal pages. */}
+      {UNFILLED.length > 0 && (
+        <Banner tone="warn" icon="✏️" title="The legal pages are not finished" className="mb-3">
+          Still to fill in: the company&apos;s {UNFILLED.map((k) => (k === 'address' ? 'postal address' : k)).join(' and ')} (OPERATOR in src/data/legalText.js).
+          Until then the pages give the email address instead. Have a lawyer read them before launch.
+        </Banner>
+      )}
       <div className="flex gap-2 mb-3" role="tablist">
         {[['schools', 'Schools'], ['pilots', 'Pilots'], ['themes', 'Theme submissions']].map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} className="chip"

@@ -37,9 +37,6 @@ const Impostor = lazyLoad(() => import('../../components/games/Impostor.jsx'))
 const Trackstar = lazyLoad(() => import('../../components/games/Trackstar.jsx'))
 const TennisTour = lazyLoad(() => import('../../components/games/TennisTour.jsx'))
 const Wildfire = lazyLoad(() => import('../../components/games/Wildfire.jsx'))
-const RoyalDraw = lazyLoad(() => import('../../components/games/RoyalDraw.jsx'))
-const HoldEm = lazyLoad(() => import('../../components/games/HoldEm.jsx'))
-const Blackjack = lazyLoad(() => import('../../components/games/Blackjack.jsx'))
 const GoFish = lazyLoad(() => import('../../components/games/GoFish.jsx'))
 
 /** One colour per shelf, so the grid is scannable without artwork. */
@@ -73,9 +70,6 @@ const COMPONENTS = {
   track: Trackstar,
   tennis: TennisTour,
   wildfire: Wildfire,
-  royal: RoyalDraw,
-  holdem: HoldEm,
-  blackjack: Blackjack,
   gofish: GoFish,
 }
 

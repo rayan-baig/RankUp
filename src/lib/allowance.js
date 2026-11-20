@@ -51,7 +51,7 @@ export function mergeFrom(summary, requestedAt) {
     // between is a line the server had not seen, and dropping it would make a
     // payout a parent just recorded vanish for a moment.
     at: requestedAt,
-    currency: summary?.currency || 'GBP',
+    currency: summary?.currency || 'USD',
   }
 }
 

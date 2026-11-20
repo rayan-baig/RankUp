@@ -1,4 +1,5 @@
-import { DIFFICULTY } from '../lib/xp.js'
+import { DIFFICULTY, calcReward, liveStreak } from '../lib/xp.js'
+import { useElite, useKid } from '../state/AppContext.jsx'
 import { CATEGORY_MAP } from '../data/questTemplates.js'
 import { formatDuration } from '../lib/dates.js'
 import { REPEATS } from '../lib/recurrence.js'
@@ -21,6 +22,16 @@ export default function QuestCard({ quest, onClick, currency, showStatus = true 
   const diff = DIFFICULTY[quest.difficulty] || DIFFICULTY.medium
   const cat = CATEGORY_MAP[quest.category]
   const status = showStatus ? STATUS_LABEL[quest.status] : null
+  /*
+   * What accepting it actually pays this child: the Elite boost, a surprise
+   * double and their streak included, from the same calcReward the reducer
+   * pays with. The card showed the bare number, so an Elite child was told
+   * "+30 XP" and then paid 45.
+   */
+  const elite = useElite()
+  const kid = useKid(quest.kidId)
+  // A race-the-clock bonus is only paid if they beat it, so it is not promised here.
+  const reward = calcReward(quest, { elite, streak: kid ? liveStreak(kid.streak) : 0, onTime: false })
 
   return (
     <button
@@ -70,7 +81,7 @@ export default function QuestCard({ quest, onClick, currency, showStatus = true 
                       border: '1px solid color-mix(in srgb, var(--accent) 36%, transparent)',
                     }}
                   >
-                    {currency.icon} +{Math.max(1, Math.round((quest.xp ?? diff.xp) / 5))}
+                    {currency.icon} +{reward.coins}
                   </span>
                 )}
                 <span
@@ -84,7 +95,7 @@ export default function QuestCard({ quest, onClick, currency, showStatus = true 
                     border: `1px solid color-mix(in srgb, ${diff.color} 38%, transparent)`,
                   }}
                 >
-                  +{quest.xp ?? diff.xp} XP
+                  +{reward.xp} XP
                 </span>
               </span>
               {/* The design ends every row with one, so a row reads as

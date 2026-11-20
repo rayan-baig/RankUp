@@ -10,10 +10,12 @@
  * Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to swap in the real one.
  */
 
-import { PAIRING_STATUS, pairingStatus, MAX_ATTEMPTS } from '../pairing.js'
+import { PAIRING_STATUS, pairingStatus, MAX_ATTEMPTS, CODE_TTL_MS, generateCode } from '../pairing.js'
 
 const KEY = 'rankup.pairing.v1'
 const CHANNEL = 'rankup-pairing'
+// Codes a parent made for one child (0.22.0), on the same terms as the others.
+const CHILD_KEY = 'rankup.childcodes.v1'
 
 function readAll() {
   try {
@@ -42,6 +44,21 @@ function broadcast(code) {
     // BroadcastChannel is missing in a few older browsers; the storage event
     // listener in watchCode covers those.
   }
+}
+
+function readChild() {
+  try {
+    return JSON.parse(localStorage.getItem(CHILD_KEY) || '{}')
+  } catch {
+    return {}
+  }
+}
+
+function writeChild(records) {
+  const cutoff = Date.now() - 60 * 60 * 1000
+  const kept = Object.fromEntries(Object.entries(records).filter(([, r]) => (r.usedAt || r.expiresAt) > cutoff))
+  localStorage.setItem(CHILD_KEY, JSON.stringify(kept))
+  return kept
 }
 
 export const localAdapter = {
@@ -172,5 +189,40 @@ export const localAdapter = {
     all[code] = { ...all[code], attempts: Math.min(MAX_ATTEMPTS, (all[code].attempts || 0) + 1) }
     writeAll(all)
     return { attempts: all[code].attempts }
+  },
+
+  /** The parent's side of a code made for one child: kept in this browser. */
+  async makeChildCode({ kidId, kidName, themeId, familyName }) {
+    const all = readChild()
+    for (const [c, r] of Object.entries(all)) if (r.kidId === kidId && !r.usedAt) delete all[c]
+    let code
+    do { code = generateCode() } while (all[code] && !all[code].usedAt && all[code].expiresAt > Date.now())
+    const expiresAt = Date.now() + CODE_TTL_MS
+    all[code] = { kidId, kidName, themeId, familyName, expiresAt, attempts: 0, usedAt: null }
+    writeChild(all)
+    broadcast(code)
+    return { ok: true, code, expiresAt }
+  },
+
+  /** Calls back with the record each time it changes, until stopped. */
+  watchChildCode(code, onChange) {
+    const emit = () => onChange(readChild()[code] || null)
+    const onStorage = (e) => { if (e.key === CHILD_KEY) emit() }
+    window.addEventListener('storage', onStorage)
+    const poll = setInterval(emit, 1500)
+    return () => { clearInterval(poll); window.removeEventListener('storage', onStorage) }
+  },
+
+  async useChildCode(code) {
+    const all = readChild()
+    const r = all[code]
+    if (!r) return { ok: false, reason: 'not_found' }
+    if (r.usedAt) return { ok: false, reason: 'used' }
+    if (r.attempts >= MAX_ATTEMPTS) return { ok: false, reason: 'blocked' }
+    if (r.expiresAt <= Date.now()) return { ok: false, reason: 'expired' }
+    all[code] = { ...r, usedAt: Date.now() }
+    writeChild(all)
+    broadcast(code)
+    return { ok: true, kid: { id: r.kidId, name: r.kidName, themeId: r.themeId }, familyName: r.familyName || null }
   },
 }

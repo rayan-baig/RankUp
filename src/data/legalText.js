@@ -18,7 +18,7 @@ import { priceWords } from '../lib/plans.js'
 import { SCHOOL_PRICES, SCHOOL_TRIAL_DAYS, SCHOOL_CHAMPION_TRIAL_DAYS, SCHOOL_YEAR_MONTHS, SCHOOL_MIN_STUDENTS, DISTRICT_DISCOUNTS, DISTRICT_MIN_SCHOOLS, PILOT_DEFAULT_DAYS, dollars } from '../lib/schools.js'
 import { GIFT_CODE_YEARS, GIFT_RECIPIENT_DAYS } from '../lib/giftRules.js'
 
-export const CONSENT_VERSION = '2026-11'
+export const CONSENT_VERSION = '2026-12'
 export const LAST_UPDATED = 'November 2026'
 /*
  * 2026-11 is the notice below, word for word as supabase/consent.sql stores
@@ -47,6 +47,12 @@ export const LAST_UPDATED = 'November 2026'
  * new consent version: a pause is about the family's billing, kept on the
  * family's own record, and nothing more is collected about a child.
  *
+ * 2026-12 (0.22.0) is 2026-11 without the guild section, because guilds are
+ * switched off: the notice describes only what is on. It collects less, so
+ * consents given to 2026-01 and 2026-11 stay valid. Switching guilds on needs
+ * a new version that describes them, and every parent asked again
+ * (docs/LEGAL.md).
+ *
  * The policy and terms were updated for the School League without a new
  * consent version: joining a school is a
  * separate, explicit choice a parent makes on the School League screen, which
@@ -57,9 +63,12 @@ export const LAST_UPDATED = 'November 2026'
 /**
  * Who runs RankUp. RankUp is a product of MTRX Horizyn, the company, and
  * lives on a subdomain of its domain (rankup.mtrxhorizyn.com). The contact
- * email and postal address are the company's, filled in once the domain and
- * the registered address exist; the app shows a warning banner until then.
- * The company's details only, never a person's.
+ * email and postal address are the company's. The postal address is left
+ * empty until the company has one (a PO box or a mailbox service): until then
+ * the pages give the email address in its place, and the reminder to fill it
+ * in is for the owner only (docs/LAUNCH.md section 5, and the operator page),
+ * never a banner on the public pages. The company's details only, never a
+ * person's.
  *
  * The consent notice below does not name the operator, so naming the company
  * here needed no new consent version.
@@ -67,7 +76,8 @@ export const LAST_UPDATED = 'November 2026'
 export const OPERATOR = {
   name: 'MTRX Horizyn',
   email: 'help@mtrxhorizyn.com',
-  address: '[YOUR POSTAL ADDRESS]',
+  // The company's postal address, once it has one. Empty until then.
+  address: '',
 }
 
 /** One sentence, used wherever RankUp says who is behind it. */
@@ -83,8 +93,18 @@ function schoolPriceList() {
   return bands.join(', ')
 }
 
-/** The fields of OPERATOR still holding a placeholder. */
-export const UNFILLED = Object.entries(OPERATOR).filter(([, v]) => v.startsWith('[')).map(([k]) => k)
+/** The fields of OPERATOR still to fill in: empty, or holding a placeholder. */
+export const UNFILLED = Object.entries(OPERATOR).filter(([, v]) => !String(v).trim() || String(v).startsWith('[')).map(([k]) => k)
+
+/**
+ * How to reach the company, for the end of both pages: the email address
+ * always, and the postal address once there is one. Never a placeholder.
+ */
+export function contactLines() {
+  const lines = [`Write to us at ${OPERATOR.email}. A person reads every message.`]
+  if (!UNFILLED.includes('address')) lines.push(`By post: ${OPERATOR.name}, ${OPERATOR.address}.`)
+  return lines
+}
 
 export const CONSENT_NOTICE = {
   version: CONSENT_VERSION,
@@ -114,12 +134,9 @@ export const CONSENT_NOTICE = {
       ],
     },
     {
-      heading: 'Guilds, if you use them',
+      heading: 'Guilds are switched off',
       body: [
-        'A guild lets your child see other children\'s first names, levels and weekly XP, and exchange short messages with them.',
-        'Nobody joins a guild until a parent on each side has agreed — yours, and the other child\'s.',
-        'Phone numbers, email addresses and links are blocked in guild chat. Any child can report a message, which hides it immediately and shows it to both parents.',
-        'You can remove your child from a guild at any moment.',
+        'Guilds, where children from different families team up, are switched off. If we ever switch them on, we will ask you first.',
       ],
     },
     {
@@ -261,6 +278,10 @@ export const PRIVACY_POLICY = {
         'If we change what we collect, we will publish a new version and ask for your consent again. We keep a record of exactly which version you agreed to and when.',
       ],
     },
+    {
+      heading: 'Contact us',
+      body: contactLines(),
+    },
   ],
 }
 
@@ -318,6 +339,10 @@ export const TERMS = {
       body: [
         'RankUp is provided as-is. We work hard to keep it running and your data safe, but we cannot promise it will never be unavailable or never lose data. Keep anything you truly cannot lose somewhere else too.',
       ],
+    },
+    {
+      heading: 'Contact us',
+      body: contactLines(),
     },
   ],
 }

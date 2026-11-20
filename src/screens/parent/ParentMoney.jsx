@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { potFor } from '../../state/reducer.js'
 import { fetchAllowance, mergeFrom, allowanceRecord } from '../../lib/allowance.js'
-import { formatMoney } from '../../lib/money.js'
+import { formatMoney, familyCurrency } from '../../lib/money.js'
 import { navigate } from '../../lib/router.js'
 import { Screen, Card, Button } from '../../components/ui.jsx'
 import EmptyNext from '../../components/EmptyNext.jsx'
@@ -21,7 +21,7 @@ export default function ParentMoney({ initialKidId = null }) {
   const { state, dispatch } = useApp()
   const [kidId, setKidId] = useState(
     state.kids.some((k) => k.id === initialKidId) ? initialKidId : state.kids[0]?.id || null)
-  const currency = state.family.currency || 'GBP'
+  const currency = familyCurrency(state.family)
   const money = (p) => formatMoney(p, currency)
 
   useEffect(() => {

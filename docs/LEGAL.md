@@ -111,10 +111,17 @@ version, and the newest is the only one a new parent can sign.
 
 - **2026-01**, the first, still describes photographs taken in the app and an
   AI photo check. RankUp has neither now. It stays as it was.
-- **2026-11** is the same notice without them, and is what new parents sign.
+- **2026-11** is the same notice without them.
+- **2026-12** (0.22.0) is 2026-11 without the guild section ("exchange short
+  messages", "guild chat"), because guilds are switched off: the notice
+  describes only what is on, and says "Guilds are switched off. If we ever
+  switch them on, we will ask you first." It is what new parents sign.
+  **Switching guilds on (`VITE_GUILDS_ENABLED`) needs a new version that
+  describes them, and every existing parent asked again first**: that is
+  collecting more, and the screen that asks is not built yet.
 
 A new version does not undo the consents already given: a version that only
-collects **less** (as 2026-11 does) needs nobody to consent again, so families
+collects **less** (as 2026-11 and 2026-12 do) needs nobody to consent again, so families
 who signed 2026-01 carry on. A version that collects **more** would need every
 existing parent asked again before the new collection starts. That is not
 built: it needs `has_valid_consent` to require the new version and a screen
@@ -133,7 +140,8 @@ one child, on a screen that says exactly what will be shown (Parent Mode →
 Settings → Leaderboards). Every existing and new child starts in Adventure, so
 nothing about any child became visible to anyone new by the update itself.
 Guild chat became ready-made messages only at the same time; that collects
-less, and the notice's guild section ("exchange short messages") still holds.
+less. (Since 0.22.0 the notice, version 2026-12, has no guild section at all,
+because guilds are switched off; see "Consent notice versions".)
 
 What Arena shows strangers, and nothing else: a nickname made of two words from
 fixed lists and two digits (never typed; changed at most weekly; the lists are

@@ -522,8 +522,10 @@ names the required ones that are not set (an empty list when all is well).
       `help@mtrxhorizyn.com` (set up forwarding for it in section 4). Still to
       fill in: the company's registered postal address, such as a PO box or
       a mailbox service. The company's, never a person's: this repository and
-      the app are public. The app shows a warning banner until it is filled
-      in. Both help pages end with "Still stuck? Write to …" with the email.
+      the app are public. Until it is filled in, the privacy policy and
+      terms give the email address in its place ("Contact us"), and the
+      reminder shows on the operator page (`#/operator`), never on the public
+      pages. Both help pages end with "Still stuck? Write to …" with the email.
       The consent notice does not name the operator, so this needs no new
       consent version.
 - [ ] Read the privacy policy and terms in that file from start to finish. They
@@ -624,10 +626,11 @@ Free things worth doing first, either way:
 - [ ] The purchaser must be the parent. Payments are behind the parent PIN and a
       child's phone has no way to a payment screen; check that yourself on a
       real child's phone.
-- [ ] The Sunday Market is a timed-scarcity mechanic aimed at children, and a
-      Flash Ticket is a paid way out of missing one. Regulators look hard at
-      that. What keeps it defensible: it sells only cosmetics, shows no
-      countdown, and every skin comes back. Keep all three true.
+- [ ] The Skin Market (was the Sunday Market) sells only cosmetics, is always
+      open, has no rarity labels and no countdown, and a child's phone never
+      shows a real-money price (0.22.0). A Flash Ticket is bought by a parent
+      in Parent Mode only. Keep all of that true: regulators look hard at
+      timed shops and paid shortcuts aimed at children.
 - [ ] Price, renewal date and how to cancel shown before payment.
 - [ ] A refund policy, written down and reachable from the app.
 - [ ] Stripe Tax switched on.

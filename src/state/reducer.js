@@ -2,7 +2,7 @@ import { uid, forAction, now as clock } from '../lib/id.js'
 import { dayKey, daysBetween, deviceZone } from '../lib/dates.js'
 import { submissionReward, levelFromXp, liveStreak } from '../lib/xp.js'
 import { createInitialState, TIERS, makeKid } from './initialState.js'
-import { findSkin, isMarketOpen, ticketCost } from '../data/marketSkins.js'
+import { findSkin, ticketCost } from '../data/marketSkins.js'
 import { DAILY_COIN_CAP, MAX_TOKENS, possibleScore, coinsForScore } from '../data/minigames.js'
 import { ENTITIES, familyGoals, weeklyLimitOf } from '../lib/sync/mappers.js'
 import { pendingRows } from '../lib/sync/shadow.js'
@@ -10,6 +10,7 @@ import { questsDueToReturn, dayOf } from '../lib/recurrence.js'
 import { STICKER_MAP } from '../data/stickers.js'
 import { foldLevelUp, foldStreak } from '../lib/moments.js'
 import { applyPrune } from '../lib/prune.js'
+import { CURRENCIES, currencyForRegion, DEFAULT_CURRENCY } from '../lib/money.js'
 import { MAX_KID_THEMES, NAME_MAX, CREDIT_MAX, cleanDesign, themeProblem, seasonProblem, SEASON_BRAND_MESSAGE, customThemeId } from '../data/themeGenesis.js'
 import { plainName } from '../lib/kidWords.js'
 
@@ -243,6 +244,14 @@ export function rewardRedemptionsThisWeek(state, kidId, rewardId, now = clock())
     .sort((a, b) => (a.at || 0) - (b.at || 0))
 }
 
+/**
+ * Has this child sent a chore today (their phone's day)? The daily chore
+ * bonus is offered only then: it rewards doing a chore, not opening the app.
+ */
+export function choreSentToday(state, kidId, today = dayKey()) {
+  return (state.submissions || []).some((s) => s.kidId === kidId && s.submittedAt && dayKey(new Date(s.submittedAt)) === today)
+}
+
 /** How many more times this child may take it in the next seven days; null when it has no limit. */
 export function rewardLeftThisWeek(state, kidId, reward, now = clock()) {
   const limit = weeklyLimitOf(reward?.weeklyLimit)
@@ -432,6 +441,12 @@ function reduce(state, action) {
             subscriptionEndsAt: family.subscription_ends_at || null,
             // The day weekly chores come back; see recurrenceDue.
             weekResetsOn: family.week_resets_on ?? null,
+            // The money sign for pocket money (set_family_currency). A choice
+            // still on its way to the server wins over the older answer.
+            currency: pending.has('family_currency')
+              ? next.family.currency
+              : family.currency || next.family.currency || DEFAULT_CURRENCY,
+            currencyChosen: Boolean(family.currency_chosen),
           },
         }
       }
@@ -531,6 +546,28 @@ function reduce(state, action) {
     }
 
     /**
+     * This phone typed a code its parent made for one child (0.22.0), and is
+     * now that child. No name was typed and no world picked here: both are
+     * the parent's, so there is never a second profile from a misspelt name.
+     * The family id comes with the first pull, as after the other kind of code.
+     */
+    case 'LINKED_BY_CODE': {
+      const { kid: linkedKid, familyName, real } = action
+      if (!linkedKid?.id) return state
+      const kid = { ...makeKid({ name: linkedKid.name, themeId: linkedKid.themeId }), id: linkedKid.id }
+      const next = {
+        ...state,
+        onboarded: true,
+        device: { role: 'kid', linkedKidId: kid.id, familyName: familyName || 'your family', pairedAt: clock() },
+        pendingPairing: null,
+        family: { ...state.family, id: real ? null : state.family.id, name: familyName || state.family.name },
+        kids: [kid],
+        session: { role: 'kid', kidId: kid.id, parentUnlocked: false },
+      }
+      return logEvent(next, { type: 'device_paired', kidId: kid.id })
+    }
+
+    /**
      * The parent's side: a code was accepted, so this kid joins the family.
      * If a profile with that name already exists it is linked rather than
      * duplicated — a parent who set the kid up here first, then handed them a
@@ -573,15 +610,23 @@ function reduce(state, action) {
 
     case 'COMPLETE_ONBOARDING': {
       const { family, kid, guildName } = action
-      const next = {
+      /*
+       * The money sign, guessed once from the phone's region (en-GB is
+       * pounds, anything unknown is US dollars) and saved to the account if
+       * it is not the default. A parent can change it in Settings.
+       */
+      const currency = family.currency
+        || currencyForRegion(typeof navigator === 'undefined' ? '' : navigator.language)
+      let next = {
         ...state,
         onboarded: true,
         device: { ...state.device, role: 'parent', linkedKidId: null },
-        family: { ...state.family, ...family },
+        family: { ...state.family, ...family, currency },
         kids: [...state.kids, kid],
         guild: { ...state.guild, name: guildName || `${family.name || kid.name}'s Guild`, leaderKidId: kid.id },
         session: { role: 'parent', kidId: kid.id, parentUnlocked: true },
       }
+      if (currency !== DEFAULT_CURRENCY) next = queueRpc(next, 'set_family_currency', { p_currency: currency }, 'set_family_currency')
       return logEvent(next, { type: 'family_created', kidId: kid.id })
     }
 
@@ -845,6 +890,14 @@ function reduce(state, action) {
      * null for "seven days after it was done". The database decides which
      * chores reopen, so it has to know the day too.
      */
+    /** The money sign in front of pocket money, chosen in Settings. */
+    case 'SET_FAMILY_CURRENCY': {
+      const code = String(action.currency || '').toUpperCase()
+      if (!CURRENCIES.some((c) => c.code === code)) return state
+      return queueRpc({ ...state, family: { ...state.family, currency: code, currencyChosen: true } },
+        'set_family_currency', { p_currency: code }, 'set_family_currency')
+    }
+
     case 'SET_WEEK_RESET_DAY': {
       const day = action.day >= 1 && action.day <= 7 ? Math.round(action.day) : null
       return queueRpc({ ...state, family: { ...state.family, weekResetsOn: day } },
@@ -852,16 +905,15 @@ function reduce(state, action) {
     }
 
     /**
-     * Buy a Sunday Market skin with the child's own currency.
+     * Buy a Skin Market skin with the child's own currency.
      *
-     * Refused unless the market is actually open, so a tampered clock in the
-     * browser is the only way round it — and that only cheats them out of the
-     * occasion, never out of XP, because skins are paint.
+     * The market is always open (0.22.0); buy_market_skin decides whether
+     * they can afford it.
      */
     case 'BUY_SKIN': {
       const kid = state.kids.find((k) => k.id === action.kidId)
       const skin = findSkin(action.skinId)
-      if (!kid || !skin || !isMarketOpen()) return state
+      if (!kid || !skin) return state
       if ((kid.skins || []).includes(skin.id)) return state
       if (kid.coins < skin.cost) return state
       const next = mapKid(state, kid.id, (k) => ({
@@ -884,7 +936,7 @@ function reduce(state, action) {
     case 'CLAIM_SKIN_WITH_TICKET': {
       const kid = state.kids.find((k) => k.id === action.kidId)
       const skin = findSkin(action.skinId)
-      if (!kid || !skin || !isMarketOpen()) return state
+      if (!kid || !skin) return state
       if ((kid.skins || []).includes(skin.id)) return state
       // Rarer skins cost more tickets. buy_market_skin decides the real price;
       // this is the local copy so the button can be disabled honestly.
@@ -1530,7 +1582,7 @@ function reduce(state, action) {
         notes: state.notes.map((n) => (n.kidId === action.kidId && n.from !== action.as ? { ...n, read: true } : n)),
       }
 
-    /* ---------- System Override Protocol (Elite) ---------- */
+    /* ---------- Pause and limits (Elite; was the System Override Protocol) ---------- */
 
     case 'APPLY_OVERRIDE': {
       const { kidId, kind, reason, consequence } = action
@@ -1689,6 +1741,9 @@ function reduce(state, action) {
       const today = dayKey()
       // A day later than today (a zone change) still counts as claimed.
       if (!kid || (kid.lastLoginBonus && kid.lastLoginBonus >= today)) return state
+      // The daily chore bonus: for a chore sent today, never for opening the
+      // app (claim_login_bonus refuses it the same way).
+      if (!choreSentToday(state, kid.id)) return state
       const coins = 5
       let next = mapKid(state, kid.id, (k) => ({ ...k, coins: k.coins + coins, lastLoginBonus: today }))
       // The zone, so the server stamps the claim with this phone's day rather

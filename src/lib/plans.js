@@ -129,10 +129,10 @@ export function planLines(tier, { guilds = false } = {}) {
     lines.push(`${tier.xpMultiplier}× XP on every accepted chore`)
   }
   if (l.overdrive && !b.overdrive) lines.push('Overdrive: the richer look, on every world')
-  if (l.profileFrames && !b.profileFrames) lines.push('Profile frames and rare drop styles for your kids')
-  if (l.consequenceEngine && !b.consequenceEngine) lines.push('The Consequence Engine: your own house rules, with Currency Tax and Lockouts')
+  if (l.profileFrames && !b.profileFrames) lines.push('Profile frames and reward pop-up styles for your kids')
+  if (l.consequenceEngine && !b.consequenceEngine) lines.push('Pause and limits: your own house rules in one place')
   if (l.blueprints && !b.blueprints) lines.push('Behaviour Blueprints: weekly charts of what got done')
-  if (l.alliances && !b.alliances) lines.push('Parent Alliances: win 20% off a month')
+  if (l.alliances && !b.alliances) lines.push('Parent Alliances: a friendly monthly contest with other families')
   lines.push(`Everything in ${below.name}`)
   return lines
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { effectiveTier, onTrial, trialDaysLeft } from '../../state/reducer.js'
 import { TIERS, TIER_LADDER, PLAN_COMPARISON, ELITE_KID_PERKS, ELITE_PARENT_PERKS } from '../../state/initialState.js'
-import { billingLive, startCheckout, openBillingPortal, fetchBillingStatus, billingError, billingNotice, keepPlan, keepOffers, PAUSE_MONTHS, planDate } from '../../lib/billing.js'
+import { noPaymentsWords, billingLive, startCheckout, openBillingPortal, fetchBillingStatus, billingError, billingNotice, keepPlan, keepOffers, PAUSE_MONTHS, planDate } from '../../lib/billing.js'
 import { Screen, Card, Button, SectionTitle, Banner, Chip, Modal } from '../../components/ui.jsx'
 import InviteCard from '../../components/InviteCard.jsx'
 import GiftPlanCard from '../../components/GiftPlanCard.jsx'
@@ -121,7 +121,7 @@ export default function ParentPlan() {
   }
 
   return (
-    <Screen>
+    <Screen className="lg:max-w-5xl">
       <h1 className="font-display text-2xl font-extrabold mb-1">Plans</h1>
       {/*
         A new family is on a free trial of Elite. This said "You are on
@@ -181,8 +181,8 @@ export default function ParentPlan() {
           )}
         </>
       ) : (
-        <Banner tone="info" icon="💳" title="Payments are switched off">
-          Switch between the plans and try any of them. No card is asked for and nothing is charged.
+        <Banner tone="info" icon="💳" title={noPaymentsWords(state, 'plan').title}>
+          {noPaymentsWords(state, 'plan').body}
         </Banner>
       )}
 
@@ -219,7 +219,8 @@ export default function ParentPlan() {
       </div>
       )}
 
-      <div className="mt-3 space-y-3">
+      {/* Side by side on a wide screen, one under another on a phone. */}
+      <div className="mt-3 grid gap-3 lg:grid-cols-3 lg:items-start" data-testid="plan-cards">
         {TIER_LADDER.map((tier, i) => {
           const active = tier.id === current
           const below = TIER_LADDER[i - 1]
@@ -477,7 +478,7 @@ export default function ParentPlan() {
           currency and streaks stay exactly where they are.
         </p>
         <p className="text-xs text-muted">
-          No payment is taken — billing is not connected on this deployment.
+          {state.demo ? 'Nothing is charged: this is the pretend family.' : 'No payment is taken: payments are not set up on this copy of RankUp.'}
         </p>
       </Modal>
     </Screen>

@@ -4,7 +4,7 @@ import { useApp } from '../state/AppContext.jsx'
 import { effectiveTier } from '../state/reducer.js'
 import { inParentMode } from '../lib/upgradeNudge.js'
 import { ELITE_KID_PERKS, ELITE_PARENT_PERKS, TIERS } from '../state/initialState.js'
-import { billingLive } from '../lib/billing.js'
+import { billingLive, noPaymentsWords } from '../lib/billing.js'
 import { priceTag } from '../lib/plans.js'
 import { guildsEnabled } from '../lib/guilds.js'
 import { navigate } from '../lib/router.js'
@@ -50,8 +50,8 @@ export default function EliteGate({ icon, title, body, perk }) {
       </Button>
 
       {!billingLive() && (
-        <Banner tone="info" icon="💳" className="mt-3" title="Payments are switched off">
-          You can turn Elite on and try it. Nothing is charged and no card is asked for.
+        <Banner tone="info" icon="💳" className="mt-3" title={noPaymentsWords(state, 'elite').title}>
+          {noPaymentsWords(state, 'elite').body}
         </Banner>
       )}
 

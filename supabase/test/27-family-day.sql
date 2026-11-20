@@ -66,6 +66,23 @@ do $$ begin
              pg_temp.fd_today() <> (now() at time zone 'UTC')::date, pg_temp.fd_tz());
 end $$;
 
+-- ---------- the daily bonus is for doing a chore, not for opening the app ----------
+do $$
+declare res jsonb;
+begin
+  set local role postgres;
+  update submissions set submitted_at = now() - interval '2 days'
+   where id = '7a666666-0000-0000-0000-000000000001';
+  set local role app_user;
+  perform become('7a111111-0000-0000-0000-0000000000c1');
+  res := claim_login_bonus('7a444444-0000-0000-0000-0000000000a1');
+  perform ok('with no chore sent today, the bonus is not paid', res->>'reason' = 'no_chore_today', res::text);
+  perform ok('and nothing is recorded as claimed',
+             (select last_login_bonus from kids where id = '7a444444-0000-0000-0000-0000000000a1') is null);
+  set local role postgres;
+  update submissions set submitted_at = now() where id = '7a666666-0000-0000-0000-000000000001';
+end $$;
+
 -- ---------- the daily bonus is stamped with the family's day ----------
 do $$
 declare res jsonb;

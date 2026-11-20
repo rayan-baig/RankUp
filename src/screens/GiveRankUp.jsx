@@ -4,7 +4,7 @@ import { Card, Button, Field, TextInput, TextArea, Banner, Chip } from '../compo
 import { TIERS } from '../state/initialState.js'
 import { usd, planLines } from '../lib/plans.js'
 import { guildsEnabled } from '../lib/guilds.js'
-import { giftsLive, startGiftCheckout } from '../lib/billing.js'
+import { giftsLive, startGiftCheckout, noPaymentsWords } from '../lib/billing.js'
 import { navigate } from '../lib/router.js'
 import { useApp } from '../state/AppContext.jsx'
 import {
@@ -35,6 +35,7 @@ const kept = () => { try { return JSON.parse(sessionStorage.getItem(KEPT) || 'nu
  * list and lib/giftRules.js.
  */
 export default function GiveRankUp({ query = '' }) {
+  const { state } = useApp()
   const params = new URLSearchParams(query)
   const paid = params.get('paid') === '1'
   const cancelled = params.get('cancelled') === '1'
@@ -101,8 +102,8 @@ export default function GiveRankUp({ query = '' }) {
       )}
       {!live && (
         <div className="mb-3">
-          <Banner tone="info" icon="💳" title="Payments are switched off">
-            Gifts cannot be bought on this copy of RankUp. Everything else on this page works.
+          <Banner tone="info" icon="💳" title={noPaymentsWords(state, 'gift').title}>
+            {noPaymentsWords(state, 'gift').body}
           </Banner>
         </div>
       )}

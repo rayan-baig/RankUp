@@ -7,7 +7,7 @@ import { Screen, Card, Button, SectionTitle, Banner, Chip, TextInput, Modal, Pro
 import EliteGate from '../../components/EliteGate.jsx'
 
 /**
- * The 20% Discount Tournament.
+ * Parent Alliances: a friendly monthly contest (was the 20% Discount Tournament).
  *
  * Up to ten FAMILIES form an alliance and compete on a monthly leaderboard. The
  * family that has the most quests approved that month gets 20% off their next
@@ -57,8 +57,8 @@ export default function ParentAlliance() {
       <EliteGate
         perk="alliance"
         icon="🏆"
-        title="The 20% Discount Tournament"
-        body="Form a ten-family Parent Alliance and compete on a monthly leaderboard. The family with the most approved quests wins 20% off the following month — earned, not bought."
+        title="Parent Alliances"
+        body="A friendly monthly contest with up to ten families, counted on chores accepted. The family on top gets 20% off the following month."
       />
     )
   }
