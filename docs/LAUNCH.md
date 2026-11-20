@@ -238,7 +238,7 @@ Seven jobs:
 | `/api/refresh-leaderboards` | every 10 minutes | The leaderboards stop moving: a child in Arena never appears on them, and every board shows the last run's places (weekly and monthly boards still empty at their reset) |
 | `/api/send-digests` | hourly | The weekly digest never goes out |
 | `/api/send-trial-emails` | hourly | No email three days before a free trial ends, or on the day, no reminder three days before a paused plan starts again, no reminder 14 days before a school's pilot ends, and no error report to `ERRORS_EMAIL`. Needs `EMAIL_API_KEY` and `EMAIL_FROM` ([EMAILS.md](EMAILS.md)) |
-| `/api/run-retention` | daily | Old activity piles up, and a deleted family's Stripe cancellation that failed is never retried |
+| `/api/run-retention` | daily | Old activity piles up, a deleted family's Stripe cancellation that failed is never retried, and the Seasons stop starting by themselves (it also runs the Season autopilot and emails its reminders) |
 | `/api/settle-alliances` | monthly (the 2nd) | Nobody is ever given their 20% discount |
 | `/api/settle-schools` | monthly (the 2nd) | No District Champion, no School Stars, no free month, and no monthly email to each school's admin |
 
@@ -639,6 +639,36 @@ Free things worth doing first, either way:
       "Cancel my plan", past the pause offer, to Stripe's cancel page.
 - [ ] Pause a real monthly subscription for a month, check Stripe shows the
       collection paused until the date, then start it again.
+
+### The deals (0.23.0; all optional, docs/PAYMENTS.md, "Deals")
+
+- [ ] In Stripe, Products, Coupons, make the coupons you want (the table in
+      docs/PAYMENTS.md, "Coupons to make in Stripe"), and put each id and its
+      percent in the settings: `STRIPE_FOUNDING_COUPON` and `FOUNDING_PERCENT`
+      (plus `FOUNDING_FAMILIES_LIMIT`, default 500, and `FOUNDING_ENDS_AT`);
+      `STRIPE_GIFT_SALE_COUPON`, `GIFT_SALE_PERCENT`, `GIFT_SALE_FROM`,
+      `GIFT_SALE_TO`; `STRIPE_SEASON_COUPON`, `SEASON_DEAL_PERCENT`,
+      `SEASON_DEAL_ON`. **Each percent must be its coupon's own.** Leave any
+      deal's settings empty and that deal is simply off.
+- [ ] In Stripe's webhook settings, add `checkout.session.expired` to the
+      endpoint's events (a Founding checkout left unpaid gives its place back).
+- [ ] In the plan-change portal configuration (`STRIPE_PORTAL_PLAN_CHANGE_CONFIG`),
+      turn prorations on, invoiced immediately, so "keep what you have paid"
+      credits the rest of the month against the year.
+- [ ] Check on a real child's phone that no deal, price or offer shows on any
+      of its screens.
+
+### On launch day: Season 1
+
+- [ ] Open the operator page (`#/operator`, Theme submissions) and set
+      **Launch day**. Season 1, the Founding Season, starts that day and each
+      Season 4 months after the one before, by themselves.
+- [ ] Write the same day in docs/SEASONS.md: `Launch date: YYYY-MM-DD`.
+- [ ] Optional: switch on pg_cron in Supabase (Database, Extensions) and run
+      `supabase/sync.sql` again; it then schedules the autopilot itself. The
+      daily `/api/run-retention` job runs it either way.
+- [ ] Optional: `SEASONS_EMAIL` for the reminder seven days before a Season
+      with no new theme (otherwise it goes to `ERRORS_EMAIL`).
 
 ## 10. Then, the important one
 

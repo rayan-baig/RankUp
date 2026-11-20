@@ -5,6 +5,7 @@ import { TIERS, TIER_LADDER, PLAN_COMPARISON, ELITE_KID_PERKS, ELITE_PARENT_PERK
 import { noPaymentsWords, billingLive, startCheckout, openBillingPortal, fetchBillingStatus, billingError, billingNotice, keepPlan, keepOffers, PAUSE_MONTHS, planDate } from '../../lib/billing.js'
 import { Screen, Card, Button, SectionTitle, Banner, Chip, Modal } from '../../components/ui.jsx'
 import InviteCard from '../../components/InviteCard.jsx'
+import { useDeals, FoundingCard, SeasonDealBanner } from '../../components/DealCards.jsx'
 import GiftPlanCard from '../../components/GiftPlanCard.jsx'
 import { giftState, giftDate } from '../../lib/giftRules.js'
 import { guildsEnabled } from '../../lib/guilds.js'
@@ -34,6 +35,14 @@ export default function ParentPlan() {
   const [error, setError] = useState('')
   const [status, setStatus] = useState(null)
   const live = billingLive()
+  /*
+   * The deals on now (0.23.0), from the server: Founding Families on the
+   * yearly plan, the Season's deal. Null in the demo, without payments, and
+   * on a child's phone (which never reaches this screen anyway).
+   */
+  const deals = useDeals()
+  const founding = live && deals?.founding && !status?.has_subscription ? deals.founding : null
+  const seasonYearly = live && !founding && deals?.season?.on === 'yearly' ? deals.season : null
   // A gift plan, running or waiting for the paid one to end.
   const gift = giftState(state.family)
   /*
@@ -112,7 +121,7 @@ export default function ParentPlan() {
     }
     setBusy(true)
     setError('')
-    const result = await startCheckout(tier.id, cycle)
+    const result = await startCheckout(tier.id, cycle, founding && cycle === 'year' ? 'founding' : null)
     if (!result.ok) {
       setError(billingError(result.reason))
       setBusy(false)
@@ -188,6 +197,14 @@ export default function ParentPlan() {
 
       {error && <p className="text-sm mt-3" style={{ color: 'var(--bad)' }} role="alert">{error}</p>}
 
+      {/* Deals, for a parent, with their real end dates (src/lib/deals.js). */}
+      {(founding || seasonYearly) && (
+        <div className="mt-3">
+          <FoundingCard deal={founding} onChoose={cycle === 'year' ? null : () => setCycle('year')} />
+          <SeasonDealBanner deal={seasonYearly} />
+        </div>
+      )}
+
       {/*
         What a year saves is the whole pitch for annual, so it is stated on the
         control rather than hidden inside the cards a tap away (yearlyNote:
@@ -258,6 +275,17 @@ export default function ParentPlan() {
                     ${saving.saved} saved a year
                   </Chip>
                 )}
+                {/* The saving, worked out from the plan list's own two
+                    prices (annualSaving): "Save 30%", and "2 months free"
+                    or more when a year costs a whole number of months less. */}
+                {tier.price > 0 && saving && (
+                  <Chip tone="var(--good)" data-testid={`save-badge-${tier.id}`}>
+                    Save {saving.percent}% yearly{saving.monthsFree ? ` · ${saving.monthsFree} months free` : saving.savedCents >= 2 * toCents(tier.price) ? ' · 2 months free+' : ''}
+                  </Chip>
+                )}
+                {yearly && founding && (
+                  <Chip tone="var(--accent)" data-testid={`founding-badge-${tier.id}`}>First year {founding.percent}% off</Chip>
+                )}
               </div>
               {yearly && (
                 <p className="text-xs text-muted mt-1.5">
@@ -318,6 +346,32 @@ export default function ParentPlan() {
       <div className="mt-4">
         <InviteCard compact />
       </div>
+
+      {/* Standard or Elite? What Elite adds, line by line, from the plan list. */}
+      <SectionTitle>Standard or Elite?</SectionTitle>
+      <Card flat className="mb-4" data-testid="standard-or-elite">
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <p className="font-display font-extrabold">{TIERS.standard.name}</p>
+            <p className="text-xs text-muted mb-2">{priceTag(TIERS.standard)}</p>
+            <ul className="space-y-1">
+              {planLines(TIERS.standard, PLAN_OPTS).filter((l) => !l.startsWith('Everything in')).map((l) => (
+                <li key={l} className="text-xs flex gap-1.5"><span className="text-good" aria-hidden="true">✓</span><span>{l}</span></li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <p className="font-display font-extrabold">{TIERS.elite.name}</p>
+            <p className="text-xs text-muted mb-2">{priceTag(TIERS.elite)}</p>
+            <ul className="space-y-1">
+              <li className="text-xs flex gap-1.5"><span className="text-good" aria-hidden="true">✓</span><span>Everything in {TIERS.standard.name}, and:</span></li>
+              {planLines(TIERS.elite, PLAN_OPTS).filter((l) => !l.startsWith('Everything in')).map((l) => (
+                <li key={l} className="text-xs flex gap-1.5"><span className="text-accent" aria-hidden="true">+</span><span>{l}</span></li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </Card>
 
       <SectionTitle>Side by side</SectionTitle>
       <Card flat className="mb-4 p-0 overflow-x-auto">

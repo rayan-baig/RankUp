@@ -26,12 +26,14 @@ import HowItWorks from '../../components/HowItWorks.jsx'
 import FirstWeek from '../../components/FirstWeek.jsx'
 import DemoTour from '../../components/DemoTour.jsx'
 import UpgradeNudge from '../../components/UpgradeNudge.jsx'
+import { useDeals, GiftSaleBanner, GiftAYearCard } from '../../components/DealCards.jsx'
 import EmptyNext from '../../components/EmptyNext.jsx'
 import { EMPTY_STATES } from '../../data/emptyStates.js'
 import { STARTER_REWARDS } from '../../lib/firstWeek.js'
 
 export default function ParentDashboard() {
   const { state, dispatch } = useApp()
+  const deals = useDeals()
   const elite = useElite()
   const pending = pendingSubmissions(state)
   // Rewards a child has spent their currency on and is waiting to be given.
@@ -120,6 +122,10 @@ export default function ParentDashboard() {
       <UpgradeNudge />
       {/* After the first accepted chore, once; never on a child's phone. */}
       <InstallPrompt />
+      {/* The deals (0.23.0): the holiday gift sale while it is on, and "Gift a
+          year" a month in. Parent Mode only. */}
+      <GiftSaleBanner sale={deals?.gift_sale || null} />
+      {!deals?.gift_sale && <GiftAYearCard />}
 
       <div className="flex gap-2 mb-3">
         <Stat icon="📥" value={pending.length} label="To review" tone={pending.length ? 'var(--warn)' : undefined} />

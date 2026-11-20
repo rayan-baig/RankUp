@@ -6,6 +6,7 @@ import { storyProgress, dragonFight, DRAGON_HP, HERO_HP } from '../../lib/dragon
 import { dayKey } from '../../lib/dates.js'
 import Avatar, { avatarTier, tiersFor } from '../../components/Avatar.jsx'
 import { nextMilestone, milestoneWords } from '../../lib/avatarTiers.js'
+import { foundingSeason, foundingSeasonChores, FOUNDING_SEASON_CHORES } from '../../data/badges.js'
 import { isMarketOpen } from '../../data/marketSkins.js'
 import QuestCard from '../../components/QuestCard.jsx'
 import { Screen, Card, Button, ProgressBar, Stat, SectionTitle, EmptyState, Banner, Chip } from '../../components/ui.jsx'
@@ -37,6 +38,10 @@ export default function KidHome() {
   const story = storyProgress(state, kid)
   const evolution = nextEvolution(kid.themeId, level, story)
   const milestone = nextMilestone(level, theme, evolution)
+  // Season 1, the Founding Season: its badge, earned by doing chores.
+  const founding = foundingSeason(state)
+  const foundingNow = Boolean(founding && Date.now() >= founding.start && Date.now() < founding.end)
+  const foundingDone = foundingNow ? foundingSeasonChores(state, kid) : 0
   /* Themes told as a story (Block Craft): the newest chapter not yet
      watched, and the dragon fight while it is on. */
   const chapters = storyChapters(kid.themeId, level, story)
@@ -90,6 +95,21 @@ export default function KidHome() {
 
       <SyncBadge />
       <SeasonMoment />
+      {foundingNow && (
+        <Card className="mb-3" data-testid="founding-season-banner">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl" aria-hidden="true">🌟</span>
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-sm">Season 1: the Founding Season</div>
+              <div className="text-xs text-muted">
+                {foundingDone >= FOUNDING_SEASON_CHORES
+                  ? 'You earned the Founding Season badge. It is yours to keep.'
+                  : `Do ${FOUNDING_SEASON_CHORES} chores this Season for the Founding Season badge: ${foundingDone} done.`}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
       <ArenaMoment kidId={kid.id} me={me} />
       <PickedNotice who="kid" />
       {/*

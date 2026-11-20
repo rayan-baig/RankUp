@@ -3,6 +3,7 @@ import { navigate } from '../lib/router.js'
 import { seasonToCelebrate, buildTheme, seasonThemeId, creditLine } from '../data/themeGenesis.js'
 import { ThemeSwatch } from './ThemePreview.jsx'
 import { Button } from './ui.jsx'
+import { FOUNDING_SEASON_CHORES } from '../data/badges.js'
 
 /**
  * "New Season!": once, on a child's home screen, the first time this phone
@@ -22,8 +23,13 @@ export default function SeasonMoment() {
         <p className="text-[11px] uppercase tracking-[0.3em] font-bold" style={{ color: 'var(--accent-2)' }}>Season {season.number}</p>
         <h2 className="font-display text-3xl font-extrabold leading-tight mt-1">New Season!</h2>
         <p className="text-sm text-muted mb-3">{season.name}</p>
+        {season.number === 1 && (
+          <p className="text-sm mb-3" data-testid="founding-season-event">
+            🌟 The Founding Season: do {FOUNDING_SEASON_CHORES} chores this Season to earn the Founding Season badge.
+          </p>
+        )}
         <div className="text-left mb-4">
-          {season.themes.map((t) => (
+          {(season.themes || []).map((t) => (
             <div key={t.id} className="flex items-center gap-3 py-2" style={{ borderTop: '1px solid var(--line)' }}>
               <ThemeSwatch theme={buildTheme({ id: seasonThemeId(t.id), name: t.name, design: t.design })} size={44} />
               <div className="min-w-0">
@@ -33,10 +39,12 @@ export default function SeasonMoment() {
             </div>
           ))}
         </div>
-        <p className="text-xs text-muted mb-3">New themes, made by RankUp players. Find them in your theme picker on the You tab.</p>
+        {(season.themes || []).length > 0 && (
+          <p className="text-xs text-muted mb-3">New themes, made by RankUp players. Find them in your theme picker on the You tab.</p>
+        )}
         <div className="flex gap-2">
           <Button variant="ghost" className="flex-1" onClick={seen}>Later</Button>
-          <Button className="flex-1" onClick={() => { seen(); navigate('/kid/profile') }}>See them</Button>
+          <Button className="flex-1" onClick={() => { seen(); navigate('/kid/profile') }}>{(season.themes || []).length ? 'See them' : 'My badges'}</Button>
         </div>
       </div>
     </div>

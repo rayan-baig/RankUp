@@ -1590,6 +1590,15 @@ drop policy if exists seasons_read on seasons;
 create policy seasons_read on seasons
   for select to authenticated using (starts_on <= (now() at time zone 'utc')::date);
 
+-- Launch day, for the Season autopilot (0.23.0; the rest is after the operator's functions).
+create table if not exists season_plan (
+  id         int primary key default 1 check (id = 1),
+  launch_on  date,
+  updated_at timestamptz not null default now()
+);
+alter table season_plan enable row level security;
+revoke all on season_plan from public, anon, authenticated;
+
 create table if not exists theme_submissions (
   id              uuid primary key default gen_random_uuid(),
   family_id       uuid not null references families(id) on delete cascade,
@@ -1739,6 +1748,8 @@ language sql stable security definer set search_path = public as $$
                'status', ts.status, 'season', se.number, 'created_at', ts.created_at)
              order by ts.created_at desc)
         from theme_submissions ts left join seasons se on se.id = ts.season_id), '[]'::jsonb),
+    -- Launch day and the rule (0.23.0): the console shows when each Season starts.
+    'launch_on', (select launch_on from season_plan where id = 1),
     'seasons', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', s.id, 'number', s.number, 'name', s.name, 'starts_on', s.starts_on,
@@ -1816,6 +1827,206 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 revoke execute on function operator_remove_theme(uuid) from public, anon, authenticated;
+
+/* ---------- Season autopilot (0.23.0) ---------- */
+
+/*
+ * Seasons by the calendar, with themes the owner has picked.
+ *
+ * Season 1 starts on launch day, which the owner sets once in the operator
+ * console (operator_set_launch_date). Each Season after starts 4 months after
+ * the one before: Season n starts on launch day + 4 x (n - 1) months. Every
+ * day the autopilot (run_season_autopilot) makes the next Season ahead of
+ * time (a Season is secret until its first day: the seasons_read policy), and
+ * puts into it the themes the owner has queued for it. On the first day every
+ * family's app sees it and shows "New Season!" by itself.
+ *
+ * A theme a child made is NEVER published without the owner's pick: only a
+ * theme the owner queued (operator_queue_theme) or picked (operator_pick_theme)
+ * goes into a Season. If nothing is queued the Season still starts, with its
+ * event and its deal and no new theme, and the owner is emailed a reminder
+ * seven days before (season_reminders; api/run-retention.js sends it).
+ *
+ * docs/SEASONS.md is the plan in words, for the monthly task that builds the
+ * Seasons' content.
+ */
+-- 'queued': picked by the owner for the next Season, before it has been made.
+alter table theme_submissions drop constraint if exists theme_submissions_status_check;
+alter table theme_submissions drop constraint if exists theme_submissions_status_values;
+alter table theme_submissions add constraint theme_submissions_status_values
+  check (status in ('new', 'queued', 'picked', 'declined'));
+
+-- One reminder per Season, sent once.
+create table if not exists season_reminders (
+  season_number int primary key,
+  starts_on     date not null,
+  created_at    timestamptz not null default now(),
+  sent_at       timestamptz
+);
+alter table season_reminders enable row level security;
+revoke all on season_reminders from public, anon, authenticated;
+
+/** The rule: Season n starts 4 months after Season n - 1, Season 1 on launch day. */
+create or replace function season_start_for(p_launch date, p_number int) returns date
+language sql immutable as $$
+  select case when p_launch is null or p_number is null or p_number < 1 then null
+              else (p_launch + make_interval(months => 4 * (p_number - 1)))::date end
+$$;
+revoke all on function season_start_for(date, int) from public, anon, authenticated;
+
+/** What a Season is called: Season 1 is the Founding Season. */
+create or replace function season_name_for(p_number int) returns text
+language sql immutable as $$
+  select case when p_number = 1 then 'Founding Season' else 'Season ' || p_number end
+$$;
+revoke all on function season_name_for(int) from public, anon, authenticated;
+
+/** Launch day, set by the owner in the console. Changeable until Season 1 has started. */
+create or replace function operator_set_launch_date(p_launch date)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if p_launch is null or p_launch < date '2026-01-01' or p_launch > date '2100-01-01' then
+    return jsonb_build_object('ok', false, 'reason', 'bad_date');
+  end if;
+  if exists (select 1 from seasons where number = 1 and starts_on <= (now() at time zone 'utc')::date) then
+    return jsonb_build_object('ok', false, 'reason', 'season_started');
+  end if;
+  insert into season_plan (id, launch_on, updated_at) values (1, p_launch, now())
+  on conflict (id) do update set launch_on = excluded.launch_on, updated_at = now();
+  -- A Season 1 already made ahead for the old date moves with it.
+  update seasons set starts_on = p_launch where number = 1 and starts_on > (now() at time zone 'utc')::date;
+  return jsonb_build_object('ok', true, 'launch_on', p_launch);
+end $$;
+revoke all on function operator_set_launch_date(date) from public, anon, authenticated;
+
+/** "Queue for the next Season": the owner's pick, before that Season exists. */
+create or replace function operator_queue_theme(p_submission_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_status text;
+begin
+  select status into v_status from theme_submissions where id = p_submission_id for update;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_submission'); end if;
+  if v_status = 'picked' then return jsonb_build_object('ok', false, 'reason', 'already_picked'); end if;
+  update theme_submissions set status = 'queued', decided_at = now() where id = p_submission_id;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke all on function operator_queue_theme(uuid) from public, anon, authenticated;
+
+/**
+ * The daily job. Idempotent: run it twice in a day, or every hour, and the
+ * second run changes nothing. Called by pg_cron where it is switched on
+ * (below), and by the daily /api/run-retention job either way, which also
+ * emails the reminders. Server only.
+ *
+ * 1. With no launch day set, it does nothing.
+ * 2. It makes every Season due to start within the next 30 days that does not
+ *    exist yet (a Season made by hand with the same number is left alone).
+ * 3. It moves every queued theme into the next Season that has not started.
+ * 4. Seven days before a Season starts with no theme in it, it records one
+ *    reminder for the owner.
+ */
+create or replace function run_season_autopilot(p_today date default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_today   date := coalesce(p_today, (now() at time zone 'utc')::date);
+  v_launch  date;
+  v_n       int := 1;
+  v_start   date;
+  v_made    int[] := '{}';
+  v_next    seasons;
+  v_moved   int := 0;
+  v_remind  jsonb := null;
+begin
+  perform pg_advisory_xact_lock(hashtext('season_autopilot'));
+  select launch_on into v_launch from season_plan where id = 1;
+  if v_launch is null then return jsonb_build_object('ok', true, 'idle', 'no_launch_date'); end if;
+
+  loop
+    v_start := season_start_for(v_launch, v_n);
+    exit when v_start > v_today + 30 or v_n > 999;
+    if not exists (select 1 from seasons where number = v_n) then
+      insert into seasons (number, name, starts_on) values (v_n, season_name_for(v_n), v_start);
+      v_made := v_made || v_n;
+    end if;
+    v_n := v_n + 1;
+  end loop;
+
+  select * into v_next from seasons where starts_on > v_today order by starts_on, number limit 1;
+  if found then
+    with q as (
+      update theme_submissions ts set status = 'picked', season_id = v_next.id, decided_at = now()
+       where ts.status = 'queued'
+      returning ts.id, ts.payload, ts.credit, ts.source_theme_id)
+    , ins as (
+      insert into season_themes (season_id, submission_id, name, design, credit)
+      select v_next.id, q.id, q.payload->>'name', q.payload->'design', q.credit from q
+      returning 1)
+    select count(*) into v_moved from ins;
+    update kid_themes k set picked_season = v_next.number
+      from theme_submissions ts
+     where ts.season_id = v_next.id and ts.source_theme_id = k.id and k.picked_season is null;
+
+    if v_next.starts_on - v_today <= 7
+       and not exists (select 1 from season_themes where season_id = v_next.id) then
+      insert into season_reminders (season_number, starts_on) values (v_next.number, v_next.starts_on)
+      on conflict (season_number) do nothing;
+      if found then
+        v_remind := jsonb_build_object('number', v_next.number, 'name', v_next.name, 'starts_on', v_next.starts_on);
+      end if;
+    end if;
+  end if;
+
+  return jsonb_build_object('ok', true, 'made', to_jsonb(v_made), 'moved', v_moved,
+                            'next', case when v_next.id is null then null
+                                         else jsonb_build_object('number', v_next.number, 'starts_on', v_next.starts_on) end,
+                            'reminder', v_remind);
+end $$;
+revoke all on function run_season_autopilot(date) from public, anon, authenticated;
+
+/** The reminders not yet emailed, for the daily job. */
+create or replace function due_season_reminders() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('number', r.season_number, 'starts_on', r.starts_on,
+                                               'name', coalesce(s.name, season_name_for(r.season_number)))
+                            order by r.season_number), '[]'::jsonb)
+    from season_reminders r left join seasons s on s.number = r.season_number
+   where r.sent_at is null;
+$$;
+revoke all on function due_season_reminders() from public, anon, authenticated;
+
+create or replace function mark_season_reminder_sent(p_number int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  update season_reminders set sent_at = now() where season_number = p_number and sent_at is null;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_reminder'); end if;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke all on function mark_season_reminder_sent(int) from public, anon, authenticated;
+
+/**
+ * The newest Season that has started, for the Season's deal (the server
+ * works out the deal's 14 days from its first day). Server only: a family's
+ * app reads Seasons through live_seasons.
+ */
+create or replace function current_season() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('number', s.number, 'name', s.name, 'starts_on', s.starts_on)
+    from seasons s where s.starts_on <= (now() at time zone 'utc')::date
+   order by s.starts_on desc, s.number desc limit 1;
+$$;
+revoke all on function current_season() from public, anon, authenticated;
+
+-- pg_cron, where the project has it switched on (Supabase: Database,
+-- Extensions, pg_cron): the autopilot every day at 05:17 UTC. Without it the
+-- daily /api/run-retention job runs it instead, so nothing depends on this.
+do $$
+begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    execute $cron$select cron.schedule('rankup-season-autopilot', '17 5 * * *', 'select public.run_season_autopilot()')$cron$;
+  end if;
+exception when others then
+  raise notice 'pg_cron not scheduled: %', sqlerrm;
+end $$;
 
 -- kid_words_ok, kid_theme_name_ok and kid_theme_design_ok stay callable: the
 -- guard above runs as the browser that is writing, and asks them. They read

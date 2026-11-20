@@ -21,6 +21,7 @@ import { recordRun } from './_shared/job.js'
 import { makeStripe } from './_shared/stripe.js'
 import { cancelPendingBilling } from './_shared/cancelBilling.js'
 import { timedFetch, JOB_TIMEOUT_MS } from './_shared/http.js'
+import { sendEmail, emailSettings, emailConfigured, seasonReminderEmail } from './_shared/email.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -68,6 +69,38 @@ function secretMatches(given) {
   return diff === 0
 }
 
+/**
+ * The Season autopilot (supabase/sync.sql, run_season_autopilot), once a
+ * day with the rest of the daily clean-up, whether or not pg_cron runs it
+ * too: it is idempotent. Then the owner's reminders, seven days before a
+ * Season with no new theme, each emailed once (to SEASONS_EMAIL, or else
+ * ERRORS_EMAIL), with an idempotency key so a retried send is one email.
+ * A failure here is reported in the answer and never fails the clean-up.
+ */
+async function seasonAutopilot() {
+  try {
+    const run = await serviceRpc('run_season_autopilot', {})
+    const to = process.env.SEASONS_EMAIL || process.env.ERRORS_EMAIL || ''
+    const s = emailSettings()
+    let emailed = 0
+    if (to && emailConfigured(s)) {
+      const due = (await serviceRpc('due_season_reminders', {})) || []
+      for (const r of due) {
+        // eslint-disable-next-line no-await-in-loop
+        const sent = await sendEmail({ to, ...seasonReminderEmail(r, { site: process.env.PUBLIC_SITE_URL || '' }), idempotencyKey: `season-reminder-${r.number}` }, s)
+        if (sent.ok) {
+          // eslint-disable-next-line no-await-in-loop
+          await serviceRpc('mark_season_reminder_sent', { p_number: r.number })
+          emailed += 1
+        }
+      }
+    }
+    return { ok: true, made: run?.made || [], moved: run?.moved || 0, reminders_emailed: emailed, ...(run?.idle ? { idle: run.idle } : {}) }
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err).slice(0, 120) }
+  }
+}
+
 export default async function handler(req, res) {
   // GET as well as POST: Vercel's scheduler issues GET, and a POST-only handler
   // would 405 on every run while still looking scheduled. The shared secret,
@@ -98,8 +131,9 @@ export default async function handler(req, res) {
     const billing = STRIPE_SECRET
       ? await cancelPendingBilling({ stripe: makeStripe(STRIPE_SECRET), serviceRpc, limit: 200 })
       : { skipped: 'stripe_not_configured' }
+    const seasons = await seasonAutopilot()
     await recordRun(serviceRpc, 'run-retention', true)
-    return res.status(200).json({ ...(result || { ok: true }), billing_cancellations: billing })
+    return res.status(200).json({ ...(result || { ok: true }), billing_cancellations: billing, seasons })
   } catch (err) {
     await recordRun(serviceRpc, 'run-retention', false, err.message)
     return res.status(502).json({ error: 'retention_failed' })

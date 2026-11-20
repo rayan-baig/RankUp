@@ -186,10 +186,54 @@ export const BADGES = [
   },
 ]
 
+/**
+ * Season 1, the Founding Season (0.23.0), as the server sent it: its first
+ * day, and the day Season 2 starts (4 months on, docs/SEASONS.md). Null
+ * until Season 1 has started.
+ */
+export const FOUNDING_SEASON_CHORES = 10
+export function foundingSeason(state) {
+  const s1 = (state?.seasons || []).find((s) => s.number === 1)
+  const start = s1 ? Date.parse(`${s1.startsOn}T00:00:00Z`) : NaN
+  if (!Number.isFinite(start)) return null
+  const end = new Date(start)
+  end.setUTCMonth(end.getUTCMonth() + 4)
+  return { start, end: end.getTime(), name: s1.name }
+}
+
+/** Chores this child had accepted during Season 1. */
+export function foundingSeasonChores(state, kid) {
+  const season = foundingSeason(state)
+  if (!season || !kid) return 0
+  return approvedFor(state, kid.id).filter((s) => {
+    const at = s.decidedAt || s.submittedAt
+    return at >= season.start && at < season.end
+  }).length
+}
+
+/*
+ * A limited-time badge, and honest about it: earned only by doing chores
+ * during Season 1, never bought, and kept for good. It is on the shelf only
+ * from the day Season 1 starts, and after Season 1 only for a child who
+ * earned it: never a locked badge that can no longer be had.
+ */
+BADGES.push({
+  id: 'founding-season',
+  emoji: '🌟',
+  name: 'Founding Season',
+  blurb: `${FOUNDING_SEASON_CHORES} chores done in Season 1, the Founding Season.`,
+  progress: (state, kid) => ({ have: foundingSeasonChores(state, kid), need: FOUNDING_SEASON_CHORES }),
+  shown: (state, kid, now = Date.now()) => {
+    const season = foundingSeason(state)
+    if (!season) return false
+    return now < season.end || foundingSeasonChores(state, kid) >= FOUNDING_SEASON_CHORES
+  },
+})
+
 /** Every badge, with whether it is earned and how close the rest are. */
 export function badgeState(state, kid) {
   if (!kid) return []
-  return BADGES.map((badge) => {
+  return BADGES.filter((badge) => !badge.shown || badge.shown(state, kid)).map((badge) => {
     const { have, need } = badge.progress(state, kid)
     return { ...badge, have, need, earned: have >= need, fraction: Math.min(1, have / need) }
   })

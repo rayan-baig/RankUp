@@ -155,6 +155,8 @@ begin
                              'school_month_scores','school_awards','school_rivalry_results',
                              'school_top_students', 'push_sends',
                              'pairing_codes','pairing_claim_attempts','child_link_codes',
+                             -- Founding Families' places and the Season autopilot (0.23.0).
+                             'founding_places','season_plan','season_reminders',
                              'reminder_schedules','digest_sends','trial_reminder_sends','job_runs',
                              'crash_reports','billing_events','push_subscriptions',
                              'parental_consents','deletions','referrals',

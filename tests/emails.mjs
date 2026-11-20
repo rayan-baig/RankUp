@@ -22,7 +22,7 @@
 import { readFileSync } from 'node:fs'
 import {
   trialEmail, pauseReminderEmail, schoolMonthEmail, errorReportEmail, giftReceiptEmail, giftEmail, districtQuoteEmail,
-  pilotReminderEmail, pilotRequestEmail, districtTakeoverEmail,
+  pilotReminderEmail, pilotRequestEmail, districtTakeoverEmail, seasonReminderEmail,
 } from '../api/_shared/email.js'
 import { TIERS } from '../src/state/initialState.js'
 import { PRODUCT_OF } from '../src/data/legalText.js'
@@ -173,6 +173,10 @@ for (const site of [SITE, '']) {
     { source: 'server', where: 'create-checkout', message: 'create_checkout failed: 500', count: 1, new: false },
     { source: 'server', where: 'send-trial-emails', message: '2 email(s) not sent', count: 2, new: false },
   ]
+  // The owner's Season reminder, with and without the day (0.23.0).
+  for (const r of [{ number: 2, name: 'Season 2', starts_on: '2027-07-01' }, { number: 1, name: 'Founding Season', starts_on: null }]) {
+    add(`season reminder, Season ${r.number}, ${r.starts_on ? 'with' : 'without'} the day, ${site ? 'with' : 'without'} a site`, seasonReminderEmail(r, { site }))
+  }
   add(`error report, one error, ${site ? 'with' : 'without'} a site`, errorReportEmail({ kinds: errorKinds.slice(0, 1), more: 0 }, { site }))
   add(`error report, three and more to come, ${site ? 'with' : 'without'} a site`, errorReportEmail({ kinds: errorKinds, more: 4 }, { site }))
 }
@@ -182,8 +186,8 @@ console.log('\n=== Every email RankUp sends itself is rendered here ===')
 const source = readFileSync(new URL('../api/_shared/email.js', import.meta.url), 'utf8')
 const builders = [...source.matchAll(/^export function (\w+Email)\(/gm)].map((m) => m[1])
 const rendered = ['trialEmail', 'pauseReminderEmail', 'schoolMonthEmail', 'errorReportEmail', 'giftReceiptEmail', 'giftEmail', 'districtQuoteEmail',
-  'pilotReminderEmail', 'pilotRequestEmail', 'districtTakeoverEmail']
-ok(`the builders in api/_shared/email.js are the ten rendered here (${builders.join(', ')})`,
+  'pilotReminderEmail', 'pilotRequestEmail', 'districtTakeoverEmail', 'seasonReminderEmail']
+ok(`the builders in api/_shared/email.js are the eleven rendered here (${builders.join(', ')})`,
   builders.length === rendered.length && builders.every((b) => rendered.includes(b)),
   `a new one needs its variants added to tests/emails.mjs: ${builders.filter((b) => !rendered.includes(b)).join(', ')}`)
 ok(`${emails.length} emails rendered`, emails.length > 100)

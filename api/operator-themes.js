@@ -31,6 +31,11 @@ const ACTIONS = {
     && rpc('operator_decline_theme', { p_submission_id: b.submission_id }),
   remove: (rpc, b) => UUID.test(String(b.submission_id || ''))
     && rpc('operator_remove_theme', { p_submission_id: b.submission_id }),
+  // The Season autopilot (0.23.0): queue a theme for the next Season, and launch day.
+  queue: (rpc, b) => UUID.test(String(b.submission_id || ''))
+    && rpc('operator_queue_theme', { p_submission_id: b.submission_id }),
+  launch: (rpc, b) => DAY.test(String(b.launch_on || ''))
+    && rpc('operator_set_launch_date', { p_launch: b.launch_on }),
   season: (rpc, b) => Number.isInteger(Number(b.number)) && typeof b.name === 'string' && DAY.test(String(b.starts_on || ''))
     && rpc('operator_create_season', { p_number: Number(b.number), p_name: b.name.slice(0, 40), p_starts_on: b.starts_on }),
 }
@@ -51,7 +56,7 @@ export default async function handler(req, res) {
       const act = ACTIONS[body?.action]
       const pending = act ? act(rpc, body) : false
       if (!pending) {
-        return res.status(400).json({ error: 'Say one of: pick, decline, remove (with submission_id), or season (number, name, starts_on).' })
+        return res.status(400).json({ error: 'Say one of: pick (submission_id, season_id), queue, decline, remove (submission_id), season (number, name, starts_on), or launch (launch_on).' })
       }
       const result = await pending
       // The database's reason (no_submission, season_started, …), for the page to say.

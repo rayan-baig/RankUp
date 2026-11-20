@@ -40,6 +40,17 @@ exec npx wrangler pages dev dist --port "$PORT" --compatibility-flags nodejs_com
   --binding STRIPE_PRICE_ELITE_YEAR=price_test_elite_year \
   --binding STRIPE_PRICE_FLASH_5=price_test_flash_5 \
   --binding STRIPE_SAVE_COUPON=rankup-test-half-month \
+  --binding STRIPE_FOUNDING_COUPON=rankup-test-founding \
+  --binding FOUNDING_PERCENT=40 \
+  --binding FOUNDING_FAMILIES_LIMIT=500 \
+  --binding FOUNDING_ENDS_AT=2099-12-31 \
+  --binding STRIPE_GIFT_SALE_COUPON=rankup-test-gift-sale \
+  --binding GIFT_SALE_PERCENT=25 \
+  --binding GIFT_SALE_FROM=2026-01-01 \
+  --binding GIFT_SALE_TO=2099-12-31 \
+  --binding STRIPE_SEASON_COUPON=rankup-test-season \
+  --binding SEASON_DEAL_PERCENT=20 \
+  --binding SEASON_DEAL_ON=yearly \
   --binding STRIPE_PORTAL_PLAN_CHANGE_CONFIG=bpc_test_plan_change \
   --binding STRIPE_PRICE_GIFT_STANDARD_YEAR=price_test_gift_standard_year \
   --binding STRIPE_PRICE_GIFT_ELITE_YEAR=price_test_gift_elite_year \

@@ -390,7 +390,9 @@ export const SEASON_NEWS_DAYS = 14
 export function seasonToCelebrate(state, now = Date.now()) {
   const fresh = (state?.seasons || []).filter((s) => {
     const start = Date.parse(`${s.startsOn}T00:00:00Z`)
-    return s.themes?.length && !state.seen?.[`season:${s.number}`]
+    // A Season with no new theme (nothing was queued) still starts, with its
+    // event, and is still news (0.23.0).
+    return !state.seen?.[`season:${s.number}`]
       && Number.isFinite(start) && start <= now && now - start <= SEASON_NEWS_DAYS * 86400000
   })
   return fresh[fresh.length - 1] || null

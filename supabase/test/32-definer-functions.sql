@@ -406,7 +406,16 @@ begin
     'finish_save_offer(uuid,boolean)', 'due_pause_reminders(timestamptz)', 'claim_pause_reminder(bigint)',
     'finish_pause_reminder(bigint,boolean)', 'count_plan_change(text)',
     -- The money sign's one-time move from pounds to dollars (0.22.0).
-    'upgrade_family_currency()']
+    'upgrade_family_currency()',
+    -- Founding Families: what /api/create-checkout, /api/deals and the
+    -- Stripe webhook call with the service key (0.23.0).
+    'founding_hold()', 'founding_places_taken()', 'founding_places_left(integer)',
+    'reserve_founding_place(uuid,integer,timestamptz)', 'note_founding_session(uuid,text)',
+    'confirm_founding_place(uuid,text)', 'release_founding_place(uuid,text)', 'family_paid_invoices(uuid)',
+    -- The Season autopilot: the daily job, the console and the deal's Season.
+    'run_season_autopilot(date)', 'operator_set_launch_date(date)', 'operator_queue_theme(uuid)',
+    'season_start_for(date,integer)', 'season_name_for(integer)', 'due_season_reminders()',
+    'mark_season_reminder_sent(integer)', 'current_season()']
   loop
     if to_regprocedure(f) is null then
       v_open := v_open || (f || ' (no longer exists — update this list)');

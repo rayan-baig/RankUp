@@ -72,6 +72,7 @@ begin
     insert into trial_reminder_sends (family_id, kind, trial_ends_at) values (f.fam, 'three_days', now());
     insert into plan_pauses (family_id, months, resumes_at) values (f.fam, 1, now() + interval '1 month');
     insert into push_sends (family_id) values (f.fam);
+    insert into founding_places (family_id, session_id) values (f.fam, 'cs_t31_' || f.tag);
     insert into child_link_codes (code, kid_id, family_id, expires_at)
       values (lpad((abs(hashtext(f.tag)) % 1000000)::text, 6, '0'), f.kid, f.fam, now() + interval '10 minutes');
     insert into crash_reports (family_id, where_at, message) values (f.fam, 'T31', 'T31');
@@ -92,6 +93,9 @@ insert into school_month_emails (school_id, month_key) values ('31a00000-0000-40
 -- The server's error log, what the error report remembers, and the daily
 -- usage counts: none of them is any family's, and none may be read by one.
 insert into server_errors (where_at, message) values ('t31', 'T31');
+-- The Season autopilot's own rows (0.23.0): no family in them, nobody reads them.
+insert into season_plan (id, launch_on) values (1, null) on conflict (id) do nothing;
+insert into season_reminders (season_number, starts_on) values (990, date '2099-01-01') on conflict do nothing;
 insert into error_report_kinds (fingerprint) values ('t31');
 insert into error_report_sends (kinds) values ('[]');
 select usage_bump('help_views');

@@ -323,6 +323,28 @@ export function errorReportEmail(report, { site } = {}) {
   return { subject, text, html: toHtml(paragraphs, null, help, foot) }
 }
 
+/**
+ * The owner's reminder, seven days before a Season starts with no new theme
+ * in it (supabase/sync.sql, run_season_autopilot). The Season starts either
+ * way; this is the moment to queue a theme if there is one worth it.
+ */
+export function seasonReminderEmail(r, { site } = {}) {
+  const number = Number(r?.number) || 0
+  const name = String(r?.name || `Season ${number}`)
+  const day = r?.starts_on ? dayName(`${r.starts_on}T12:00:00Z`) : 'in seven days'
+  const subject = `RankUp: ${name} starts ${r?.starts_on ? `on ${day}` : day} with no new theme`
+  const base = site ? site.replace(/\/+$/, '') : ''
+  const paragraphs = [
+    'Hello,',
+    `${name} (Season ${number}) starts ${r?.starts_on ? `on ${day}` : day}, and no theme has been picked for it yet.`,
+    'It starts either way, with its event and its deal. To add a theme children made, open the operator page, Theme submissions, and tap "Queue for next Season" on one you like. Queued themes go into the Season by themselves.',
+  ]
+  const help = `The operator page is #/operator on ${base ? base.replace(/^https?:\/\//, '') : 'the site'}, with the operator key. The plan for the Seasons is docs/SEASONS.md in RankUp's code.`
+  const foot = [PRODUCT_OF, 'You get this because ERRORS_EMAIL (or SEASONS_EMAIL) is set to this address. One email per Season, at most.']
+  const text = [...paragraphs, help, '--', ...foot].join('\n\n')
+  return { subject, text, html: toHtml(paragraphs, null, help, foot) }
+}
+
 const giftPlanName = (plan) => (TIERS[plan] || TIERS.elite).name
 const redeemHow = 'To redeem it, a parent opens RankUp (or sets it up, free), goes into Parent Mode, then Settings, Redeem a gift, and types the code.'
 

@@ -441,6 +441,8 @@ function reduce(state, action) {
             subscriptionEndsAt: family.subscription_ends_at || null,
             // The day weekly chores come back; see recurrenceDue.
             weekResetsOn: family.week_resets_on ?? null,
+            // When the family was made: "Gift a year" waits a month (0.23.0).
+            createdAt: family.created_at ? Date.parse(family.created_at) : next.family.createdAt ?? null,
             // The money sign for pocket money (set_family_currency). A choice
             // still on its way to the server wins over the older answer.
             currency: pending.has('family_currency')

@@ -15,6 +15,8 @@ import { makeStripe, stripeUnavailable } from './_shared/stripe.js'
 import { reportError, userHeaders } from './_shared/job.js'
 import { returnOrigin } from './_shared/site.js'
 import { timedFetch } from './_shared/http.js'
+import { foundingDeal, seasonDeal, settingCount, FOUNDING_DEFAULT_LIMIT } from '../src/lib/deals.js'
+import { dealSettings } from './deals.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -143,6 +145,50 @@ function giftEndFor(billing, now = Date.now()) {
 }
 const STRIPE_LONGEST_TRIAL = 730 * 86400
 
+/** The database, as the server itself (the service key): the deals' counts. */
+async function serviceRpc(fn, args) {
+  const res = await timedFetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+    body: JSON.stringify(args),
+  })
+  if (!res.ok) throw new Error(`${fn} failed: ${res.status}`)
+  const text = await res.text()
+  return text ? JSON.parse(text) : null
+}
+
+/**
+ * The deal for a yearly checkout, if one is on (src/lib/deals.js): Founding
+ * Families when the parent chose it and a place is held for them, otherwise
+ * the Season's deal on the yearly plan. One coupon, never two. Its id comes
+ * from the settings; no amount is ever named here. A Founding place is held
+ * in the database (reserve_founding_place) before Stripe is asked, so the
+ * count is real and the last place cannot be given twice; the webhook
+ * confirms it when Stripe says it was paid.
+ */
+async function yearlyDeal(familyId, wantFounding, now = Date.now()) {
+  const settings = dealSettings()
+  if (wantFounding) {
+    const deal = foundingDeal(settings, { now })
+    if (!deal) return { refused: 'deal_over' }
+    const held = await serviceRpc('reserve_founding_place', {
+      p_family_id: familyId,
+      p_limit: settingCount(settings.FOUNDING_FAMILIES_LIMIT, FOUNDING_DEFAULT_LIMIT),
+      p_ends_at: deal.endsAt ? new Date(deal.endsAt).toISOString() : null,
+    })
+    if (!held?.ok) return { refused: held?.reason === 'full' || held?.reason === 'ended' ? 'deal_over' : held?.reason || 'deal_over' }
+    return { coupon: deal.coupon, kind: 'founding' }
+  }
+  if (!String(settings.STRIPE_SEASON_COUPON || '').trim()) return null
+  try {
+    const s = await serviceRpc('current_season', {})
+    const deal = seasonDeal(settings, s ? { number: s.number, name: s.name, startsOn: s.starts_on } : null, { now })
+    return deal && deal.on === 'yearly' ? { coupon: deal.coupon, kind: `season_${deal.number}` } : null
+  } catch {
+    return null
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' })
@@ -205,6 +251,22 @@ export default async function handler(req, res) {
       message: 'PUBLIC_SITE_URL is not set on the server, so there is nowhere to send you back to.',
     })
   }
+  // A deal on the yearly plan (0.23.0). Asked for only on a yearly plan; a
+  // monthly checkout never carries one.
+  const wantFounding = !oneOff && body?.deal === 'founding'
+  if (wantFounding && cycle !== 'year') return res.status(400).json({ error: 'deal_yearly_only' })
+  let deal = null
+  if (!oneOff && cycle === 'year') {
+    try {
+      deal = await yearlyDeal(familyId, wantFounding)
+    } catch (err) {
+      await reportError('create-checkout:deal', err)
+      if (wantFounding) return res.status(502).json({ error: 'checkout_failed' })
+      deal = null
+    }
+    if (deal?.refused) return res.status(409).json({ error: deal.refused })
+  }
+
   const stripe = makeStripe(STRIPE_SECRET)
   const customer = billing.has_customer ? await existingCustomer(familyId) : null
   const giftEnd = oneOff ? null : giftEndFor(billing)
@@ -214,6 +276,16 @@ export default async function handler(req, res) {
   // The later of what is left of the in-app trial and the gift.
   const trialEnd = oneOff ? undefined : (Math.max(trialEndFor(billing) || 0, giftEnd || 0) || undefined)
 
+  /*
+   * The same request twice in a minute (a second tap, a retry after a lost
+   * answer) is the same checkout, never two: Stripe's idempotency key. A
+   * Founding checkout also closes when its held place lapses (two hours),
+   * so nobody can pay at the founding price after the place was given back;
+   * the time is worked out from the same minute, so a retry sends exactly the
+   * same request, as an idempotency key requires.
+   */
+  const minute = Math.floor(Date.now() / 60000)
+  const idempotencyKey = `checkout:${familyId}:${oneOff ? product : `${tier}:${cycle}`}:${deal?.kind || 'none'}:${minute}`
   try {
     const session = await stripe.checkout.sessions.create({
       mode: oneOff ? 'payment' : 'subscription',
@@ -223,7 +295,7 @@ export default async function handler(req, res) {
       // Both, because different webhook events surface different ones.
       metadata: oneOff
         ? { family_id: familyId, product, ticket_count: String(PRODUCTS[product].tickets) }
-        : { family_id: familyId, tier, cycle },
+        : { family_id: familyId, tier, cycle, ...(deal ? { deal: deal.kind } : {}), ...(deal?.kind === 'founding' ? { founding: '1' } : {}) },
       ...(oneOff ? {} : {
         subscription_data: {
           metadata: { family_id: familyId, tier, cycle },
@@ -238,8 +310,14 @@ export default async function handler(req, res) {
       cancel_url: oneOff
         ? `${origin}/#/parent/settings?tickets=cancelled`
         : `${origin}/#/parent/plan?checkout=cancelled`,
-      allow_promotion_codes: !oneOff,
-    })
+      // A deal's coupon, or a promotion code the parent types: Stripe takes
+      // one or the other, never both.
+      ...(deal ? { discounts: [{ coupon: deal.coupon }] } : { allow_promotion_codes: !oneOff }),
+      ...(deal?.kind === 'founding' ? { expires_at: (minute + 1) * 60 + 2 * 3600 } : {}),
+    }, { idempotencyKey })
+    if (deal?.kind === 'founding') {
+      await serviceRpc('note_founding_session', { p_family_id: familyId, p_session_id: session.id }).catch(() => null)
+    }
     return res.status(200).json({ url: session.url })
   } catch (err) {
     // Logged here, not returned: Stripe's message can describe this

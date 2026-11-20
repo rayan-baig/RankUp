@@ -60,6 +60,7 @@ const SUITES = {
     { file: 'quickchat.mjs' },
     { file: 'failsoft.mjs' },
     { file: 'speed.mjs' },
+    { file: 'seasonsdoc.mjs' },
   ],
   // The app in a real browser, against the dev server on :5173 and the mock
   // API on :54321 (supabase/test/up.sh starts both).
@@ -89,6 +90,7 @@ const SUITES = {
     { file: 'firstten.mjs', weight: 45 },
     { file: 'demolive.mjs', weight: 40 },
     { file: 'reviewfixes.mjs', weight: 45 },
+    { file: 'dealsui.mjs', weight: 45 },
     { file: 'notifications.mjs', weight: 19 },
     { file: 'plans.mjs', weight: 25 },
     { file: 'referrals.mjs', weight: 20 },
@@ -157,6 +159,7 @@ const SUITES = {
     { file: 'upgradenudge.mjs' },
     { file: 'firststeps.mjs' },
     { file: 'reviewrules.mjs' },
+    { file: 'dealrules.mjs' },
   ],
   // The server functions under workerd on :8788 (supabase/test/up.sh --cf).
   api: [
@@ -165,6 +168,8 @@ const SUITES = {
     { file: 'push.mjs' },
     { file: 'billingwalk.mjs' },
     { file: 'keepplan.mjs' },
+    // Last: it makes Seasons (and removes them) while it runs.
+    { file: 'deals.mjs' },
   ],
   // A production build: no secrets in it, the policy, the framed games.
   built: [

@@ -76,8 +76,9 @@ async function post(url, body) {
  * 'year' is a month, so an older phone that knows nothing about annual billing
  * keeps working exactly as it did.
  */
-export async function startCheckout(tier, cycle = 'month') {
-  const result = await post(CHECKOUT_URL, { tier, cycle: cycle === 'year' ? 'year' : 'month' })
+export async function startCheckout(tier, cycle = 'month', deal = null) {
+  const yearly = cycle === 'year'
+  const result = await post(CHECKOUT_URL, { tier, cycle: yearly ? 'year' : 'month', ...(yearly && deal === 'founding' ? { deal: 'founding' } : {}) })
   if (result.ok && result.url) window.location.href = result.url
   return result
 }
@@ -231,6 +232,7 @@ export function keepOffers(status) {
 }
 
 const GIFT_CHECKOUT_URL = import.meta.env?.VITE_GIFT_CHECKOUT_URL || '/api/gift-checkout'
+const DEALS_URL = '/api/deals'
 const REDEEM_GIFT_URL = import.meta.env?.VITE_REDEEM_GIFT_URL || '/api/redeem-gift'
 
 /**
@@ -283,6 +285,26 @@ export async function redeemGift(code) {
 }
 
 /** What the server says this family currently has. */
+/**
+ * The deals on now (api/deals.js), for Parent Mode and the Give page.
+ *
+ * Never on a child's phone and never in the demo: it refuses there rather
+ * than leaving it to each screen to remember. Null when it cannot be asked
+ * (no server, payments off, offline): then no deal is shown, never a guess.
+ */
+export async function fetchDeals(state) {
+  if (state?.device?.role === 'kid' || state?.demo || transport.isNetworkPaused()) return null
+  if (!STRIPE_ENABLED) return null
+  try {
+    const res = await fetch(DEALS_URL, { headers: { Accept: 'application/json' } })
+    if (!res.ok) return null
+    const data = await res.json()
+    return data?.ok ? { founding: data.founding || null, gift_sale: data.gift_sale || null, season: data.season || null } : null
+  } catch {
+    return null
+  }
+}
+
 export async function fetchBillingStatus() {
   if (!transport.isConfigured()) return null
   try {
@@ -304,6 +326,10 @@ export const BILLING_ERRORS = {
   suspended: 'This school is suspended. Contact us to sort it out.',
   already_subscribed: 'You already have a plan. Change it from “Manage billing or update card”, where Stripe swaps it over without charging you twice.',
   refunded_plan_renews: 'Your refunded plan is still set to renew. Cancel it from “Cancel my plan” first, so you are never charged for two plans.',
+  deal_over: 'That deal has just ended, so nothing was charged. The plans below are at their normal prices.',
+  deal_yearly_only: 'That deal is for the yearly plan.',
+  already_founding: 'Your family already has its Founding Families place.',
+  save_offer_recent: 'The Founding Families price is not on top of the half-price month. It can be chosen once that month is over.',
   gift_too_long: 'Your gift plans run for more than two years from now, longer than Stripe can wait to take a first payment. Choose a plan once less than two years of gift are left.',
   already_paying: 'Your school is already paying. Use “Card, invoices and cancelling” to change the plan.',
   district_pays: 'Your district pays for your school, so there is nothing to pay here.',
