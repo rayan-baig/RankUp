@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useApp } from '../state/AppContext.jsx'
 import { potFor } from '../state/reducer.js'
 import { fetchAllowance, mergeFrom } from '../lib/allowance.js'
-import { formatMoney } from '../lib/money.js'
+import { formatMoney, familyCurrency } from '../lib/money.js'
 import { Card } from './ui.jsx'
 import { CountUp } from './Motion.jsx'
 
@@ -20,7 +20,7 @@ import { CountUp } from './Motion.jsx'
  */
 export default function KidPot({ kidId }) {
   const { state, dispatch } = useApp()
-  const currency = state.family.currency || 'GBP'
+  const currency = familyCurrency(state.family)
 
   useEffect(() => {
     const at = Date.now()

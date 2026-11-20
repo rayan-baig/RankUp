@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useApp } from '../state/AppContext.jsx'
 import { potFor } from '../state/reducer.js'
 import { fetchAllowance, mergeFrom } from '../lib/allowance.js'
-import { formatMoney, parseMoney, symbolFor } from '../lib/money.js'
+import { formatMoney, parseMoney, symbolFor, familyCurrency } from '../lib/money.js'
 import { Card, Button, TextInput, Banner, Modal } from './ui.jsx'
 import { CountUp } from './Motion.jsx'
 import { navigate } from '../lib/router.js'
@@ -24,7 +24,7 @@ export default function PocketMoney({ kidId = null }) {
   const [amount, setAmount] = useState('')
   const [error, setError] = useState('')
 
-  const currency = state.family.currency || 'GBP'
+  const currency = familyCurrency(state.family)
   const kids = kidId ? state.kids.filter((k) => k.id === kidId) : state.kids
 
   useEffect(() => {

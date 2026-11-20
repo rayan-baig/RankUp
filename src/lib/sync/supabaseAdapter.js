@@ -131,4 +131,43 @@ export const supabaseAdapter = {
       return { ok: false, reason: 'unavailable' }
     }
   },
+
+  /** The parent's side of a code made for one child (0.22.0). */
+  async makeChildCode({ kidId }) {
+    try {
+      const result = await rpc('create_child_link_code', { p_kid_id: kidId })
+      if (!result?.ok) return { ok: false, reason: result?.reason || 'unavailable' }
+      return { ok: true, code: result.code, expiresAt: Date.parse(result.expires_at) }
+    } catch (err) {
+      console.warn('[RankUp] makeChildCode:', err.message)
+      return { ok: false, reason: 'unavailable' }
+    }
+  },
+
+  /** The parent's phone hears that the child joined through the next pull. */
+  watchChildCode() {
+    return () => {}
+  },
+
+  /** The child's phone: type the parent's code, become that child. */
+  async useChildCode(code) {
+    try {
+      let userId = transport.currentUserId()
+      if (!userId) {
+        const session = await transport.signInAnonymously()
+        userId = session?.user?.id || null
+      }
+      if (!userId) return { ok: false, reason: 'unavailable' }
+      const result = await rpc('redeem_child_link_code', { p_code: code })
+      if (!result?.ok) return { ok: false, reason: result?.reason || 'not_found' }
+      return {
+        ok: true,
+        kid: { id: result.kid_id, name: result.kid_name, themeId: result.theme_id },
+        familyName: result.family_name || null,
+      }
+    } catch (err) {
+      console.warn('[RankUp] useChildCode:', err.message)
+      return { ok: false, reason: 'unavailable' }
+    }
+  },
 }

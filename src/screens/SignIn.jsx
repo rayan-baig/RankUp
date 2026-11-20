@@ -83,6 +83,13 @@ export default function SignIn({ onDone, onBack, who = 'parent', startWith = 'si
         <Button className="w-full" disabled={busy || !email.trim() || password.length < 8} onClick={submit}>
           {busy ? 'Working…' : mode === 'signup' ? 'Create account' : 'Sign in'}
         </Button>
+        {mode === 'signup' && (
+          <p className="text-xs text-muted text-center mt-2" data-testid="agree-line">
+            By creating an account you agree to the{' '}
+            <a href="#/legal/terms" target="_blank" rel="noopener" className="underline">Terms</a> and the{' '}
+            <a href="#/legal/privacy" target="_blank" rel="noopener" className="underline">Privacy Policy</a>.
+          </p>
+        )}
 
         <button
           type="button"

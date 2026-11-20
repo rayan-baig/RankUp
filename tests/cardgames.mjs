@@ -1,5 +1,5 @@
 /**
- * The three card games, played to the end in a real browser.
+ * The card games, played to the end in a real browser, and no casino games.
  *
  * A card game that compiles is not a card game that works: the failures
  * these catch are a turn that never comes back, a deal that leaves the
@@ -83,26 +83,16 @@ async function playOut(labels, maxClicks = 120) {
   return { done: false, clicks: maxClicks }
 }
 
-console.log('\n=== Blackjack ===')
+console.log('\n=== No casino games in the arcade (0.22.0) ===')
 {
-  await open('Blackjack', /Hand \d+ of 6/)
-  const before = await page.evaluate(() => document.body.innerText)
-  ok('it deals a hand', /Hand 1 of 6/.test(before), before.slice(0, 120))
-  // Stand every time: six hands, no bust loops, and the dealer has to
-  // play itself out each time.
-  const out = await playOut([/^Stand$/, /^Deal$/])
-  ok('six hands play out and the round ends', out.done, `gave up after ${out.clicks} clicks`)
-  await page.screenshot({ path: `${SHOT_DIR}/cards-blackjack.png` })
-}
-
-console.log("\n=== Texas Hold'em ===")
-{
-  await open("Texas Hold", /Hand \d+ of 5/)
-  const before = await page.evaluate(() => document.body.innerText)
-  ok('it deals a hand', /Hand 1 of 5/.test(before), before.slice(0, 120))
-  const out = await playOut([/^Stay in$/, /^Deal$/])
-  ok('five hands play out and the round ends', out.done, `gave up after ${out.clicks} clicks`)
-  await page.screenshot({ path: `${SHOT_DIR}/cards-holdem.png` })
+  await page.evaluate(() => { window.location.hash = '/kid/arcade' })
+  await page.waitForTimeout(1200)
+  const text = await page.evaluate(() => document.body.innerText)
+  ok("no Texas Hold'em, no Blackjack and no draw poker", !/Hold.em|Blackjack|Royal Draw/i.test(text), text.match(/Hold.em|Blackjack|Royal Draw/i)?.[0])
+  // Back where the games below start from: open() presses anything named
+  // like "Arcade" first, which on the arcade itself is the Arcade shelf.
+  await page.evaluate(() => { window.location.hash = '/parent' })
+  await page.waitForTimeout(800)
 }
 
 console.log('\n=== Go Fish ===')

@@ -719,6 +719,120 @@ no Parent Mode. `tests/upgradenudge.mjs` holds the rules and
 
 ---
 
+## Deals (0.23.0)
+
+Five deals, all for parents. **None is ever on a child's phone**: a child's
+phone never even asks for them (`fetchDeals` in `src/lib/billing.js` refuses
+there and in the demo), and `tests/dealsui.mjs` checks every child's screen.
+No fake countdowns and no fake scarcity: every end date is the real one from
+the settings, and the Founding places left are counted in the database. The
+rules for when each one is on are in one place, `src/lib/deals.js`, used by
+the server (`/api/deals`, `/api/create-checkout`, `/api/gift-checkout`) and
+by Parent Mode, so the screen and the charge cannot disagree.
+
+**No price changes.** Every plan, gift and pack keeps its price. Each
+discount is a **Stripe coupon** whose id is a setting; the code never names an
+amount. The `*_PERCENT` settings only say on screen what the coupon takes, so
+**each must be the coupon's own percent**. One coupon per checkout: Founding
+Families first, then the Season's deal; for gifts, the holiday sale first,
+then the Season's deal. A checkout with a deal's coupon does not also take a
+promotion code (Stripe allows one or the other).
+
+`GET /api/deals` (no sign-in, kept 60 seconds) answers which deals are on:
+each one's percent and end date, and the Founding places left. Never a
+coupon id.
+
+### 1. Founding Families
+
+The first `FOUNDING_FAMILIES_LIMIT` families (default 500) on a **yearly**
+plan get the first year at a founding price.
+
+- **On** while `STRIPE_FOUNDING_COUPON` and `FOUNDING_PERCENT` are set, places
+  are left, and `FOUNDING_ENDS_AT` (a day, `YYYY-MM-DD`, the last day it
+  runs; empty for no end date) has not passed.
+- **The count is real.** Places left = the limit less the places Stripe has
+  confirmed less the places held for a checkout started in the last two
+  hours (`founding_places` in `supabase/billing.sql`). The plan screen shows
+  "312 places left" from that count; if it cannot be counted, it shows no
+  number at all.
+- **How a place is taken.** "Subscribe" on the yearly plan, with the Founding
+  card showing, sends `deal: founding` to `/api/create-checkout`, which holds
+  a place in the database first (one family at a time, so the last place is
+  never given twice), then asks Stripe for a checkout with the coupon, an
+  idempotency key, and an expiry two hours away (so nobody pays at the
+  founding price after the place was given back). **Stripe's signed webhook
+  is the source of truth**: `checkout.session.completed` (paid, or no payment
+  needed today because of trial days left) confirms the place for good;
+  `checkout.session.expired` gives it back.
+- **One per family, ever.** A family with a confirmed place is refused a
+  second (`already_founding`). **Not on top of the half-price month**: a
+  family that took the half-price month in the last 31 days is refused
+  (`save_offer_recent`); and the half-price month is only ever for monthly
+  plans, so a founding (yearly) plan can never take it.
+- It is only for a family starting a plan (a family already paying changes
+  plan in the portal, at the normal prices).
+
+### 2. The holiday gift sale
+
+Gift codes a percentage off between two days, e.g. Black Friday to 31
+December.
+
+- **On** between `GIFT_SALE_FROM` and `GIFT_SALE_TO` (both days included,
+  `YYYY-MM-DD`, UTC) when `STRIPE_GIFT_SALE_COUPON` and `GIFT_SALE_PERCENT`
+  are set. **Off** when any of them is empty.
+- `/api/gift-checkout` adds the coupon to the gift's checkout (with an
+  idempotency key per gift order). A banner says it on the parent's
+  dashboard and on the Give page, with its end date; never on a child's phone
+  (the Give page cannot be opened there).
+
+### 3. Monthly to yearly: "keep what you've paid"
+
+After a family has paid two months (`paid_months` in `billing_status`,
+counted from the paid invoices the webhook records), "Switch to yearly" in
+Settings says "Switch to yearly and keep what you have paid". It opens
+Stripe's plan-change page (`STRIPE_PORTAL_PLAN_CHANGE_CONFIG`), which credits
+what is left of the month already paid against the year and shows the amount
+before anything is charged. **For that, the plan-change configuration must
+prorate**: in Stripe, Settings, Billing, Customer portal, the plan-change
+configuration, "Prorations" on, "Invoice immediately" (so the credit comes off
+the yearly charge today).
+
+### 4. The plan screen says the saving
+
+"Save 30% yearly" on each paid plan, and "2 months free" (or "2 months
+free+") when a year costs at least two months less, worked out from the plan
+list's own two prices (`annualSaving`, `src/lib/plans.js`). "Standard or
+Elite?" lists what Elite adds, line by line, from the same plan list. On a
+computer the three plans sit side by side.
+
+### 5. "Gift a year", a month in
+
+A family that has used RankUp for 30 days sees "Know a family who would like
+this?" on the parent's dashboard, with "Give a year" (the Give page) and "Not
+now", which hides it for good on that phone. Parent Mode only. Not shown while
+the holiday sale banner is.
+
+### 6. The Season's deal
+
+For the first 14 days of each Season (counted from the Season's own first day
+in the database), `SEASON_DEAL_PERCENT` off the yearly plan or gift codes
+(`SEASON_DEAL_ON`: `yearly`, the default, or `gift`), through
+`STRIPE_SEASON_COUPON`. Off when either is empty. A banner on the plan screen
+(or the Give page, for gifts) says it, with its real end date. docs/SEASONS.md
+says when Seasons start.
+
+### Coupons to make in Stripe (Products, Coupons)
+
+| Setting | Make this coupon | Notes |
+|---|---|---|
+| `STRIPE_FOUNDING_COUPON` | Percent off (e.g. 40%), **Duration: repeating, 1 month**. Id e.g. `rankup-founding` | Repeating for one month covers the first yearly charge, even when it comes at the end of up to 14 trial days, and never the renewal a year later. Put the same percent in `FOUNDING_PERCENT`. |
+| `STRIPE_GIFT_SALE_COUPON` | Percent off (e.g. 25%), **Duration: once**. Id e.g. `rankup-gift-sale` | Applies to the one-time gift payment. Same percent in `GIFT_SALE_PERCENT`. |
+| `STRIPE_SEASON_COUPON` | Percent off (e.g. 20%), **Duration: repeating, 1 month** for the yearly plan (the first year only, as above), or **once** for gift codes. Id e.g. `rankup-season` | Same percent in `SEASON_DEAL_PERCENT`. |
+
+And in Stripe's webhook settings, add the event **`checkout.session.expired`**
+to the endpoint (the others are already there), so an unpaid Founding
+checkout gives its place back at once rather than after two hours.
+
 ## Cancelling and card changes
 
 These go to Stripe's own customer portal (`/api/billing-portal`), not to
@@ -832,7 +946,7 @@ longer than feels comfortable.
 
 ---
 
-## The 20% Discount Tournament — one thing you must schedule
+## Parent Alliances (the 20% monthly contest) — one thing you must schedule
 
 Parent Alliances are real: `supabase/alliances.sql` counts each member family's
 approved quests for the month, and `api/settle-alliances.js` gives the winner

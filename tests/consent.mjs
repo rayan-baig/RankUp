@@ -40,10 +40,12 @@ const termsText = await page.locator('body').innerText()
 ;/RankUp is a product of MTRX Horizyn\. "We" means MTRX Horizyn\./.test(termsText)
   ? pass('and so do the terms')
   : fail('operator named in the terms', termsText.slice(0, 300))
-const unfinished = await page.getByText(/Still to fill in: the company's postal address/).count()
-unfinished > 0
-  ? pass('while the postal address is a placeholder, the page still says so')
-  : fail('unfilled banner names what is left', termsText.slice(0, 300))
+// The public page never says it is unfinished (0.22.0): the owner's
+// reminder is on the operator page; the page gives the email instead.
+const unfinished = await page.getByText(/Not finished|Still to fill in|\[YOUR/).count()
+unfinished === 0 && /Contact us[\s\S]*help@mtrxhorizyn\.com/i.test(termsText)
+  ? pass('no "not finished" banner on the public page, and how to reach the company instead')
+  : fail('public page finished', termsText.slice(0, 300))
 const notice = JSON.stringify(CONSENT_NOTICE)
 ;!/MTRX|operated by|\[YOUR/i.test(notice)
   ? pass(`the consent notice names no operator, so ${CONSENT_VERSION} stands unchanged`)
@@ -110,7 +112,7 @@ const recorded = await page.evaluate(async (MOCK) => {
 recorded.consents === 1
   ? pass(`the consent is on the server, signed "${recorded.signed}"`)
   : fail('consent recorded server-side', JSON.stringify(recorded))
-recorded.version === CONSENT_VERSION && CONSENT_VERSION === '2026-11'
+recorded.version === CONSENT_VERSION && CONSENT_VERSION === '2026-12'
   ? pass(`against the notice in force, ${CONSENT_VERSION}`)
   : fail('signed the current version', JSON.stringify(recorded))
 

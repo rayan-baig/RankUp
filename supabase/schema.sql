@@ -54,8 +54,11 @@ create table if not exists families (
   /*
    * What to put in front of the numbers. Display only — nothing here converts
    * anything, and a family that moves country keeps whatever they set.
+   * US dollars unless the parent picks another in Settings (or the parent's
+   * phone says another region when the family is made); `currency_chosen`
+   * says one was picked, so the upgrade below never undoes it.
    */
-  currency        text not null default 'GBP',
+  currency        text not null default 'USD',
   created_at      timestamptz not null default now()
 );
 
@@ -1455,9 +1458,11 @@ begin
    limit 1;
 
   if found then
+    -- The parent's choice of world wins. The phone's pick used to overwrite
+    -- the world the parent had already chosen for this child (0.22.0).
     update kids
        set user_id = v_row.kid_user_id,
-           theme_id = coalesce(nullif(v_row.theme_id, ''), theme_id)
+           theme_id = coalesce(nullif(theme_id, ''), nullif(v_row.theme_id, ''), 'matrixblocks')
      where id = v_kid.id
     returning * into v_kid;
 
@@ -1515,6 +1520,149 @@ grant execute on function claim_pairing_code(text, uuid, text) to authenticated;
 
 
 -- ---------------------------------------------------------------------------
+-- Linking a child's phone with a code the PARENT makes (0.22.0).
+--
+-- The other way round from pairing_codes above. The parent picks the child in
+-- Parent Mode and is shown six digits; the child's phone types only those and
+-- becomes that child. The phone never types a name or picks a world, so it
+-- can never make a second profile from a misspelt name, and the world is
+-- always the parent's choice.
+--
+-- The same four rules as the codes above, all held here:
+--   * it expires after 10 minutes
+--   * it dies after 5 wrong guesses at it
+--   * it works exactly once
+--   * it comes from a cryptographic random source (gen_random_bytes)
+-- and every failed try counts against the account trying, through
+-- pairing_claim_attempts, so walking the code space is no quicker this way.
+--
+-- No policies: nothing reads this table from a browser. Only the two
+-- functions below.
+-- ---------------------------------------------------------------------------
+create table if not exists child_link_codes (
+  code         text primary key check (code ~ '^[0-9]{6}$'),
+  kid_id       uuid not null references kids(id) on delete cascade,
+  family_id    uuid not null references families(id) on delete cascade,
+  created_by   uuid,
+  created_at   timestamptz not null default now(),
+  expires_at   timestamptz not null,
+  attempts     int not null default 0,
+  used_at      timestamptz,
+  used_by      uuid
+);
+create index if not exists child_link_codes_kid_idx on child_link_codes (kid_id);
+create index if not exists child_link_codes_family_idx on child_link_codes (family_id);
+create index if not exists child_link_codes_expiry_idx on child_link_codes (expires_at);
+alter table child_link_codes enable row level security;
+
+/**
+ * The parent's side: six digits for one child, shown on the parent's phone.
+ *
+ * Only a parent (not a supporter) of that child's family, and only for a
+ * child with no phone yet: moving a child to a new phone means unlinking the
+ * old one first, as before. A new code for a child replaces any earlier one.
+ */
+create or replace function create_child_link_code(p_kid_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_kid kids;
+  v_code text;
+  v_expires timestamptz := now() + interval '10 minutes';
+begin
+  select * into v_kid from kids where id = p_kid_id;
+  if not found or not exists (
+    select 1 from parents where user_id = auth.uid() and family_id = v_kid.family_id and role = 'parent'
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'not_parent');
+  end if;
+  if v_kid.user_id is not null then
+    return jsonb_build_object('ok', false, 'reason', 'already_linked');
+  end if;
+  delete from child_link_codes where expires_at < now() - interval '1 hour';
+  delete from child_link_codes where kid_id = p_kid_id and used_at is null;
+  -- A code not live for anyone else: live ones are never handed out twice,
+  -- and a live code from the kid-made kind (pairing_codes) is left alone too.
+  for i in 1..20 loop
+    v_code := lpad(((('x' || encode(gen_random_bytes(4), 'hex'))::bit(32)::bigint) % 1000000)::text, 6, '0');
+    exit when not exists (select 1 from child_link_codes where code = v_code and used_at is null and expires_at > now())
+          and not exists (select 1 from pairing_codes where code = v_code and claimed_at is null and expires_at > now());
+    v_code := null;
+  end loop;
+  if v_code is null then
+    raise exception 'could not find a free code; try again';
+  end if;
+  delete from child_link_codes where code = v_code;
+  insert into child_link_codes (code, kid_id, family_id, created_by, expires_at)
+  values (v_code, p_kid_id, v_kid.family_id, auth.uid(), v_expires);
+  return jsonb_build_object('ok', true, 'code', v_code, 'expires_at', v_expires, 'kid_id', p_kid_id);
+end $$;
+revoke all on function create_child_link_code(uuid) from public, anon, authenticated;
+grant execute on function create_child_link_code(uuid) to authenticated;
+
+/**
+ * The child's phone: type the six digits, become that child.
+ *
+ * The phone has signed in anonymously first, as for the other kind of code.
+ * A phone that already belongs to someone (a parent, a supporter, a child)
+ * cannot use one. Every failed try counts against the account; a wrong try at
+ * a code that exists also counts against that code, which dies at five.
+ */
+create or replace function redeem_child_link_code(p_code text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_row child_link_codes;
+  v_kid kids;
+begin
+  if auth.uid() is null then
+    return jsonb_build_object('ok', false, 'reason', 'signed_out');
+  end if;
+  if exists (select 1 from parents where user_id = auth.uid())
+     or exists (select 1 from kids where user_id = auth.uid()) then
+    return jsonb_build_object('ok', false, 'reason', 'device_taken');
+  end if;
+  delete from pairing_claim_attempts where tried_at < now() - interval '1 hour';
+  if pairing_attempts_exhausted() then
+    return jsonb_build_object('ok', false, 'reason', 'too_many');
+  end if;
+  insert into pairing_claim_attempts (user_id) values (auth.uid());
+
+  if coalesce(p_code, '') !~ '^[0-9]{6}$' then
+    return jsonb_build_object('ok', false, 'reason', 'not_found');
+  end if;
+  select * into v_row from child_link_codes where code = p_code for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'not_found');
+  end if;
+  if v_row.used_at is not null then
+    return jsonb_build_object('ok', false, 'reason', 'used');
+  end if;
+  if v_row.attempts >= 5 then
+    return jsonb_build_object('ok', false, 'reason', 'blocked');
+  end if;
+  if v_row.expires_at <= now() then
+    update child_link_codes set attempts = attempts + 1 where code = p_code;
+    return jsonb_build_object('ok', false, 'reason', 'expired');
+  end if;
+  select * into v_kid from kids where id = v_row.kid_id for update;
+  if v_kid.user_id is not null then
+    return jsonb_build_object('ok', false, 'reason', 'already_linked');
+  end if;
+
+  update kids set user_id = auth.uid() where id = v_kid.id returning * into v_kid;
+  update child_link_codes set used_at = now(), used_by = auth.uid() where code = p_code;
+  delete from pairing_claim_attempts where user_id = auth.uid();
+  insert into events (family_id, kid_id, type, meta)
+  values (v_kid.family_id, v_kid.id, 'device_paired', jsonb_build_object('by', 'parent_code'));
+
+  return jsonb_build_object(
+    'ok', true, 'kid_id', v_kid.id, 'kid_name', v_kid.name, 'theme_id', v_kid.theme_id,
+    'family_id', v_kid.family_id, 'family_name', (select name from families where id = v_kid.family_id));
+end $$;
+revoke all on function redeem_child_link_code(text) from public, anon, authenticated;
+grant execute on function redeem_child_link_code(text) to authenticated;
+
+
+-- ---------------------------------------------------------------------------
 -- Bringing an older database up to date
 --
 -- `create table if not exists` makes this file safe to run twice, but it also
@@ -1560,7 +1708,31 @@ alter table quests   add column if not exists pence int not null default 0;
 alter table quests   drop constraint if exists quests_pence_check;
 alter table quests   drop constraint if exists quests_pence_range;
 alter table quests   add constraint quests_pence_range check (pence between 0 and 10000);
-alter table families add column if not exists currency text not null default 'GBP';
+alter table families add column if not exists currency text not null default 'USD';
+alter table families alter column currency set default 'USD';
+
+/*
+ * The money sign, fixed for families who never chose one.
+ *
+ * Until 0.22.0 every family was made with British pounds and there was no way
+ * to change it, so US families saw "£" in front of their pocket money. Every
+ * family that still has the old default and never chose a currency moves to
+ * US dollars. A family that picks one (set_family_currency, in allowance.sql)
+ * is marked `currency_chosen` and is never touched here, so running this file
+ * again later changes nothing. Server only: it runs as this file is applied.
+ */
+alter table families add column if not exists currency_chosen boolean not null default false;
+create or replace function upgrade_family_currency()
+returns integer language plpgsql security definer set search_path = public as $$
+declare v_moved integer;
+begin
+  update families set currency = 'USD'
+   where currency = 'GBP' and not currency_chosen;
+  get diagnostics v_moved = row_count;
+  return v_moved;
+end $$;
+revoke all on function upgrade_family_currency() from public, anon, authenticated;
+select upgrade_family_currency();
 
 -- What an adult in the family is allowed to do. Existing rows are parents,
 -- which is what the default gives them.

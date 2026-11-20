@@ -4,7 +4,6 @@ import { guilds, guildError } from '../../lib/guilds.js'
 import { levelFromXp, formatXp } from '../../lib/xp.js'
 import { relativeTime } from '../../lib/dates.js'
 import { Screen, Card, Button, SectionTitle, ProgressBar, Banner, TextInput, Chip, EmptyState } from '../../components/ui.jsx'
-import { navigate } from '../../lib/router.js'
 import QuickChat from '../../components/QuickChat.jsx'
 import { quickChatText, isQuickEmoji } from '../../data/quickChat.js'
 
@@ -252,13 +251,12 @@ export default function KidGuild() {
           <div className="flex items-start gap-3">
             <span className="text-2xl" aria-hidden="true">👥</span>
             <div className="min-w-0">
-              <div className="font-display font-bold text-sm">10-Player Megacluster Guilds</div>
-              <p className="text-xs text-muted mb-2">
-                Elite Pass doubles the clan from 5 slots to 10.
+              {/* A full guild, said plainly. Never a plan, a price or a button
+                  to one on a child's screen. */}
+              <div className="font-display font-bold text-sm">Your guild is full</div>
+              <p className="text-xs text-muted">
+                Every place is taken. A friend can join when somebody leaves.
               </p>
-              <Button variant="soft" className="px-3 py-2 min-h-0 text-xs" onClick={() => navigate('/parent/plan')}>
-                See Elite Pass
-              </Button>
             </div>
           </div>
         </Card>

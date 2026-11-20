@@ -22,6 +22,35 @@ export function billingLive() {
   return STRIPE_ENABLED && transport.isConfigured()
 }
 
+/**
+ * What to say where payments are not taken: in the demo, and on a copy of
+ * RankUp with Stripe not set up (a developer's, or a test).
+ *
+ * The demo said "Stripe is not configured", "Add (test)" and "Payments are
+ * switched off": a developer's words, on the screen a parent sees first. In
+ * the demo it now says plainly that nothing is charged because this is the
+ * pretend family. Elsewhere it says payments are not set up, without naming
+ * the company that would take them.
+ */
+export function noPaymentsWords(state, where = 'plan') {
+  if (state?.demo) {
+    const body = {
+      plan: 'This is the pretend family, so nothing is charged. Switch between the plans to see what each one gives.',
+      elite: 'This is the pretend family, so nothing is charged. Switch to Elite to try it.',
+      gift: 'This is the pretend family, so gifts cannot be bought from here. Start for free to give one.',
+      flash: 'This is the pretend family, so these add tickets for free. A real family buys them here.',
+    }[where]
+    return { title: 'Nothing is charged in the demo', body, button: 'Try it free' }
+  }
+  const body = {
+    plan: 'Switch between the plans and try any of them. No card is asked for and nothing is charged.',
+    elite: 'You can turn Elite on and try it. Nothing is charged and no card is asked for.',
+    gift: 'Gifts cannot be bought on this copy of RankUp. Everything else on this page works.',
+    flash: 'Payments are not set up on this copy of RankUp, so these add tickets without charging anything.',
+  }[where]
+  return { title: 'Payments are not set up here', body, button: 'Add free' }
+}
+
 async function post(url, body) {
   const token = await freshAccessToken()
   if (!token) return { ok: false, reason: 'signed_out' }
@@ -47,8 +76,9 @@ async function post(url, body) {
  * 'year' is a month, so an older phone that knows nothing about annual billing
  * keeps working exactly as it did.
  */
-export async function startCheckout(tier, cycle = 'month') {
-  const result = await post(CHECKOUT_URL, { tier, cycle: cycle === 'year' ? 'year' : 'month' })
+export async function startCheckout(tier, cycle = 'month', deal = null) {
+  const yearly = cycle === 'year'
+  const result = await post(CHECKOUT_URL, { tier, cycle: yearly ? 'year' : 'month', ...(yearly && deal === 'founding' ? { deal: 'founding' } : {}) })
   if (result.ok && result.url) window.location.href = result.url
   return result
 }
@@ -202,6 +232,7 @@ export function keepOffers(status) {
 }
 
 const GIFT_CHECKOUT_URL = import.meta.env?.VITE_GIFT_CHECKOUT_URL || '/api/gift-checkout'
+const DEALS_URL = '/api/deals'
 const REDEEM_GIFT_URL = import.meta.env?.VITE_REDEEM_GIFT_URL || '/api/redeem-gift'
 
 /**
@@ -254,6 +285,26 @@ export async function redeemGift(code) {
 }
 
 /** What the server says this family currently has. */
+/**
+ * The deals on now (api/deals.js), for Parent Mode and the Give page.
+ *
+ * Never on a child's phone and never in the demo: it refuses there rather
+ * than leaving it to each screen to remember. Null when it cannot be asked
+ * (no server, payments off, offline): then no deal is shown, never a guess.
+ */
+export async function fetchDeals(state) {
+  if (state?.device?.role === 'kid' || state?.demo || transport.isNetworkPaused()) return null
+  if (!STRIPE_ENABLED) return null
+  try {
+    const res = await fetch(DEALS_URL, { headers: { Accept: 'application/json' } })
+    if (!res.ok) return null
+    const data = await res.json()
+    return data?.ok ? { founding: data.founding || null, gift_sale: data.gift_sale || null, season: data.season || null } : null
+  } catch {
+    return null
+  }
+}
+
 export async function fetchBillingStatus() {
   if (!transport.isConfigured()) return null
   try {
@@ -275,6 +326,10 @@ export const BILLING_ERRORS = {
   suspended: 'This school is suspended. Contact us to sort it out.',
   already_subscribed: 'You already have a plan. Change it from “Manage billing or update card”, where Stripe swaps it over without charging you twice.',
   refunded_plan_renews: 'Your refunded plan is still set to renew. Cancel it from “Cancel my plan” first, so you are never charged for two plans.',
+  deal_over: 'That deal has just ended, so nothing was charged. The plans below are at their normal prices.',
+  deal_yearly_only: 'That deal is for the yearly plan.',
+  already_founding: 'Your family already has its Founding Families place.',
+  save_offer_recent: 'The Founding Families price is not on top of the half-price month. It can be chosen once that month is over.',
   gift_too_long: 'Your gift plans run for more than two years from now, longer than Stripe can wait to take a first payment. Choose a plan once less than two years of gift are left.',
   already_paying: 'Your school is already paying. Use “Card, invoices and cancelling” to change the plan.',
   district_pays: 'Your district pays for your school, so there is nothing to pay here.',

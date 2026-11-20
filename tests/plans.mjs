@@ -92,7 +92,9 @@ yearly.includes('$49.99/yr') && yearly.includes('$79.99/yr')
 // $49.99 is not a whole number of $5.99 months, so the switch gives the
 // smaller of the two real savings as a percentage (30%, against Elite's 33%),
 // never "2 months free".
-yearly.includes('Save 30% or more') && !/months? free/.test(yearly)
+// "2 months free+" (0.23.0) is allowed: Standard's year saves more than two
+// months' money. A bare "N months free" never is.
+yearly.includes('Save 30% or more') && !/months? free(?!\+)/.test(yearly)
   ? pass('and the control itself says what yearly buys, honestly: "Save 30% or more"')
   : fail('saving stated on the switch', 'phrase missing, or it still says months free')
 yearly.includes('A year saves 30%') && yearly.includes('A year saves 33%')

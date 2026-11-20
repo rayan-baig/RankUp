@@ -42,6 +42,20 @@ and the pause, the period and the half-price month in
 counts (plans paused, saved, cancelled); and to `retention.sql` deleting a
 pause 90 days after it is over. No new file and no change to the order.
 
+The product review's fixes (0.22.0) added to `schema.sql` the column
+`families.currency_chosen`, US dollars as the default money sign, and
+`upgrade_family_currency()` (server only, revoked; it runs as the file is
+applied and moves every family still on the old British-pound default that
+never chose one to US dollars, so re-running it changes nothing); the table
+`child_link_codes` (row level security on, no policy) with
+`create_child_link_code` and `redeem_child_link_code` (a code the parent makes
+for one child, typed on the child's phone); and the parent's choice of world
+winning in `claim_pairing_code`. To `allowance.sql`: `set_family_currency`. To
+`sync.sql`: the daily bonus only after a chore (`claim_login_bonus`), and no
+casino games in `play_minigame`. To `consent.sql`: notice 2026-12. No new file
+and no change to the order; re-run `schema.sql`, `sync.sql`, `allowance.sql`
+and `consent.sql`, in that order.
+
 School pilots, the pilot report and houses (0.19.0) added to `schools.sql`
 the tables `school_groups` (a school's houses or classes), `school_pilots`
 (pilot codes, by hash) and `school_pilot_attempts` (row level security on, no

@@ -9,34 +9,37 @@ import EliteGate from '../../components/EliteGate.jsx'
 import EmptyNext from '../../components/EmptyNext.jsx'
 
 /**
- * The Parental Consequence Engine — System Override Protocol.
+ * Pause and limits (was "the Parental Consequence Engine" and "System
+ * Override Protocol").
  *
- * Three tiers, deliberately escalating, and every one of them asks for a written
- * reason before it will fire. A consequence a kid cannot see the reason for
- * teaches nothing; it just makes the app the enemy.
+ * Plain names and calm words: a short break from the app, a pause until the
+ * parent lifts it, or taking back some coins. Each asks for a reason, which
+ * the child sees, because a limit a child cannot see the reason for teaches
+ * nothing. The plan screens no longer sell any of this as a perk: they say
+ * "your own house rules in one place".
  */
 
 const TIERS = [
   {
     id: 'tax',
     icon: '💰',
-    name: 'Currency Tax',
+    name: 'Take back some coins',
     tone: 'var(--warn)',
-    blurb: 'Deducts a percentage of the kid\'s in-app currency. The app stays usable.',
+    blurb: 'Takes back part of the coins they have saved. The app keeps working as normal.',
   },
   {
     id: 'dimension',
     icon: '⏸️',
-    name: 'Dimension Lockout',
+    name: 'A short break',
     tone: 'var(--warn)',
-    blurb: 'Locks the kid out of the app for a set time, then lifts itself.',
+    blurb: 'Gives the app a rest for a set time. It opens again by itself.',
   },
   {
     id: 'red',
     icon: '🛑',
-    name: 'Red Security Lockdown',
+    name: 'Pause until I lift it',
     tone: 'var(--bad)',
-    blurb: 'Full lockout that stays in effect until you manually lift it.',
+    blurb: 'Gives the app a rest until you come back here and lift it.',
   },
 ]
 
@@ -56,8 +59,8 @@ export default function ParentOverride() {
       <EliteGate
         perk="override"
         icon="🛡️"
-        title="The Parental Consequence Engine"
-        body="Unlocks the System Override Protocol panel: write custom real-world consequences and trigger three lockout tiers — Currency Tax, Dimension Lockout and Red Security Lockdown."
+        title="Pause and limits"
+        body="Your own house rules in one place, in your words, and a way to give the app a rest for a while when it is needed."
       />
     )
   }
@@ -85,8 +88,12 @@ export default function ParentOverride() {
   return (
     <Screen>
       <header className="mb-3">
-        <p className="text-xs uppercase tracking-widest text-muted">Elite · Consequence Engine</p>
-        <h1 className="font-display text-2xl font-extrabold">System Override Protocol</h1>
+        <p className="text-xs uppercase tracking-widest text-muted">Elite</p>
+        <h1 className="font-display text-2xl font-extrabold">Pause and limits</h1>
+        <p className="text-sm text-muted mt-1">
+          For the days a talk is not enough. Whatever you choose, your child sees your reason, and
+          nothing they have earned in XP, levels or streaks is taken away.
+        </p>
       </header>
 
       {state.kids.length === 0 ? (
@@ -107,7 +114,7 @@ export default function ParentOverride() {
                 <span className="text-2xl" aria-hidden="true">{lock.type === 'red' ? '🛑' : '⏸️'}</span>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-sm" style={{ color: 'var(--bad)' }}>
-                    {kid.name} is currently {lock.type === 'red' ? 'in Red Security Lockdown' : 'in a Dimension Lockout'}
+                    {kid.name}&apos;s app is {lock.type === 'red' ? 'paused until you lift it' : 'on a short break'}
                   </div>
                   {lock.until && <div className="text-xs text-muted">Lifts in {formatDuration(lock.until - Date.now())}</div>}
                   {lock.reason && <div className="text-xs text-muted mt-1">“{lock.reason}”</div>}
@@ -123,7 +130,7 @@ export default function ParentOverride() {
             </Card>
           )}
 
-          <SectionTitle>Choose a tier</SectionTitle>
+          <SectionTitle>Choose one</SectionTitle>
           <div className="space-y-2 mb-3">
             {TIERS.map((t) => (
               <button
@@ -146,7 +153,7 @@ export default function ParentOverride() {
 
           <Card className="mb-3">
             {kind === 'tax' && (
-              <Field label={`Tax percentage — ${percent}%`} hint={kid ? `Takes ${Math.floor((kid.coins * percent) / 100)} of ${formatXp(kid.coins)} ${resolveKidTheme(kid.themeId, levelFromXp(kid.xp).level).currency.name}.` : ''}>
+              <Field label={`How much to take back — ${percent}%`} hint={kid ? `Takes ${Math.floor((kid.coins * percent) / 100)} of ${formatXp(kid.coins)} ${resolveKidTheme(kid.themeId, levelFromXp(kid.xp).level).currency.name}.` : ''}>
                 <input
                   type="range"
                   min="5"
@@ -160,7 +167,7 @@ export default function ParentOverride() {
             )}
 
             {kind === 'dimension' && (
-              <Field label="Lockout length">
+              <Field label="How long">
                 <Select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
                   {[15, 30, 60, 120, 240, 480, 1440].map((m) => (
                     <option key={m} value={m}>{m < 60 ? `${m} minutes` : m === 1440 ? '24 hours' : `${m / 60} hours`}</option>
@@ -170,23 +177,23 @@ export default function ParentOverride() {
             )}
 
             {kind === 'red' && (
-              <Banner tone="bad" icon="🛑" title="This does not lift itself">
-                {kid?.name || 'Your kid'} cannot use the app at all until you come back here and lift it.
+              <Banner tone="bad" icon="⏸️" title="This does not lift itself">
+                The app stays paused for {kid?.name || 'your child'} until you come back here and lift it.
               </Banner>
             )}
 
             <div className="mt-3">
-              <Field label="Reason" hint="Shown to your kid on the lockout screen. Required.">
+              <Field label="Reason" hint="Shown to your child on their screen. Required.">
                 <TextInput value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Sent someone else's tidy room" />
               </Field>
 
-              <Field label="Real-world consequence (optional)" hint="The part that actually happens away from the app.">
+              <Field label="What happens away from the app (optional)" hint="Shown to your child with the reason.">
                 <TextArea value={consequence} onChange={(e) => setConsequence(e.target.value)} placeholder="e.g. No console until the bathroom is genuinely done and checked." />
               </Field>
             </div>
 
             <Banner tone="info" icon="🧊" title="What is never touched">
-              XP, level and streak are never removed by an override. Progress a kid earned stays earned.
+              XP, level and streak are never removed. Progress your child earned stays earned.
             </Banner>
 
             <Button
@@ -195,16 +202,16 @@ export default function ParentOverride() {
               disabled={!reason.trim() || !kidId}
               onClick={() => setConfirm(true)}
             >
-              {tier.icon} Trigger {tier.name}
+              {tier.icon} Use: {tier.name}
             </Button>
             {!reason.trim() && <p className="text-xs text-muted text-center mt-2">Write a reason first.</p>}
           </Card>
         </>
       )}
 
-      <SectionTitle>Override history</SectionTitle>
+      <SectionTitle>History</SectionTitle>
       {history.length === 0 ? (
-        <Card><p className="text-sm text-muted">No overrides have been used.</p></Card>
+        <Card><p className="text-sm text-muted">Nothing used yet.</p></Card>
       ) : (
         history.map((o) => {
           const k = state.kids.find((x) => x.id === o.kidId)
@@ -238,7 +245,7 @@ export default function ParentOverride() {
       <Modal
         open={confirm}
         onClose={() => setConfirm(false)}
-        title={`Trigger ${tier?.name}?`}
+        title={`Use “${tier?.name}”?`}
         footer={
           <>
             <Button variant="ghost" className="flex-1" onClick={() => setConfirm(false)}>Cancel</Button>
@@ -247,9 +254,9 @@ export default function ParentOverride() {
         }
       >
         <p className="text-sm mb-2">
-          {kind === 'tax' && `${kid?.name} loses ${percent}% of their currency immediately.`}
-          {kind === 'dimension' && `${kid?.name} cannot open the app for ${minutes >= 60 ? `${minutes / 60} hours` : `${minutes} minutes`}.`}
-          {kind === 'red' && `${kid?.name} is locked out until you lift it by hand.`}
+          {kind === 'tax' && `${percent}% of ${kid?.name}'s coins are taken back now.`}
+          {kind === 'dimension' && `The app rests for ${kid?.name} for ${minutes >= 60 ? `${minutes / 60} hours` : `${minutes} minutes`}, then opens again by itself.`}
+          {kind === 'red' && `The app rests for ${kid?.name} until you lift it here.`}
         </p>
         <p className="text-xs text-muted">Reason shown to them: “{reason}”</p>
       </Modal>

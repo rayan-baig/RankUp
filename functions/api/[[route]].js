@@ -28,6 +28,7 @@ import { reportError } from '../../api/_shared/job.js'
 const ROUTES = {
   'billing-portal': () => import('../../api/billing-portal.js'),
   'create-checkout': () => import('../../api/create-checkout.js'),
+  deals: () => import('../../api/deals.js'),
   'delete-account': () => import('../../api/delete-account.js'),
   'district-billing': () => import('../../api/district-billing.js'),
   'district-quote': () => import('../../api/district-quote.js'),

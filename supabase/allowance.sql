@@ -247,3 +247,26 @@ returns jsonb language sql stable security definer set search_path = public as $
 $$;
 
 grant execute on function allowance_summary() to authenticated;
+
+/**
+ * The money sign in front of pocket money: a parent's choice in Settings.
+ *
+ * Display only, like the column: nothing is converted. Marks the family as
+ * having chosen, so upgrade_family_currency (schema.sql) never changes it
+ * back. The list is the one in src/lib/money.js (CURRENCIES).
+ */
+create or replace function set_family_currency(p_currency text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_family uuid := current_family_id();
+begin
+  if v_family is null or not is_parent() then
+    return jsonb_build_object('ok', false, 'reason', 'not_parent');
+  end if;
+  if upper(coalesce(p_currency, '')) not in ('USD', 'GBP', 'EUR', 'CAD', 'AUD', 'NZD', 'JPY') then
+    return jsonb_build_object('ok', false, 'reason', 'bad_currency');
+  end if;
+  update families set currency = upper(p_currency), currency_chosen = true where id = v_family;
+  return jsonb_build_object('ok', true, 'currency', upper(p_currency));
+end $$;
+revoke all on function set_family_currency(text) from public, anon, authenticated;
+grant execute on function set_family_currency(text) to authenticated;

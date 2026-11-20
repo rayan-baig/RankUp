@@ -71,7 +71,6 @@ Rarer skins cost more tickets — one for a common, three for the legendary.
                 <div className="text-xs text-muted flex items-center gap-1.5 flex-wrap">
                   <span style={{ color: RARITY[skin.rarity].tone }}>{RARITY[skin.rarity].label}</span>
                   {!have && <span>· {theme.currency.icon} {skin.cost}</span>}
-                  {!have && <span>· 🎟️ {ticketCost(skin)}</span>}
                   {have && <span>· Yours</span>}
                 </div>
               </div>
@@ -125,9 +124,11 @@ Rarer skins cost more tickets — one for a common, three for the legendary.
         )
       })}
 
-      <p className="text-xs text-muted mt-4">
-        Flash Tickets are bought by a grown-up in Parent Mode. You cannot buy them here, and nothing
-        in this shop can be paid for with real money from your phone.
+      {/* Gem prices only on a child's phone (0.22.0). Flash Tickets, and
+          what they cost in real money, are for a grown-up in Parent Mode. */}
+      <p className="text-xs text-muted mt-4" data-testid="market-ask">
+        Want a Flash Ticket? Ask a grown-up: they get them in Parent Mode. Nothing in this shop can be
+        paid for with real money from your phone.
       </p>
     </Screen>
   )

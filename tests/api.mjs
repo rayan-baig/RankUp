@@ -163,6 +163,12 @@ const liveBody = await live.json()
 ok('/api/healthz answers 200 with only ok and the version', live.status === 200
   && Object.keys(liveBody).sort().join(',') === 'ok,version' && liveBody.version === PACKAGE_VERSION, JSON.stringify(liveBody))
 ok('and nothing in between may keep it', live.headers.get('cache-control') === 'no-store')
+// Which deals are on (0.23.0): anybody may ask, and it says no coupon id.
+// tests/deals.mjs drives the deals themselves.
+const dealsRes = await fetch(`${BASE}/api/deals`)
+const dealsBody = await dealsRes.json()
+ok('/api/deals answers anybody, with the deals and no coupon id', dealsRes.status === 200 && dealsBody.ok
+  && 'founding' in dealsBody && !/rankup-test-/.test(JSON.stringify(dealsBody)), JSON.stringify(dealsBody))
 const readyPublic = await fetch(`${BASE}/api/ready`)
 const readyBody = await readyPublic.json()
 ok('/api/ready answers 200 or 503 with only ok and the version', [200, 503].includes(readyPublic.status)

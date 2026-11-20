@@ -104,7 +104,7 @@ export function nudgeWords(reason) {
   }
   return {
     title: `That one is an ${elite.name} tool`,
-    body: `${elite.name} adds the Consequence Engine, Blueprints and Parent Alliances. And ${boost}.`,
+    body: `${elite.name} adds Pause and limits, Blueprints and Parent Alliances. And ${boost}.`,
     button,
   }
 }

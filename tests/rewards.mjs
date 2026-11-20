@@ -51,6 +51,16 @@ await page.evaluate(() => { window.location.hash = '/kid/shop' })
 await page.waitForTimeout(600)
 const coinsBefore = (await readState(page)).kids[0].coins
 await page.getByRole('button', { name: /3$/ }).first().click()
+await page.waitForTimeout(300)
+// The price asks first (0.22.0): nothing is spent until "Yes, get it".
+{
+  const asked = await page.getByTestId('confirm-reward').isVisible().catch(() => false)
+  const spentEarly = (await readState(page)).kids[0].coins !== coinsBefore
+  asked && !spentEarly
+    ? pass('tapping the price asks "Get … ?" and spends nothing yet')
+    : fail('reward asks before buying', JSON.stringify({ asked, spentEarly }))
+}
+await page.getByTestId('confirm-reward').click()
 await page.waitForTimeout(800)
 let state = await readState(page)
 // Exactly one: a tap once left two, one the server never had (tests/oncetap.mjs).
@@ -92,7 +102,8 @@ for (let i = 0; i < 40 && (await readState(page)).kids[0].coins !== 50; i += 1) 
 {
   const before = (await readState(page)).redemptions.length
   const coins = (await readState(page)).kids[0].coins
-  await page.getByRole('button', { name: /3$/ }).first().dblclick()
+  await page.getByRole('button', { name: /3$/ }).first().click()
+  await page.getByTestId('confirm-reward').dblclick()
   await page.waitForTimeout(900)
   const after = await readState(page)
   after.redemptions.length === before + 1 && after.kids[0].coins === coins - 3

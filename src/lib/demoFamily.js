@@ -53,7 +53,7 @@ export function buildDemoFamily() {
 
   s = run(s, {
     type: 'COMPLETE_ONBOARDING',
-    family: { name: DEMO_NAMES.family, parentName: DEMO_NAMES.parent, pin: '1234' },
+    family: { name: DEMO_NAMES.family, parentName: DEMO_NAMES.parent, pin: '1234', currency: 'USD' },
     kid: ava,
     guildName: "Ava's Guild",
   })

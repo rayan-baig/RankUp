@@ -135,22 +135,22 @@ export const PLAN_COMPARISON = [
   { label: 'Arcade', value: () => true },
   { label: 'Overdrive visuals', value: (t) => t.limits.overdrive },
   { label: 'Profile frames', value: (t) => t.limits.profileFrames },
-  { label: 'Consequence Engine', value: (t) => t.limits.consequenceEngine },
+  { label: 'Pause and limits', value: (t) => t.limits.consequenceEngine },
   { label: 'Behaviour Blueprints', value: (t) => t.limits.blueprints },
-  { label: 'Discount Tournament', value: (t) => t.limits.alliances },
+  { label: 'Parent Alliances', value: (t) => t.limits.alliances },
 ]
 
 export const ELITE_KID_PERKS = [
   { id: 'overdrive', icon: '✨', title: 'Overdrive', body: 'A slow aurora behind every screen in your own theme\u2019s colours, light coming off the buttons, a highlight running along the XP bar, a turning ring around your avatar, and a proper burst when you level up.' },
-  { id: 'guilds', needs: 'guilds', icon: '👥', title: `${TIERS.elite.guildSize}-Player Megacluster Guilds`, body: `Guilds of up to ${TIERS.elite.guildSize} instead of ${TIERS.standard.guildSize}, so a squad leader can invite more real-world classmates.` },
-  { id: 'xp', icon: '⚡', title: `Permanent ${TIERS.elite.xpMultiplier}× XP Boost`, body: 'A constant multiplier on every accepted chore, so Elite kids level faster than Standard kids.' },
-  { id: 'frames', icon: '🔮', title: 'Exclusive Profile Customisation', body: 'Unlocks animated profile card frames and rare item drop selectors Standard users cannot access.' },
+  { id: 'guilds', needs: 'guilds', icon: '👥', title: `${TIERS.elite.guildSize}-player guilds`, body: `Guilds of up to ${TIERS.elite.guildSize} instead of ${TIERS.standard.guildSize}, so a squad leader can invite more real-world classmates.` },
+  { id: 'xp', icon: '⚡', title: `${TIERS.elite.xpMultiplier}× XP`, body: `Every accepted chore pays ${TIERS.elite.xpMultiplier} times the XP, so levels come round sooner.` },
+  { id: 'frames', icon: '🔮', title: 'Profile frames', body: 'Animated frames for your kids\u2019 profile cards, and styles for the reward pop-ups. Looks only.' },
 ]
 
 export const ELITE_PARENT_PERKS = [
-  { id: 'override', icon: '🛡️', title: 'The Parental Consequence Engine', body: 'Unlocks the System Override Protocol: custom real-world consequences plus Currency Tax, Dimension Lockout and Red Security Lockdown.' },
+  { id: 'override', icon: '⏸️', title: 'Pause and limits', body: 'Your own house rules in one place, written in your words, and a way to give the app a rest for a while when it is needed. XP, levels and streaks are never taken away.' },
   { id: 'blueprint', icon: '📊', title: 'Behaviour Blueprints', body: 'Weekly chart breakdowns of focus patterns and chore-completion history, built from what actually happened in the app.' },
-  { id: 'alliance', icon: '🏆', title: 'The 20% Discount Tournament', body: 'Join a ten-family alliance and compete each month on quests approved. The winning family gets 20% off their next bill — earned, not bought.' },
+  { id: 'alliance', icon: '🏆', title: 'Parent Alliances', body: 'A friendly monthly contest with up to ten families, counted on chores accepted. The family on top gets 20% off their next bill.' },
 ]
 
 /** Profile card frames — Elite only. */

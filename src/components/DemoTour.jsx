@@ -33,8 +33,10 @@ export default function DemoTour() {
   ]
 
   const more = [
-    { icon: '🎁', label: 'Rewards', go: asKid('/kid/shop') },
-    { icon: '🏆', label: 'League', go: asKid('/kid/leaderboards') },
+    // The parent's own screens, from the parent's dashboard: they opened the
+    // child's view instead, which read as the buttons going to the wrong place.
+    { icon: '🎁', label: 'Rewards', go: () => navigate('/parent/settings?open=rewards') },
+    { icon: '🏆', label: 'League', go: () => navigate('/parent/leaderboards') },
     { icon: '📜', label: 'History', go: () => navigate('/parent/history') },
   ]
 

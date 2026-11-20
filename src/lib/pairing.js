@@ -118,3 +118,40 @@ export function newPairingRecord({ code, kidId, kidName, themeId, now = Date.now
     revokedAt: null,
   }
 }
+
+/*
+ * The other way round (0.22.0): the PARENT makes a code for one child, and
+ * the child's phone types only that. The phone never types a name or picks a
+ * world, so it cannot make a second profile from a misspelt name, and the
+ * world is always the parent's choice. Same rules: ten minutes, five wrong
+ * tries, once (create_child_link_code and redeem_child_link_code in
+ * supabase/schema.sql).
+ */
+
+/** What the child's phone says when a code does not work. Short, for a child. */
+export const CHILD_CODE_ERRORS = {
+  not_found: "Those numbers don't match. Check them on your grown-up's phone and try again.",
+  expired: `That code ran out (codes last ${MINUTES} minutes). Ask your grown-up to make a new one.`,
+  blocked: 'That code was typed wrong too many times. Ask your grown-up to make a new one.',
+  used: 'That code has been used already. Ask your grown-up to make a new one.',
+  already_linked: 'That profile is already on another phone. Ask your grown-up to unlink it first.',
+  too_many: 'Too many wrong codes. Wait about ten minutes, then try again.',
+  device_taken: 'This phone already belongs to someone in RankUp.',
+  signed_out: 'Could not connect. Check the internet and try again.',
+  unavailable: 'Could not connect. Check the internet and try again.',
+}
+
+export function childCodeError(reason) {
+  return CHILD_CODE_ERRORS[reason] || CHILD_CODE_ERRORS.not_found
+}
+
+/** What the parent's phone says when it cannot make a code. */
+export const MAKE_CODE_ERRORS = {
+  not_parent: 'Only a parent in this family can link a phone.',
+  already_linked: 'This child already has a phone linked. Unlink it below first, then make a code.',
+  unavailable: 'Could not reach the sync service. Check your connection and try again.',
+}
+
+export function makeCodeError(reason) {
+  return MAKE_CODE_ERRORS[reason] || MAKE_CODE_ERRORS.unavailable
+}

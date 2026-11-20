@@ -1,28 +1,29 @@
-import { PRIVACY_POLICY, TERMS, UNFILLED } from '../data/legalText.js'
-import { Screen, Card, Button, SectionTitle, Banner } from '../components/ui.jsx'
+import { PRIVACY_POLICY, TERMS } from '../data/legalText.js'
+import { useApp } from '../state/AppContext.jsx'
+import { Screen, Card, Button, SectionTitle } from '../components/ui.jsx'
 import { navigate } from '../lib/router.js'
+import { legalBack } from '../lib/support.js'
 
-const FIELD_NAMES = { name: 'name', email: 'contact email', address: 'postal address' }
-
-/** The privacy policy and terms, readable on a phone. */
+/**
+ * The privacy policy and terms, readable on a phone.
+ *
+ * No "not finished" banner here: these pages are public. The reminder to fill
+ * in the company's postal address is the owner's (docs/LAUNCH.md section 5,
+ * and the operator page), and until it is filled in the pages give the email
+ * address in its place.
+ */
 export default function LegalDoc({ which }) {
+  const { state } = useApp()
   const doc = which === 'terms' ? TERMS : PRIVACY_POLICY
-  const unfilled = UNFILLED.length > 0
+  const back = legalBack(state)
 
   return (
     <Screen>
-      <button type="button" onClick={() => navigate('/parent/settings')} className="tap-link text-sm text-muted mb-1 -ml-1">
-        ← Settings
+      <button type="button" onClick={() => navigate(back.to)} className="tap-link text-sm text-muted mb-1 -ml-1" data-testid="legal-back">
+        {back.label}
       </button>
       <h1 className="font-display text-2xl font-extrabold mb-1">{doc.title}</h1>
       <p className="text-sm text-muted mb-4">{doc.intro}</p>
-
-      {unfilled && (
-        <Banner tone="warn" icon="✏️" title="Not finished">
-          Still to fill in: the company&apos;s {UNFILLED.map((k) => FIELD_NAMES[k] || k).join(' and ')} (src/data/legalText.js).
-          Have a lawyer read this before you publish it.
-        </Banner>
-      )}
 
       <div className="mt-3">
         {doc.sections.map((section) => (

@@ -4,7 +4,7 @@ import { DIFFICULTY_LIST, DIFFICULTY } from '../../lib/xp.js'
 import { CATEGORIES, QUEST_PACKS, ADAPTIVE_SUPPORTS } from '../../data/questTemplates.js'
 import { Screen, Card, Button, Field, TextInput, TextArea, Select, Toggle, Chip, Banner, Tabs } from '../../components/ui.jsx'
 import { RECURRENCES } from '../../lib/recurrence.js'
-import { parseMoney, symbolFor } from '../../lib/money.js'
+import { parseMoney, symbolFor, familyCurrency } from '../../lib/money.js'
 import { navigate } from '../../lib/router.js'
 
 const TABS = [
@@ -40,7 +40,7 @@ export default function ParentAssign({ initialKidId }) {
   const kid = state.kids.find((k) => k.id === kidId)
   const [quest, setQuest] = useState(() => blankQuest(kidId, Boolean(kid?.accessibility?.hasNeeds)))
   const [saved, setSaved] = useState('')
-  const currency = state.family.currency || 'GBP'
+  const currency = familyCurrency(state.family)
   // Blank is fine — it means unpaid. Only something typed that is not an
   // amount is worth saying anything about.
   const moneyError = quest.money.trim() !== '' && parseMoney(quest.money, currency) === null

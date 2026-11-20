@@ -48,9 +48,10 @@ export function parentHelp() {
           id: 'pairing',
           q: "How do I link my child's phone?",
           a: [
-            "On your child's phone, open RankUp and tap “I'm a kid”. They pick a name and a world, and their phone shows a six-digit code.",
-            "On your phone, go to Settings → Family sync → Link a kid's device and type the code.",
-            `A code lasts ${MINUTES} minutes, works once, and stops after ${MAX_ATTEMPTS} wrong tries. If it runs out, your child taps “New code”.`,
+            "On your phone, go to Settings → Family sync → Link a kid's device and tap “Code for” your child. Your phone shows six digits.",
+            "On your child's phone, open RankUp, tap “I'm a kid” and type the six digits. That is all: no name to spell and no world to pick, so the phone joins the profile you made, in the world you chose.",
+            `A code lasts ${MINUTES} minutes, works once, and stops after ${MAX_ATTEMPTS} wrong tries. If it runs out, tap “New code”.`,
+            "Not added your child yet? On their phone, tap “No code? Make one on this phone instead”, and type the code their phone shows into yours.",
           ],
           to: { path: '/parent/pair', label: "Link a kid's device" },
         },
@@ -138,7 +139,7 @@ export function parentHelp() {
           a: [
             ...planPrices().map((line) => `${line}.`),
             `${TIERS.starter.name} covers one child. ${TIERS.standard.name} covers as many as you have. ${TIERS.elite.name} adds ${ELITE_XP_MULTIPLIER}× XP, the Overdrive look and the extra parent tools.`,
-            `Flash Tickets for the Sunday Market are an optional one-off extra, from $${usd(FLASH_TICKET_PACKS[0].price)}.`,
+            `Flash Tickets for the Sunday Market are an optional one-off extra, from $${usd(FLASH_TICKET_PACKS[0].price)}: an occasional treat from you, never needed to keep up.`,
           ],
           to: { path: '/parent/plan', label: 'See your plan' },
         },

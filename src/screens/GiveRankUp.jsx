@@ -4,9 +4,10 @@ import { Card, Button, Field, TextInput, TextArea, Banner, Chip } from '../compo
 import { TIERS } from '../state/initialState.js'
 import { usd, planLines } from '../lib/plans.js'
 import { guildsEnabled } from '../lib/guilds.js'
-import { giftsLive, startGiftCheckout } from '../lib/billing.js'
+import { giftsLive, startGiftCheckout, noPaymentsWords } from '../lib/billing.js'
 import { navigate } from '../lib/router.js'
 import { useApp } from '../state/AppContext.jsx'
+import { useDeals, GiftSaleBanner } from '../components/DealCards.jsx'
 import {
   checkGiftForm, giftError, GIFT_CHECKOUT_ERRORS, GIFT_PLANS, GIFT_MONTHS, GIFT_CODE_YEARS,
   GIFT_MESSAGE_MAX, GIFT_NAME_MAX, GIFT_RECIPIENT_DAYS,
@@ -35,6 +36,10 @@ const kept = () => { try { return JSON.parse(sessionStorage.getItem(KEPT) || 'nu
  * list and lib/giftRules.js.
  */
 export default function GiveRankUp({ query = '' }) {
+  const { state } = useApp()
+  // The holiday gift sale or the Season's deal on gifts, while on (0.23.0).
+  const deals = useDeals()
+  const sale = deals?.gift_sale || (deals?.season?.on === 'gift' ? { percent: deals.season.percent, until: deals.season.until } : null)
   const params = new URLSearchParams(query)
   const paid = params.get('paid') === '1'
   const cancelled = params.get('cancelled') === '1'
@@ -101,11 +106,13 @@ export default function GiveRankUp({ query = '' }) {
       )}
       {!live && (
         <div className="mb-3">
-          <Banner tone="info" icon="💳" title="Payments are switched off">
-            Gifts cannot be bought on this copy of RankUp. Everything else on this page works.
+          <Banner tone="info" icon="💳" title={noPaymentsWords(state, 'gift').title}>
+            {noPaymentsWords(state, 'gift').body}
           </Banner>
         </div>
       )}
+
+      <GiftSaleBanner sale={sale} link={false} />
 
       <p className="section-title">1. Choose the plan</p>
       <div className="grid grid-cols-2 gap-2.5 mb-1" role="radiogroup" aria-label="Plan">

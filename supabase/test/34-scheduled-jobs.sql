@@ -432,3 +432,29 @@ end $$;
 
 -- The schools the pilot rows above hung on.
 delete from schools where id in ('34a00000-0000-4000-8000-0000000005c1', '34a00000-0000-4000-8000-0000000005c2');
+
+-- ===========================================================================
+-- The Season autopilot (0.23.0): run_season_autopilot, run daily by pg_cron
+-- where it is switched on and by /api/run-retention either way.
+-- ===========================================================================
+do $$
+declare r jsonb; v_today date := (now() at time zone 'utc')::date; v_before text;
+begin
+  delete from season_plan;
+  v_before := (select coalesce(string_agg(id::text, ',' order by id), '') from seasons);
+  r := run_season_autopilot(v_today);
+  perform ok('the autopilot with no launch day changes nothing', r->>'idle' = 'no_launch_date'
+    and (select coalesce(string_agg(id::text, ',' order by id), '') from seasons) = v_before, r::text);
+  insert into season_plan (id, launch_on) values (1, v_today + 20);
+  r := run_season_autopilot(v_today);
+  perform ok('with launch day 20 days away, it makes Season 1, secretly', r->'made' = '[1]'::jsonb
+    and (select starts_on from seasons where number = 1) = v_today + 20, r::text);
+  r := run_season_autopilot(v_today);
+  perform ok('run again the same day: nothing more', r->'made' = '[]'::jsonb and (r->>'moved')::int = 0, r::text);
+  perform ok('the job is the server''s alone',
+    not has_function_privilege('anon', 'run_season_autopilot(date)', 'execute')
+    and not has_function_privilege('authenticated', 'run_season_autopilot(date)', 'execute'));
+  delete from season_reminders;
+  delete from seasons where number = 1;
+  delete from season_plan;
+end $$;

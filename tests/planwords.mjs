@@ -90,7 +90,7 @@ for (const [i, tier] of TIER_LADDER.entries()) {
   }
   ok(`${tier.name}: Overdrive really runs only where the plan says`, overdriveActive(state) === Boolean(tier.limits.overdrive))
   const newTools = below ? ['overdrive', 'consequenceEngine', 'blueprints', 'alliances'].filter((k) => tier.limits[k] && !below.limits[k]) : []
-  const toolWords = { overdrive: 'Overdrive', consequenceEngine: 'Consequence Engine', blueprints: 'Behaviour Blueprints', alliances: 'Parent Alliances' }
+  const toolWords = { overdrive: 'Overdrive', consequenceEngine: 'Pause and limits', blueprints: 'Behaviour Blueprints', alliances: 'Parent Alliances' }
   for (const k of newTools) ok(`${tier.name}: says it adds ${toolWords[k]}`, words.includes(toolWords[k]), words)
   for (const k of Object.keys(toolWords).filter((x) => !newTools.includes(x))) {
     ok(`${tier.name}: does not claim ${toolWords[k]}`, !words.includes(toolWords[k]))

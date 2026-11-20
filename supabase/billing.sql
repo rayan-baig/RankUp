@@ -597,6 +597,9 @@ begin
     'cycle', v_family.billing_cycle,
     -- The half-price month has been taken (once per family, ever), and
     -- whether it was in the last 31 days, when a pause would void it.
+    -- Paid months so far (0.23.0): "switch to yearly and keep what you've
+    -- paid" is offered after two.
+    'paid_months', family_paid_invoices(v_family.id),
     'save_offer_used', v_family.save_offer_used_at is not null,
     'save_offer_recent', coalesce(v_family.save_offer_used_at > now() - interval '31 days', false)
   );
@@ -1620,3 +1623,150 @@ revoke execute on function finish_save_offer(uuid, boolean) from public, anon, a
 revoke execute on function due_pause_reminders(timestamptz) from public, anon, authenticated;
 revoke execute on function claim_pause_reminder(bigint) from public, anon, authenticated;
 revoke execute on function finish_pause_reminder(bigint, boolean) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Founding Families (0.23.0): the first N families get the yearly plan's
+-- first year at a founding price, through a Stripe coupon (the setting
+-- STRIPE_FOUNDING_COUPON; no amount is kept here).
+--
+-- The places left are COUNTED, never made up: N (the setting
+-- FOUNDING_FAMILIES_LIMIT) less the places Stripe has confirmed, less the
+-- places held for a checkout started in the last two hours. A place is held
+-- when the checkout starts (reserve_founding_place), made the family's for
+-- good when Stripe's signed webhook says the checkout was paid
+-- (confirm_founding_place: the webhook is the source of truth), and given
+-- back when the checkout expires unpaid (release_founding_place) or the two
+-- hours pass. One place per family, ever.
+--
+-- No policies: only the server reads or writes it.
+-- ---------------------------------------------------------------------------
+create table if not exists founding_places (
+  family_id    uuid primary key references families(id) on delete cascade,
+  session_id   text,
+  reserved_at  timestamptz not null default now(),
+  confirmed_at timestamptz,
+  released_at  timestamptz
+);
+create index if not exists founding_places_live_idx on founding_places (confirmed_at, reserved_at) where released_at is null;
+alter table founding_places enable row level security;
+revoke all on founding_places from public, anon, authenticated;
+
+/** How long a place is held for a checkout that has not been paid yet. */
+create or replace function founding_hold() returns interval language sql immutable as $$ select interval '2 hours' $$;
+revoke all on function founding_hold() from public, anon, authenticated;
+
+/** The places taken: confirmed by Stripe, or held for a checkout in progress. */
+create or replace function founding_places_taken() returns integer
+language sql stable security definer set search_path = public as $$
+  select count(*)::int from founding_places
+   where released_at is null
+     and (confirmed_at is not null or reserved_at > now() - founding_hold());
+$$;
+revoke all on function founding_places_taken() from public, anon, authenticated;
+
+/** Places left out of p_limit: the real count, never below zero. */
+create or replace function founding_places_left(p_limit integer) returns integer
+language sql stable security definer set search_path = public as $$
+  select greatest(0, coalesce(p_limit, 0) - founding_places_taken());
+$$;
+revoke all on function founding_places_left(integer) from public, anon, authenticated;
+
+/**
+ * Hold a place for this family's yearly checkout. One family at a time
+ * (an advisory lock), so the last place cannot be given twice. A family that
+ * already holds a place gets the same one back (a second tap, or Stripe's
+ * page reopened), never a second.
+ */
+create or replace function reserve_founding_place(p_family_id uuid, p_limit integer, p_ends_at timestamptz default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_row founding_places; v_fam families;
+begin
+  perform pg_advisory_xact_lock(hashtext('founding_places'));
+  select * into v_fam from families where id = p_family_id;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_family'); end if;
+  if p_ends_at is not null and now() > p_ends_at then
+    return jsonb_build_object('ok', false, 'reason', 'ended');
+  end if;
+  select * into v_row from founding_places where family_id = p_family_id for update;
+  if found and v_row.confirmed_at is not null and v_row.released_at is null then
+    return jsonb_build_object('ok', false, 'reason', 'already_founding');
+  end if;
+  -- The half-price month and a founding year are never both had: a family
+  -- that took the half-price month in the last 31 days waits for it to end.
+  if v_fam.save_offer_used_at > now() - interval '31 days' then
+    return jsonb_build_object('ok', false, 'reason', 'save_offer_recent');
+  end if;
+  if found and v_row.released_at is null and v_row.reserved_at > now() - founding_hold() then
+    update founding_places set reserved_at = now() where family_id = p_family_id;
+    return jsonb_build_object('ok', true, 'left', founding_places_left(p_limit), 'held', true);
+  end if;
+  if founding_places_left(p_limit) < 1 then
+    return jsonb_build_object('ok', false, 'reason', 'full');
+  end if;
+  insert into founding_places (family_id) values (p_family_id)
+  on conflict (family_id) do update
+    set reserved_at = now(), released_at = null, confirmed_at = null, session_id = null;
+  return jsonb_build_object('ok', true, 'left', founding_places_left(p_limit));
+end $$;
+revoke all on function reserve_founding_place(uuid, integer, timestamptz) from public, anon, authenticated;
+
+/** The checkout session a held place is for, once Stripe has made it. */
+create or replace function note_founding_session(p_family_id uuid, p_session_id text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  update founding_places set session_id = p_session_id
+   where family_id = p_family_id and released_at is null and confirmed_at is null;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_place'); end if;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke all on function note_founding_session(uuid, text) from public, anon, authenticated;
+
+/**
+ * Stripe's signed webhook says the founding checkout was paid: the place is
+ * this family's for good. Idempotent: the same news twice changes nothing.
+ * A paid checkout whose hold had lapsed still gets its place: the family paid
+ * at the founding price, and the count says so.
+ */
+create or replace function confirm_founding_place(p_family_id uuid, p_session_id text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_row founding_places;
+begin
+  if p_family_id is null then return jsonb_build_object('ok', false, 'reason', 'no_family'); end if;
+  select * into v_row from founding_places where family_id = p_family_id for update;
+  if found and v_row.confirmed_at is not null and v_row.released_at is null then
+    return jsonb_build_object('ok', true, 'duplicate', true);
+  end if;
+  insert into founding_places (family_id, session_id, confirmed_at)
+  values (p_family_id, p_session_id, now())
+  on conflict (family_id) do update
+    set confirmed_at = now(), released_at = null, session_id = coalesce(excluded.session_id, founding_places.session_id);
+  return jsonb_build_object('ok', true);
+end $$;
+revoke all on function confirm_founding_place(uuid, text) from public, anon, authenticated;
+
+/** A founding checkout that expired unpaid gives its place back. Never a confirmed one. */
+create or replace function release_founding_place(p_family_id uuid, p_session_id text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  update founding_places set released_at = now()
+   where family_id = p_family_id and confirmed_at is null and released_at is null
+     and (session_id is null or p_session_id is null or session_id = p_session_id);
+  if not found then return jsonb_build_object('ok', false, 'reason', 'no_place'); end if;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke all on function release_founding_place(uuid, text) from public, anon, authenticated;
+
+/**
+ * How many paid invoices a family has had: the months "keep what you've
+ * paid" counts before it offers the switch to yearly. Server only, as the
+ * rest of billing.
+ */
+create or replace function family_paid_invoices(p_family_id uuid) returns integer
+language plpgsql stable security definer set search_path = public as $$
+begin
+  -- plpgsql, not sql: billing_events.amount_pence is added by charity.sql,
+  -- which runs after this file.
+  return (select count(*)::int from billing_events
+           where family_id = p_family_id and stripe_event like 'invoice:%' and coalesce(amount_pence, 0) > 0);
+end $$;
+revoke all on function family_paid_invoices(uuid) from public, anon, authenticated;

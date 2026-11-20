@@ -26,12 +26,14 @@ import HowItWorks from '../../components/HowItWorks.jsx'
 import FirstWeek from '../../components/FirstWeek.jsx'
 import DemoTour from '../../components/DemoTour.jsx'
 import UpgradeNudge from '../../components/UpgradeNudge.jsx'
+import { useDeals, GiftSaleBanner, GiftAYearCard } from '../../components/DealCards.jsx'
 import EmptyNext from '../../components/EmptyNext.jsx'
 import { EMPTY_STATES } from '../../data/emptyStates.js'
 import { STARTER_REWARDS } from '../../lib/firstWeek.js'
 
 export default function ParentDashboard() {
   const { state, dispatch } = useApp()
+  const deals = useDeals()
   const elite = useElite()
   const pending = pendingSubmissions(state)
   // Rewards a child has spent their currency on and is waiting to be given.
@@ -120,6 +122,10 @@ export default function ParentDashboard() {
       <UpgradeNudge />
       {/* After the first accepted chore, once; never on a child's phone. */}
       <InstallPrompt />
+      {/* The deals (0.23.0): the holiday gift sale while it is on, and "Gift a
+          year" a month in. Parent Mode only. */}
+      <GiftSaleBanner sale={deals?.gift_sale || null} />
+      {!deals?.gift_sale && <GiftAYearCard />}
 
       <div className="flex gap-2 mb-3">
         <Stat icon="📥" value={pending.length} label="To review" tone={pending.length ? 'var(--warn)' : undefined} />
@@ -237,7 +243,7 @@ export default function ParentDashboard() {
       <SectionTitle>Elite tools</SectionTitle>
       <div className="grid grid-cols-3 gap-2 mb-3">
         {[
-          { icon: '🛡️', label: 'Override', to: '/parent/override' },
+          { icon: '⏸️', label: 'Pause and limits', to: '/parent/override' },
           { icon: '📊', label: 'Blueprints', to: '/parent/blueprint' },
           { icon: '🏆', label: 'Alliance', to: '/parent/alliance' },
         ].map((t) => (
@@ -345,14 +351,14 @@ function StarterRewards() {
  * XP rate are its numbers, and guilds are only mentioned when they are on.
  */
 function elitePitch() {
-  const parts = ['the Consequence Engine', 'Behaviour Blueprints', 'Parent Alliances']
+  const parts = ['Pause and limits', 'Behaviour Blueprints', 'Parent Alliances']
   if (guildsEnabled()) parts.push(`${TIERS.elite.guildSize}-player guilds`)
   return `Adds ${parts.join(', ')} and a permanent ${TIERS.elite.xpMultiplier}× XP boost for kids.`
 }
 
 // The words for what the events store as ids: "Plan changed to elite" and
 // "Override (red)" were the database's words on a parent's screen.
-const OVERRIDE_NAMES = { tax: 'A Currency Tax', dimension: 'A Dimension Lockout', red: 'A Red Security Lockdown' }
+const OVERRIDE_NAMES = { tax: 'Coins taken back', dimension: 'A short break', red: 'A pause until lifted' }
 
 function describeEvent(e, kid) {
   const who = kid?.name || 'Someone'
@@ -364,7 +370,7 @@ function describeEvent(e, kid) {
     case 'level_up': return `🎉 ${who} reached level ${e.meta?.to}`
     case 'reward_redeemed': return `🎁 ${who} redeemed ${e.meta?.name}`
     case 'override_applied': return `🛡️ ${OVERRIDE_NAMES[e.meta?.kind] || 'An override'} applied to ${who}`
-    case 'override_lifted': return `🔓 Override lifted for ${who}`
+    case 'override_lifted': return `▶️ ${who} can use the app again`
     case 'login_bonus': return `🎁 ${who} claimed the daily bonus`
     case 'tier_changed': return `💳 Plan changed to ${TIERS[e.meta?.tier]?.name || 'a new plan'}`
     case 'theme_changed': return `🎨 ${who} changed theme`

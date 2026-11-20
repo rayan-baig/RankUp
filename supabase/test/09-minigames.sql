@@ -142,10 +142,14 @@ begin
   -- it, and the server quietly refuses to pay for it. That happened to
   -- ten games at once, and it was invisible from the browser because a
   -- refused game also never spends the token.
+  -- No casino games (0.22.0): hold'em, blackjack and draw poker are gone
+  -- from the arcade, and the server pays for none of them.
   res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'holdem', 60);
-  perform ok('hold''em is a game the server knows', (res->>'ok')::boolean = true);
+  perform ok('hold''em is no longer a game the server pays for', res->>'reason' = 'no_game');
   res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'blackjack', 60);
-  perform ok('and blackjack', (res->>'ok')::boolean = true);
+  perform ok('nor blackjack', res->>'reason' = 'no_game');
+  res := play_minigame('e4a44444-0000-0000-0000-000000000001', 'royal', 60);
+  perform ok('nor draw poker', res->>'reason' = 'no_game');
 
   set local role postgres;
   update kids set play_tokens = 3 where id = 'e4a44444-0000-0000-0000-000000000001';
@@ -176,7 +180,7 @@ do $$
 declare res jsonb; g text; v_games text[] := array[
     'stack', 'memory', 'chain', 'lights', 'catch', 'snake', 'merge', 'bricks', 'sweeper', 'sky',
     'four', 'slide', 'sports', 'blocks', 'sweets', 'impostor', 'turbo', 'track', 'wildfire',
-    'royal', 'tennis', 'holdem', 'blackjack', 'gofish'];
+    'tennis', 'gofish'];
 begin
   set local role postgres;
   update kids set play_tokens = 200, game_coins_today = 0, game_day = current_date - 1,

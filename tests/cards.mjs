@@ -16,7 +16,7 @@
  */
 import { rankHand, handScore, bestOfSeven, freshDeck, SUITS, RANKS } from '../src/components/games/pokerHands.js'
 import {
-  handTotal, isBlackjack, dealerShouldHit, settle, booksIn, takeRank, opponentAsk,
+  booksIn, takeRank, opponentAsk,
 } from '../src/components/games/cardRules.js'
 
 let fails = 0
@@ -140,56 +140,6 @@ console.log('\n=== The best five out of seven ===')
 }
 
 /* ---------------------------------------------------------------- */
-
-console.log('\n=== Blackjack: the aces ===')
-{
-  // The ace is eleven until it cannot be, and a hand can hold several.
-  ok('an ace and a nine is a soft twenty', handTotal(hand('AS 9H')).total === 20)
-  ok('and it knows that twenty is soft', handTotal(hand('AS 9H')).soft === true)
-  ok('ace, nine and five drops the ace to one', handTotal(hand('AS 9H 5D')).total === 15)
-  ok('and that fifteen is hard', handTotal(hand('AS 9H 5D')).soft === false)
-
-  // The one that catches a loop that only steps the first ace down.
-  ok('two aces and a nine is twenty-one', handTotal(hand('AS AH 9D')).total === 21,
-    String(handTotal(hand('AS AH 9D')).total))
-  ok('three aces and an eight is twenty-one', handTotal(hand('AS AH AD 8C')).total === 21,
-    String(handTotal(hand('AS AH AD 8C')).total))
-  ok('four aces is fourteen, not forty-four', handTotal(hand('AS AH AD AC')).total === 14,
-    String(handTotal(hand('AS AH AD AC')).total))
-
-  ok('a picture card is ten', handTotal(hand('KS QH')).total === 20)
-  ok('twenty-two is bust', handTotal(hand('KS QH 2D')).bust === true)
-
-  ok('ace and a king is blackjack', isBlackjack(hand('AS KH')) === true)
-  // Twenty-one built up to is twenty-one, but it is not blackjack.
-  ok('seven, seven, seven is twenty-one but not blackjack',
-    handTotal(hand('7S 7H 7D')).total === 21 && isBlackjack(hand('7S 7H 7D')) === false)
-}
-
-console.log('\n=== Blackjack: the dealer has no choices ===')
-{
-  ok('the dealer hits sixteen', dealerShouldHit(hand('10S 6H')) === true)
-  ok('the dealer stands on seventeen', dealerShouldHit(hand('10S 7H')) === false)
-  // Standing on a soft seventeen rather than hitting it. Both rules exist
-  // in the world; this game plays the one it says it plays.
-  ok('and stands on a soft seventeen too', dealerShouldHit(hand('AS 6H')) === false)
-}
-
-console.log('\n=== Blackjack: who won ===')
-{
-  ok('twenty beats nineteen', settle(hand('10S QH'), hand('10D 9C')) === 'player')
-  ok('nineteen loses to twenty', settle(hand('10D 9C'), hand('10S QH')) === 'dealer')
-  ok('equal totals push', settle(hand('10S 9H'), hand('10D 9C')) === 'push')
-  // Bust loses even when the dealer busts afterwards — the player's hand is
-  // already dead, which is the whole reason the house has an edge.
-  ok('a bust player loses to a bust dealer',
-    settle(hand('10S 9H 8D'), hand('10C 9D 8H')) === 'dealer')
-  ok('a dealer bust wins it for a standing player',
-    settle(hand('10S 9H'), hand('10C 9D 8H')) === 'player')
-  ok('blackjack beats a built twenty-one',
-    settle(hand('AS KH'), hand('7S 7H 7D')) === 'player')
-  ok('two blackjacks push', settle(hand('AS KH'), hand('AD QC')) === 'push')
-}
 
 console.log('\n=== Go Fish ===')
 {

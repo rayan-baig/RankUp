@@ -101,6 +101,7 @@ await page.screenshot({ path: `${SHOT_DIR}/demolive-kid.png` })
 await go('/kid/shop')
 const coins = (await store()).kids.find((k) => k.name === 'Ava').coins
 await page.locator('.card', { hasText: "Pick Friday's film" }).getByRole('button').first().click()
+await page.getByTestId('confirm-reward').click()
 await page.waitForTimeout(900)
 const shop = await store()
 shop.redemptions?.some((r) => r.name === "Pick Friday's film") && shop.kids.find((k) => k.name === 'Ava').coins < coins

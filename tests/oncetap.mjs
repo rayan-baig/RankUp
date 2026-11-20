@@ -137,6 +137,8 @@ await page.evaluate(() => {
 })
 await page.getByTestId('level-up').waitFor({ state: 'detached', timeout: 5000 })
 ok('the tap landed as the level-up closed', await page.evaluate(() => window.__tapped === true))
+// The price asks first (0.22.0); the purchase is "Yes, get it".
+await page.getByTestId('confirm-reward').click()
 
 // Long enough for the purchase to reach the server and a pull to come back.
 let mine = []

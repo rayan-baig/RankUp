@@ -145,10 +145,10 @@ regardless of theme — a chart has to stay readable and colour-blind safe in al
 | Price | $5.99/mo · $49.99/yr | $9.99/mo · $79.99/yr |
 | Quests and kid profiles | Unlimited | Unlimited |
 | All 15 kid + 10 parent themes | ✓ | ✓ |
-| Guild size | 5 | **10** (Megacluster) |
+| Guild size | 5 | **10** |
 | XP multiplier | ×1 | **×1.5** permanent |
 | Profile frames & drop selectors | — | **✓** |
-| System Override Protocol | — | **✓** |
+| Pause and limits | — | **✓** |
 | Behaviour Blueprints | — | **✓** |
 | Parent Alliance tournament | — | **✓** |
 
@@ -166,15 +166,17 @@ place on a board. See [Leaderboards](#leaderboards).
 
 ---
 
-## The System Override Protocol
+## Pause and limits (was "the System Override Protocol")
 
-Three escalating tiers, all Elite:
+Renamed in 0.22.0, in plain words, and no longer sold as a perk: the plan
+screens say "your own house rules in one place", never lock-outs or taking
+coins. Three choices, all Elite (the ids in the database are unchanged):
 
-| Tier | Effect | Ends |
+| Choice (id) | Effect | Ends |
 |---|---|---|
-| **Currency Tax** | Deducts a % of the kid's currency. App stays usable. | Instantly — it is a one-off deduction |
-| **Dimension Lockout** | Kid cannot open the app | Automatically, after the set duration |
-| **Red Security Lockdown** | Kid cannot open the app | Only when the parent manually lifts it |
+| **Take back some coins** (`tax`) | Takes back a % of the coins saved. App stays usable. | Instantly — it is a one-off |
+| **A short break** (`dimension`) | The app rests for a set time | Automatically, after the set duration |
+| **Pause until I lift it** (`red`) | The app rests | Only when the parent lifts it |
 
 Two rules built into the design:
 

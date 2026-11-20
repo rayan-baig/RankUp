@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import { formatXp } from '../../lib/xp.js'
 import { relativeTime } from '../../lib/dates.js'
-import { Screen, Card, Button, SectionTitle, Chip } from '../../components/ui.jsx'
+import { Screen, Card, Button, SectionTitle, Chip, Modal } from '../../components/ui.jsx'
 import HeroArt from '../../components/HeroArt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
 import { isMarketOpen, nextOpeningLabel } from '../../data/marketSkins.js'
@@ -29,10 +29,18 @@ export default function KidShop() {
    * once.
    */
   const buying = useRef(false)
+  /*
+   * "Are you sure?" before coins are spent. A tap on the price used to buy
+   * the reward at once, so a child scrolling past, or testing what the button
+   * did, spent their savings. The price now asks first; the purchase is the
+   * second tap, on "Yes, get it".
+   */
+  const [asking, setAsking] = useState(null)
   useEffect(() => () => clearTimeout(settle.current), [])
   if (!kid) return null
 
   const redeem = (r) => {
+    setAsking(null)
     if (justGot || buying.current) return
     buying.current = true
     dispatch({ type: 'REDEEM_REWARD', rewardId: r.id, kidId: kid.id })
@@ -156,7 +164,7 @@ export default function KidShop() {
                 disabled={!affordable || justGot === r.id}
                 aria-busy={justGot === r.id}
                 className="px-3 py-2 min-h-0 text-sm shrink-0"
-                onClick={() => redeem(r)}
+                onClick={() => { if (!justGot && !buying.current) setAsking(r) }}
               >
                 {justGot === r.id ? 'Got it!' : <>{theme.currency.icon} {r.cost}</>}
               </Button>
@@ -181,6 +189,24 @@ export default function KidShop() {
           ))}
         </>
       )}
+      <Modal
+        open={Boolean(asking)}
+        onClose={() => setAsking(null)}
+        title={asking ? `Get ${asking.name}?` : ''}
+        footer={
+          <>
+            <Button variant="ghost" className="flex-1" onClick={() => setAsking(null)}>Not now</Button>
+            <Button className="flex-1" data-testid="confirm-reward" onClick={() => asking && redeem(asking)}>Yes, get it</Button>
+          </>
+        }
+      >
+        {asking && (
+          <p className="text-sm">
+            It costs {theme.currency.icon} {asking.cost} of your {formatXp(kid.coins)} {theme.currency.name}.
+            Your grown-up hands it over.
+          </p>
+        )}
+      </Modal>
     </Screen>
   )
 }

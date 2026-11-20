@@ -25,6 +25,8 @@ import { returnOrigin } from './_shared/site.js'
 import { checkGiftForm, giftPlan } from '../src/lib/giftRules.js'
 import { ipKey } from './_shared/gifts.js'
 import { timedFetch } from './_shared/http.js'
+import { giftSale, seasonDeal } from '../src/lib/deals.js'
+import { dealSettings } from './deals.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || ''
@@ -92,6 +94,20 @@ export default async function handler(req, res) {
   }
 
   const plan = giftPlan(clean.plan)
+  /*
+   * A gift deal (0.23.0): the holiday sale between its two days, otherwise
+   * the Season's deal if it is on gift codes. One coupon, from the settings;
+   * no amount named here. Off when the settings are empty.
+   */
+  const settings = dealSettings()
+  let coupon = giftSale(settings)?.coupon || null
+  if (!coupon && String(settings.STRIPE_SEASON_COUPON || '').trim()) {
+    try {
+      const s = await serviceRpc('current_season', {})
+      const deal = seasonDeal(settings, s ? { number: s.number, name: s.name, startsOn: s.starts_on } : null)
+      if (deal?.on === 'gift') coupon = deal.coupon
+    } catch { /* no Season, no Season's deal */ }
+  }
   try {
     const stripe = makeStripe(STRIPE_SECRET)
     const session = await stripe.checkout.sessions.create({
@@ -108,9 +124,11 @@ export default async function handler(req, res) {
         metadata: { kind: 'gift', gift_order: order.order_id },
       },
       submit_type: 'pay',
+      ...(coupon ? { discounts: [{ coupon }] } : {}),
       success_url: `${origin}/#/gift?paid=1`,
       cancel_url: `${origin}/#/gift?cancelled=1`,
-    })
+    // One order, one checkout: a retry for the same order is the same session.
+    }, { idempotencyKey: `gift-checkout:${order.order_id}` })
     return res.status(200).json({ url: session.url })
   } catch (err) {
     await reportError('gift-checkout', err)

@@ -472,7 +472,7 @@ you agree to RankUp collecting the above.
 $notice$
 ) on conflict (version) do nothing;
 
--- The wording in force from November 2026: the same as src/data/legalText.js
+-- The wording in force from November 2026 until 0.22.0: the same as src/data/legalText.js
 -- (CONSENT_NOTICE), which is what the app shows. 2026-01 still described
 -- photographs and an AI photo check that RankUp no longer has. This version
 -- only collects less, so consents given to 2026-01 stay valid and nobody is
@@ -516,6 +516,57 @@ Guilds, if you use them
     child can report a message, which hides it immediately and shows it to
     both parents.
   * You can remove your child from a guild at any moment.
+
+Your rights, at any time
+
+  * See everything held about your child — Settings → Download my data.
+  * Delete all of it — Settings → Delete account. It is immediate and
+    permanent.
+  * Withdraw this consent, which deletes your children's data with it.
+
+I confirm I am the parent or legal guardian of the children I add to this
+account, and I consent to RankUp collecting the information described above.
+$notice$
+) on conflict (version) do nothing;
+
+-- The wording in force from 0.22.0 (December 2026): 2026-11 without the
+-- guild section, because guilds are switched off and the notice describes only
+-- what is on. It collects less, so consents to 2026-01 and 2026-11 stay valid.
+-- Switching guilds on needs a new version that describes them, with every
+-- parent asked again (docs/LEGAL.md). Published a second after 2026-11 so it
+-- is the newest even when both rows are made by one run of this file.
+insert into consent_notices (version, published_at, summary, body) values (
+  '2026-12', now() + interval '1 second',
+  'What RankUp collects about your child, and your rights.',
+  $notice$
+What RankUp collects about your child
+
+What we collect
+
+  * The first name you enter for your child. Nothing else identifying — no
+    surname, no birthday, no email address, no home address.
+  * The chores you assign, and whether they were completed.
+  * The theme they choose, and their XP, level and in-app currency.
+
+No photographs
+
+  * RankUp never takes, sends or keeps photographs. If you want to see that
+    a chore is done, your child can send you a picture from their own
+    phone's camera app, the way you already message each other. It never
+    passes through RankUp.
+
+What we never do
+
+  * We do not sell your data or your child's data. To anyone. Ever.
+  * We show no advertising to children.
+  * Your child is never asked for an email address, a password or a phone
+    number.
+  * We do not track your child across other websites or apps.
+
+Guilds are switched off
+
+  * Guilds, where children from different families team up, are switched
+    off. If we ever switch them on, we will ask you first.
 
 Your rights, at any time
 

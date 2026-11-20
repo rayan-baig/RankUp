@@ -505,9 +505,29 @@ export default async function handler(req, res) {
           },
         })
       }
+      /*
+       * Founding Families (0.23.0): the place held when the checkout started
+       * is the family's for good once Stripe says the checkout was paid (or
+       * needed no payment today, with what is left of a trial). The signed
+       * webhook is the source of truth; the same news twice changes nothing.
+       */
+      if (object.metadata?.founding === '1' && familyId && ['paid', 'no_payment_required'].includes(object.payment_status)) {
+        await serviceRpc('confirm_founding_place', { p_family_id: familyId, p_session_id: object.id })
+        return res.status(200).json({ received: true, founding: 'confirmed' })
+      }
       // For a subscription, the events that follow carry the authoritative
       // status, so nothing is granted here.
       return res.status(200).json({ received: true })
+    }
+
+    // A Founding checkout left unpaid until it closed: its place goes back.
+    if (event.type === 'checkout.session.expired') {
+      const familyId = object.metadata?.family_id || object.client_reference_id
+      if (object.metadata?.founding === '1' && familyId) {
+        await serviceRpc('release_founding_place', { p_family_id: familyId, p_session_id: object.id })
+        return res.status(200).json({ received: true, founding: 'released' })
+      }
+      return res.status(200).json({ received: true, ignored: 'expired' })
     }
 
     if (event.type.startsWith('customer.subscription.')) {

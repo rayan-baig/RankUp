@@ -36,3 +36,28 @@ export function avatarTier(level, theme) {
 export function nextTierLevel(level, theme) {
   return tiersFor(theme).find((t) => t > level) ?? null
 }
+
+/**
+ * The one next thing to reach: whichever comes first of the next avatar form
+ * and the next secret world (`evolution`, from nextEvolution in
+ * data/kidThemes.js). A child on level 12 used to read "Next secret at level
+ * 125": true, and so far away it says nothing. The nearer goal says more.
+ * A world opened by a story moment (beating the dragon) comes last, once no
+ * level is left to reach.
+ */
+export function nextMilestone(level, theme, evolution = null) {
+  const form = nextTierLevel(level, theme)
+  const world = evolution && !evolution.requires && evolution.level > level ? evolution.level : null
+  if (form && (!world || form <= world)) return { kind: 'form', level: form, form: tiersFor(theme).indexOf(form) + 1 }
+  if (world) return { kind: 'world', level: world }
+  if (evolution?.requires === 'dragonDefeated') return { kind: 'dragon' }
+  return null
+}
+
+/** The milestone in a few words, for a chip or a line under a level-up. */
+export function milestoneWords(m) {
+  if (!m) return ''
+  if (m.kind === 'form') return `Next form at level ${m.level}`
+  if (m.kind === 'world') return `Secret world at level ${m.level}`
+  return 'Beat the dragon to find out what comes next'
+}

@@ -3,9 +3,11 @@ import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.js
 import { levelFromXp, formatXp, xpToNext, liveStreak, DIFFICULTY } from '../../lib/xp.js'
 import { nextEvolution, storyChapters } from '../../data/kidThemes.js'
 import { storyProgress, dragonFight, DRAGON_HP, HERO_HP } from '../../lib/dragonFight.js'
-import { isMarketOpen } from '../../data/marketSkins.js'
 import { dayKey } from '../../lib/dates.js'
-import Avatar, { avatarTier, nextTierLevel, tiersFor } from '../../components/Avatar.jsx'
+import Avatar, { avatarTier, tiersFor } from '../../components/Avatar.jsx'
+import { nextMilestone, milestoneWords } from '../../lib/avatarTiers.js'
+import { foundingSeason, foundingSeasonChores, FOUNDING_SEASON_CHORES } from '../../data/badges.js'
+import { isMarketOpen } from '../../data/marketSkins.js'
 import QuestCard from '../../components/QuestCard.jsx'
 import { Screen, Card, Button, ProgressBar, Stat, SectionTitle, EmptyState, Banner, Chip } from '../../components/ui.jsx'
 import { Words, CountUp } from '../../components/Motion.jsx'
@@ -15,7 +17,7 @@ import AppHeader from '../../components/AppHeader.jsx'
 import SeasonMoment from '../../components/SeasonMoment.jsx'
 import { PickedNotice } from '../../components/KidThemesParent.jsx'
 import { useKidSchool } from './useKidSchool.js'
-import { familyGoalProgress, planPaused } from '../../state/reducer.js'
+import { familyGoalProgress, planPaused, choreSentToday } from '../../state/reducer.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
 import ModeBadge, { useLeaderboardMe } from '../../components/ModeBadge.jsx'
 import ArenaMoment from '../../components/ArenaMoment.jsx'
@@ -33,9 +35,13 @@ export default function KidHome() {
 
   const { level, intoLevel, needed, progress } = levelFromXp(kid.xp)
   const tier = avatarTier(level, theme)
-  const nextTier = nextTierLevel(level, theme)
   const story = storyProgress(state, kid)
   const evolution = nextEvolution(kid.themeId, level, story)
+  const milestone = nextMilestone(level, theme, evolution)
+  // Season 1, the Founding Season: its badge, earned by doing chores.
+  const founding = foundingSeason(state)
+  const foundingNow = Boolean(founding && Date.now() >= founding.start && Date.now() < founding.end)
+  const foundingDone = foundingNow ? foundingSeasonChores(state, kid) : 0
   /* Themes told as a story (Block Craft): the newest chapter not yet
      watched, and the dragon fight while it is on. */
   const chapters = storyChapters(kid.themeId, level, story)
@@ -89,6 +95,21 @@ export default function KidHome() {
 
       <SyncBadge />
       <SeasonMoment />
+      {foundingNow && (
+        <Card className="mb-3" data-testid="founding-season-banner">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl" aria-hidden="true">🌟</span>
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-sm">Season 1: the Founding Season</div>
+              <div className="text-xs text-muted">
+                {foundingDone >= FOUNDING_SEASON_CHORES
+                  ? 'You earned the Founding Season badge. It is yours to keep.'
+                  : `Do ${FOUNDING_SEASON_CHORES} chores this Season for the Founding Season badge: ${foundingDone} done.`}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
       <ArenaMoment kidId={kid.id} me={me} />
       <PickedNotice who="kid" />
       {/*
@@ -150,13 +171,12 @@ export default function KidHome() {
         <div className="flex flex-wrap gap-1.5 mt-3">
             <ModeBadge mode={me?.mode || 'adventure'} onClick={() => navigate('/kid/leaderboards')} />
             <Chip tone="var(--accent)">Form {tier} / {tiersFor(theme).length}</Chip>
-            {nextTier && <Chip>Next form at level {nextTier}</Chip>}
-            {/* When, never what: a world nobody has reached is a secret. */}
-            {evolution && (
-              <Chip tone="var(--accent-2)">
-                {evolution.requires === 'dragonDefeated'
-                  ? '🔒 Beat the dragon to find out what comes next'
-                  : `🔒 Secret world at level ${evolution.level}`}
+            {/* The one next thing to reach, the nearer of the next form and
+                the next world. When, never what: a world nobody has reached
+                is a secret. */}
+            {milestone && (
+              <Chip tone={milestone.kind === 'form' ? undefined : 'var(--accent-2)'} data-testid="next-milestone">
+                {milestone.kind === 'form' ? '' : '🔒 '}{milestoneWords(milestone)}
               </Chip>
             )}
         </div>
@@ -332,12 +352,14 @@ export default function KidHome() {
         />
       </div>
 
-      {bonusAvailable && (
-        <Card className="mb-3 flex items-center gap-3" style={{ borderColor: 'var(--accent)' }}>
+      {/* The daily chore bonus: offered once a chore has been sent today,
+          never for simply opening the app. */}
+      {bonusAvailable && choreSentToday(state, kid.id) && (
+        <Card className="mb-3 flex items-center gap-3" style={{ borderColor: 'var(--accent)' }} data-testid="chore-bonus">
           <span className="text-2xl" aria-hidden="true">🎁</span>
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-sm">Daily login bonus</div>
-            <div className="text-xs text-muted">+5 {theme.currency.name} just for showing up.</div>
+            <div className="font-semibold text-sm">Daily chore bonus</div>
+            <div className="text-xs text-muted">+5 {theme.currency.name} for the chore you did today.</div>
           </div>
           <Button className="px-3 py-2 min-h-0" onClick={() => dispatch({ type: 'CLAIM_LOGIN_BONUS', kidId: kid.id })}>
             Claim

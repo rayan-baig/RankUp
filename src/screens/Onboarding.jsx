@@ -168,6 +168,8 @@ export default function Onboarding() {
               value={family.pin}
               onChange={(e) => setFamily({ ...family, pin: e.target.value.replace(/\D/g, '').slice(0, 8) })}
               inputMode="numeric"
+              type="password"
+              autoComplete="new-password"
               placeholder="••••"
             />
           </Field>

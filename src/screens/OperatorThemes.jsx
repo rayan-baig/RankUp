@@ -39,6 +39,7 @@ const REFUSED = {
   season_started: 'That Season has already started. Pick for one that has not.',
   already_picked: 'It is already picked.',
   season_exists: 'There is already a Season with that number.',
+  bad_date: 'Launch day needs a real date.',
   bad_season: 'A Season needs a number from 1 to 999, a name and a start day.',
 }
 
@@ -52,6 +53,7 @@ export default function OperatorThemes({ operatorKey }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
   const [season, setSeason] = useState({ number: '', name: '', starts_on: '' })
+  const [launch, setLaunch] = useState('')
 
   const load = useCallback(async () => {
     const res = await call(operatorKey)
@@ -90,6 +92,20 @@ export default function OperatorThemes({ operatorKey }) {
       {error && <Banner tone="warn" icon="⚠️" title="Not right now" className="mb-3">{error}</Banner>}
 
       <SectionTitle>Seasons</SectionTitle>
+      {/* Launch day: Season 1 starts then, and every Season 4 months after the
+          one before, made by themselves (docs/SEASONS.md). */}
+      <Card className="mb-3" data-testid="launch-day">
+        <p className="text-sm">
+          {inbox.launch_on
+            ? <>Launch day: <strong>{inbox.launch_on}</strong>. Season 1 starts then, and each Season 4 months after the one before, by itself.</>
+            : 'Launch day is not set. Set it on launch day: Season 1 (the Founding Season) starts then, and each Season 4 months after the one before, by itself.'}
+        </p>
+        <div className="flex gap-2 mt-2 items-end">
+          <div className="flex-1"><Field label="Launch day (UTC)"><TextInput type="date" value={launch} onChange={(e) => setLaunch(e.target.value)} /></Field></div>
+          <Button variant="soft" className="mb-3" disabled={Boolean(busy) || !launch} onClick={() => act({ action: 'launch', launch_on: launch }, 'launch')}>Set</Button>
+        </div>
+        <p className="text-xs text-muted">Also write it in docs/SEASONS.md (Launch date: YYYY-MM-DD).</p>
+      </Card>
       <Card className="mb-3">
         {(inbox.seasons || []).length === 0 && <p className="text-sm text-muted mb-2">No Seasons yet.</p>}
         {(inbox.seasons || []).map((s) => (
@@ -123,7 +139,7 @@ export default function OperatorThemes({ operatorKey }) {
       <Card flat className="mb-3">
         <p className="text-xs text-muted">
           Each theme was made by a child and sent by their parent. What is here is the theme and the credit line the
-          parent chose, nothing else. Picked themes join {next ? `Season ${next.number} (${next.name}), starting ${next.starts_on}` : 'the next Season (make one first)'};
+          parent chose, nothing else. Picked themes join {next ? `Season ${next.number} (${next.name}), starting ${next.starts_on}` : 'the next Season'}; queued ones go into the next Season by themselves when it is made; nothing is published unless you pick or queue it;
           declined and unpicked ones are deleted after 90 days.
         </p>
       </Card>
@@ -141,7 +157,7 @@ export default function OperatorThemes({ operatorKey }) {
                     <p className="text-xs text-muted">{creditLine(s.credit)} · {theme.design.worlds.join(' · ')}</p>
                   </div>
                   <Chip tone={s.status === 'picked' ? 'var(--good)' : s.status === 'declined' ? 'var(--warn)' : 'var(--accent)'}>
-                    {s.status === 'picked' ? `Season ${s.season}` : s.status === 'declined' ? 'Declined' : 'New'}
+                    {s.status === 'picked' ? (s.season ? `Season ${s.season}` : 'Picked') : s.status === 'declined' ? 'Declined' : s.status === 'queued' ? 'Queued for next Season' : 'New'}
                   </Chip>
                 </div>
                 <ThemePreview theme={{ ...theme, evolution: null }} level={12} kidName="Player" height={372} testId="submission-preview" />
@@ -152,7 +168,14 @@ export default function OperatorThemes({ operatorKey }) {
                       {next ? `Pick for Season ${next.number}` : 'Pick for next Season'}
                     </Button>
                   )}
-                  {s.status === 'new' && (
+                  {/* Queue: the owner's pick for the next Season, any time,
+                      even before that Season is made. Nothing a child made is
+                      ever published without this or "Pick". */}
+                  {(s.status === 'new' || s.status === 'declined') && (
+                    <Button variant="soft" className="flex-1 !min-h-0 py-2 text-sm" disabled={Boolean(busy)}
+                            onClick={() => act({ action: 'queue', submission_id: s.id }, s.id)}>Queue for next Season</Button>
+                  )}
+                  {(s.status === 'new' || s.status === 'queued') && (
                     <Button variant="ghost" className="flex-1 !min-h-0 py-2 text-sm" disabled={Boolean(busy)}
                             onClick={() => act({ action: 'decline', submission_id: s.id }, s.id)}>Decline</Button>
                   )}

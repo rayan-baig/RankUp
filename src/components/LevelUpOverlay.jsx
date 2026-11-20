@@ -3,6 +3,7 @@ import Avatar, { avatarTier, tiersFor } from './Avatar.jsx'
 import { Button, SparkleBurst } from './ui.jsx'
 import { CountUp } from './Motion.jsx'
 import { nextEvolution, themeById } from '../data/kidThemes.js'
+import { nextMilestone, milestoneWords } from '../lib/avatarTiers.js'
 import { navigate } from '../lib/router.js'
 import { LEVEL_UP_MS, NEW_WORLD_MS, STREAK_MS } from '../lib/moments.js'
 
@@ -63,7 +64,7 @@ export default function LevelUpOverlay({ levelUp, streak = null, kid, theme, onC
   const evolutionHit = themeById(kid.themeId)?.evolutions?.find(
     (e) => !e.requires && levelUp.from < e.level && levelUp.to >= e.level,
   )
-  const upcoming = nextEvolution(kid.themeId, levelUp.to)
+  const milestone = nextMilestone(levelUp.to, theme, nextEvolution(kid.themeId, levelUp.to))
   const ms = evolutionHit ? NEW_WORLD_MS : LEVEL_UP_MS
   useMoment(ms, onClose, card)
   const levels = levelUp.to - levelUp.from
@@ -108,9 +109,11 @@ export default function LevelUpOverlay({ levelUp, streak = null, kid, theme, onC
             )}
           </>
         )}
-        {!newForm && !evolutionHit && upcoming && (
-          <p className="text-xs text-muted mb-2">
-            {upcoming.requires === 'dragonDefeated' ? 'Next secret: beat the dragon.' : `Next secret at level ${upcoming.level}.`}
+        {/* The nearer of the next form and the next world, never a level
+            so far away it means nothing (lib/avatarTiers.js). */}
+        {!newForm && !evolutionHit && milestone && (
+          <p className="text-xs text-muted mb-2" data-testid="level-up-next">
+            {milestoneWords(milestone)}.
           </p>
         )}
 

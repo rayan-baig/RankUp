@@ -1,65 +1,12 @@
 /**
- * Rules for the two card games that are not poker.
+ * Rules for Go Fish, the card game that is not poker. (Blackjack's went
+ * with the game in 0.22.0: no casino games in a children's arcade.)
  *
  * Out here rather than inside the screens for the same reason hand
  * ranking is: these are the parts that are simply right or wrong, a
  * child notices instantly when they are wrong, and they can be tested
  * without a browser. tests/cards.mjs covers them.
  */
-
-import { valueOf } from './pokerHands.js'
-
-/* ---------------------------------------------------------------- */
-/* Blackjack                                                         */
-
-/**
- * The total of a blackjack hand, with the aces sorted out.
- *
- * An ace is eleven until that would bust you, and then it is one — and
- * a hand can hold several of them, so A-A-9 is 21 and not 31 or 11.
- * Counting every ace as eleven and then stepping each one down to one
- * while the hand is bust is the version of this that handles all of
- * them; the usual bug is stepping only the first ace down.
- *
- * `soft` means an ace is still counting as eleven, which is what the
- * difference between a soft 17 and a hard 17 means.
- */
-export function handTotal(cards) {
-  let total = 0
-  let aces = 0
-  for (const c of cards) {
-    if (c.rank === 'A') { aces += 1; total += 11 } else { total += Math.min(10, valueOf(c)) }
-  }
-  let big = aces
-  while (total > 21 && big > 0) { total -= 10; big -= 1 }
-  return { total, soft: big > 0, bust: total > 21 }
-}
-
-/** Twenty-one in the first two cards, which beats a twenty-one built up to. */
-export const isBlackjack = (cards) => cards.length === 2 && handTotal(cards).total === 21
-
-/**
- * The dealer has no choices to make: hit below seventeen, stand on
- * seventeen or better, soft or hard. Playing it as a rule rather than
- * as a judgement is the point — the dealer is the fixed thing the
- * player's own decisions get measured against.
- */
-export const dealerShouldHit = (cards) => handTotal(cards).total < 17
-
-/** Who won: 'player', 'dealer' or 'push'. */
-export function settle(player, dealer) {
-  const p = handTotal(player)
-  const d = handTotal(dealer)
-  if (p.bust) return 'dealer'
-  if (d.bust) return 'player'
-  const pBJ = isBlackjack(player)
-  const dBJ = isBlackjack(dealer)
-  if (pBJ && dBJ) return 'push'
-  if (pBJ) return 'player'
-  if (dBJ) return 'dealer'
-  if (p.total === d.total) return 'push'
-  return p.total > d.total ? 'player' : 'dealer'
-}
 
 /* ---------------------------------------------------------------- */
 /* Go Fish                                                           */
