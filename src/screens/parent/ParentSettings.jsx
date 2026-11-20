@@ -7,7 +7,6 @@ import { canSyncAcrossDevices } from '../../lib/sync/index.js'
 import { isElite, planSummary } from '../../state/reducer.js'
 import { billingLive, buyFlashTickets, billingError, FLASH_TICKET_PACKS, perTicket, packSaving, noPaymentsWords } from '../../lib/billing.js'
 import { CURRENCIES, familyCurrency } from '../../lib/money.js'
-import { MARKET_NAME } from '../../data/marketSkins.js'
 import { guildsEnabled } from '../../lib/guilds.js'
 import { saveReminderSchedule } from '../../lib/notifications.js'
 import { transport } from '../../lib/sync/transport.js'
@@ -410,9 +409,10 @@ export default function ParentSettings({ open = null }) {
         summary={`${state.family.flashTickets || 0} left · from $${FLASH_TICKET_PACKS[0].price}`}>
       <Card flat>
         <p className="text-sm text-muted mb-3">
-          Your children save up for skins in the {MARKET_NAME} with the coins their chores earn, and
-          that is the point: saving up is how they get one. A Flash Ticket is an occasional treat from
-          you, like a birthday surprise, never something they need to keep up.
+          The Sunday Market opens on Sunday evenings and sells cosmetic skins for the coins your child
+          earns from chores. Saving up for one is the point, and how they get one. A Flash Ticket is an
+          occasional treat from you, like a birthday surprise, never something they need to keep up.
+          Rarer skins cost more tickets; the whole shop is eleven.
         </p>
         <Banner tone="info" icon="🧒" title="Skins are paint">
           Nothing sold in the market affects XP, levelling or how much a chore pays. A child who

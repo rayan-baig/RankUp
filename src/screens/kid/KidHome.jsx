@@ -6,6 +6,7 @@ import { storyProgress, dragonFight, DRAGON_HP, HERO_HP } from '../../lib/dragon
 import { dayKey } from '../../lib/dates.js'
 import Avatar, { avatarTier, tiersFor } from '../../components/Avatar.jsx'
 import { nextMilestone, milestoneWords } from '../../lib/avatarTiers.js'
+import { isMarketOpen } from '../../data/marketSkins.js'
 import QuestCard from '../../components/QuestCard.jsx'
 import { Screen, Card, Button, ProgressBar, Stat, SectionTitle, EmptyState, Banner, Chip } from '../../components/ui.jsx'
 import { Words, CountUp } from '../../components/Motion.jsx'
@@ -369,6 +370,27 @@ export default function KidHome() {
           </div>
           <ProgressBar value={familyGoalProgress(state)} max={state.familyGoal.targetXp} height={9} label="Family goal progress" />
         </Card>
+      )}
+
+      {/*
+        Only while the market is actually open. A card counting down to it would
+        be the exact pressure the market is written to avoid putting on a child
+        — see the note at the top of data/marketSkins.js.
+      */}
+      {isMarketOpen() && (
+        <button
+          type="button"
+          onClick={() => navigate('/kid/market')}
+          className="card w-full mb-3 flex items-center gap-3 text-left transition-transform active:scale-[0.98]"
+          style={{ borderColor: 'var(--accent)' }}
+        >
+          <span className="text-2xl" aria-hidden="true">🛍️</span>
+          <span className="flex-1 min-w-0">
+            <span className="block font-semibold text-sm">The Sunday Market is open</span>
+            <span className="block text-xs text-muted">Skins you cannot get any other day.</span>
+          </span>
+          <span aria-hidden="true" className="text-muted">›</span>
+        </button>
       )}
 
       <SectionTitle action={<button type="button" className="text-xs text-muted underline" onClick={() => navigate('/kid/quests')}>See all</button>}>

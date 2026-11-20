@@ -139,7 +139,7 @@ export function parentHelp() {
           a: [
             ...planPrices().map((line) => `${line}.`),
             `${TIERS.starter.name} covers one child. ${TIERS.standard.name} covers as many as you have. ${TIERS.elite.name} adds ${ELITE_XP_MULTIPLIER}× XP, the Overdrive look and the extra parent tools.`,
-            `Flash Tickets for the Skin Market are an optional one-off extra, from $${usd(FLASH_TICKET_PACKS[0].price)}: an occasional treat from you, never needed to keep up.`,
+            `Flash Tickets for the Sunday Market are an optional one-off extra, from $${usd(FLASH_TICKET_PACKS[0].price)}: an occasional treat from you, never needed to keep up.`,
           ],
           to: { path: '/parent/plan', label: 'See your plan' },
         },

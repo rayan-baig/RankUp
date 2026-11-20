@@ -626,11 +626,12 @@ Free things worth doing first, either way:
 - [ ] The purchaser must be the parent. Payments are behind the parent PIN and a
       child's phone has no way to a payment screen; check that yourself on a
       real child's phone.
-- [ ] The Skin Market (was the Sunday Market) sells only cosmetics, is always
-      open, has no rarity labels and no countdown, and a child's phone never
-      shows a real-money price (0.22.0). A Flash Ticket is bought by a parent
-      in Parent Mode only. Keep all of that true: regulators look hard at
-      timed shops and paid shortcuts aimed at children.
+- [ ] The Sunday Market is a timed-scarcity mechanic aimed at children, and a
+      Flash Ticket is a paid way out of missing one. Regulators look hard at
+      that. What keeps it defensible: it sells only cosmetics, shows no
+      countdown, every skin comes back, and a child's phone shows gem prices
+      only, never what a ticket costs in real money (Parent Mode only). Keep
+      all of that true.
 - [ ] Price, renewal date and how to cancel shown before payment.
 - [ ] A refund policy, written down and reachable from the app.
 - [ ] Stripe Tax switched on.

@@ -89,6 +89,10 @@ console.log('\n=== No casino games in the arcade (0.22.0) ===')
   await page.waitForTimeout(1200)
   const text = await page.evaluate(() => document.body.innerText)
   ok("no Texas Hold'em, no Blackjack and no draw poker", !/Hold.em|Blackjack|Royal Draw/i.test(text), text.match(/Hold.em|Blackjack|Royal Draw/i)?.[0])
+  // Back where the games below start from: open() presses anything named
+  // like "Arcade" first, which on the arcade itself is the Arcade shelf.
+  await page.evaluate(() => { window.location.hash = '/parent' })
+  await page.waitForTimeout(800)
 }
 
 console.log('\n=== Go Fish ===')

@@ -3,7 +3,7 @@
  *
  *   - the money sign: US dollars by default, a first guess from the phone's
  *     region, a parent's choice saved to the account;
- *   - the Skin Market: no rarity labels, no opening hours;
+ *   - the Sunday Market kept as it is, with gem prices only for a child;
  *   - the daily bonus is for a chore done today, never for opening the app;
  *   - the next goal shown to a child is the nearer one;
  *   - the legal pages' way back, and how to reach the company;
@@ -78,18 +78,16 @@ for (const [loc, want] of [['en-US', 'USD'], ['en-GB', 'GBP'], ['en-CA', 'CAD'],
   ok('the database starts families in dollars', /currency\s+text not null default 'USD'/.test(readFileSync('supabase/schema.sql', 'utf8')))
 }
 
-console.log('\n=== The Skin Market ===')
-ok('no rarity labels', MARKET_SKINS.every((s) => !('rarity' in s)) && !('RARITY' in marketModule))
-ok('no opening hours', !('isMarketOpen' in marketModule) && !('nextOpeningLabel' in marketModule) && !('MARKET_OPENS_HOUR' in marketModule))
+console.log('\n=== The Sunday Market, kept as it is (the owner\'s choice) ===')
+ok('its Sunday window, rarity labels and gem prices stay', 'isMarketOpen' in marketModule && 'RARITY' in marketModule && MARKET_SKINS.every((s) => s.cost > 0))
 ok('every skin still has its ticket price for the server to check', MARKET_SKINS.every((s) => ticketCost(s) >= 1) && FULL_SET_TICKETS === 11)
 {
-  const s0 = createInitialState()
-  const kid = { ...makeKid({ name: 'Ava', themeId: 'blockcraft' }), coins: 500 }
-  const s = { ...s0, kids: [kid] }
-  const bought = reducer(s, { type: 'BUY_SKIN', kidId: kid.id, skinId: 'ember' })
-  ok('a skin can be bought on any day, at any hour', bought.kids[0].skins.includes('ember'))
+  const market = readFileSync('src/screens/kid/KidMarket.jsx', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+  ok('a child sees gem prices only: no ticket price beside each skin', !/🎟️ \{ticketCost\(skin\)\}<\/span>/.test(market))
+  ok('no real-money price anywhere on it', !/\$\d|FLASH_TICKET_PACKS|\.price\b|perTicket/.test(market))
+  ok('and tickets are "ask a grown-up"', /Ask a grown-up/.test(market))
 }
-ok('the plan list calls it the Skin Market', PLAN_COMPARISON.some((r) => r.label === 'Skin Market') && !PLAN_COMPARISON.some((r) => /Sunday/.test(r.label)))
+ok('the plan list still calls it the Sunday Market', PLAN_COMPARISON.some((r) => r.label === 'Sunday Market'))
 
 console.log('\n=== The daily bonus is for doing a chore ===')
 {

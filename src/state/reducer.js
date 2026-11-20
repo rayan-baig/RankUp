@@ -2,7 +2,7 @@ import { uid, forAction, now as clock } from '../lib/id.js'
 import { dayKey, daysBetween, deviceZone } from '../lib/dates.js'
 import { submissionReward, levelFromXp, liveStreak } from '../lib/xp.js'
 import { createInitialState, TIERS, makeKid } from './initialState.js'
-import { findSkin, ticketCost } from '../data/marketSkins.js'
+import { findSkin, isMarketOpen, ticketCost } from '../data/marketSkins.js'
 import { DAILY_COIN_CAP, MAX_TOKENS, possibleScore, coinsForScore } from '../data/minigames.js'
 import { ENTITIES, familyGoals, weeklyLimitOf } from '../lib/sync/mappers.js'
 import { pendingRows } from '../lib/sync/shadow.js'
@@ -905,15 +905,16 @@ function reduce(state, action) {
     }
 
     /**
-     * Buy a Skin Market skin with the child's own currency.
+     * Buy a Sunday Market skin with the child's own currency.
      *
-     * The market is always open (0.22.0); buy_market_skin decides whether
-     * they can afford it.
+     * Refused unless the market is actually open, so a tampered clock in the
+     * browser is the only way round it — and that only cheats them out of the
+     * occasion, never out of XP, because skins are paint.
      */
     case 'BUY_SKIN': {
       const kid = state.kids.find((k) => k.id === action.kidId)
       const skin = findSkin(action.skinId)
-      if (!kid || !skin) return state
+      if (!kid || !skin || !isMarketOpen()) return state
       if ((kid.skins || []).includes(skin.id)) return state
       if (kid.coins < skin.cost) return state
       const next = mapKid(state, kid.id, (k) => ({
@@ -936,7 +937,7 @@ function reduce(state, action) {
     case 'CLAIM_SKIN_WITH_TICKET': {
       const kid = state.kids.find((k) => k.id === action.kidId)
       const skin = findSkin(action.skinId)
-      if (!kid || !skin) return state
+      if (!kid || !skin || !isMarketOpen()) return state
       if ((kid.skins || []).includes(skin.id)) return state
       // Rarer skins cost more tickets. buy_market_skin decides the real price;
       // this is the local copy so the button can be disabled honestly.

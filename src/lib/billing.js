@@ -85,7 +85,7 @@ export async function startCheckout(tier, cycle = 'month') {
 /**
  * Flash Tickets: a one-off purchase, not a subscription.
  *
- * A ticket claims one skin from the Skin Market without spending the child's
+ * A ticket claims one skin from the Sunday Market without spending the child's
  * currency, so a child who did not save enough that week is not shut out of it.
  *
  * Bought by a PARENT, in Parent Mode, behind the PIN. A child can spend a
@@ -106,8 +106,8 @@ export async function startCheckout(tier, cycle = 'month') {
  * genuinely better for the family too rather than just for the operator.
  */
 export const FLASH_TICKET_PACKS = [
-  { id: 'flash_2', tickets: 2, price: 2.99, note: 'Two of the smaller skins, or one mid-price one' },
-  { id: 'flash_5', tickets: 5, price: 5.99, best: true, note: 'The dearest skin and a mid-price one' },
+  { id: 'flash_2', tickets: 2, price: 2.99, note: 'A common skin, or half of a legendary' },
+  { id: 'flash_5', tickets: 5, price: 5.99, best: true, note: 'A legendary and a common, with one over' },
   { id: 'flash_12', tickets: 12, price: 11.99, note: 'Every skin in the shop, with one spare' },
 ]
 

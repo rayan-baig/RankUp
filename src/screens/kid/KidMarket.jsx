@@ -1,15 +1,14 @@
 import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import { formatXp } from '../../lib/xp.js'
-import { MARKET_SKINS, MARKET_NAME, ticketCost } from '../../data/marketSkins.js'
-import { Screen, Card, Button, SectionTitle, Chip, Stat } from '../../components/ui.jsx'
+import { MARKET_SKINS, RARITY, ticketCost, isMarketOpen, nextOpeningLabel } from '../../data/marketSkins.js'
+import { Screen, Card, Button, SectionTitle, Banner, Chip, Stat } from '../../components/ui.jsx'
 
 /**
- * The Skin Market.
+ * The Sunday Market.
  *
- * Always open, and selling nothing but paint. No opening hours, no countdown,
- * no rarity labels, and never a real-money price: a child saves up from their
- * chores and buys when they have enough (see data/marketSkins.js). Flash
- * Tickets a grown-up has given appear here only when there are some.
+ * Open Sunday evening only, and selling nothing but paint. Deliberately shows
+ * no countdown: a clock ticking down is the part of a limited-time shop that
+ * actually pressures a child, and none of this is worth pressuring anyone over.
  */
 export default function KidMarket() {
   const { state, dispatch } = useApp()
@@ -17,23 +16,40 @@ export default function KidMarket() {
   const theme = useKidTheme()
   if (!kid) return null
 
+  const open = isMarketOpen()
   const owned = kid.skins || []
   const tickets = state.family.flashTickets || 0
 
   return (
     <Screen>
-      <h1 className="font-display text-2xl font-extrabold mb-1">{MARKET_NAME}</h1>
+      <h1 className="font-display text-2xl font-extrabold mb-1">Sunday Market</h1>
       <p className="text-sm text-muted mb-3">
-        Skins for your avatar, bought with what your chores earn. They change how you look and
-        nothing else — no extra XP, no faster levelling. Every skin is always here.
+        Skins you cannot get anywhere else. They change how you look and nothing else — no extra XP,
+        no faster levelling.
       </p>
+
+      {open ? (
+        <Banner tone="good" icon="🎪" title="The market is open">
+          It shuts at midnight and comes back next Sunday at 8pm.
+        </Banner>
+      ) : (
+        <Banner tone="info" icon="🌙" title="The market is shut">
+          {nextOpeningLabel()}. Nothing here is ever gone for good — every skin comes back.
+        </Banner>
+      )}
 
       <div className="flex gap-2 my-4">
         <Stat icon={theme.currency.icon} value={formatXp(kid.coins)} label={theme.currency.name} tone="var(--accent)" />
-        {tickets > 0 && <Stat icon="🎟️" value={tickets} label="Flash Tickets" tone="var(--accent-2)" />}
+        <Stat icon="🎟️" value={tickets} label="Flash Tickets" tone="var(--accent-2)" />
       </div>
 
-      <SectionTitle>Skins</SectionTitle>
+      {tickets > 0 && open && (
+        <Banner tone="info" icon="🎟️" title={`You have ${tickets} Flash Ticket${tickets === 1 ? '' : 's'}`}>
+Rarer skins cost more tickets — one for a common, three for the legendary.
+        </Banner>
+      )}
+
+      <SectionTitle>This week's stock</SectionTitle>
       {MARKET_SKINS.map((skin) => {
         const have = owned.includes(skin.id)
         const wearing = kid.skinId === skin.id
@@ -52,8 +68,10 @@ export default function KidMarket() {
               </span>
               <div className="min-w-0 flex-1">
                 <div className="font-semibold text-sm truncate">{skin.name}</div>
-                <div className="text-xs text-muted">
-                  {have ? 'Yours' : `${theme.currency.icon} ${skin.cost}`}
+                <div className="text-xs text-muted flex items-center gap-1.5 flex-wrap">
+                  <span style={{ color: RARITY[skin.rarity].tone }}>{RARITY[skin.rarity].label}</span>
+                  {!have && <span>· {theme.currency.icon} {skin.cost}</span>}
+                  {have && <span>· Yours</span>}
                 </div>
               </div>
               {wearing && <Chip tone="var(--good)">Wearing</Chip>}
@@ -73,22 +91,30 @@ export default function KidMarket() {
                   <Button
                     variant={affordable ? 'primary' : 'soft'}
                     className="flex-1"
-                    disabled={!affordable}
+                    disabled={!open || !affordable}
                     onClick={() => dispatch({ type: 'BUY_SKIN', kidId: kid.id, skinId: skin.id })}
                   >
-                    {/* The shortfall, not "Not enough": it is the number of
-                        chores between them and the thing. */}
+                    {/*
+                      Six identical "Not enough yet" buttons tell a child
+                      nothing they did not already know. The shortfall does: it
+                      is the number of chores between them and the thing, which
+                      is the only honest way this shop should create any pull at
+                      all.
+                    */}
                     {affordable
                       ? `Buy for ${skin.cost}`
                       : `${skin.cost - kid.coins} more ${theme.currency.name}`}
                   </Button>
-                  {tickets >= ticketCost(skin) && (
+                  {tickets > 0 && (
                     <Button
                       variant="soft"
                       className="flex-1"
+                      disabled={!open || tickets < ticketCost(skin)}
                       onClick={() => dispatch({ type: 'CLAIM_SKIN_WITH_TICKET', kidId: kid.id, skinId: skin.id })}
                     >
-                      🎟️ Use {ticketCost(skin)}
+                      {tickets < ticketCost(skin)
+                        ? `Needs 🎟️ ${ticketCost(skin)}`
+                        : `🎟️ Use ${ticketCost(skin)}`}
                     </Button>
                   )}
                 </>
@@ -98,9 +124,11 @@ export default function KidMarket() {
         )
       })}
 
-      <p className="text-xs text-muted mt-4">
-        Nothing here costs real money on your phone. Flash Tickets can only come from a grown-up, in
-        Parent Mode.
+      {/* Gem prices only on a child's phone (0.22.0). Flash Tickets, and
+          what they cost in real money, are for a grown-up in Parent Mode. */}
+      <p className="text-xs text-muted mt-4" data-testid="market-ask">
+        Want a Flash Ticket? Ask a grown-up: they get them in Parent Mode. Nothing in this shop can be
+        paid for with real money from your phone.
       </p>
     </Screen>
   )

@@ -131,7 +131,7 @@ export const PLAN_COMPARISON = [
   },
   { label: 'Guilds', needs: 'guilds', value: (t) => (t.guildSize ? `${t.guildSize}-player` : false) },
   { label: 'XP rate', value: (t) => (t.xpMultiplier > 1 ? `${t.xpMultiplier}×` : 'Normal') },
-  { label: 'Skin Market', value: () => true },
+  { label: 'Sunday Market', value: () => true },
   { label: 'Arcade', value: () => true },
   { label: 'Overdrive visuals', value: (t) => t.limits.overdrive },
   { label: 'Profile frames', value: (t) => t.limits.profileFrames },

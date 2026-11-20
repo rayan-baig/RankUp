@@ -1,48 +1,67 @@
 /**
- * The Skin Market (was the Sunday Market).
+ * The Sunday Market.
  *
- * Cosmetics a child saves up for with the coins their chores earn. Until
- * 0.22.0 it opened for four hours on Sunday evenings, with rarity labels
- * (Common, Rare, Legendary) and a paid Flash Ticket as the way round missing
- * it: a scarcity mechanic aimed at children. Now:
+ * A shop that opens for four hours a week — Sunday 20:00 until midnight, on the
+ * device's own clock — and sells cosmetics you cannot get anywhere else.
  *
- *   1. It is always open. No opening hours, no countdown, nothing that goes
- *      away: a child saves up and buys when they have enough.
- *   2. No rarity labels. Skins have prices, not ranks.
- *   3. Only a parent can buy a Flash Ticket, behind the parent PIN; a child's
- *      phone never shows what a ticket costs in real money.
- *   4. Nothing sold here affects earning. Skins are paint. A child who never
- *      opens it is never behind one who buys every week.
+ * WHAT THIS IS, PLAINLY: a scarcity mechanic aimed at children, and the Flash
+ * Ticket beside it is a paid way out of missing one. That combination is
+ * exactly the pattern the FTC, the UK CMA and both app stores' family policies
+ * look hardest at. Three things keep it on the right side of the line, and all
+ * three are enforced in code rather than promised here:
+ *
+ *   1. Only a parent can buy a Flash Ticket — it lives behind the parent PIN,
+ *      and a kid's device cannot reach the purchase at all.
+ *   2. Nothing sold here affects earning. Skins are paint. A child who never
+ *      sees the market is never behind one who buys every week.
+ *   3. No countdown timer is shown to the child. The market is either open or
+ *      it is shut, and a shut market says when it opens next — once.
  */
+
+export const MARKET_OPENS_HOUR = 20 // 8pm, device local time
+export const MARKET_CLOSES_HOUR = 24
 
 /**
  * Cosmetics only, on purpose. Each is a CSS treatment applied to the child's
  * avatar ring, so a skin costs the app nothing and gives no advantage.
- *
- * `tickets` is what claiming it with Flash Tickets costs, so a ticket has a
- * size (the whole set costs eleven). Mirrored in buy_market_skin() in
- * supabase/billing.sql, which is the authority on what a claim actually
- * costs; supabase/test/08-billing.sql checks the two agree, because a client
- * that could name its own price would make the dearest skin free.
  */
+/**
+ * Rarity, and what a ticket is worth.
+ *
+ * A ticket used to buy any skin at all, which made the big packs absurd: there
+ * are six skins, so twenty-five tickets bought the shop four times over. Tying
+ * the price to rarity gives a ticket a size — the whole set costs eleven — and
+ * lets the packs be small enough to make sense.
+ *
+ * Mirrored in buy_market_skin() in supabase/billing.sql, which is the authority
+ * on what a claim actually costs. supabase/test/08-billing.sql checks the two
+ * agree, because a client that could name its own price would make the
+ * legendary free.
+ */
+export const RARITY = {
+  common: { label: 'Common', tickets: 1, tone: '#8b93a7' },
+  rare: { label: 'Rare', tickets: 2, tone: '#4d8dff' },
+  legendary: { label: 'Legendary', tickets: 3, tone: '#ffc23d' },
+}
+
 export const MARKET_SKINS = [
-  { id: 'ember', name: 'Ember Halo', cost: 120, tickets: 1, icon: '🔥',
+  { id: 'ember', name: 'Ember Halo', cost: 120, rarity: 'common', icon: '🔥',
     ring: 'conic-gradient(from 0deg, #ff8a3d, #ffd76f, #ff5f3d, #ff8a3d)' },
-  { id: 'tide', name: 'Tide Glass', cost: 120, tickets: 1, icon: '🌊',
+  { id: 'tide', name: 'Tide Glass', cost: 120, rarity: 'common', icon: '🌊',
     ring: 'conic-gradient(from 0deg, #4fd1e8, #2f7ff0, #7ef0d6, #4fd1e8)' },
-  { id: 'orchard', name: 'Orchard Bloom', cost: 150, tickets: 2, icon: '🌸',
+  { id: 'orchard', name: 'Orchard Bloom', cost: 150, rarity: 'rare', icon: '🌸',
     ring: 'conic-gradient(from 0deg, #ff9ec7, #ffd4e6, #b98cff, #ff9ec7)' },
-  { id: 'circuit', name: 'Live Circuit', cost: 150, tickets: 2, icon: '🔌',
+  { id: 'circuit', name: 'Live Circuit', cost: 150, rarity: 'rare', icon: '🔌',
     ring: 'conic-gradient(from 0deg, #7cf5a0, #22c1a4, #d7ff8a, #7cf5a0)' },
-  { id: 'dusk', name: 'Dusk Prism', cost: 200, tickets: 2, icon: '🌆',
+  { id: 'dusk', name: 'Dusk Prism', cost: 200, rarity: 'rare', icon: '🌆',
     ring: 'conic-gradient(from 0deg, #8b6bff, #ff7ad9, #4fa8ff, #8b6bff)' },
-  { id: 'gilded', name: 'Gilded Crown', cost: 260, tickets: 3, icon: '👑',
+  { id: 'gilded', name: 'Gilded Crown', cost: 260, rarity: 'legendary', icon: '👑',
     ring: 'conic-gradient(from 0deg, #ffd76f, #b8860b, #fff2c4, #ffd76f)' },
 ]
 
 /** What claiming this skin with tickets costs. */
 export function ticketCost(skin) {
-  return skin?.tickets ?? 1
+  return RARITY[skin?.rarity]?.tickets ?? 1
 }
 
 /** Tickets needed to own every skin in the shop — what the biggest pack targets. */
@@ -52,5 +71,26 @@ export function findSkin(id) {
   return MARKET_SKINS.find((s) => s.id === id) || null
 }
 
-/** The market's name, wherever it is shown. */
-export const MARKET_NAME = 'Skin Market'
+/** Sunday is day 0. Open from 20:00 to midnight, on the device's own clock. */
+export function isMarketOpen(now = new Date()) {
+  return now.getDay() === 0 && now.getHours() >= MARKET_OPENS_HOUR
+}
+
+/**
+ * When it next opens, as a plain sentence rather than a ticking clock.
+ *
+ * A countdown is the part of a scarcity mechanic that actually pressures a
+ * child, so this deliberately rounds to days and never counts seconds.
+ */
+export function nextOpeningLabel(now = new Date()) {
+  if (isMarketOpen(now)) return 'Open now'
+  const isSundayBefore = now.getDay() === 0 && now.getHours() < MARKET_OPENS_HOUR
+  if (isSundayBefore) return 'Opens tonight at 8pm'
+  const daysUntilSunday = (7 - now.getDay()) % 7 || 7
+  if (daysUntilSunday === 1) return 'Opens tomorrow at 8pm'
+  // No "· 5 days" tail. The rule at the top of this file is that a child is
+  // never shown a countdown to the market, and a number ticking down to a shop
+  // full of things they cannot buy yet is the countdown, whether or not it has
+  // a clock on it. "Opens Sunday at 8pm" already says when.
+  return 'Opens Sunday at 8pm'
+}

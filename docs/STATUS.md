@@ -46,7 +46,7 @@ one phone, with no account (see "On one phone only" below).
 | Block Craft's nine forms, story and battles | ✅ | The village to The Dragon (399). A battle scene per chapter; worlds stay secret until reached |
 | Dragon boss fight | ✅ | Accepted chores hit the dragon; chores sent back, 48 idle hours and specials hit back. Worked out from synced chores and held by the server |
 | Arcade | ✅ | 24 games. Tokens come only from finished chores (at most 5 held); at most 15 coins a day from games, counted on the family's day. The look-around family has unlimited tokens. The arcade tells a child, in plain words, how many tokens they have, how many coins they can still win today, and that winnings come back at midnight |
-| Skin Market and Flash Tickets | ✅ | Cosmetic skins, always open, no rarity labels, no countdown, no real-money price on a child's phone. Flash Tickets are bought by a parent; prices fixed on the server |
+| Sunday Market and Flash Tickets | ✅ | Cosmetic skins on Sundays only, no countdown, every skin comes back. Flash Tickets are bought by a parent, and a child's phone shows gem prices only, never a real-money price; prices fixed on the server |
 | Elite cosmetics (frames, drop selectors) | ✅ | |
 | 10 parent dashboard themes | ✅ | Colours only, by design |
 
