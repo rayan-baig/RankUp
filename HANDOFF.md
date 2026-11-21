@@ -432,7 +432,7 @@ SVG scene, **four unlockable worlds** and **a storyline**.
 
 MatrixBlocks · Block Craft · Tactical Override · Apex Royale · Aura Awakening ·
 Coquette Circuit · Pop Arena · Pegasus Horizon · Sugar Rush · Glam Protocol ·
-Campfire Cozy · Cyber Grid · Plumber Kingdom · Neon Pulse · Monster Tamer
+Campfire Cozy · Cyber Grid · Wrench Kingdom · Neon Pulse · Critter Crew
 
 **10 parent themes** (cosmetic by design): Executive Focus · Cozy Café · Zen
 Minimalist · Midnight Admin · Botanical Core · Velocity Carbon · Solstice Clean ·
