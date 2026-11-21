@@ -21,6 +21,7 @@ import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pilotConnectSources } from '../src/lib/pilotHosts.js'
 
 let fails = 0
 const ok = (label, cond, detail = '') => {
@@ -113,7 +114,11 @@ const expected = {
   // The typefaces are served from this site (src/styles/fonts.css), not Google.
   'font-src': ["'self'"],
   'img-src': ["'self'", 'data:'],
-  'connect-src': ["'self'", ...(supabase ? [supabase] : [])],
+  // Pilot, the AI helper in Parent Mode: the AI providers a parent's own key
+  // may call, from src/lib/pilotHosts.js (tests/pilot.mjs holds the list).
+  'connect-src': ["'self'", ...(supabase ? [supabase] : []), ...pilotConnectSources()],
+  // A video Pilot made with the parent's own key, played from memory.
+  'media-src': ["'self'", 'blob:'],
   'worker-src': ["'self'"],
   'manifest-src': ["'self'"],
   'object-src': ["'none'"],
@@ -140,7 +145,8 @@ const vercelHeaders = Object.fromEntries((vercel.headers.find((h) => h.source ==
 for (const [name, value] of [
   ['X-Frame-Options', 'DENY'],
   ['X-Content-Type-Options', 'nosniff'],
-  ['Permissions-Policy', 'camera=(), microphone=(), geolocation=(), interest-cohort=()'],
+  // The microphone for this site only: Pilot's voice button in Parent Mode.
+  ['Permissions-Policy', 'camera=(), microphone=(self), geolocation=(), interest-cohort=()'],
 ]) {
   ok(`${name}: ${value}, on Cloudflare and on Vercel`,
     headers.includes(`${name}: ${value}`) && vercelHeaders[name] === value,
@@ -201,6 +207,23 @@ ok(`the first file is under 260 KB, 82 KB compressed (now ${Math.round(entryText
   entryText.length < 260 * 1024 && entryZipped < 82 * 1024)
 ok('the page loads no stylesheet or script from another site, Google\'s fonts included',
   !/<link[^>]+href="https?:\/\//.test(html.replace(/<link rel="(preconnect|dns-prefetch)"[^>]*>/g, '')) && !/fonts\.(googleapis|gstatic)/.test(html))
+/*
+ * Pilot, the AI helper (0.24.0), adds only its small gate to the first file
+ * (src/lib/pilotGate.js): its config, knowledge pack and tools are a piece of
+ * their own (assets/pilot…), and its shared core is in /pilot/, fetched only
+ * once Parent Mode or a public page shows it, after the page has loaded.
+ * 0.23.0's first file was 80,374 bytes compressed; the gate may add 2 KB.
+ */
+const PILOT_GATE_BUDGET = 80374 + 2 * 1024
+ok(`with Pilot, the first file grows by its small gate only (${entryZipped} bytes compressed, at most ${PILOT_GATE_BUDGET})`,
+  entryZipped <= PILOT_GATE_BUDGET)
+const pilotPiece = files.map((f) => f.slice(dir.length + 1)).filter((f) => /^assets\/pilot[^/]*\.js$/.test(f))
+ok('Pilot\'s config, guide and tools are a piece of their own, fetched later', pilotPiece.length === 1, pilotPiece.join(', '))
+ok('none of it is in the first file (no guide, no tools, no provider address)',
+  !/whats_waiting_for_review|add_starter_chores|Your AI copilot|api\.anthropic\.com|generativelanguage/.test(entryText))
+ok('and the page itself names no Pilot file', !/pilot/i.test(html))
+ok('the shared core is copied into the build as it is (public/pilot/)',
+  ['pilot.js', 'pilot-panel.js', 'pilot-engine.js', 'pilot.css'].every((f) => readFileSync(join(dir, 'pilot', f), 'utf8') === readFileSync(join('public/pilot', f), 'utf8')))
 const css = texts.filter((t) => t.f.endsWith('.css')).map((t) => t.text).join('\n')
 ok('the typefaces are files under assets/, never written into the stylesheet',
   /url\(\/assets\/inter-latin-wght-normal-[^)]+\.woff2\)/.test(css) && !/data:font|data:application\/font/.test(css))

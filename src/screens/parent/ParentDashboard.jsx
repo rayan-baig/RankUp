@@ -158,7 +158,7 @@ export default function ParentDashboard() {
           {owed.map((r) => (
             <div key={r.id} className="flex items-center gap-2 py-1.5">
               <span className="flex-1 min-w-0 text-sm truncate">
-                {state.kids.find((k) => k.id === r.kidId)?.name || 'Your kid'}: {r.name}
+                <span data-pilot-private="">{state.kids.find((k) => k.id === r.kidId)?.name || 'Your kid'}</span>: {r.name}
               </span>
               <Button
                 className="px-3 py-1.5 min-h-0 text-xs shrink-0"
@@ -190,7 +190,7 @@ export default function ParentDashboard() {
                 <Avatar theme={theme} level={level} size={54} interactive={false} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-display font-bold truncate">{kid.name}</span>
+                    <span className="font-display font-bold truncate" data-pilot-private="">{kid.name}</span>
                     <Chip>Lv {level}</Chip>
                     {kid.accessibility?.hasNeeds && <Chip tone="var(--accent-2)">♿ Adaptive</Chip>}
                     {lock && <Chip tone="var(--bad)">{lock.type === 'red' ? 'Locked down' : 'Locked out'}</Chip>}
@@ -302,7 +302,7 @@ export default function ParentDashboard() {
               const kid = state.kids.find((k) => k.id === e.kidId)
               return (
                 <li key={e.id} className="flex items-baseline justify-between gap-2 text-sm">
-                  <span className="truncate">{describeEvent(e, kid)}</span>
+                  <span className="truncate" data-pilot-private="">{describeEvent(e, kid)}</span>
                   <span className="text-[11px] text-muted shrink-0">{relativeTime(e.at)}</span>
                 </li>
               )

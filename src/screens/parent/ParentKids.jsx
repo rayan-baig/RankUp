@@ -80,7 +80,7 @@ export default function ParentKids() {
                 <Avatar theme={theme} level={level} size={56} interactive={false} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-display font-bold truncate">{kid.name}</span>
+                    <span className="font-display font-bold truncate" data-pilot-private="">{kid.name}</span>
                     <Chip>Lv {level}</Chip>
                     {kid.accessibility?.hasNeeds && <Chip tone="var(--accent-2)">♿ Adaptive</Chip>}
                   </div>

@@ -227,6 +227,17 @@ export const PRIVACY_POLICY = {
       ],
     },
     {
+      heading: 'Pilot, the AI helper in Parent Mode',
+      body: [
+        'Pilot is an optional AI helper for parents. It is only in Parent Mode, after your PIN, and on RankUp\'s public pages (the front door, the gift pages and the School League pages). It is never on a child\'s screen or a child\'s phone.',
+        'Pilot runs on your own key from an AI company you choose (for example Anthropic, OpenAI or Google). Your key stays in your browser on that device: for this visit only, unless you tick "Remember my keys on this device". RankUp\'s server never receives your key or your conversation, and RankUp pays nothing for it: your AI company bills you, under its own terms and privacy policy. AI keys are for grown-ups (the AI companies require 18+).',
+        'Only when you send a message, your browser sends that AI company: what you typed and the conversation so far in that tab; RankUp\'s guide to its own features; the name of the screen you are on with a few counts (your plan, how many children, how many chores are waiting); and, if you press "Analyze & explain" or "Summarise", the words on that screen with your children\'s names, email addresses and phone numbers taken out.',
+        'Nothing about your children is sent unless you type it yourself or ask Pilot to look something up or make a change. Even then it is only first names and chore titles, with numbers such as XP and coins. Never a surname, an age, a photo (RankUp has none), a phone or device, or anything your child typed.',
+        'Pilot asks before it changes anything (adding a chore or a reward, accepting a chore or sending one back), and it cannot change your plan, buy anything, pause or limit a child, delete anything, remove a child, link or unlink a phone, or message anyone.',
+        'When you sign out, delete your account or leave the demo, Pilot forgets the chat and any key kept for this visit. "Remove my keys from this browser" in Pilot\'s settings deletes every key at any time.',
+      ],
+    },
+    {
       heading: 'How long we keep it',
       body: [
         'Everything: until you delete your account, which removes it immediately and permanently.',
@@ -241,6 +252,7 @@ export const PRIVACY_POLICY = {
       heading: 'Who we share it with',
       body: [
         'Nobody, except the services that make the app work: Supabase (hosting and database), Stripe (payments, only if you subscribe), a push notification service if you enable notifications, and an email service that sends your account emails (your email address only, never anything about your children).',
+        'If you use Pilot, your own browser sends your messages to the AI company you chose, with your key, as described under "Pilot" above. RankUp itself sends nothing to any AI company.',
         'If you add your child to a school\'s league, that school sees what is described under "The School League" above, and nothing more.',
         'If you send one of your child\'s themes to RankUp and we pick it for a Season, every RankUp family sees that theme and its credit line, as described above, and nothing else about your family.',
         'If you switch a child into Arena, other RankUp families see their nickname, your country\'s flag and their leaderboard numbers, as described under "Leaderboards" above, and nothing else.',
@@ -332,6 +344,13 @@ export const TERMS = {
         `A school district can buy one yearly plan, by invoice, for ${DISTRICT_MIN_SCHOOLS} schools or more. Each school is priced by its size at the yearly price, less a discount by its place in the plan: ${DISTRICT_DISCOUNTS.map((d, i) => { const next = DISTRICT_DISCOUNTS[i + 1]; return next ? `${d.pct}% for schools ${d.from} to ${next.from - 1}` : `${d.pct}% from school ${d.from}` }).join(', ')}, biggest schools first. A district that cancels keeps its plan to the end of the year paid for; an invoice left unpaid ends it. Then each school goes back to its own plan, its free trial or the free level, and nothing is deleted.`,
         `Each month the best school in each district is named District Champion and its next month is free (or, during the free trial, the trial is extended by ${SCHOOL_CHAMPION_TRIAL_DAYS} days). This needs at least two ranked schools in the district.`,
         'Any prize a school gives its students is the school\'s own. A school must not use the league to identify, contact or single out any child outside the school\'s normal care of its students.',
+      ],
+    },
+    {
+      heading: 'Pilot, the AI helper',
+      body: [
+        'Pilot uses your own key from an AI company you choose. That company bills you for it, under its own terms. AI keys are for grown-ups: the AI companies require you to be 18 or older.',
+        'Pilot\'s answers come from that AI company and can be wrong. Check anything important, such as a price, on RankUp\'s own screens. Pilot only changes something after you press Allow.',
       ],
     },
     {

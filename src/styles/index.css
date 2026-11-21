@@ -712,3 +712,20 @@
   }
   .print-page .print-hidden, .print-page .print-hidden * { display: none !important; }
 }
+
+/*
+ * Pilot, the AI helper (lib/pilotGate.js). Its own look is the shared core's
+ * (public/pilot/pilot.css and pilot-panel.css), unchanged. Two things here:
+ * it is never shown where the gate says no, even for a moment, and in Parent
+ * Mode the robot sits above the tab bar instead of on it.
+ */
+html[data-pilot='off'] .pilot-root { display: none !important; }
+html[data-pilot-tabs='on'] .pilot-root.rk-pilot.pilot-at-br,
+html[data-pilot-tabs='on'] .pilot-root.rk-pilot.pilot-at-bl {
+  bottom: calc(var(--safe-bottom, 0px) + 84px);
+}
+/* RankUp's own "Reduce motion" (Settings) keeps the robot still too, as the
+   browser's setting already does in the core's stylesheet. */
+html[data-reduce-motion='true'] .pilot-root .pilot-robot,
+html[data-reduce-motion='true'] .pilot-root .pilot-launcher::before,
+html[data-reduce-motion='true'] .pilot-root .pilot-dot { animation: none; }

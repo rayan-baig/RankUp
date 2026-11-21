@@ -61,7 +61,7 @@ export default function ParentHistory({ initialKidId = null }) {
       {state.kids.length > 1 && (
         <div className="flex flex-wrap gap-1.5 mb-2" role="group" aria-label="Which child">
           {[{ id: null, name: 'Everyone' }, ...state.kids].map((k) => (
-            <FilterChip key={k.id || 'all'} on={kidId === k.id} onClick={() => setKidId(k.id)}>{k.name}</FilterChip>
+            <FilterChip key={k.id || 'all'} on={kidId === k.id} onClick={() => setKidId(k.id)}><span data-pilot-private="">{k.name}</span></FilterChip>
           ))}
         </div>
       )}

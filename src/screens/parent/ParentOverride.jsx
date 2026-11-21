@@ -114,7 +114,7 @@ export default function ParentOverride() {
                 <span className="text-2xl" aria-hidden="true">{lock.type === 'red' ? '🛑' : '⏸️'}</span>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-sm" style={{ color: 'var(--bad)' }}>
-                    {kid.name}&apos;s app is {lock.type === 'red' ? 'paused until you lift it' : 'on a short break'}
+                    <span data-pilot-private="">{kid.name}</span>&apos;s app is {lock.type === 'red' ? 'paused until you lift it' : 'on a short break'}
                   </div>
                   {lock.until && <div className="text-xs text-muted">Lifts in {formatDuration(lock.until - Date.now())}</div>}
                   {lock.reason && <div className="text-xs text-muted mt-1">“{lock.reason}”</div>}

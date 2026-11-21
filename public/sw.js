@@ -112,6 +112,10 @@ async function keepShell() {
  * was fetched (answerAsset).
  */
 function worthKeepingAhead(path) {
+  // Pilot, the AI helper, is only for grown-ups and needs the internet
+  // anyway: its part of the app (assets/pilot…) is fetched when Parent Mode
+  // first shows it, never ahead of time, so a child's phone never holds it.
+  if (/(^|\/)assets\/pilot[^/]*$/.test(path)) return false
   return !/\.woff2$/.test(path) || /-latin-wght-normal-[^/]*\.woff2$/.test(path)
 }
 

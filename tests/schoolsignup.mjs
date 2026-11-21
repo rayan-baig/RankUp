@@ -66,7 +66,8 @@ ok(`${screens.size} screens, no more than 3 counting the school's own page`, scr
 console.log('\n=== The help page for schools ===')
 await page.evaluate(() => { window.location.hash = '/school/help' })
 await page.waitForTimeout(1200)
-const helpQuestions = await page.locator('button[aria-expanded]').count()
+// Pilot's robot (the AI helper, on the School League pages too) has aria-expanded; it is not a question.
+const helpQuestions = await page.evaluate(() => [...document.querySelectorAll('button[aria-expanded]')].filter((el) => !el.closest('.pilot-root')).length)
 ok(`the help page opens, with ${helpQuestions} questions`, helpQuestions >= 9, String(helpQuestions))
 await page.getByRole('button', { name: 'How much does it cost?' }).click()
 await page.waitForTimeout(300)

@@ -78,18 +78,30 @@ const policyText = page.match(/content="([^"]+)"/)?.[1] || ''
 const policy = Object.fromEntries(policyText.split(';').map((d) => d.trim()).filter(Boolean)
   .map((d) => { const [k, ...v] = d.split(/\s+/); return [k, v] }))
 ok('a policy was written', Object.keys(policy).length > 5, policyText)
+/*
+ * Pilot, the AI helper in Parent Mode, adds the AI providers a parent's own
+ * key may call (src/lib/pilotHosts.js; tests/pilot.mjs holds the list), and
+ * the parent's own computer for a model they run there: http://localhost:*
+ * and http://127.0.0.1:*. Those two are the only "*" allowed, and only as a
+ * port on the visitor's own machine in connect-src: no host wildcard, nothing
+ * of the company's domain.
+ */
+const { PILOT_PROVIDER_HOSTS, PILOT_COMPATIBLE_HOSTS } = await import('../src/lib/pilotHosts.js')
+const LOCAL_MODEL = new Set(['http://localhost:*', 'http://127.0.0.1:*'])
 const THIRD_PARTIES = new Set([
   'https://abcdefghijkl.supabase.co',
   'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js',
+  ...[...PILOT_PROVIDER_HOSTS, ...PILOT_COMPATIBLE_HOSTS].map((h) => `https://${h}`),
+  ...LOCAL_MODEL,
 ])
 const sources = Object.entries(policy).flatMap(([d, list]) => list.map((s) => [d, s]))
-const wild = sources.filter(([, s]) => s.includes('*'))
-ok('no wildcard in any directive (no *.<your domain>, no *)', wild.length === 0, wild.map((x) => x.join(' ')).join(', '))
-const schemes = sources.filter(([d, s]) => /^[a-z][a-z0-9+.-]*:$/i.test(s) && !(d === 'img-src' && s === 'data:'))
+const wild = sources.filter(([d, s]) => s.includes('*') && !(d === 'connect-src' && LOCAL_MODEL.has(s)))
+ok('no wildcard in any directive (no *.<your domain>, no *; only a port on the visitor\'s own computer, for Pilot)', wild.length === 0, wild.map((x) => x.join(' ')).join(', '))
+const schemes = sources.filter(([d, s]) => /^[a-z][a-z0-9+.-]*:$/i.test(s) && !(d === 'img-src' && s === 'data:') && !(d === 'media-src' && s === 'blob:'))
 ok('no bare scheme such as https:, which would allow every site', schemes.length === 0, schemes.map((x) => x.join(' ')).join(', '))
 const hosts = sources.filter(([, s]) => /^[a-z][a-z0-9+.-]*:\/\//i.test(s) || /^[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(s))
 const unknown = hosts.filter(([, s]) => !THIRD_PARTIES.has(s))
-ok("every address named is the database or the one Three.js file; this site is only 'self'",
+ok("every address named is the database, the one Three.js file or one of Pilot's AI providers; this site is only 'self'",
   unknown.length === 0, unknown.map((x) => x.join(' ')).join(', '))
 for (const sibling of SIBLINGS) {
   const host = new URL(sibling).host

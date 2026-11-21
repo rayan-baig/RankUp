@@ -66,7 +66,7 @@ export default function ParentMoney({ initialKidId = null }) {
 
       <Card className="mb-3">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="font-semibold">{kid.name} is owed</span>
+          <span className="font-semibold"><span data-pilot-private="">{kid.name}</span> is owed</span>
           <span className="font-display font-extrabold text-xl">{money(record.pot)}</span>
         </div>
         <dl className="grid grid-cols-3 gap-2 mt-3 text-center">
@@ -78,7 +78,7 @@ export default function ParentMoney({ initialKidId = null }) {
           {record.totals.lastPaidAt
             ? `Last paid ${new Date(record.totals.lastPaidAt).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}.`
             : 'Not paid anything yet.'}
-          {' '}Earned and added, less paid, is what {kid.name} is owed.
+          {' '}Earned and added, less paid, is what <span data-pilot-private="">{kid.name}</span> is owed.
         </p>
       </Card>
 

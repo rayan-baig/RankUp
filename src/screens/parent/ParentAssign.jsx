@@ -6,30 +6,12 @@ import { Screen, Card, Button, Field, TextInput, TextArea, Select, Toggle, Chip,
 import { RECURRENCES } from '../../lib/recurrence.js'
 import { parseMoney, symbolFor, familyCurrency } from '../../lib/money.js'
 import { navigate } from '../../lib/router.js'
+import { blankQuest } from '../../lib/questDraft.js'
 
 const TABS = [
   { id: 'custom', label: 'Write one' },
   { id: 'packs', label: 'Quest packs' },
 ]
-
-const blankQuest = (kidId, adaptive) => ({
-  kidId,
-  title: '',
-  description: '',
-  category: 'bedroom',
-  difficulty: 'medium',
-  xp: DIFFICULTY.medium.xp,
-  money: '',
-  requiresPhoto: true,
-  adaptive,
-  doneMeans: '',
-  supports: [],
-  why: '',
-  timerSeconds: 0,
-  testScore: false,
-  doubleXp: false,
-  recurrence: 'once',
-})
 
 export default function ParentAssign({ initialKidId }) {
   const { state, dispatch } = useApp()

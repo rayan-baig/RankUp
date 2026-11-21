@@ -38,12 +38,12 @@ export function ThemeRequests() {
               <ThemeSwatch theme={built(t)} size={46} />
               <div className="min-w-0">
                 <p className="font-semibold truncate">{t.name}</p>
-                <p className="text-xs text-muted">Made by {kid.name} in Theme Genesis</p>
+                <p className="text-xs text-muted">Made by <span data-pilot-private="">{kid.name}</span> in Theme Genesis</p>
               </div>
             </div>
             {t.useAsk && (
               <div className="mb-2" data-testid="theme-ask-use">
-                <p className="text-sm mb-2">{kid.name} would like to play in it. Their level, XP and coins stay exactly as they are.</p>
+                <p className="text-sm mb-2"><span data-pilot-private="">{kid.name}</span> would like to play in it. Their level, XP and coins stay exactly as they are.</p>
                 <div className="flex gap-2">
                   <Button variant="ghost" className="flex-1 !min-h-0 py-2 text-sm"
                           onClick={() => dispatch({ type: 'ASK_KID_THEME', id: t.id, ask: 'use', on: false })}>Not now</Button>
@@ -56,7 +56,7 @@ export function ThemeRequests() {
             )}
             {t.sendAsk && !t.sentAt && (
               <div data-testid="theme-ask-send">
-                <p className="text-sm mb-1">{kid.name} would like to send it to RankUp for next Season.</p>
+                <p className="text-sm mb-1"><span data-pilot-private="">{kid.name}</span> would like to send it to RankUp for next Season.</p>
                 <p className="text-xs text-muted mb-2">
                   RankUp gets the theme only: its name, colours, pattern, mascot and world names. Never {kid.name}&apos;s
                   name, unless you type a credit. If it is picked, every RankUp family sees the theme and the credit.
@@ -136,7 +136,7 @@ export function KidThemesSection() {
           return (
             <div key={kid.id} className="mb-3">
               <div className="flex items-center justify-between gap-2 mb-1">
-                <p className="font-semibold text-sm">{kid.name} <span className="text-muted font-normal">· {mine.length} of {MAX_KID_THEMES}</span></p>
+                <p className="font-semibold text-sm"><span data-pilot-private="">{kid.name}</span> <span className="text-muted font-normal">· {mine.length} of {MAX_KID_THEMES}</span></p>
                 {mine.length < MAX_KID_THEMES && (
                   <button type="button" className="chip" onClick={() => navigate(`/parent/genesis?kid=${kid.id}`)}>+ Make one</button>
                 )}

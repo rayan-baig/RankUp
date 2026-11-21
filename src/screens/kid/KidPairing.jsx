@@ -5,6 +5,7 @@ import { generateCode, formatCode, newPairingRecord, pairingStatus, msRemaining,
 import { uid } from '../../lib/id.js'
 import { formatDuration } from '../../lib/dates.js'
 import { Card, Button, Banner, SectionTitle } from '../../components/ui.jsx'
+import { useKidHere } from '../../components/PilotGate.jsx'
 
 /**
  * The kid's device, waiting to be linked.
@@ -15,6 +16,8 @@ import { Card, Button, Banner, SectionTitle } from '../../components/ui.jsx'
  * and this screen is where that yes arrives.
  */
 export default function KidPairing({ name, themeId, onCancel }) {
+  // A child is setting this phone up: no Pilot (lib/pilotGate.js).
+  useKidHere()
   const { state, dispatch } = useApp()
   const [record, setRecord] = useState(state.pendingPairing)
   const [status, setStatus] = useState('waiting') // waiting | claimed | error

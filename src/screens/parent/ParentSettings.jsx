@@ -164,7 +164,7 @@ export default function ParentSettings({ open = null }) {
               const kid = state.kids.find((k) => k.id === r.kidId)
               return (
                 <div key={r.id} className="flex items-center gap-2 py-2">
-                  <span className="flex-1 text-sm truncate">{kid?.name}: {r.name}</span>
+                  <span className="flex-1 text-sm truncate"><span data-pilot-private="">{kid?.name}</span>: {r.name}</span>
                   <Button className="px-3 py-1.5 min-h-0 text-xs" onClick={() => dispatch({ type: 'FULFIL_REDEMPTION', redemptionId: r.id })}>
                     Mark given
                   </Button>

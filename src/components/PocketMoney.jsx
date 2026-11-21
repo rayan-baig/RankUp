@@ -79,7 +79,7 @@ export default function PocketMoney({ kidId = null }) {
         const pot = potFor(state, kid.id)
         return (
           <div key={kid.id} className="flex items-center gap-2 py-2">
-            <span className="min-w-0 flex-1 font-semibold text-sm">{kid.name}</span>
+            <span className="min-w-0 flex-1 font-semibold text-sm" data-pilot-private="">{kid.name}</span>
             <CountUp
               value={pot}
               format={(p) => formatMoney(p, currency)}
@@ -99,7 +99,7 @@ export default function PocketMoney({ kidId = null }) {
             return (
               <div key={e.id} className="flex items-baseline gap-2 py-0.5">
                 <span className="text-xs text-muted min-w-0 flex-1 truncate">
-                  {kid?.name}
+                  <span data-pilot-private="">{kid?.name}</span>
                   {e.note ? ` · ${e.note}` : ''}
                   {!e.note && e.kind === 'paid' ? ' · paid out' : ''}
                   {!e.note && e.kind === 'gift' ? ' · added' : ''}
