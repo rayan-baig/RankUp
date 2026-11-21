@@ -3,7 +3,7 @@
 Drop image files straight into this folder. Nothing else needs changing —
 the app picks up any file it finds and uses it automatically. A file here
 always wins over RankUp's own drawing for the same slot, which lives in
-`src/assets/drawn/` (an original picture for each world, a tile for each
+`public/drawn/` (an original picture for each world, a tile for each
 arcade game, and the skyline behind the tab banners). So a picture from an
 image generator replaces the drawn one just by being dropped in here under
 the same name, e.g. `avatar-pegasus.png` replaces the drawn winged horse.

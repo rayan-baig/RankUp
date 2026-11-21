@@ -100,7 +100,7 @@ export default function Avatar({ theme, level = 1, size = 120, companion = false
    * The picture for this theme at this form. The owner's per-form file
    * wins (Block Craft has all nine); then the owner's single portrait for
    * the theme; then RankUp's own drawing of the world's hero
-   * (src/assets/drawn/avatar-<theme>.svg, one for each of the fourteen
+   * (public/drawn/avatar-<theme>.svg, one for each of the fourteen
    * other worlds). With none, the generated character below is drawn
    * instead, which is what a child's own Theme Genesis world without a
    * mascot would get. See data/art.js.

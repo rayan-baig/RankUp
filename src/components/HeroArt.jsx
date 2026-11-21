@@ -12,7 +12,7 @@ import { isLightTheme } from '../lib/themeTone.js'
  * stays readable over whatever the picture turns out to be.
  *
  * Otherwise, on a dark world, RankUp's own night skyline
- * (src/assets/drawn/hero-city.svg) sits in the band, drawn in the world's
+ * (public/drawn/hero-city.svg) sits in the band, drawn in the world's
  * own colours: the picture gives only its light and shade, and the band's
  * gradient, made of the theme's accent and surfaces, gives the colour. So
  * it is green under Block Craft and gold-red under Aura Awakening.

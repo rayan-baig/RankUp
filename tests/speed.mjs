@@ -32,9 +32,8 @@ ok('an avatar, an arcade tile or an icon is never written into the code',
   inlineAsset('/repo/src/assets/art/avatar-apex.svg') === false
   && inlineAsset('/repo/src/assets/art/game-snake.svg') === false
   && inlineAsset('C:\\repo\\src\\assets\\art\\icon-coin.svg') === false)
-ok('nor one of RankUp\'s own drawings (src/assets/drawn: the worlds, the tiles, the skyline)',
-  inlineAsset('/repo/src/assets/drawn/avatar-pegasus.svg') === false
-  && inlineAsset('C:\\repo\\src\\assets\\drawn\\game-snake.svg') === false)
+ok('nor one of RankUp\'s own drawings (public/drawn: served as files by name, never imported into the code)',
+  existsSync('public/drawn/avatar-pegasus.svg') && !existsSync('src/assets/drawn'))
 ok('nor a typeface (the policy allows fonts from this site only, not data:)',
   inlineAsset('/repo/node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-cyrillic-ext-wght-normal.woff2') === false)
 ok('anything else follows Vite\'s usual rule', inlineAsset('/repo/src/components/games/x.png') === undefined)

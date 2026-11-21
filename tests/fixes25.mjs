@@ -63,7 +63,7 @@ ok('the quest cards use questPay', /questPay\(quest, kid, \{ elite \}\)/.test(ca
 ok('the quest page uses questPay', /questPay\(quest, kid, \{ elite, onTime \}\)/.test(detail) && !/calcReward\(/.test(detail))
 
 console.log('\n=== 2. A picture for every world, a tile for every game ===')
-const DRAWN = 'src/assets/drawn'
+const DRAWN = 'public/drawn'
 const ART = 'src/assets/art'
 const drawnFiles = readdirSync(DRAWN)
 const artFiles = readdirSync(ART)
@@ -99,14 +99,18 @@ ok('every drawn file is a world, a game or the banner skyline',
 const artJs = read('src/data/art.js')
 ok('the owner\'s file wins over the drawn one (picture(): art first, then drawn)',
   /export function picture\(\.\.\.slots\) \{\s*const own = artAny\(\.\.\.slots\)\s*if \(own\) return \{ url: own, drawn: false \}/.test(artJs))
-ok('the drawn ones are found by name, like the owner\'s', /import\.meta\.glob\('\.\.\/assets\/drawn\/\*\.svg'/.test(artJs))
+ok('the drawn ones are found by name, like the owner\'s', /drawn\/\$\{name\}\.svg/.test(artJs))
+{
+  const listed = [...artJs.matchAll(/'((?:avatar|game|hero)-[a-z0-9-]+)'/g)].map((m) => m[1]).sort()
+  const onDisk = drawnFiles.filter((f) => f.endsWith('.svg')).map((f) => f.replace(/\.svg$/, '')).sort()
+  ok('art.js lists exactly the drawings in public/drawn', JSON.stringify(listed) === JSON.stringify(onDisk), `${listed.length} listed, ${onDisk.length} on disk`)
+}
 ok('the avatar, the theme picker and the arcade all ask picture()',
   /picture\(\s*`avatar-\$\{theme\?\.id\}-/.test(read('src/components/Avatar.jsx'))
   && /picture\(`avatar-\$\{theme\.id\}-\$\{tiersFor\(theme\)\[0\]\}`, `avatar-\$\{theme\.id\}`\)/.test(read('src/components/ThemePicker.jsx'))
   && /tileArt\(`game-\$\{g\.id\}`\)/.test(read('src/screens/kid/KidArcade.jsx')))
-const { inlineAsset } = await import('../vite.config.js')
-ok('drawn pictures are files of their own, never written into the code (fetched when shown)',
-  inlineAsset('/repo/src/assets/drawn/avatar-pegasus.svg') === false)
+ok('drawn pictures are files of their own in public/, never written into the code (fetched when shown)',
+  existsSync('public/drawn/avatar-pegasus.svg') && !existsSync('src/assets/drawn'))
 ok('the README tells the owner how to replace a drawn picture', /avatar-pegasus\.png/.test(read(`${ART}/README.md`)))
 
 console.log('\n=== 3. The parent PIN: a salted hash, a limit, offline ===')

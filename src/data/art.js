@@ -72,7 +72,7 @@ export function artAny(...slots) {
 }
 
 /*
- * RankUp's own drawn pictures, in src/assets/drawn/: an original portrait
+ * RankUp's own drawn pictures, in public/drawn/: an original portrait
  * for each world's picker card and first avatar form, a tile for each arcade
  * game, and the banner behind each tab's title. Small SVG files, each its
  * own file in the build (vite.config.js, inlineAsset) and fetched only when
@@ -83,15 +83,21 @@ export function artAny(...slots) {
  * dropped in, with nothing to change here. Block Craft's pictures are the
  * owner's, in src/assets/art/, and have no drawn stand-in.
  */
-const drawnFiles = import.meta.glob('../assets/drawn/*.svg', {
-  eager: true,
-  query: '?url',
-  import: 'default',
-})
+// The drawn pictures live in public/drawn/ and are served as they are, by
+// name: listing names here costs the first file far less than a table of
+// fingerprinted addresses (tests/fixes25.mjs keeps this list and the folder
+// in step).
+const DRAWN_NAMES = [
+  'avatar-apex', 'avatar-aura', 'avatar-campfire', 'avatar-coquette', 'avatar-cybergrid',
+  'avatar-glam', 'avatar-matrixblocks', 'avatar-monstertamer', 'avatar-neonpulse',
+  'avatar-pegasus', 'avatar-plumber', 'avatar-poparena', 'avatar-sugarrush', 'avatar-tactical',
+  'game-blocks', 'game-bricks', 'game-catch', 'game-chain', 'game-four', 'game-gofish',
+  'game-impostor', 'game-lights', 'game-memory', 'game-merge', 'game-sky', 'game-slide',
+  'game-snake', 'game-sports', 'game-stack', 'game-sweeper', 'game-sweets', 'game-tennis',
+  'game-track', 'game-turbo', 'game-wildfire', 'hero-city',
+]
 const DRAWN = {}
-for (const [path, url] of Object.entries(drawnFiles)) {
-  DRAWN[slug(path.split('/').pop().replace(/\.[^.]+$/, ''))] = url
-}
+for (const name of DRAWN_NAMES) DRAWN[name] = `${import.meta.env.BASE_URL}drawn/${name}.svg`
 
 /** RankUp's own drawing for a slot, or null. */
 export function drawn(slot) {
