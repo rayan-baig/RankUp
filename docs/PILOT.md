@@ -13,7 +13,9 @@ only what is different in RankUp.
   no tab and on nothing on the screen; on a wider screen, beside the column.
 - On a signed-out phone **only after "I'm a parent"**: the sign-up and the
   family's set-up (`useParentHere()` in Onboarding). **Never on the front
-  door** or anything shown before someone says whose phone it is (0.26.0).
+  door** or anything shown before someone says whose phone it is (0.26.0),
+  and **not on sign-up's step 2** ("Your kid picks a world"), where the child
+  may be holding the phone (0.27.0); back on step 1 it returns.
 - On the gift and School League pages (`#/gift`, `#/gift/card`, `#/school`,
   `#/school/help`, `#/school/report`, `#/district`).
 - **Never** on a child's screen (anything under `#/kid`, the PIN screen, the
@@ -43,6 +45,26 @@ core's `PilotMascot.placeNow` (without changing its files) to answer "bottom
 right, not tucked away" while the slot is showing, because what scrolls
 behind the bar is hidden by it. `gutter: false`: RankUp's screens keep their
 own side padding.
+
+## The opening screen and the settings (0.27.0)
+
+The design's five pills stay, as the owner decided. Under them RankUp adds a
+row of its own suggestions ("What's waiting for me?", "Add a chore for…" and
+one for the screen, the same `chips` the core shows once a chat has started),
+so they are there before any chat and before a key is added. The core (1.1.1)
+shows `chips` only once a conversation has started and has no option for the
+welcome, so `src/pilot/pilotRankUp.js` puts the row into the core's welcome,
+after `.pilot-pills`, and puts it back whenever the core redraws it (a
+MutationObserver), without changing the core's files. A tap writes the
+question into the message box, like the core's "Get things done…" pill; with
+a key it is sent, unless it ends on a gap for the parent to finish.
+
+RankUp's Pilot settings show chat keys only. The core has no option to leave
+out "Image generation" and "Video generation", so one rule in
+`src/styles/index.css`, scoped to RankUp's Pilot (`.pilot-root.rk-pilot`, the
+config's `themeClass`), hides the settings view's `details.pilot-section`
+elements, which in core 1.1.1 are exactly those two (`tests/fixes27.mjs`
+checks that against the core's file).
 
 ## The moving robot
 

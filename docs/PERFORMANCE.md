@@ -78,6 +78,15 @@ arcade, in the demo) was identical pixel for pixel.
 of this: the first file must stay under 260 KB (82 KB compressed), with no
 picture and no third-party stylesheet in the page.
 
+**0.27.0.** The level-up and streak moments (`components/LevelUpOverlay.jsx`)
+left the first file: they are fetched the first time one is due, which made
+about 1.3 KB of compressed room. The computer layouts added in 0.27.0 are a
+stylesheet of their own (`src/styles/desk.css`, under 1 KB compressed),
+fetched with the front door, the parent dashboard and the children's
+screens, and never part of the first file (`tests/fixes27.mjs`). Built
+without `.env.local`, as CI builds it, the first file went from 82,391 to
+about 81,100 bytes compressed (the budget in `tests/bundle.mjs` is 82,422).
+
 ### Measure it again
 
 The script used is not part of the app (it needs a stand-in for Google's

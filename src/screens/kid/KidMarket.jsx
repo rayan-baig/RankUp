@@ -2,6 +2,8 @@ import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import { formatXp } from '../../lib/xp.js'
 import { MARKET_SKINS, RARITY, ticketCost, isMarketOpen, nextOpeningLabel } from '../../data/marketSkins.js'
 import { Screen, Card, Button, SectionTitle, Banner, Chip, Stat } from '../../components/ui.jsx'
+// A child's screens sit in a frame on a computer (styles/desk.css).
+import '../../styles/desk.css'
 
 /**
  * The Sunday Market.

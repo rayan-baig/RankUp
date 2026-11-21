@@ -1,0 +1,103 @@
+/*
+ * RankUp on a computer (0.27.0).
+ *
+ * The app is built for a phone, and on a desktop every screen used to be the
+ * same phone-wide column in the middle of the window. This file is imported
+ * by the screens that use it (the front door, the parent dashboard and the
+ * children's screens), so it arrives with them, after the first file, and a
+ * phone never runs a line of it: everything below is inside a min-width
+ * query, apart from the front door's step list, which a phone never shows.
+ *
+ * Nothing here sets transform, filter or backdrop-filter on a column: any of
+ * them would make it the containing block of the fixed things inside it (the
+ * level-up moment, the "Sent!" card) and pin those to the column instead of
+ * the window.
+ */
+
+/* ---------------------------------------------------------------- the front door */
+
+/* The four steps beside the demo, on a computer only. */
+.door-steps { display: none; }
+
+@media (min-width: 960px) {
+  .shell.door {
+    max-width: 66rem;
+    padding: 56px 40px 40px;
+    justify-content: center;
+  }
+  /* Words and the ways in on the left, the demo on the right. */
+  .door-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 27rem) minmax(0, 1fr);
+    grid-template-areas: 'head demo' 'ways demo';
+    column-gap: 56px;
+    align-items: center;
+    align-content: center;
+  }
+  .door .door-head { grid-area: head; text-align: left; align-self: end; }
+  .door .door-head > :first-child { justify-content: flex-start; }
+  .door .door-head [data-testid='what-it-is'] { margin-left: 0; max-width: 26rem; font-size: 15px; }
+  .door-ways { grid-area: ways; align-self: start; }
+  .door-demo {
+    grid-area: demo;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    padding: 32px 36px;
+    border-radius: 28px;
+    background: color-mix(in srgb, var(--surface) 55%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+    box-shadow: 0 30px 80px -44px rgb(0 0 0 / 0.8), 0 0 60px -34px var(--accent);
+  }
+  .door-demo > :first-child { flex: 0 0 auto; width: 230px; }
+  .door-steps { display: block; flex: 1 1 0; min-width: 0; max-width: 17rem; list-style: none; margin: 0; padding: 0; }
+  .door-steps li { display: flex; gap: 12px; padding: 10px 0; }
+  .door-steps li + li { border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+  .door-step-n {
+    flex: 0 0 26px; height: 26px; border-radius: 999px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800;
+    color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+}
+
+/* ---------------------------------------------------------------- the parent dashboard */
+
+@media (min-width: 1100px) {
+  html[data-area='parent'] body .shell.dash-wide { max-width: 72rem; padding-left: 24px; padding-right: 24px; }
+  /* The tab bar stays Parent Mode's 38rem (index.css), centred under the two
+     columns: its five tabs a thumb apart, and room beside it for Pilot's
+     robot, which on a computer sits beside the bar, never on it. */
+  .dash-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    column-gap: 24px;
+    align-items: start;
+  }
+}
+
+/* ---------------------------------------------------------------- a child's screens */
+
+/*
+ * A child's screens stay narrow (a game is played in a column), but on a
+ * computer the column sits in a frame of its own in the world's colours
+ * instead of floating loose on the background. The tab bar is as wide as the
+ * cards inside it.
+ */
+@media (min-width: 1100px) {
+  html[data-area='kid'] body .shell {
+    max-width: 34rem;
+    margin-top: 24px;
+    padding: 20px 22px 7.5rem;
+    border-radius: 32px 32px 0 0;
+    background: color-mix(in srgb, var(--bg) 62%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+    border-bottom: 0;
+    box-shadow: 0 40px 90px -50px rgb(0 0 0 / 0.85), 0 0 70px -40px var(--accent);
+    min-height: calc(100vh - 24px);
+  }
+  html[data-area='kid'] .tabbar { max-width: calc(34rem - 44px); }
+}

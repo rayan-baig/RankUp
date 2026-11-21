@@ -157,6 +157,94 @@ function chips() {
   return [WAITING, ADD_CHORE, third]
 }
 
+/*
+ * RankUp's suggestions on Pilot's opening screen, before any chat and before
+ * a key is added (0.27.0).
+ *
+ * The core (1.1.1) shows `chips` only once a conversation has started, and a
+ * conversation can't start without a key, so a parent opening Pilot for the
+ * first time saw only the design's five pills, which say nothing about
+ * RankUp. The five pills stay (the owner's decision). The core has no option
+ * for suggestions on its welcome, so RankUp adds a row of its own, the same
+ * `chips` as above, between the pills and the key card, without changing the
+ * core's files: the core redraws its welcome, and the row is put back each
+ * time (a MutationObserver, before the next paint). It goes with the welcome
+ * once a conversation starts, where the core's own chips take over.
+ *
+ * A tap writes the question into the message box, as the core's own "Get
+ * things done…" pill does. With a key it is sent; without one it waits in
+ * the box, with the core's note about keys just under it.
+ */
+let starters = null
+let startersFor = ''
+let welcomeSeen = null
+export function starterRow(doc = document) {
+  const list = chips().slice(0, 3)
+  const key = list.map((c) => c.label).join('|')
+  if (!starters) {
+    starters = doc.createElement('div')
+    starters.className = 'rk-starters'
+    starters.setAttribute('role', 'group')
+    starters.setAttribute('aria-label', 'Suggestions for RankUp')
+    starters.dataset.testid = 'pilot-starters'
+  }
+  if (key !== startersFor) {
+    startersFor = key
+    starters.replaceChildren(...list.map((c) => {
+      const b = doc.createElement('button')
+      b.type = 'button'
+      b.className = 'pilot-chip'
+      b.textContent = c.label
+      b.addEventListener('click', () => askFromStarter(c.prompt || c.label))
+      return b
+    }))
+  }
+  return starters
+}
+
+function askFromStarter(prompt) {
+  const root = document.querySelector('.pilot-root')
+  const input = root?.querySelector('.pilot-input')
+  if (!input) return
+  input.value = prompt
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+  input.focus()
+  try { input.setSelectionRange(prompt.length, prompt.length) } catch { /* fine */ }
+  // A question that ends on a gap ("Add a chore for ") is for the parent to finish.
+  if (window.Pilot?.ready?.() && !/\s$/.test(prompt)) input.closest('form')?.requestSubmit?.()
+}
+
+/* Puts the row back into the core's welcome whenever the core redraws it. */
+function placeStarters() {
+  const root = document.querySelector('.pilot-root')
+  const welcome = root?.querySelector('.pilot-welcome')
+  if (!welcome) return false
+  const row = starterRow()
+  const pills = welcome.querySelector('.pilot-pills')
+  if (pills && row.previousElementSibling !== pills) pills.after(row)
+  else if (!pills && row.parentNode !== welcome) welcome.append(row)
+  if (welcomeSeen !== welcome && typeof MutationObserver === 'function') {
+    welcomeSeen = welcome
+    new MutationObserver(() => { if (row.parentNode !== welcome || row.previousElementSibling !== welcome.querySelector('.pilot-pills')) placeStarters() })
+      .observe(welcome, { childList: true })
+  }
+  return true
+}
+
+/* The welcome is built the first time Pilot is opened, inside Pilot's root,
+   which the core adds to the page a moment after mounting: wait for each once. */
+let waitingForWelcome = false
+function watchForWelcome() {
+  if (placeStarters() || waitingForWelcome || typeof MutationObserver !== 'function') return
+  waitingForWelcome = true
+  const root = document.querySelector('.pilot-root')
+  const seen = new MutationObserver(() => {
+    if (placeStarters()) { seen.disconnect(); return }
+    if (!root && document.querySelector('.pilot-root')) { seen.disconnect(); waitingForWelcome = false; watchForWelcome() }
+  })
+  seen.observe(root || document.body, root ? { childList: true, subtree: true } : { childList: true })
+}
+
 function taskPrompt() {
   const r = route()
   if (r === '/parent/assign' || r === '/parent') return 'Add a chore for '
@@ -284,7 +372,7 @@ function start() {
   if (!shows()) return false
   placeAroundTabBar()
   mounted = window.Pilot.mount(config) === true
-  if (mounted) watch()
+  if (mounted) { watch(); watchForWelcome() }
   return mounted
 }
 
@@ -445,8 +533,11 @@ export function connect() {
       if (!start()) return
       unpark()
       robotStill(reduceMotion())
+      // The screen may have changed: the row follows it.
+      if (starters) starterRow()
+      watchForWelcome()
     },
   }
 }
 
-export const _test = { accountOf, chips, screen, SCREENS, CORE_FILES, config }
+export const _test = { accountOf, chips, screen, SCREENS, CORE_FILES, config, starterRow }

@@ -409,7 +409,7 @@ Elite multiplies all XP by **1.5**.
 
 ### Currency and caps
 
-- Coins are themed per world — Pink Crystals, Drop Coins, Berberries, Star Shards…
+- Coins are themed per world — Pink Crystals, Drop Coins, Berries, Star Shards…
 - **Arcade: `MAX_TOKENS = 5`, `DAILY_COIN_CAP = 15`.** A token comes from an
   approved chore and from nothing else; the daily cap stops the arcade becoming
   a coin faucet.

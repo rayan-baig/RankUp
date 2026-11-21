@@ -12,7 +12,6 @@ import ThemeBackground from './components/ThemeBackground.jsx'
 import Atmosphere from './components/Atmosphere.jsx'
 import ParentBackground from './components/ParentBackground.jsx'
 import NavBar from './components/NavBar.jsx'
-import LevelUpOverlay, { StreakMoment } from './components/LevelUpOverlay.jsx'
 import BadgeToast from './components/BadgeToast.jsx'
 
 import RoleSwitch from './screens/RoleSwitch.jsx'
@@ -73,6 +72,12 @@ const NotFound = lazyLoad(() => import('./screens/NotFound.jsx'))
 const GiveRankUp = lazyLoad(() => import('./screens/GiveRankUp.jsx'))
 const GiftCard = lazyLoad(() => import('./screens/GiftCard.jsx'))
 const ParentRedeem = lazyLoad(() => import('./screens/parent/ParentRedeem.jsx'))
+/*
+ * The level-up and streak moments arrive a few times a week, never on the
+ * first screen: fetched the first time one is due, not with the first file.
+ */
+const LevelUpOverlay = lazyLoad(() => import('./components/LevelUpOverlay.jsx'))
+const StreakMoment = lazyLoad(() => import('./components/LevelUpOverlay.jsx').then((m) => ({ default: m.StreakMoment })))
 
 const KID_NAV = [
   { to: '/kid', icon: '🏠', label: 'Home', exact: true },
@@ -159,10 +164,11 @@ export default function App() {
   }, [state.settings.reduceMotion])
 
   // Which half of the app is showing: on a wide screen Parent Mode's column
-  // is a little wider than a child's (index.css, [data-area='parent']).
+  // is a little wider than a child's (index.css, [data-area='parent']), and
+  // a child's column sits in a frame (styles/desk.css, [data-area='kid']).
   useEffect(() => {
-    document.documentElement.dataset.area = isParentArea ? 'parent' : ''
-  }, [isParentArea])
+    document.documentElement.dataset.area = isParentArea ? 'parent' : isKidArea ? 'kid' : ''
+  }, [isParentArea, isKidArea])
 
   // One attribute switches the whole Elite visual tier on. Every effect lives
   // in the stylesheet under [data-overdrive='true'], so no screen has to know.
@@ -432,6 +438,7 @@ export default function App() {
           screen — that is what the weekly digest is for. */}
       {isKidArea && activeKid && <BadgeToast state={state} kid={activeKid} />}
 
+      <Suspense fallback={null}>
       {state.pendingLevelUp && activeKid && kidTheme && (
         <LevelUpOverlay
           levelUp={state.pendingLevelUp}
@@ -453,6 +460,7 @@ export default function App() {
           onClose={() => dispatch({ type: 'CLEAR_STREAK' })}
         />
       )}
+      </Suspense>
     </>
   )
 }

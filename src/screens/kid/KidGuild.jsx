@@ -6,6 +6,8 @@ import { relativeTime } from '../../lib/dates.js'
 import { Screen, Card, Button, SectionTitle, ProgressBar, Banner, TextInput, Chip, EmptyState } from '../../components/ui.jsx'
 import QuickChat from '../../components/QuickChat.jsx'
 import { quickChatText, isQuickEmoji } from '../../data/quickChat.js'
+// A child's screens sit in a frame on a computer (styles/desk.css).
+import '../../styles/desk.css'
 
 /*
  * Children muted on this phone: their messages are not shown here. Per child,

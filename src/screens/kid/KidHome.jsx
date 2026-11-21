@@ -22,6 +22,8 @@ import { weeklyGoalProgress } from '../../lib/weeklyGoal.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
 import ModeBadge, { useLeaderboardMe } from '../../components/ModeBadge.jsx'
 import ArenaMoment from '../../components/ArenaMoment.jsx'
+// A child's screens sit in a frame on a computer (styles/desk.css).
+import '../../styles/desk.css'
 
 export default function KidHome() {
   const { state, dispatch } = useApp()
@@ -230,6 +232,23 @@ export default function KidHome() {
         </Card>
       )}
 
+      {/* The daily chore bonus: offered once a parent has accepted one of
+          today's chores, never for simply sending one in or opening the app.
+          Right under "Do this next", so on a phone it is in view above the
+          tab bar, not half under it at the end of the first screen. */}
+      {bonusAvailable && choreAcceptedToday(state, kid.id) && (
+        <Card className="mb-3 flex items-center gap-3 kid-bonus" data-testid="chore-bonus">
+          <span className="text-2xl" aria-hidden="true">🎁</span>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-sm">Daily chore bonus</div>
+            <div className="text-xs text-muted">+5 {theme.currency.name}: a grown-up accepted a chore of yours today.</div>
+          </div>
+          <Button className="px-3 py-2 min-h-0 shrink-0" onClick={() => dispatch({ type: 'CLAIM_LOGIN_BONUS', kidId: kid.id })}>
+            Claim
+          </Button>
+        </Card>
+      )}
+
       {/* The story: a new chapter to watch, or the fight that is on. */}
       {newChapter && (
         <button
@@ -362,21 +381,6 @@ export default function KidHome() {
           label={nextReward ? nextReward.name : 'No rewards set'}
         />
       </div>
-
-      {/* The daily chore bonus: offered once a parent has accepted one of
-          today's chores, never for simply sending one in or opening the app. */}
-      {bonusAvailable && choreAcceptedToday(state, kid.id) && (
-        <Card className="mb-3 flex items-center gap-3" style={{ borderColor: 'var(--accent)' }} data-testid="chore-bonus">
-          <span className="text-2xl" aria-hidden="true">🎁</span>
-          <div className="flex-1 min-w-0">
-            <div className="font-semibold text-sm">Daily chore bonus</div>
-            <div className="text-xs text-muted">+5 {theme.currency.name}: a grown-up accepted a chore of yours today.</div>
-          </div>
-          <Button className="px-3 py-2 min-h-0" onClick={() => dispatch({ type: 'CLAIM_LOGIN_BONUS', kidId: kid.id })}>
-            Claim
-          </Button>
-        </Card>
-      )}
 
       {unreadNotes.length > 0 && (
         <Card className="mb-3" style={{ borderColor: 'var(--accent-2)' }}>

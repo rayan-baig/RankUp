@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useApp, useElite, pendingSubmissions } from '../../state/AppContext.jsx'
 import { levelFromXp, formatXp } from '../../lib/xp.js'
 import { lastSevenDays, relativeTime } from '../../lib/dates.js'
@@ -29,8 +29,10 @@ import UpgradeNudge from '../../components/UpgradeNudge.jsx'
 import { useDeals, GiftSaleBanner, GiftAYearCard } from '../../components/DealCards.jsx'
 import EmptyNext from '../../components/EmptyNext.jsx'
 import { EMPTY_STATES } from '../../data/emptyStates.js'
-import { STARTER_REWARDS } from '../../lib/firstWeek.js'
+import { STARTER_REWARDS, newFamily } from '../../lib/firstWeek.js'
 import { plural } from '../../lib/plural.js'
+// The desktop layouts (two columns here), fetched with this screen.
+import '../../styles/desk.css'
 
 export default function ParentDashboard() {
   const { state, dispatch } = useApp()
@@ -73,8 +75,14 @@ export default function ParentDashboard() {
     }
   }
 
+  /*
+   * On a phone, one column. On a wide screen (1100px and up, styles/desk.css)
+   * two: what needs the parent (getting started, Review, the kids) on the
+   * left, and how the family is doing (activity, the family goal, the tools)
+   * on the right.
+   */
   return (
-    <Screen>
+    <Screen className="dash-wide">
       <TrialBanner />
       {stopped && (
         <Banner className="mb-3" tone={stopped.tone} icon={stopped.icon} title={stopped.title}>
@@ -117,12 +125,15 @@ export default function ParentDashboard() {
         )}
       </header>
 
+      <div className="dash-cols">
+      <div className="dash-main">
       <DemoTour />
       <HowItWorks />
       <FirstWeek />
       {/* Elite, offered at a moment it is true; once a fortnight at most. */}
       <UpgradeNudge />
-      {/* After the first accepted chore, once; never on a child's phone. */}
+      {/* After the first accepted chore, once, where it is seen on the first
+          screen; never on a child's phone. */}
       <InstallPrompt />
       {/* The deals (0.23.0): the holiday gift sale while it is on, and "Gift a
           year" a month in. Parent Mode only. */}
@@ -222,6 +233,9 @@ export default function ParentDashboard() {
       {/* Nothing for a child to save up for yet: three to start, one tap. */}
       {state.kids.length > 0 && (state.rewards || []).length === 0 && <StarterRewards />}
 
+      </div>
+
+      <div className="dash-side">
       {state.familyGoal && (
         <>
           <SectionTitle>Family goal</SectionTitle>
@@ -242,26 +256,45 @@ export default function ParentDashboard() {
         </>
       )}
 
-      <SectionTitle>Elite tools</SectionTitle>
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        {[
-          { icon: '⏸️', label: 'Pause and limits', to: '/parent/override' },
-          { icon: '📊', label: 'Blueprints', to: '/parent/blueprint' },
-          { icon: '🏆', label: 'Alliance', to: '/parent/alliance' },
-        ].map((t) => (
-          <button
-            key={t.to}
-            type="button"
-            onClick={() => navigate(t.to)}
-            className="card-flat p-3 text-center relative"
-            style={{ opacity: elite ? 1 : 0.65 }}
-          >
-            <div className="text-xl mb-1" aria-hidden="true">{t.icon}</div>
-            <div className="text-[11px] font-semibold">{t.label}</div>
-            {!elite && <span className="absolute top-1 right-1.5 text-[10px]">🔒</span>}
+      <div className="flex items-baseline justify-between">
+        <SectionTitle>Recent activity</SectionTitle>
+        {state.submissions.length > 0 && (
+          <button type="button" className="tap-link text-xs underline text-muted" onClick={() => navigate('/parent/history')}>
+            Chore history
           </button>
-        ))}
+        )}
       </div>
+      <Card className="mb-3">
+        {feed.length === 0 ? (
+          <div data-testid="empty-activity">
+            <p className="text-sm font-semibold">{EMPTY_STATES.activity.title}</p>
+            <p className="text-xs text-muted">{EMPTY_STATES.activity.body}</p>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {[...feed].reverse().slice(0, 8).map((e) => {
+              const kid = state.kids.find((k) => k.id === e.kidId)
+              return (
+                <li key={e.id} className="flex items-baseline justify-between gap-2 text-sm">
+                  <span className="truncate" data-pilot-private="">{describeEvent(e, kid)}</span>
+                  <span className="text-[11px] text-muted shrink-0">{relativeTime(e.at)}</span>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </Card>
+
+      {/* For a new family, one row that opens: the steps and their child come
+          first. Once the family is going, the three tiles as before. */}
+      {newFamily(state) ? (
+        <EliteToolsFold elite={elite} />
+      ) : (
+        <>
+          <SectionTitle>Elite tools</SectionTitle>
+          <div className="mb-3"><EliteTools elite={elite} /></div>
+        </>
+      )}
 
       {/* Not an Elite tool: the school pays for the league, so every family
           whose school plays can join it, on any plan. */}
@@ -283,36 +316,62 @@ export default function ParentDashboard() {
           {elitePitch()}
         </Banner>
       )}
-
-      <div className="flex items-baseline justify-between">
-        <SectionTitle>Recent activity</SectionTitle>
-        {state.submissions.length > 0 && (
-          <button type="button" className="tap-link text-xs underline text-muted" onClick={() => navigate('/parent/history')}>
-            Chore history
-          </button>
-        )}
       </div>
-      <Card>
-        {feed.length === 0 ? (
-          <div data-testid="empty-activity">
-            <p className="text-sm font-semibold">{EMPTY_STATES.activity.title}</p>
-            <p className="text-xs text-muted">{EMPTY_STATES.activity.body}</p>
-          </div>
-        ) : (
-          <ul className="space-y-2">
-            {[...feed].reverse().slice(0, 8).map((e) => {
-              const kid = state.kids.find((k) => k.id === e.kidId)
-              return (
-                <li key={e.id} className="flex items-baseline justify-between gap-2 text-sm">
-                  <span className="truncate" data-pilot-private="">{describeEvent(e, kid)}</span>
-                  <span className="text-[11px] text-muted shrink-0">{relativeTime(e.at)}</span>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </Card>
+      </div>
     </Screen>
+  )
+}
+
+const ELITE_TOOLS = [
+  { icon: '⏸️', label: 'Pause and limits', to: '/parent/override' },
+  { icon: '📊', label: 'Blueprints', to: '/parent/blueprint' },
+  { icon: '🏆', label: 'Alliance', to: '/parent/alliance' },
+]
+
+/**
+ * A new family's Elite tools: one row, "Elite tools" and their names, that
+ * opens to the three tiles. A button rather than <details>, so a closed row
+ * holds nothing on the page at all.
+ */
+function EliteToolsFold({ elite }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="card-flat mb-3" data-testid="elite-tools-fold" data-open={open ? '' : undefined}>
+      <button
+        type="button"
+        className="w-full flex items-center gap-3 p-3 text-left"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span className="text-lg shrink-0" aria-hidden="true">⚡</span>
+        <span className="flex-1 min-w-0">
+          <span className="block font-semibold text-sm">Elite tools{elite ? '' : ' 🔒'}</span>
+          <span className="block text-xs text-muted truncate">{ELITE_TOOLS.map((t) => t.label).join(' · ')}</span>
+        </span>
+        <span className={`text-muted shrink-0 transition-transform${open ? ' rotate-90' : ''}`} aria-hidden="true">›</span>
+      </button>
+      {open && <div className="px-3 pb-3"><EliteTools elite={elite} /></div>}
+    </div>
+  )
+}
+
+/** The three Elite tools as tiles, dimmed and locked without Elite. */
+function EliteTools({ elite }) {
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {ELITE_TOOLS.map((t) => (
+        <button
+          key={t.to}
+          type="button"
+          onClick={() => navigate(t.to)}
+          className={`card-flat p-3 text-center relative${elite ? '' : ' opacity-[0.65]'}`}
+        >
+          <div className="text-xl mb-1" aria-hidden="true">{t.icon}</div>
+          <div className="text-[11px] font-semibold">{t.label}</div>
+          {!elite && <span className="absolute top-1 right-1.5 text-[10px]">🔒</span>}
+        </button>
+      ))}
+    </div>
   )
 }
 

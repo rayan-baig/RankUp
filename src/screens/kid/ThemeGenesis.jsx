@@ -13,6 +13,8 @@ import ThemePreview, { ThemeSwatch } from '../../components/ThemePreview.jsx'
 import { Screen, Card, Button, Field, TextInput, Chip, Banner, Modal, ProgressBar } from '../../components/ui.jsx'
 import { hasPin } from '../../lib/parentPin.js'
 import { usePinLock } from '../../components/usePinLock.js'
+// A child's screens sit in a frame on a computer (styles/desk.css).
+import '../../styles/desk.css'
 
 /**
  * Theme Genesis: a child makes a theme of their own.

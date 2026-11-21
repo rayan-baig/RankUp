@@ -23,7 +23,7 @@ import { useEffect, useState } from 'react'
  * an exception to it.
  */
 
-const BEATS = [
+export const BEATS = [
   { label: 'You assign it', ms: 1700 },
   { label: 'They do it', ms: 1900 },
   { label: 'They show you, in a message', ms: 2100 },

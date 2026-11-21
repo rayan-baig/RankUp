@@ -8,6 +8,8 @@ import { formatDuration } from '../../lib/dates.js'
 import { Screen, Card, Button, Banner, Chip, TextInput, Field, SectionTitle } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
 import { noteSent } from '../../lib/sentFlash.js'
+// A child's screens sit in a frame on a computer (styles/desk.css).
+import '../../styles/desk.css'
 
 /*
  * RankUp never takes, keeps or sends photos.

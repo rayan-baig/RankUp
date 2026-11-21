@@ -33,15 +33,18 @@ export default function Onboarding() {
   // sign-up (#/welcome?start=parent): they have already read the front door.
   const [mode, setMode] = useState(() => (/[?&]start=parent\b/.test(window.location.hash) ? 'parent' : null))
   const [step, setStep] = useState(0)
-  // Pilot, the AI helper, is for grown-ups: never on the front door, where
-  // nobody has said yet whose phone this is, only once "I'm a parent" is tapped.
-  useParentHere(mode === 'parent')
   // With a backend configured the parent needs a real account before anything
   // can sync. Without one the app is device-only and there is nothing to join.
   const [signedIn, setSignedIn] = useState(!transport.isConfigured() || Boolean(transport.currentUserId()))
   // Consent has to come before a child exists — the database enforces the same
   // rule, so skipping this would simply fail when the kid is created.
   const [consented, setConsented] = useState(false)
+  // Pilot, the AI helper, is for grown-ups: never on the front door, where
+  // nobody has said yet whose phone this is, only once "I'm a parent" is tapped,
+  // and not on step 2 either, where the child may be holding the phone to pick
+  // their world ("Your kid picks a world"). Back on step 1 it returns.
+  const worldPicker = step === 1 && consented
+  useParentHere(mode === 'parent' && !worldPicker)
   const [serverFamilyId, setServerFamilyId] = useState(null)
   // A second parent is not setting anything up — their family already exists.
   const [joining, setJoining] = useState(false)
