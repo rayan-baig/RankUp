@@ -233,7 +233,8 @@ export function createInitialState() {
       parentName: '',
       parentEmail: '',
       parentThemeId: DEFAULT_PARENT_THEME,
-      pin: '',
+      // The parent PIN, as a salted hash (lib/parentPin.js). Never the PIN.
+      pinHash: '',
       tier: 'starter',
       /*
        * A fortnight of Elite, from the moment the app is opened.

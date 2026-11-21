@@ -1,20 +1,32 @@
-import { art } from '../data/art.js'
+import { art, drawn } from '../data/art.js'
+import { useKidTheme } from '../state/AppContext.jsx'
+import { isLightTheme } from '../lib/themeTone.js'
 
 /**
  * The banner across the top of a tab, with the screen's name on it.
  *
- * When the artwork for this slot exists it is the background, dimmed just
- * enough that white text stays readable over whatever the picture turns
- * out to be — the art is made separately and nobody wants a title that
- * disappears because one banner came back pale.
+ * Three cases, and the header follows the child's world in all of them:
  *
- * When it does not exist, the same band is drawn from the theme's own
- * colours. That is the normal state while art is still being made, so it
- * has to look deliberate rather than like a gap: a lit gradient with the
- * screen's emblem sitting in it, in whatever colour the child's theme is.
+ * The owner's picture for this slot (src/assets/art/hero-<tab>), when there
+ * is one, is shown as it is, dimmed on the left just enough that white text
+ * stays readable over whatever the picture turns out to be.
+ *
+ * Otherwise, on a dark world, RankUp's own night skyline
+ * (src/assets/drawn/hero-city.svg) sits in the band, drawn in the world's
+ * own colours: the picture gives only its light and shade, and the band's
+ * gradient, made of the theme's accent and surfaces, gives the colour. So
+ * it is green under Block Craft and gold-red under Aura Awakening.
+ *
+ * On a light world (Pegasus Horizon, Sugar Rush, Campfire Cozy…) there is
+ * no skyline: a city at night above a pastel bakery was the picture that
+ * did not belong. The band is the theme's lit gradient with the screen's
+ * emblem in it, in the theme's ink.
  */
 export default function HeroArt({ slot, title, sub, emblem, right }) {
-  const picture = art(slot)
+  const theme = useKidTheme()
+  const own = art(slot)
+  const city = !own && !isLightTheme(theme) ? drawn('hero-city') : null
+  const picture = own || null
 
   return (
     <>
@@ -44,6 +56,12 @@ export default function HeroArt({ slot, title, sub, emblem, right }) {
           style={{ objectFit: 'cover', objectPosition: 'center' }}
         />
       )}
+      {city && (
+        <>
+          <img src={city} alt="" aria-hidden="true" className="hero-city" data-testid="hero-city" />
+          <div className="hero-city-shade" aria-hidden="true" />
+        </>
+      )}
       {picture && (
         <div
           className="absolute inset-0"
@@ -57,7 +75,7 @@ export default function HeroArt({ slot, title, sub, emblem, right }) {
         />
       )}
 
-      {!picture && emblem && (
+      {!picture && !city && emblem && (
         <span
           aria-hidden="true"
           className="absolute"

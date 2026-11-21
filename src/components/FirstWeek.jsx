@@ -3,6 +3,7 @@ import { useApp } from '../state/AppContext.jsx'
 import { firstWeekSteps, showFirstWeek, starterChores } from '../lib/firstWeek.js'
 import { Button, Card, ProgressBar } from './ui.jsx'
 import { navigate } from '../lib/router.js'
+import { plural } from '../lib/plural.js'
 
 /*
  * Getting started, as four things to do.
@@ -25,7 +26,7 @@ export default function FirstWeek() {
     const quests = starterChores(kid)
     if (!quests.length) return
     dispatch({ type: 'ADD_QUESTS', quests })
-    setAdded(`${quests.length} chores added for ${kid.name}: ${quests.map((q) => q.title).join(', ')}.`)
+    setAdded(`${plural(quests.length, 'chore')} added for ${kid.name}: ${quests.map((q) => q.title).join(', ')}.`)
   }
 
   return (

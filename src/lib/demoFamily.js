@@ -183,7 +183,7 @@ export function buildDemoFamily() {
    *
    * Every entry was written "just now" while this was being built, so the
    * dashboard's recent activity opened on "Plan changed to Elite Pass" and
-   * "7 quest(s) assigned", all just now: the setting-up, not the family.
+   * "7 quests assigned", all just now: the setting-up, not the family.
    * Setting up happened a fortnight ago, the plan change is how the demo
    * gets Elite and nothing a visitor needs to read, and the level-ups came
    * with the chores of the last few days.

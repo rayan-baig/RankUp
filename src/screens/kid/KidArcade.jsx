@@ -2,7 +2,7 @@ import { Suspense, useEffect, useRef, useState } from 'react'
 import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import {
   MINIGAMES, CATEGORIES, findGame, featuredGame,
-  MAX_TOKENS, DAILY_COIN_CAP, payout, possibleScore,
+  MAX_TOKENS, DAILY_COIN_CAP, payout, possibleScore, isNewGame,
 } from '../../data/minigames.js'
 import { dayKey } from '../../lib/dates.js'
 import { arcadeLimits } from '../../lib/arcadeWords.js'
@@ -10,7 +10,7 @@ import { Screen, Card, Button, SectionTitle, Stat, EmptyState, Segmented, Loadin
 import { navigate } from '../../lib/router.js'
 import HeroArt from '../../components/HeroArt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
-import { art } from '../../data/art.js'
+import { picture as tileArt } from '../../data/art.js'
 import { lazyLoad } from '../../lib/lazy.js'
 
 /*
@@ -189,7 +189,8 @@ export default function KidArcade() {
   const GameTile = (g) => {
     const best = bests[g.id] || 0
     const locked = tokens < 1
-    const picture = art(`game-${g.id}`)
+    // The owner's tile if dropped in, else RankUp's own drawing for this game.
+    const picture = tileArt(`game-${g.id}`)?.url || null
     return (
       <button
         key={g.id}
@@ -237,17 +238,23 @@ export default function KidArcade() {
             )
             : <span style={{ fontSize: 30, lineHeight: 1 }} aria-hidden="true">{g.icon}</span>}
           {best === 0 ? (
-            <span
-              className="absolute top-1.5 right-1.5 rounded-full font-bold"
-              style={{
-                fontSize: 8,
-                padding: '1px 5px',
-                background: 'var(--good)',
-                color: 'var(--bg)',
-              }}
-            >
-              NEW
-            </span>
+            /* NEW only for a game that is new to the arcade
+               (isNewGame, data/minigames.js), not for every game this
+               child has not played yet. */
+            isNewGame(g) && (
+              <span
+                className="absolute top-1.5 right-1.5 rounded-full font-bold"
+                data-testid="game-new"
+                style={{
+                  fontSize: 8,
+                  padding: '1px 5px',
+                  background: 'var(--good)',
+                  color: 'var(--bg)',
+                }}
+              >
+                NEW
+              </span>
+            )
           ) : (
             /* The design stars a game once it has a score on it, which is
                how a child finds the one they are good at in a grid of

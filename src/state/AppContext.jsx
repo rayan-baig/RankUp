@@ -3,6 +3,7 @@ import { reducer, isElite, guildCapacity, activeLockout } from './reducer.js'
 import { createInitialState, TIERS } from './initialState.js'
 import { buildDemoFamily, DEMO_VERSION } from '../lib/demoFamily.js'
 import { loadState, saveState, clearState, dropOldPhotos, wipeDevice } from '../lib/storage.js'
+import { securePin } from '../lib/parentPin.js'
 import { setCrashNames } from '../lib/crashReport.js'
 import { createSyncEngine, SYNC_STATUS, resetCursor } from '../lib/sync/syncEngine.js'
 import { queueChanges, recordDelivered, pendingRows, forgetRows } from '../lib/sync/shadow.js'
@@ -78,7 +79,15 @@ function init() {
 
   // Merge onto a fresh state so a new field added in a later version never
   // crashes an app that is loading data saved by an older version.
-  return { ...createInitialState(), ...saved, settings: { ...createInitialState().settings, ...saved.settings } }
+  // A PIN saved as typed by an older version becomes its salted hash here,
+  // as the app opens, and the plain value is gone (lib/parentPin.js).
+  const fresh = createInitialState()
+  return {
+    ...fresh,
+    ...saved,
+    family: saved.family ? securePin(saved.family) : fresh.family,
+    settings: { ...fresh.settings, ...saved.settings },
+  }
 }
 
 export function AppProvider({ children }) {

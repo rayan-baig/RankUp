@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { STICKER_MAP } from '../../data/stickers.js'
 import { useApp, useKid, useKidTheme, useElite, useSync } from '../../state/AppContext.jsx'
 import { readOutbox } from '../../lib/sync/outbox.js'
-import { DIFFICULTY, calcReward, liveStreak, finishedOnTime } from '../../lib/xp.js'
+import { DIFFICULTY, questPay, finishedOnTime } from '../../lib/xp.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
 import { formatDuration } from '../../lib/dates.js'
 import { Screen, Card, Button, Banner, Chip, TextInput, Field, SectionTitle } from '../../components/ui.jsx'
 import { navigate } from '../../lib/router.js'
+import { noteSent } from '../../lib/sentFlash.js'
 
 /*
  * RankUp never takes, keeps or sends photos.
@@ -68,7 +69,9 @@ export default function QuestDetail({ questId }) {
   // sitting with the parent or already paid out.
   const isOpen = quest.status === 'assigned' || quest.status === 'redo'
   const onTime = finishedOnTime(quest.timerSeconds, elapsed)
-  const preview = calcReward(quest, { elite, streak: liveStreak(kid.streak), onTime })
+  // The same questPay as the quest cards and Home's "Do this next", plus the
+  // beat-the-clock bonus once the clock has actually been beaten.
+  const preview = questPay(quest, kid, { elite, onTime })
 
   const submit = () => {
     dispatch({
@@ -82,6 +85,8 @@ export default function QuestDetail({ questId }) {
         onTime,
       },
     })
+    // The "Sent!" moment, shown by the list it goes back to (lib/sentFlash.js).
+    noteSent(quest.title, { queued: configured && typeof navigator !== 'undefined' && navigator.onLine === false })
     navigate('/kid/quests')
   }
 
@@ -127,7 +132,7 @@ export default function QuestDetail({ questId }) {
         <div className="min-w-0">
           <h1 className="font-display text-2xl font-extrabold leading-tight">{quest.title}</h1>
           <div className="flex flex-wrap gap-1.5 mt-2">
-            <Chip tone={diff.color}>{diff.label}</Chip>
+            <Chip className={`diff-chip diff-${diff.id}`}>{diff.label}</Chip>
             {quest.adaptive && <Chip tone="var(--accent-2)">♿ Adaptive</Chip>}
             {quest.doubleXp && <Chip tone="var(--warn)">⚡ 2× XP</Chip>}
           </div>

@@ -49,7 +49,13 @@ export function Button({ variant = 'primary', className = '', children, ...rest 
 }
 
 export function Chip({ children, tone, className = '', ...rest }) {
-  const style = tone ? { borderColor: tone, color: tone } : undefined
+  /*
+   * The words in a toned chip are the tone pulled toward the theme's ink:
+   * lighter on a dark world, darker on a light one, so a blue "Medium" or a
+   * green "Adventure" reads on every background. A browser without
+   * color-mix keeps the chip's own ink colour, which reads too.
+   */
+  const style = tone ? { borderColor: tone, color: `color-mix(in srgb, ${tone} 62%, var(--ink))` } : undefined
   return (
     <span className={`chip ${className}`} style={style} {...rest}>
       {children}

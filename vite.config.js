@@ -175,7 +175,8 @@ function vendorChunk(id) {
 }
 
 /**
- * The artwork in src/assets/art is never written into the JavaScript.
+ * The artwork in src/assets/art (the owner's) and src/assets/drawn (RankUp's
+ * own drawings, the fallback) is never written into the JavaScript.
  *
  * Vite copies a picture under 4 KB into the code as text, which saves a
  * request when the picture is on the screen that loads it. But data/art.js
@@ -191,7 +192,7 @@ function vendorChunk(id) {
  * would otherwise be copied into the stylesheet. tests/speed.mjs holds both.
  */
 export function inlineAsset(file) {
-  if (/[\\/]src[\\/]assets[\\/]art[\\/]/.test(String(file))) return false
+  if (/[\\/]src[\\/]assets[\\/](art|drawn)[\\/]/.test(String(file))) return false
   if (/\.woff2?$/i.test(String(file))) return false
   return undefined // Vite's usual rule for everything else
 }

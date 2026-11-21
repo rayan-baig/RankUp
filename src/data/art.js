@@ -71,6 +71,54 @@ export function artAny(...slots) {
   return null
 }
 
+/*
+ * RankUp's own drawn pictures, in src/assets/drawn/: an original portrait
+ * for each world's picker card and first avatar form, a tile for each arcade
+ * game, and the banner behind each tab's title. Small SVG files, each its
+ * own file in the build (vite.config.js, inlineAsset) and fetched only when
+ * it is on the screen.
+ *
+ * They are the fallback, never the first choice: a file of the same name in
+ * src/assets/art/ wins, so the owner's own pictures replace them by being
+ * dropped in, with nothing to change here. Block Craft's pictures are the
+ * owner's, in src/assets/art/, and have no drawn stand-in.
+ */
+const drawnFiles = import.meta.glob('../assets/drawn/*.svg', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+})
+const DRAWN = {}
+for (const [path, url] of Object.entries(drawnFiles)) {
+  DRAWN[slug(path.split('/').pop().replace(/\.[^.]+$/, ''))] = url
+}
+
+/** RankUp's own drawing for a slot, or null. */
+export function drawn(slot) {
+  return DRAWN[slug(String(slot || ''))] || null
+}
+
+/**
+ * The picture for a slot: the owner's file if there is one, else the drawn
+ * one, else null. `{ url, drawn }`, so a caller can treat its own drawing
+ * differently (the tab banner tints it to the world; the owner's art is
+ * shown as it is).
+ */
+export function picture(...slots) {
+  const own = artAny(...slots)
+  if (own) return { url: own, drawn: false }
+  for (const s of slots) {
+    const d = drawn(s)
+    if (d) return { url: d, drawn: true }
+  }
+  return null
+}
+
+/** Every drawn slot. Used by the art check in tests. */
+export function drawnSlots() {
+  return Object.keys(DRAWN).sort()
+}
+
 /** Every slot currently supplied. Used by the art check in tests. */
 export function artSlots() {
   return Object.keys(BY_SLOT).sort()

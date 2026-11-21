@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+<defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4ec3f0"/><stop offset="1" stop-color="#1b5fa8"/></linearGradient></defs>
+<rect width="200" height="200" fill="url(#s)"/>
+<path d="M0 46 Q25 38 50 46 T100 46 T150 46 T200 46" fill="none" stroke="#bfe6ff" stroke-width="4"/>
+<path d="M140 0 V96" stroke="#e8eef8" stroke-width="2"/><path d="M140 96 q0 12 -10 10" fill="none" stroke="#c9d1d9" stroke-width="3" stroke-linecap="round"/>
+<path d="M50 120 Q76 88 112 104 L136 88 L132 120 L136 152 L112 136 Q76 152 50 120Z" fill="#ff7a18" stroke="#b8501b" stroke-width="3" stroke-linejoin="round"/>
+<path d="M84 104 Q90 120 84 136" fill="none" stroke="#b8501b" stroke-width="3"/>
+<circle cx="66" cy="114" r="6" fill="#fff"/><circle cx="64" cy="114" r="3" fill="#1d2330"/>
+<path d="M54 126 q4 3 8 1" fill="none" stroke="#b8501b" stroke-width="2.5" stroke-linecap="round"/>
+<rect x="134" y="134" width="44" height="60" rx="6" transform="rotate(12 156 164)" fill="#fff" stroke="#1d2330" stroke-width="3"/>
+<path d="M150 156 Q160 146 168 156 l4 -4 v12 l-4 -4 Q160 170 150 160Z" transform="rotate(12 156 164)" fill="#2f7de0"/>
+<g fill="#e6f7ff" opacity=".8"><circle cx="38" cy="96" r="4"/><circle cx="30" cy="80" r="3"/><circle cx="40" cy="66" r="2"/></g>
+</svg>

@@ -1,8 +1,14 @@
 import { useState } from 'react'
-import { art } from '../data/art.js'
+import { picture } from '../data/art.js'
+import { tiersFor } from '../lib/avatarTiers.js'
 import { KID_THEMES, resolveKidTheme, extraThemes } from '../data/kidThemes.js'
 import Avatar from './Avatar.jsx'
 import { Card } from './ui.jsx'
+
+/** A world's first-form picture, for its card: see data/art.js. */
+function portraitFor(theme) {
+  return picture(`avatar-${theme.id}-${tiersFor(theme)[0]}`, `avatar-${theme.id}`)?.url || null
+}
 
 /**
  * The 15-theme chooser.
@@ -127,17 +133,19 @@ export default function ThemePicker({ value, onChange, previewLevel = 1, showEvo
                   The theme's own character, where one has been drawn. This
                   is the question the picker is actually answering — a child
                   chooses a theme because of who they get to be, not because
-                  of two colours in a swatch.
+                  of two colours in a swatch. It is the child's first form:
+                  the owner's picture where there is one (Block Craft's
+                  level 1), else RankUp's own drawing of the world.
                 */}
-                {art(`avatar-${theme.id}`) && (
+                {portraitFor(theme) && (
                   <img
-                    src={art(`avatar-${theme.id}`)}
+                    src={portraitFor(theme)}
                     alt=""
                     aria-hidden="true"
                     loading="lazy"
                     decoding="async"
-                    className="relative"
-                    style={{ height: '100%', width: 'auto', objectFit: 'contain' }}
+                    className="absolute inset-0 w-full h-full object-contain"
+                    data-testid="world-picture"
                   />
                 )}
               </div>

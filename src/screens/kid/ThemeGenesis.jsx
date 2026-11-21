@@ -11,6 +11,8 @@ import { inspire, TOPIC_MAP, TOPICS, IDEA_MAX } from '../../data/inspirations.js
 import { SCENES } from '../../components/ThemeBackground.jsx'
 import ThemePreview, { ThemeSwatch } from '../../components/ThemePreview.jsx'
 import { Screen, Card, Button, Field, TextInput, Chip, Banner, Modal, ProgressBar } from '../../components/ui.jsx'
+import { hasPin } from '../../lib/parentPin.js'
+import { usePinLock } from '../../components/usePinLock.js'
 
 /**
  * Theme Genesis: a child makes a theme of their own.
@@ -183,6 +185,7 @@ export default function ThemeGenesis({ kidId, editId = null, area = 'kid' }) {
   const [pinOpen, setPinOpen] = useState(false)
   const [pin, setPin] = useState('')
   const [pinError, setPinError] = useState('')
+  const pinLock = usePinLock()
   const [removing, setRemoving] = useState(null)
   const [credit, setCredit] = useState('')
   // "What's it inspired by?": the words typed, and what was made of them.
@@ -293,16 +296,19 @@ export default function ThemeGenesis({ kidId, editId = null, area = 'kid' }) {
   const useIt = () => {
     if (!save('ready')) return
     if (area === 'parent') { wear(); return }
-    if (state.family.pin) { setPinOpen(true); return }
+    if (hasPin(state.family)) { setPinOpen(true); return }
     dispatch({ type: 'ASK_KID_THEME', id: draft.id, ask: 'use', on: true })
     setDone('Saved! A grown-up can switch it on from their phone: it is waiting in their Review tab.')
   }
 
+  // Counted with every other PIN box (lib/parentPin.js).
   const tryPin = () => {
-    if (state.family.pin && pin === state.family.pin) {
+    if (pinLock.locked || !pin) return
+    const r = pinLock.attempt(state.family, pin)
+    if (r.result === 'ok') {
       setPinOpen(false); setPin(''); setPinError('')
       wear()
-    } else setPinError('That PIN is not right.')
+    } else { setPin(''); setPinError(r.message) }
   }
 
   const s = STEPS[step]
@@ -489,12 +495,14 @@ export default function ThemeGenesis({ kidId, editId = null, area = 'kid' }) {
         title="Parent PIN required"
         footer={<>
           <Button variant="ghost" className="flex-1" onClick={() => setPinOpen(false)}>Cancel</Button>
-          <Button className="flex-1" onClick={tryPin}>Unlock</Button>
+          <Button className="flex-1" onClick={tryPin} disabled={pinLock.locked}>Unlock</Button>
         </>}
       >
         <p className="text-sm text-muted mb-3">A new theme changes how the app looks. Level, XP, coins and streak stay exactly as they are.</p>
-        <TextInput value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 8))} inputMode="numeric" type="password" placeholder="Parent PIN" autoFocus />
-        {pinError && <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>{pinError}</p>}
+        <TextInput value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 8))} inputMode="numeric" type="password" placeholder="Parent PIN" disabled={pinLock.locked} autoFocus />
+        {pinLock.locked
+          ? <p className="text-xs mt-2 text-muted" role="status">{pinLock.lockText}</p>
+          : pinError && <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>{pinError}</p>}
       </Modal>
     </Screen>
   )

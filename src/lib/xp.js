@@ -79,6 +79,21 @@ export function calcReward(quest, { elite = false, streak = 0, onTime = true } =
 }
 
 /**
+ * What a quest pays this child, as every screen promises it before it is
+ * done: the "Do this next" card on Home, the quest cards and the quest's own
+ * page. One function, so the three cannot disagree. The Home card worked its
+ * own number out from the bare XP, and told an Elite child "+30 XP" beside a
+ * card saying "+45 XP" for the same chore.
+ *
+ * The Elite boost, a surprise double and the child's live streak are in it.
+ * A race-the-clock bonus is not promised: it is only paid if they beat the
+ * clock, so `onTime` is false unless the quest page has seen them do it.
+ */
+export function questPay(quest, kid, { elite = false, onTime = false } = {}) {
+  return calcReward(quest, { elite, streak: kid ? liveStreak(kid.streak) : 0, onTime })
+}
+
+/**
  * What accepting this submission pays: the quest's reward plus, for a
  * test-score quest, the bonus for the score reported.
  *

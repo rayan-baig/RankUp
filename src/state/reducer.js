@@ -13,6 +13,7 @@ import { applyPrune } from '../lib/prune.js'
 import { CURRENCIES, currencyForRegion, DEFAULT_CURRENCY } from '../lib/money.js'
 import { MAX_KID_THEMES, NAME_MAX, CREDIT_MAX, cleanDesign, themeProblem, seasonProblem, SEASON_BRAND_MESSAGE, customThemeId } from '../data/themeGenesis.js'
 import { plainName } from '../lib/kidWords.js'
+import { securePin } from '../lib/parentPin.js'
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -327,7 +328,7 @@ function reduce(state, action) {
     /* ---------- lifecycle ---------- */
 
     case 'HYDRATE':
-      return action.state
+      return action.state?.family ? { ...action.state, family: securePin(action.state.family) } : action.state
 
     /**
      * Fold a server snapshot into local state.
@@ -623,7 +624,8 @@ function reduce(state, action) {
         ...state,
         onboarded: true,
         device: { ...state.device, role: 'parent', linkedKidId: null },
-        family: { ...state.family, ...family, currency },
+        // The PIN typed at setup is kept as its salted hash, never as typed.
+        family: securePin({ ...state.family, ...family, currency }),
         kids: [...state.kids, kid],
         guild: { ...state.guild, name: guildName || `${family.name || kid.name}'s Guild`, leaderKidId: kid.id },
         session: { role: 'parent', kidId: kid.id, parentUnlocked: true },
@@ -667,13 +669,13 @@ function reduce(state, action) {
         ...state,
         onboarded: true,
         device: { ...state.device, role: 'parent', linkedKidId: null },
-        family: {
+        family: securePin({
           ...state.family,
           id: familyId,
           name: familyName || state.family.name,
           parentName: parentName || state.family.parentName,
-          pin: pin || state.family.pin,
-        },
+          ...(pin ? { pin } : {}),
+        }),
         session: { role: 'parent', kidId: null, parentUnlocked: true },
       }
     }
@@ -691,8 +693,14 @@ function reduce(state, action) {
         },
       }
 
-    case 'UNLOCK_PARENT':
-      return { ...state, session: { ...state.session, parentUnlocked: true, role: 'parent' } }
+    /*
+     * Opening Parent Mode also finishes moving an older phone's plain PIN to
+     * its hash (lib/parentPin.js), if opening the app had not already.
+     */
+    case 'UNLOCK_PARENT': {
+      const family = securePin(state.family)
+      return { ...state, ...(family !== state.family ? { family } : {}), session: { ...state.session, parentUnlocked: true, role: 'parent' } }
+    }
 
     case 'LOCK_PARENT':
       return { ...state, session: { ...state.session, parentUnlocked: false } }
@@ -884,8 +892,9 @@ function reduce(state, action) {
     case 'SET_PARENT_THEME':
       return { ...state, family: { ...state.family, parentThemeId: action.themeId } }
 
+    // A new PIN in the patch is stored as its salted hash (lib/parentPin.js).
     case 'UPDATE_FAMILY':
-      return { ...state, family: { ...state.family, ...action.patch } }
+      return { ...state, family: securePin({ ...state.family, ...action.patch }) }
 
     /**
      * The day a family's weekly chores come back (Monday 1 to Sunday 7), or

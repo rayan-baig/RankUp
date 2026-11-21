@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+<rect width="200" height="200" fill="#2a6fc9"/>
+<path d="M40 200 L70 60 H130 L160 200Z" fill="#3b86e0" stroke="#fff" stroke-width="3"/><path d="M100 60 V200 M58 120 H142" stroke="#fff" stroke-width="3"/>
+<path d="M30 112 H170" stroke="#e8eef8" stroke-width="5"/><g stroke="#e8eef8" stroke-width="1" opacity=".8"><path d="M34 104 V112 M46 104 V112 M58 104 V112 M70 104 V112 M82 104 V112 M94 104 V112 M106 104 V112 M118 104 V112 M130 104 V112 M142 104 V112 M154 104 V112 M166 104 V112"/></g>
+<ellipse cx="72" cy="58" rx="26" ry="32" transform="rotate(-30 72 58)" fill="none" stroke="#e5342b" stroke-width="7"/>
+<g stroke="#ffffff" stroke-width="1.5" opacity=".9" transform="rotate(-30 72 58)"><path d="M56 40 V76 M64 30 V86 M72 27 V89 M80 30 V86 M88 40 V76 M50 50 H94 M47 60 H97 M50 70 H94"/></g>
+<path d="M88 86 L116 132" stroke="#1d2330" stroke-width="10" stroke-linecap="round"/>
+<circle cx="146" cy="56" r="17" fill="#d8f34a" stroke="#a9c22c" stroke-width="2"/><path d="M132 48 Q146 58 158 46 M134 66 Q146 56 160 66" fill="none" stroke="#fff" stroke-width="2.5"/>
+<path d="M162 72 q10 8 18 6" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="3 4" opacity=".8"/>
+</svg>

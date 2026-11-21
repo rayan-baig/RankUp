@@ -1,4 +1,4 @@
-import { DIFFICULTY, calcReward, liveStreak } from '../lib/xp.js'
+import { DIFFICULTY, questPay } from '../lib/xp.js'
 import { useElite, useKid } from '../state/AppContext.jsx'
 import { CATEGORY_MAP } from '../data/questTemplates.js'
 import { formatDuration } from '../lib/dates.js'
@@ -26,12 +26,13 @@ export default function QuestCard({ quest, onClick, currency, showStatus = true 
    * What accepting it actually pays this child: the Elite boost, a surprise
    * double and their streak included, from the same calcReward the reducer
    * pays with. The card showed the bare number, so an Elite child was told
-   * "+30 XP" and then paid 45.
+   * "+30 XP" and then paid 45. questPay is the one the Home card and the
+   * quest page use too.
    */
   const elite = useElite()
   const kid = useKid(quest.kidId)
   // A race-the-clock bonus is only paid if they beat it, so it is not promised here.
-  const reward = calcReward(quest, { elite, streak: kid ? liveStreak(kid.streak) : 0, onTime: false })
+  const reward = questPay(quest, kid, { elite })
 
   return (
     <button
@@ -84,17 +85,10 @@ export default function QuestCard({ quest, onClick, currency, showStatus = true 
                     {currency.icon} +{reward.coins}
                   </span>
                 )}
-                <span
-                  className="font-display font-extrabold whitespace-nowrap"
-                  style={{
-                    fontSize: 11,
-                    padding: '2px 7px',
-                    borderRadius: 7,
-                    color: diff.color,
-                    background: `color-mix(in srgb, ${diff.color} 14%, transparent)`,
-                    border: `1px solid color-mix(in srgb, ${diff.color} 38%, transparent)`,
-                  }}
-                >
+                {/* Its colour is the difficulty's, pulled toward the
+                    theme's ink so it reads on dark and light worlds alike
+                    (.pay-box in styles/index.css). */}
+                <span className={`pay-box diff-${diff.id} font-display font-extrabold whitespace-nowrap`} data-testid="quest-xp">
                   +{reward.xp} XP
                 </span>
               </span>
@@ -107,7 +101,7 @@ export default function QuestCard({ quest, onClick, currency, showStatus = true 
           {quest.description && <p className="text-xs text-muted mt-1 line-clamp-2">{quest.description}</p>}
 
           <div className="flex flex-wrap gap-1.5 mt-2">
-            <span className="chip" style={{ color: diff.color, borderColor: diff.color }}>{diff.label}</span>
+            <span className={`chip diff-chip diff-${diff.id}`}>{diff.label}</span>
             {quest.adaptive && <span className="chip" style={{ color: 'var(--accent-2)', borderColor: 'var(--accent-2)' }}>♿ Adaptive</span>}
             {quest.doubleXp && <span className="chip" style={{ color: 'var(--warn)', borderColor: 'var(--warn)' }}>⚡ 2× XP</span>}
             {quest.requiresPhoto && <span className="chip">📷 Show a parent</span>}

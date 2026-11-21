@@ -246,7 +246,9 @@ export default function ParentPairKid() {
         only be used once. If it stops working, tap “New code” on their phone.
       </Banner>
 
-      {!canSyncAcrossDevices && (
+      {/* A note for whoever is building RankUp, never for a visitor to the
+          look-around, who has no second tab to open and no backend to miss. */}
+      {!canSyncAcrossDevices && !state.demo && (
         <div className="mt-3">
           <Banner tone="warn" icon="⚠️" title="Testing on one computer?">
             Real device-to-device pairing needs the backend. For now, open{' '}

@@ -8,10 +8,13 @@
 import { launch, reporter, setUpFamily, readState, finish, expireTrialInDatabase, SHOT_DIR } from './helpers.mjs'
 import { TIERS, TIER_LADDER } from '../src/state/initialState.js'
 import { planLines, annualSaving } from '../src/lib/plans.js'
+import { KID_THEME_MAP, DEFAULT_KID_THEME } from '../src/data/kidThemes.js'
 
 // The tests run with guilds switched on (supabase/test/up.sh), so the plan
 // screen mentions them; tests/planwords.mjs checks they vanish when off.
-const PLAN_OPTS = { guilds: true }
+// The arcade's winnings are named in the family's children's own word
+// (0.25.0): this family's one child is in the default world.
+const PLAN_OPTS = { guilds: true, currencies: [KID_THEME_MAP[DEFAULT_KID_THEME].currency.name] }
 
 const { browser, page, errors } = await launch()
 const { fails, pass, fail } = reporter()

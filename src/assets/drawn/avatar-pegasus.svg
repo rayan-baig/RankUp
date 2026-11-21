@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+<defs>
+<linearGradient id="b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8e0ff"/><stop offset="1" stop-color="#cfe9ff"/></linearGradient>
+<linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c5cd6"/><stop offset="1" stop-color="#1b9ae4"/></linearGradient>
+<linearGradient id="w" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d9ccfb"/></linearGradient>
+</defs>
+<rect width="200" height="200" fill="url(#b)"/>
+<g fill="#fff" opacity=".95"><ellipse cx="34" cy="176" rx="36" ry="12"/><ellipse cx="58" cy="168" rx="22" ry="12"/><ellipse cx="160" cy="30" rx="24" ry="8"/><ellipse cx="176" cy="24" rx="14" ry="8"/></g>
+<g fill="#ffd166"><path d="M30 36 l3 8 l8 3 l-8 3 l-3 8 l-3 -8 l-8 -3 l8 -3z"/><path d="M172 150 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2z"/><circle cx="22" cy="80" r="2.5"/><circle cx="150" cy="58" r="2"/><circle cx="160" cy="176" r="2.5"/></g>
+<path d="M112 150 C122 96 156 64 198 58 C188 72 196 80 194 86 C180 90 190 100 184 106 C170 106 178 118 170 122 C154 120 158 134 150 138 C140 136 134 146 128 156Z" fill="url(#w)" stroke="#a98cf0" stroke-width="3" stroke-linejoin="round"/>
+<path d="M134 128 C146 108 164 94 186 88 M126 142 C138 126 152 116 168 112" fill="none" stroke="#a98cf0" stroke-width="2.5" stroke-linecap="round"/>
+<path d="M60 200 C60 168 72 144 84 128 C72 128 54 128 46 124 C34 119 32 104 40 95 C50 84 60 74 70 64 C74 56 78 46 82 36 L90 52 C98 52 104 58 108 64 C124 88 132 116 142 200Z" fill="#ffffff" stroke="#a98cf0" stroke-width="3.5" stroke-linejoin="round"/>
+<path d="M86 48 C112 38 132 56 128 72 C140 82 134 98 146 106 C134 106 140 122 150 130 C130 132 128 116 120 112 C116 90 106 70 86 48Z" fill="url(#m)"/>
+<path d="M84 48 C74 52 68 62 70 72 C78 64 84 60 94 58Z" fill="url(#m)"/>
+<path d="M66 82 C70 76 78 76 82 82 C78 88 70 88 66 82Z" fill="#33235e"/><circle cx="77" cy="80" r="2" fill="#fff"/>
+<path d="M64 76 l-4 -4 M70 74 l-2 -5" stroke="#33235e" stroke-width="2" stroke-linecap="round"/>
+<ellipse cx="42" cy="108" rx="3.5" ry="2.5" fill="#7a6aa8"/>
+<path d="M44 118 Q50 121 58 119" fill="none" stroke="#7a6aa8" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="64" cy="98" r="6" fill="#f7b5cf" opacity=".6"/>
+<path d="M84 140 C96 150 110 150 120 142" fill="none" stroke="#d9ccfb" stroke-width="3" stroke-linecap="round"/>
+</svg>

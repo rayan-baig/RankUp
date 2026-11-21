@@ -5,6 +5,7 @@ import { Button, Field, TextInput, Modal } from './ui.jsx'
 import {
   pinResetAvailability, proveParent, validPin, lockedForMinutes, PIN_RESET_ERRORS,
 } from '../lib/pinReset.js'
+import { clearPinLock } from '../lib/parentPin.js'
 
 /** "s•••@example.com": enough to recognise, not enough to read over a shoulder. */
 function masked(email) {
@@ -48,7 +49,10 @@ export default function PinReset({ open, onClose, onDone }) {
 
   const save = () => {
     if (!validPin(pin) || pin !== again) return
+    // Stored as its salted hash by the reducer; the parent proved who they
+    // are with the account's password, so the PIN boxes' wait ends too.
     dispatch({ type: 'UPDATE_FAMILY', patch: { pin } })
+    clearPinLock()
     close()
     onDone?.()
   }

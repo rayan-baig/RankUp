@@ -16,6 +16,8 @@ import { activityFeed } from '../../lib/activity.js'
 import { MAX_KID_THEMES } from '../../data/themeGenesis.js'
 import { choreCounts } from '../../lib/prune.js'
 import LeaderboardCard from '../../components/LeaderboardCard.jsx'
+import { hasPin } from '../../lib/parentPin.js'
+import { usePinLock } from '../../components/usePinLock.js'
 
 export default function KidProfile() {
   const { state, dispatch } = useApp()
@@ -26,6 +28,8 @@ export default function KidProfile() {
   const [pin, setPin] = useState('')
   const [pinError, setPinError] = useState('')
   const [themeUnlocked, setThemeUnlocked] = useState(false)
+  // The same wrong-try limit as every other PIN box (lib/parentPin.js).
+  const lock = usePinLock()
   const [draftTheme, setDraftTheme] = useState(kid?.themeId)
 
   const stats = useMemo(() => {
@@ -50,16 +54,20 @@ export default function KidProfile() {
   // A kid's own device holds no PIN — the parent's PIN lives on the parent's
   // phone. Without this guard an empty box would match the empty stored value
   // and unlock the theme picker, which is exactly what the lock exists to stop.
-  const canUnlockHere = Boolean(state.family.pin)
+  const canUnlockHere = hasPin(state.family)
 
   const tryUnlock = () => {
-    if (canUnlockHere && pin === state.family.pin) {
+    if (!canUnlockHere) { setPinError('That PIN is not right.'); return }
+    if (lock.locked || !pin) return
+    const r = lock.attempt(state.family, pin)
+    if (r.result === 'ok') {
       setThemeUnlocked(true)
       setPinOpen(false)
       setPin('')
       setPinError('')
     } else {
-      setPinError('That PIN is not right.')
+      setPin('')
+      setPinError(r.message)
     }
   }
 
@@ -297,7 +305,7 @@ export default function KidProfile() {
         footer={
           <>
             <Button variant="ghost" className="flex-1" onClick={() => setPinOpen(false)}>Cancel</Button>
-            <Button className="flex-1" onClick={tryUnlock}>Unlock</Button>
+            <Button className="flex-1" onClick={tryUnlock} disabled={lock.locked}>Unlock</Button>
           </>
         }
       >
@@ -308,9 +316,13 @@ export default function KidProfile() {
           inputMode="numeric"
           type="password"
           placeholder="Parent PIN"
+          aria-label="Parent PIN for the theme"
+          disabled={lock.locked}
           autoFocus
         />
-        {pinError && <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>{pinError}</p>}
+        {lock.locked
+          ? <p className="text-xs mt-2 text-muted" role="status">{lock.lockText}</p>
+          : pinError && <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>{pinError}</p>}
       </Modal>
     </Screen>
   )

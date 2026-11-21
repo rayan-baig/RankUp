@@ -7,6 +7,7 @@ import { RECURRENCES } from '../../lib/recurrence.js'
 import { parseMoney, symbolFor, familyCurrency } from '../../lib/money.js'
 import { navigate } from '../../lib/router.js'
 import { blankQuest } from '../../lib/questDraft.js'
+import { plural } from '../../lib/plural.js'
 
 const TABS = [
   { id: 'custom', label: 'Write one' },
@@ -65,7 +66,7 @@ export default function ParentAssign({ initialKidId }) {
         doubleXp: Math.random() < 0.17,
       })),
     })
-    setSaved(`${pack.quests.length} quests from the ${pack.label} added to ${kid?.name}.`)
+    setSaved(`${plural(pack.quests.length, 'quest')} from the ${pack.label} added to ${kid?.name}.`)
     setTimeout(() => setSaved(''), 4000)
   }
 

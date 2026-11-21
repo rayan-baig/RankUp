@@ -4,7 +4,7 @@ import { guildsEnabled } from '../../lib/guilds.js'
 import { guildsAllowedByPlan } from '../../state/reducer.js'
 import { leaderboards, cachedMe } from '../../lib/leaderboards.js'
 import {
-  BOARDS, BOARD_MAP, PERIODS, SCOPES, MODES, boardsFor, scopesFor, resetWords, boardError, localFamilyBoard,
+  BOARDS, BOARD_MAP, PERIODS, SCOPES, MODES, boardsFor, scopesFor, resetWords, boardError, localFamilyBoard, modeLine, boardsIntro, scoreWithUnit,
 } from '../../data/leaderboards.js'
 import { MINIGAMES } from '../../data/minigames.js'
 import { countryFlag, countryName } from '../../data/countries.js'
@@ -81,7 +81,7 @@ export default function KidLeaderboards() {
   return (
     <Screen>
       <button type="button" onClick={() => navigate('/kid')} className="tap-link text-sm text-muted mb-1 -ml-1">← Home</button>
-      <PageTitle sub="Race your family, your guild, or the world." right={<ModeBadge mode={mode} />}>
+      <PageTitle sub={boardsIntro({ guildsOn })} right={<ModeBadge mode={mode} />}>
         <span data-testid="boards-title">Leaderboards</span>
       </PageTitle>
 
@@ -138,7 +138,7 @@ export default function KidLeaderboards() {
           <div className="min-w-0">
             <div className="font-display font-bold text-sm">You are in Adventure</div>
             <p className="text-xs text-muted">
-              {MODES.adventure.line} Worldwide boards are in Arena, which a grown-up can switch on.
+              {modeLine('adventure', { guildsOn })} Worldwide boards are in Arena, which a grown-up can switch on.
             </p>
           </div>
         </Card>
@@ -146,12 +146,14 @@ export default function KidLeaderboards() {
 
       {!online && state.demo && (
         <Banner tone="info" icon="🏠" title="The demo's family board" className="mb-3">
-          A real family also gets guild boards, and worldwide ones if a parent says yes.
+          {guildsOn
+            ? 'A real family also gets guild boards, and worldwide ones if a parent says yes.'
+            : 'A real family also gets worldwide boards, if a parent says yes.'}
         </Banner>
       )}
       {!online && !state.demo && (
         <Banner tone="info" icon="🏠" title="Family board on this phone" className="mb-3">
-          Worldwide and guild boards need the sync service. This is your family, worked out here.
+          {guildsOn ? 'Worldwide and guild boards' : 'Worldwide boards'} need the sync service. This is your family, worked out here.
         </Banner>
       )}
 
@@ -196,8 +198,9 @@ function scoreText(row, unit, board) {
   // The level board is ranked by the XP behind the level; the level is worked
   // out here, by the app's one curve.
   if (board === 'level') return `Lv ${levelFromXp(row.score || 0).level}`
-  const n = formatXp(row.score || 0)
-  return `${n} ${unit}`
+  // "1 chore", never "1 chores".
+  const score = row.score || 0
+  return score === 1 ? scoreWithUnit(1, board) : `${formatXp(score)} ${unit}`
 }
 
 function nameOf(row) {

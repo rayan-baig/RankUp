@@ -72,7 +72,9 @@ export function firstWeekSteps(state) {
     {
       id: 'pair',
       label: `Link ${kids[0] ? `${firstKid}'s` : 'their'} phone`,
-      line: `On ${firstKid}'s phone, open RankUp and tap “I'm a kid” for a code.`,
+      // The code is made on the parent's phone for one child, and typed on
+      // the child's: the way linking works since 0.22.0.
+      line: `In Settings, Link a kid's device, tap “Code for ${firstKid}”.`,
       done: paired || sharedPhone,
       to: '/parent/pair',
       // One phone for the whole family is fine: this step then counts as done.
