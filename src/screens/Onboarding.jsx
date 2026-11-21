@@ -13,6 +13,7 @@ import Welcome from './Welcome.jsx'
 import { buildDemoFamily } from '../lib/demoFamily.js'
 import { transport } from '../lib/sync/transport.js'
 import { navigate } from '../lib/router.js'
+import { useParentHere } from '../components/PilotGate.jsx'
 
 /*
  * Two screens, with the consent notice between them.
@@ -32,6 +33,9 @@ export default function Onboarding() {
   // sign-up (#/welcome?start=parent): they have already read the front door.
   const [mode, setMode] = useState(() => (/[?&]start=parent\b/.test(window.location.hash) ? 'parent' : null))
   const [step, setStep] = useState(0)
+  // Pilot, the AI helper, is for grown-ups: never on the front door, where
+  // nobody has said yet whose phone this is, only once "I'm a parent" is tapped.
+  useParentHere(mode === 'parent')
   // With a backend configured the parent needs a real account before anything
   // can sync. Without one the app is device-only and there is nothing to join.
   const [signedIn, setSignedIn] = useState(!transport.isConfigured() || Boolean(transport.currentUserId()))

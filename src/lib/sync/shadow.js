@@ -303,6 +303,8 @@ export function pendingRows(ops, state = null) {
     else if (op.type === 'rpc' && op.fn === 'set_family_goal') pending.add('family_goals')
     // A money sign just chosen in Settings: an older pull must not put the old one back.
     else if (op.type === 'rpc' && op.fn === 'set_family_currency') pending.add('family_currency')
+    // The same for each child's weekly goal (0.26.0).
+    else if (op.type === 'rpc' && op.fn === 'set_weekly_chore_goal') pending.add('set_weekly_chore_goal')
     // A parent sending a child's theme to RankUp: an older pull would show
     // the request as still waiting, and invite a second tap.
     else if (op.type === 'rpc' && op.fn === 'submit_kid_theme' && op.args?.p_theme_id) pending.add(`kid_themes:${op.args.p_theme_id}`)

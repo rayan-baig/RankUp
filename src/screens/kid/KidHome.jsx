@@ -17,7 +17,8 @@ import AppHeader from '../../components/AppHeader.jsx'
 import SeasonMoment from '../../components/SeasonMoment.jsx'
 import { PickedNotice } from '../../components/KidThemesParent.jsx'
 import { useKidSchool } from './useKidSchool.js'
-import { familyGoalProgress, planPaused, choreSentToday } from '../../state/reducer.js'
+import { familyGoalProgress, planPaused, choreAcceptedToday } from '../../state/reducer.js'
+import { weeklyGoalProgress } from '../../lib/weeklyGoal.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
 import ModeBadge, { useLeaderboardMe } from '../../components/ModeBadge.jsx'
 import ArenaMoment from '../../components/ArenaMoment.jsx'
@@ -75,6 +76,7 @@ export default function KidHome() {
       : quests.length
         ? { icon: '✅', to: '/kid/quests', title: 'All done for now', line: 'New quests show up here when your parent adds them.' }
         : { icon: '📜', to: '/kid/quests', title: 'No quests yet', line: 'Ask your parent to give you your first quest.' }
+  const week = weeklyGoalProgress(state, kid.id)
   // A day later than today (the server's, after a zone change) counts as claimed.
   const bonusAvailable = !kid.lastLoginBonus || kid.lastLoginBonus < dayKey()
 
@@ -150,8 +152,10 @@ export default function KidHome() {
             <ProgressBar value={progress} max={1} height={9} label="Level progress" />
             <p className="text-[11px] text-muted mt-1">
               Next level: {formatXp(needed - intoLevel)} XP to go
-              {elite && <span style={{ color: 'var(--accent-2)' }}> · ⚡ 1.5× Elite</span>}
             </p>
+            {/* The boost, never the paid plan's name: no plan names on a
+                child's screen. Its own line, so neither line wraps. */}
+            {elite && <p className="kid-boost text-[11px]">⚡ 1.5× boost</p>}
           </div>
           {/* The streak, beside the avatar as in the design. */}
           <div
@@ -338,11 +342,16 @@ export default function KidHome() {
           label={theme.currency.name}
           tone="var(--accent)"
         />
+        {/* Chores accepted this week, out of the goal a parent set in
+            Settings (lib/weeklyGoal.js). It used to count sent against open,
+            which is no goal at all. */}
         <Stat
-          icon="🎯"
-          value={active.length + waiting.length ? `${waiting.length}/${active.length + waiting.length}` : '—'}
+          icon={week.met ? '🏆' : '🎯'}
+          value={`${week.done}/${week.goal}`}
           label="Weekly goal"
           tone="var(--accent-2)"
+          title={`${week.done} of ${week.goal} chores accepted this week`}
+          data-testid="weekly-goal"
         />
         {/* The design's third card is what you are saving towards. A
             number you cannot spend is a worse thing to look at than the
@@ -354,14 +363,14 @@ export default function KidHome() {
         />
       </div>
 
-      {/* The daily chore bonus: offered once a chore has been sent today,
-          never for simply opening the app. */}
-      {bonusAvailable && choreSentToday(state, kid.id) && (
+      {/* The daily chore bonus: offered once a parent has accepted one of
+          today's chores, never for simply sending one in or opening the app. */}
+      {bonusAvailable && choreAcceptedToday(state, kid.id) && (
         <Card className="mb-3 flex items-center gap-3" style={{ borderColor: 'var(--accent)' }} data-testid="chore-bonus">
           <span className="text-2xl" aria-hidden="true">🎁</span>
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-sm">Daily chore bonus</div>
-            <div className="text-xs text-muted">+5 {theme.currency.name} for the chore you did today.</div>
+            <div className="text-xs text-muted">+5 {theme.currency.name}: a grown-up accepted a chore of yours today.</div>
           </div>
           <Button className="px-3 py-2 min-h-0" onClick={() => dispatch({ type: 'CLAIM_LOGIN_BONUS', kidId: kid.id })}>
             Claim

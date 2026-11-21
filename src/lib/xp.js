@@ -70,7 +70,9 @@ export function calcReward(quest, { elite = false, streak = 0, onTime = true } =
   }
   if (elite) {
     const bonus = Math.round(xp * (ELITE_XP_MULTIPLIER - 1))
-    lines.push({ label: `Elite Pass ${ELITE_XP_MULTIPLIER}× boost`, value: bonus })
+    // No plan's name: this line is shown to the child (QuestDetail), and
+    // children's screens never name a paid plan (0.26.0).
+    lines.push({ label: `${ELITE_XP_MULTIPLIER}× XP boost`, value: bonus })
     xp += bonus
   }
 

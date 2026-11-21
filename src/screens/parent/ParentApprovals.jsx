@@ -134,7 +134,7 @@ export default function ParentApprovals() {
               )}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2" data-pilot-primary="">
               <Button variant="soft" className="flex-1" onClick={() => { setRejecting(sub); setRejectNote('') }}>
                 Send back
               </Button>

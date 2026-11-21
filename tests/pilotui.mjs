@@ -2,8 +2,9 @@
  * Pilot, the AI helper, in a real browser: where it is, where it never is,
  * and a change going through its confirm card.
  *
- *   - the robot on the signed-out front door, and in Parent Mode above the
- *     tab bar; tapping it opens the window with the MTRX Horizyn words;
+ *   - never on the front door (0.26.0): only after "I'm a parent", and in
+ *     Parent Mode in the tab bar's own slot, on no tab; tapping it opens the
+ *     window with the MTRX Horizyn words;
  *   - with a (stand-in) AI provider asking to add a chore, the card says
  *     "Pilot wants to: add the chore “Feed the dog” for Ava (30 XP)"; Allow
  *     puts it on Ava's list through the app's own state;
@@ -85,19 +86,26 @@ async function standInProvider(page, answers) {
 const KEY = JSON.stringify({ keys: [{ id: 'k1', provider: 'anthropic', key: 'test-key', model: 'test-model' }], active: 'k1' })
 
 // -----------------------------------------------------------------------------
-console.log('\n=== The front door, for a visitor ===')
+console.log('\n=== The front door: no Pilot until "I\'m a parent" (0.26.0) ===')
 {
-  const { page, ctx } = await newPage()
+  const { page, ctx, pilotFiles } = await newPage()
   await page.goto(BASE, { waitUntil: 'networkidle' })
-  check('the robot comes once the page has loaded', await waitForRobot(page))
-  check('loaded from this site by the gate (one core tag, nothing in the page source)', await page.evaluate(() => document.querySelectorAll('#pilot-core').length === 1))
+  await page.waitForTimeout(2500)
+  check('no robot on the front door, where nobody has said whose phone it is', await robotGone(page))
+  check('and not one Pilot file fetched there', pilotFiles.length === 0, pilotFiles.join(', '))
   await shot(page, 'front-door')
   await page.getByRole('button', { name: /I'm a kid/ }).click()
-  await page.waitForTimeout(500)
-  check('"I\'m a kid": gone while a child sets the phone up', await robotGone(page))
+  await page.waitForTimeout(800)
+  check('"I\'m a kid": none while a child sets the phone up', await robotGone(page))
   await page.getByRole('button', { name: /Back/ }).first().click().catch(() => {})
   await page.waitForTimeout(800)
-  check('and back on the front door after "Back"', await waitForRobot(page, 3000))
+  check('back on the front door: still none', await robotGone(page))
+  await page.getByRole('button', { name: /I'm a parent/ }).click()
+  check('"I\'m a parent": the robot comes for the grown-up setting up', await waitForRobot(page))
+  check('loaded from this site by the gate (one core tag, nothing in the page source)', await page.evaluate(() => document.querySelectorAll('#pilot-core').length === 1))
+  await page.getByRole('button', { name: /Back/ }).first().click().catch(() => {})
+  await page.waitForTimeout(400)
+  check('and gone again on "Back" to the door', await robotGone(page))
   await ctx.close()
 }
 
@@ -108,12 +116,16 @@ await page.goto(BASE, { waitUntil: 'networkidle' })
 await page.getByTestId('see-it-live').click()
 await page.waitForTimeout(1200)
 check('the parent dashboard has the robot', await waitForRobot(page) && (await page.evaluate(() => location.hash)) === '#/parent')
+await page.waitForTimeout(800)
 const place = await page.evaluate(() => {
   const r = document.querySelector('.pilot-launcher').getBoundingClientRect()
-  const nav = [...document.querySelectorAll('nav')].pop()?.getBoundingClientRect()
-  return { robotBottom: r.bottom, navTop: nav ? nav.top : 9999 }
+  const tabs = [...document.querySelectorAll('nav.tabbar button')].map((b) => b.getBoundingClientRect())
+  const slot = document.querySelector('[data-pilot-dock]').getBoundingClientRect()
+  const nav = document.querySelector('nav.tabbar').getBoundingClientRect()
+  return { r: { l: r.left, r: r.right, t: r.top, b: r.bottom }, lastTab: Math.max(...tabs.map((t) => t.right)), slot: { l: slot.left, r: slot.right }, navTop: nav.top }
 })
-check('above the tab bar, not on it', place.robotBottom <= place.navTop + 1, JSON.stringify(place))
+check('in the tab bar\'s own slot, on no tab (and so on nothing on the screen)',
+  place.r.l >= place.lastTab && place.r.t >= place.navTop - 1 && Math.abs((place.r.l + place.r.r) / 2 - (place.slot.l + place.slot.r) / 2) < 8, JSON.stringify(place))
 await shot(page, 'parent-dashboard')
 let alive = false
 for (let t = 0; t < 8000 && !alive; t += 250) { alive = await page.evaluate(() => Boolean(document.querySelector('.pilot-root .pa-stage'))); if (!alive) await page.waitForTimeout(250) }

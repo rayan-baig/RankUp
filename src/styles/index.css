@@ -720,9 +720,46 @@
  * Mode the robot sits above the tab bar instead of on it.
  */
 html[data-pilot='off'] .pilot-root { display: none !important; }
-html[data-pilot-tabs='on'] .pilot-root.rk-pilot.pilot-at-br,
-html[data-pilot-tabs='on'] .pilot-root.rk-pilot.pilot-at-bl {
-  bottom: calc(var(--safe-bottom, 0px) + 84px);
+
+/*
+ * The tab bar (components/NavBar.jsx) is as wide as the screen's own cards:
+ * the phone's width less a small margin, and on a wider screen the column's
+ * width, centred, rather than a bar from one edge of a desktop to the other.
+ */
+.tabbar { width: calc(100% - 20px); max-width: 28rem; margin-left: auto; margin-right: auto; }
+.tabbar-dock { display: none; }
+/* However wide the bar, the tabs stay a thumb's reach apart. */
+.tabbar > div { max-width: 38rem; margin-left: auto; margin-right: auto; }
+
+/*
+ * Pilot in Parent Mode never covers a tab or the screen.
+ *
+ * On a phone it sits in a slot of its own at the right end of the tab bar
+ * (.tabbar-dock): the screen scrolls behind the bar, so nothing on it is ever
+ * under the robot, and none of the five tabs is either. src/pilot/pilotRankUp.js
+ * tells the core's placement about the slot. Wider than the core's phone size
+ * (720px), the bar is narrower than the screen and the robot sits in the
+ * empty space beside the column, clear of both.
+ */
+@media (max-width: 720px) {
+  html[data-pilot-tabs='on'] .tabbar-dock { display: block; flex: 0 0 56px; }
+  html[data-pilot-tabs='on'] .pilot-root.rk-pilot.pilot-at-br {
+    right: 17px;
+    bottom: calc(var(--safe-bottom, 0px) + 16px);
+  }
+  /* Dragged to the other bottom corner: above the bar, never on a tab. */
+  html[data-pilot-tabs='on'] .pilot-root.rk-pilot.pilot-at-bl {
+    bottom: calc(var(--safe-bottom, 0px) + 88px);
+  }
+}
+
+/* On a wide screen Parent Mode's column (and its tab bar) is a little wider
+   than a child's, for a parent reading lists at a desk. */
+@media (min-width: 1024px) {
+  html[data-area='parent'] .shell:not(.lg\:max-w-5xl) { max-width: 40rem; }
+  html[data-area='parent'] .tabbar { max-width: 38rem; }
+  /* Plans sets the three plans side by side, wider: the bar follows. */
+  html[data-area='parent']:has(.shell.lg\:max-w-5xl) .tabbar { max-width: 62rem; }
 }
 /* RankUp's own "Reduce motion" (Settings) keeps the robot still too, as the
    browser's setting already does in the core's stylesheet. */
@@ -807,3 +844,6 @@ html[data-reduce-motion='true'] .pilot-root .pilot-dot { animation: none; }
   background: linear-gradient(95deg, var(--surface) 8%, transparent 80%);
   background: linear-gradient(95deg, color-mix(in srgb, var(--bg) 82%, transparent) 8%, color-mix(in srgb, var(--bg) 40%, transparent) 50%, transparent 88%);
 }
+
+/* The Elite boost on a child's Home: the boost, never the plan's name. */
+.kid-boost { color: var(--accent-2); }

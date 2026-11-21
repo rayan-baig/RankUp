@@ -26,7 +26,7 @@ const day = 86400000
  * Bump this whenever what the demo contains changes, so saved copies of
  * the old one are rebuilt instead of lingering for ever.
  */
-export const DEMO_VERSION = 5
+export const DEMO_VERSION = 6
 
 /**
  * The only names in the demo. Made up, fixed, first names only: no real
@@ -41,13 +41,14 @@ export function buildDemoFamily() {
   const run = (state, ...actions) => actions.reduce(reducer, state)
 
   /*
-   * Block Craft, because it is the theme with the art finished: nine
-   * avatar forms, a world behind every tab, and the only theme whose
-   * later levels are a story rather than a recolour. A demo should show
-   * the product at its best, and this is where the product looks best.
+   * Ava in Block Craft, because it is the theme with the art finished:
+   * nine avatar forms, a world behind every tab, and the only theme whose
+   * later levels are a story rather than a recolour. Noah in Pegasus
+   * (0.26.0), so a visitor sees that each child picks their own world, with
+   * its own drawn picture, rather than one look for the whole family.
    */
   const ava = makeKid({ name: DEMO_NAMES.kids[0], themeId: 'blockcraft' })
-  const noah = makeKid({ name: DEMO_NAMES.kids[1], themeId: 'blockcraft' })
+  const noah = makeKid({ name: DEMO_NAMES.kids[1], themeId: 'pegasus' })
 
   let s = createInitialState()
 

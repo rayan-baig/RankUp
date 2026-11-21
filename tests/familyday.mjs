@@ -46,8 +46,8 @@ const base = (kid = {}) => {
       ...s.kids?.[0], id: AVA, name: 'Ava', xp: 0, coins: 50, lockout: null, playTokens: 3,
       streak: { count: 4, lastDay: null, freezeTokens: 1 }, bestTimes: {}, ...kid,
     }],
-    // A chore sent today: the daily bonus is for doing one (0.22.0).
-    quests: [], submissions: [{ id: 's0', questId: 'q0', kidId: AVA, status: 'pending', submittedAt: Date.now() }],
+    // A chore accepted today: the daily bonus waits for one (0.26.0).
+    quests: [], submissions: [{ id: 's0', questId: 'q0', kidId: AVA, status: 'approved', submittedAt: Date.now(), decidedAt: Date.now() }],
     rewards: [], redemptions: [], notes: [], overrides: [],
     syncQueue: [],
   }
@@ -77,14 +77,14 @@ console.log('\n=== Calls that depend on the date say which zone the phone is in 
     JSON.stringify(call(s, 'approve_submission')))
 }
 
-console.log('\n=== The daily bonus is for doing a chore, not opening the app ===')
+console.log('\n=== The daily bonus is for a chore a parent accepted today, not opening the app ===')
 {
   const s = reducer({ ...base(), submissions: [] }, { type: 'CLAIM_LOGIN_BONUS', kidId: AVA })
-  ok('with no chore sent today, no bonus on screen', s.kids[0].coins === 50, `coins ${s.kids[0].coins}`)
+  ok('with no chore accepted today, no bonus on screen', s.kids[0].coins === 50, `coins ${s.kids[0].coins}`)
   ok('and nothing is sent', !call(s, 'claim_login_bonus'))
-  const yesterday = { id: 'sy', questId: 'q0', kidId: AVA, status: 'approved', submittedAt: Date.now() - 2 * 86400000 }
+  const yesterday = { id: 'sy', questId: 'q0', kidId: AVA, status: 'approved', submittedAt: Date.now() - 2 * 86400000, decidedAt: Date.now() - 2 * 86400000 }
   const t = reducer({ ...base(), submissions: [yesterday] }, { type: 'CLAIM_LOGIN_BONUS', kidId: AVA })
-  ok('a chore from two days ago does not count', t.kids[0].coins === 50)
+  ok('a chore accepted two days ago does not count', t.kids[0].coins === 50)
 }
 
 console.log('\n=== A day recorded as later than today counts as done ===')

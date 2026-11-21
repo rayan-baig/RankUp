@@ -28,7 +28,8 @@ one phone, with no account (see "On one phone only" below).
 | Surprise 2× XP chores | ✅ | Flagged at random when adding a pack, or by hand |
 | Rewards shop | ✅ | Bought with coins. Rewards waiting to be given show on the parent's dashboard; "Mark given" counts once even from two phones |
 | Family goal | ✅ | Shared XP towards one reward, counted from when it was set. The same goal and bar on both parents' and every child's phone ([SYNC.md](SYNC.md#the-family-goal)) |
-| Daily login bonus | ✅ | Once a day, on the family's day |
+| Daily chore bonus | ✅ | Once a day, on the family's day, and only after a parent has accepted one of the child's chores that day; the database checks the same (0.26.0) |
+| Weekly goal | ✅ | A child's Home shows chores accepted this week out of the goal a parent sets in Settings (5 until they do), synced on the family row (0.26.0) |
 | Pocket money | ✅ | A chore can carry a real price; a ledger of what is owed, payouts and gifts. RankUp never holds money: the parent pays and records it |
 | Pause and limits (was System Override Protocol) | ✅ | Take back some coins, a short break, pause until lifted. Never takes away XP, levels or streaks |
 | Behaviour Blueprints | ✅ | Charts from this family's real, synced chores |

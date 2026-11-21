@@ -25,6 +25,9 @@ import { SUPPORT_EMAIL } from '../../lib/support.js'
 import { STARTER_REWARDS } from '../../lib/firstWeek.js'
 import { hasPin } from '../../lib/parentPin.js'
 import { validPin } from '../../lib/pinReset.js'
+import { weeklyGoalOf, WEEKLY_GOAL_CHOICES } from '../../lib/weeklyGoal.js'
+
+const WEEK_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 export default function ParentSettings({ open = null }) {
   const { state, dispatch } = useApp()
@@ -109,7 +112,7 @@ export default function ParentSettings({ open = null }) {
             onChange={(e) => dispatch({ type: 'SET_WEEK_RESET_DAY', day: e.target.value ? Number(e.target.value) : null })}
           >
             <option value="">Seven days after it was done</option>
-            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((name, i) => (
+            {WEEK_DAYS.map((name, i) => (
               <option key={name} value={i + 1}>Every {name}</option>
             ))}
           </Select>
@@ -219,6 +222,25 @@ export default function ParentSettings({ open = null }) {
             </Button>
           )}
         </div>
+      </Card>
+      </Section>
+      <Section title="Weekly goal" icon="🏁"
+        summary={`${weeklyGoalOf(state)} accepted chore${weeklyGoalOf(state) === 1 ? '' : 's'} a week, for each child`}>
+      <Card flat>
+        <p className="text-sm text-muted mb-3">
+          Each child's Home shows how many of their chores you have accepted this week, out of this number.
+          The week starts {state.family.weekResetsOn ? `every ${WEEK_DAYS[state.family.weekResetsOn - 1]}` : 'on Monday'}.
+        </p>
+        <Field label="Chores accepted a week">
+          <Select
+            value={weeklyGoalOf(state)}
+            onChange={(e) => dispatch({ type: 'SET_WEEKLY_CHORE_GOAL', goal: Number(e.target.value) })}
+            data-testid="settings-weekly-goal"
+          >
+            {[...new Set([...WEEKLY_GOAL_CHOICES, weeklyGoalOf(state)])].sort((a, b) => a - b)
+              .map((n) => <option key={n} value={n}>{n} a week</option>)}
+          </Select>
+        </Field>
       </Card>
       </Section>
       <Section title="Notes to your kid" icon="✉️"

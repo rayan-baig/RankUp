@@ -19,7 +19,7 @@ globalThis.localStorage = {
 }
 globalThis.window = { location: { search: '' }, addEventListener() {}, removeEventListener() {} }
 
-const { reducer, choreSentToday } = await import('../src/state/reducer.js')
+const { reducer, choreSentToday, choreAcceptedToday } = await import('../src/state/reducer.js')
 const { createInitialState, makeKid, PLAN_COMPARISON, ELITE_PARENT_PERKS } = await import('../src/state/initialState.js')
 const { currencyForRegion, familyCurrency, formatMoney, CURRENCIES, DEFAULT_CURRENCY } = await import('../src/lib/money.js')
 const { MARKET_SKINS, ticketCost, FULL_SET_TICKETS } = await import('../src/data/marketSkins.js')
@@ -89,15 +89,30 @@ ok('every skin still has its ticket price for the server to check', MARKET_SKINS
 }
 ok('the plan list still calls it the Sunday Market', PLAN_COMPARISON.some((r) => r.label === 'Sunday Market'))
 
-console.log('\n=== The daily bonus is for doing a chore ===')
+console.log('\n=== The daily bonus waits for a parent to accept a chore that day (0.26.0) ===')
 {
   const kid = { ...makeKid({ name: 'Ava', themeId: 'blockcraft' }), id: 'k1', coins: 10 }
   const s = { ...createInitialState(), kids: [kid], submissions: [] }
-  ok('no chore today: no bonus', choreSentToday(s, 'k1') === false && reducer(s, { type: 'CLAIM_LOGIN_BONUS', kidId: 'k1' }).kids[0].coins === 10)
-  const done = { ...s, submissions: [{ id: 's', kidId: 'k1', questId: 'q', status: 'pending', submittedAt: Date.now() }] }
-  ok('a chore sent today: the bonus', choreSentToday(done, 'k1') && reducer(done, { type: 'CLAIM_LOGIN_BONUS', kidId: 'k1' }).kids[0].coins === 15)
-  const sibling = { ...s, submissions: [{ id: 's', kidId: 'k2', questId: 'q', status: 'pending', submittedAt: Date.now() }] }
-  ok('a brother\'s chore does not count', choreSentToday(sibling, 'k1') === false)
+  const claim = (st) => reducer(st, { type: 'CLAIM_LOGIN_BONUS', kidId: 'k1' })
+  ok('no chore today: no bonus', choreAcceptedToday(s, 'k1') === false && claim(s).kids[0].coins === 10)
+  const sent = { ...s, submissions: [{ id: 's', kidId: 'k1', questId: 'q', status: 'pending', submittedAt: Date.now() }] }
+  ok('a chore sent today but not accepted yet: no bonus, nothing sent to the server',
+    choreSentToday(sent, 'k1') && !choreAcceptedToday(sent, 'k1') && claim(sent).kids[0].coins === 10
+    && !(claim(sent).syncQueue || []).some((c) => c.fn === 'claim_login_bonus'))
+  const back = { ...s, submissions: [{ id: 's', kidId: 'k1', questId: 'q', status: 'rejected', submittedAt: Date.now(), decidedAt: Date.now() }] }
+  ok('a chore sent back today: no bonus', !choreAcceptedToday(back, 'k1') && claim(back).kids[0].coins === 10)
+  const done = { ...s, submissions: [{ id: 's', kidId: 'k1', questId: 'q', status: 'approved', submittedAt: Date.now() - 2 * 86400000, decidedAt: Date.now() }] }
+  ok('a chore accepted today (even one sent days ago): the bonus', choreAcceptedToday(done, 'k1') && claim(done).kids[0].coins === 15)
+  const sibling = { ...s, submissions: [{ id: 's', kidId: 'k2', questId: 'q', status: 'approved', submittedAt: Date.now(), decidedAt: Date.now() }] }
+  ok('a brother\'s accepted chore does not count', choreAcceptedToday(sibling, 'k1') === false)
+  // The acceptance this phone showed never reached the server (another
+  // phone sent the chore back first): the claim is refused and undone.
+  const claimed = claim(done)
+  const undone = reducer({ ...claimed, syncQueue: [] }, { type: 'RPC_REFUSED', fn: 'claim_login_bonus', args: { p_kid_id: 'k1' }, reason: 'no_chore_accepted' })
+  ok('a claim the server refuses (no chore accepted after all) is taken back on the phone',
+    undone.kids[0].coins === 10 && !undone.kids[0].lastLoginBonus, JSON.stringify(undone.kids[0].coins))
+  const home = readFileSync('src/screens/kid/KidHome.jsx', 'utf8')
+  ok('the child\'s Home offers it only after an acceptance', /bonusAvailable && choreAcceptedToday\(state, kid\.id\)/.test(home) && !/choreSentToday/.test(home))
 }
 
 console.log('\n=== The next goal is the nearer one ===')

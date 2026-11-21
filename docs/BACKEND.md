@@ -56,6 +56,14 @@ casino games in `play_minigame`. To `consent.sql`: notice 2026-12. No new file
 and no change to the order; re-run `schema.sql`, `sync.sql`, `allowance.sql`
 and `consent.sql`, in that order.
 
+The strict review's fixes (0.26.0) changed only `sync.sql`: the daily chore
+bonus (`claim_login_bonus`) is paid only for a chore a parent accepted on the
+family's day, worked out by the new `family_day_of(uuid, timestamptz, text)`
+(server only, revoked from `public, anon, authenticated`); and each child's
+weekly goal, the column `families.weekly_chore_goal` (1 to 50, null for the
+app's 5) with `set_weekly_chore_goal(int)` for a parent. No new file and no
+change to the order; re-run `sync.sql`.
+
 School pilots, the pilot report and houses (0.19.0) added to `schools.sql`
 the tables `school_groups` (a school's houses or classes), `school_pilots`
 (pilot codes, by hash) and `school_pilot_attempts` (row level security on, no
