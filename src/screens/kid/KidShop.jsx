@@ -9,6 +9,8 @@ import { isMarketOpen, nextOpeningLabel } from '../../data/marketSkins.js'
 import { navigate } from '../../lib/router.js'
 import { rewardLeftThisWeek, rewardFreesUpAt } from '../../state/reducer.js'
 import EmptyNext from '../../components/EmptyNext.jsx'
+// A child's screens sit in a frame on a computer (styles/desk.css).
+import '../../styles/desk.css'
 
 export default function KidShop() {
   const { state, dispatch } = useApp()

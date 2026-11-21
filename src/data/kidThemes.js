@@ -806,7 +806,7 @@ export const KID_THEMES = [
     name: 'Campfire Cozy',
     inspiredBy: 'Cozy village',
     blurb: 'Warm wood panels, calm pastel-green buttons, leaf-thin lines.',
-    currency: { name: 'Berberries', icon: '🍒' },
+    currency: { name: 'Berries', icon: '🍒' },
     scene: 'leaves',
     ...base,
     mode: 'light',

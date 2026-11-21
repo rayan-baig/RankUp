@@ -1,8 +1,18 @@
 import Logo, { SLOGAN } from '../components/Logo.jsx'
-import LoopPreview from '../components/LoopPreview.jsx'
+import LoopPreview, { BEATS } from '../components/LoopPreview.jsx'
 import { Words } from '../components/Motion.jsx'
 import { TIERS, TRIAL_DAYS } from '../state/initialState.js'
 import { OPERATOR } from '../data/legalText.js'
+// On a computer the door is two columns, the demo beside the ways in.
+import '../styles/desk.css'
+
+/* The four beats of the demo, said once more beside it on a computer. */
+const BEAT_LINES = [
+  'A chore from a ready-made pack, or your own.',
+  'They tap “I did it!” on their phone or on yours.',
+  'A photo from their own camera app, if you ask. RankUp keeps none.',
+  'XP and coins land only when you accept.',
+]
 
 /* "$5.99", never "$5.990" or "$6". */
 const dollars = (n) => `$${n.toFixed(2)}`
@@ -30,10 +40,14 @@ const dollars = (n) => `$${n.toFixed(2)}`
  * there a catch to trying it. The prices and the trial come from TIERS and
  * TRIAL_DAYS, the same numbers the plan screen and the server use, so the
  * door cannot quote a price the app does not charge (tests/lookaround.mjs).
+ *
+ * On a computer (960px and up, styles/desk.css) it is two columns: the words
+ * and the ways in on the left, and on the right the demo, with its four steps
+ * written out beside it. On a phone the order and the look are unchanged.
  */
 export default function Welcome({ onLookAround, onParent, onKid, wiped = null, childPhone = false }) {
   return (
-    <div className="shell px-5 py-5 min-h-screen flex flex-col">
+    <div className="shell door px-5 py-5 min-h-screen flex flex-col">
       {wiped && (
         <p role="status" data-testid="device-wiped" className="text-sm text-center mb-4 rounded-xl px-3 py-2"
           style={{ background: 'var(--card)', border: '1px solid var(--line)' }}>
@@ -42,7 +56,8 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null, c
             : 'This phone was unlinked from its family, so everything RankUp kept on it has been erased.'}
         </p>
       )}
-      <div className="text-center mb-3 anim-slide-up">
+      <div className="door-grid">
+      <div className="door-head text-center mb-3 anim-slide-up">
         <div className="flex items-center justify-center gap-2.5">
           <Logo size={44} glow />
           <h1 className="font-display text-4xl font-extrabold leading-none tracking-tight">
@@ -55,13 +70,28 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null, c
         <Words as="p" className="font-display font-bold mt-1.5 text-[var(--accent)]">
           {SLOGAN}
         </Words>
-        <p className="text-sm text-muted mt-1 mx-auto" style={{ maxWidth: 330 }} data-testid="what-it-is">
+        <p className="text-sm text-muted mt-1 mx-auto max-w-[330px]" data-testid="what-it-is">
           Your kids&rsquo; chores become quests. They tap &ldquo;I did it!&rdquo;, you accept,
           and they earn XP and level up in a world they pick.
         </p>
       </div>
 
-      <LoopPreview compact />
+      <div className="door-demo">
+        <LoopPreview compact />
+        <ol className="door-steps" aria-label="How it works">
+          {BEATS.map((b, i) => (
+            <li key={b.label}>
+              <span className="door-step-n" aria-hidden="true">{i + 1}</span>
+              <span className="min-w-0">
+                <span className="block font-display font-bold text-sm">{b.label}</span>
+                <span className="block text-xs text-muted mt-0.5">{BEAT_LINES[i]}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <div className="door-ways">
 
       {/*
         * The price, before anyone is asked for anything. A parent who has to
@@ -155,6 +185,8 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null, c
           <a href="#/legal/terms" className="tap-link underline text-muted">Terms</a>
           <a href={`mailto:${OPERATOR.email}`} className="tap-link underline text-muted">Contact</a>
         </nav>
+      </div>
+      </div>
       </div>
     </div>
   )

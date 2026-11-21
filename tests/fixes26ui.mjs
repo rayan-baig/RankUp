@@ -107,6 +107,9 @@ console.log('\n=== A desktop: a bar as wide as the column, the robot beside it =
 {
   const { ctx, page } = await open(1440, 900)
   await demo(page)
+  // Review, a one-column parent screen: the dashboard is two columns on a
+  // computer since 0.27.0 (tests/fixes27ui.mjs), with the bar centred under them.
+  await go(page, '/parent/approvals', 1400)
   const m = await page.evaluate(() => {
     const nav = document.querySelector('nav.tabbar').getBoundingClientRect()
     const card = document.querySelector('.shell .card').getBoundingClientRect()

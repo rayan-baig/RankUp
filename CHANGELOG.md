@@ -5,6 +5,20 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.27.0 — 2026-11-21
+
+Fixes from a strict review: a computer gets a computer's layout, Pilot opens with RankUp's own suggestions, and a new family's dashboard is quieter.
+
+- **On a computer, no more phone column.** From 1100px wide the parent dashboard is two columns: getting started, Review and the kids on the left; the recent activity, the family goal, the Elite tools and the School League on the right. The front door is wider: the words, the prices and the ways in on the left, and the demo on the right with its four steps written out beside it (from 960px). A child's screens stay a comfortable column, now centred in a frame in their world's colours, with the tab bar as wide as the cards inside it. A phone looks as before.
+- **Still a light first load.** The new layouts are in their own small stylesheet (`src/styles/desk.css`, under 1 KB compressed), fetched with the screens that use it, not with the first file. To make room in the first file, the level-up and streak moments are now fetched the first time one is due instead of with the app: the first file is about 1.3 KB smaller than in 0.26.0, with the layouts included.
+- **Pilot's opening screen speaks RankUp.** Under the five pills (unchanged, the owner's decision) Pilot now offers "What's waiting for me?", "Add a chore for…" and one suggestion for the screen, before any chat and before a key is added. A tap writes the question in the message box; with a key it is sent. Pilot's settings now show chat keys only: the "Image generation" and "Video generation" sections are hidden in RankUp. The shared core has no option for either, so RankUp does both from its own files (a row it puts into Pilot's welcome, and one style rule scoped to RankUp's Pilot); the core's files are unchanged.
+- **No Pilot while a child may be choosing.** Sign-up's step 2, "Your kid picks a world", no longer shows Pilot (it used to sit on the progress bar). It comes back if the parent goes back to step 1.
+- **The daily chore bonus is where a child sees it.** It sits right under "Do this next", so on a phone it is fully in view above the tab bar instead of half under it.
+- **Campfire Cozy's coins are Berries** (they were "Berberries"). The theme's id is unchanged, so every child keeps their world and their coins.
+- **A quieter start for a new family.** Until the first chore is accepted (or while the getting started list is open), the trial banner is one line, "14 days of Elite Pass free" with "See plans", and what the plan gives is folded under "What you get"; in the last three days it is the full banner again. The Elite tools are one row that opens to the three tools. Families already going see them as before.
+- **Before deploying:** nothing to run on the database and no new setting.
+- Tests: new `tests/fixes27.mjs` (static) and `tests/fixes27ui.mjs` (smoke). Updated: `tests/fixes26.mjs` (the set-up's Pilot mark now leaves out the world picker) and `tests/fixes26ui.mjs` (the desktop tab bar is checked on Review, a one-column parent screen, since the dashboard is now two columns).
+
 ## 0.26.0 — 2026-11-21
 
 Fixes from a strict review: Pilot only where a grown-up has said they are one, never in the way, and a daily bonus and weekly goal that mean what they say.

@@ -361,7 +361,7 @@ Elite subscribers get a permanent 1.5× multiplier on all experience.
 
 Each theme has its own currency with its own name and icon. Matrix Clears,
 Emeralds, Renown, V-Coins, Power Levels, Pink Crystals, VIP Tickets, Star
-Shards, Sugar Orbs, Glow Points, Berberries, Credits, Star Coins, Mana Orbs,
+Shards, Sugar Orbs, Glow Points, Berries, Credits, Star Coins, Mana Orbs,
 Pocket Coins.
 
 It is the same underlying number in all fifteen cases. The renaming is what makes
@@ -554,7 +554,7 @@ Points. *A whole industry decides who gets looked at. You have decided to decide
 instead.* Dressing Room, Red Carpet, Spotlight, Icon: "They stop saying your
 name and start saying 'the look'."
 
-**Campfire Cozy** — Animal Crossing. Warm wood and pastel green. Berberries.
+**Campfire Cozy** — Animal Crossing. Warm wood and pastel green. Berries.
 Light. *A quiet island, a loan you never asked for, and neighbours worth the
 trouble.* First Light, Deep Wood, Golden Hour ("Everything turns amber for twenty
 minutes and the whole island comes outside"), Stargazing.

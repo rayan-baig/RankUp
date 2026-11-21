@@ -7,6 +7,8 @@ import AppHeader from '../../components/AppHeader.jsx'
 import { navigate } from '../../lib/router.js'
 import EmptyNext from '../../components/EmptyNext.jsx'
 import { peekSent, clearSent, SENT_MS } from '../../lib/sentFlash.js'
+// A child's screens sit in a frame on a computer (styles/desk.css).
+import '../../styles/desk.css'
 
 const TABS = [
   { id: 'todo', name: 'To Do' },

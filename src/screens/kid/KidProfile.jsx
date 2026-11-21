@@ -18,6 +18,8 @@ import { choreCounts } from '../../lib/prune.js'
 import LeaderboardCard from '../../components/LeaderboardCard.jsx'
 import { hasPin } from '../../lib/parentPin.js'
 import { usePinLock } from '../../components/usePinLock.js'
+// A child's screens sit in a frame on a computer (styles/desk.css).
+import '../../styles/desk.css'
 
 export default function KidProfile() {
   const { state, dispatch } = useApp()

@@ -46,7 +46,7 @@ markParentScreen(-1)
 ok('back to choosing a role: no', !at('/welcome'))
 ok('the gift and School League pages: yes', ['/gift', '/school', '/district'].every(at))
 const onboarding = read('src/screens/Onboarding.jsx')
-ok('the parent\'s set-up says so with useParentHere(mode === \'parent\')', /useParentHere\(mode === 'parent'\)/.test(onboarding))
+ok('the parent\'s set-up says so with useParentHere(mode === \'parent\' …)', /useParentHere\(mode === 'parent'( && !worldPicker)?\)/.test(onboarding))
 ok('the door (Welcome) knows nothing of Pilot', !/pilot/i.test(code('src/screens/Welcome.jsx')))
 
 console.log('\n=== 2. Pilot keeps clear of what a parent taps ===')

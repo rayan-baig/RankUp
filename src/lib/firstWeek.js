@@ -118,3 +118,14 @@ export function showHowItWorks(state) {
   if (state.demo || state.settings?.howItWorksSeen) return false
   return !(state.submissions || []).some((s) => s.status === 'approved')
 }
+
+/**
+ * A family still finding its feet: no chore accepted yet, or the getting
+ * started list still open. Never the demo. The dashboard keeps the trial
+ * banner and the Elite tools small for them (0.27.0), so the first things a
+ * new parent sees are the steps and their child, not the plan.
+ */
+export function newFamily(state) {
+  if (state.demo) return false
+  return !(state.submissions || []).some((s) => s.status === 'approved') || showFirstWeek(state)
+}

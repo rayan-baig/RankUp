@@ -5,6 +5,8 @@ import { schools, DEMO_LEAGUE } from '../../lib/schools.js'
 import { Screen, Card } from '../../components/ui.jsx'
 import { SchoolHeadline, LeagueTable, RivalryList, StarList, HouseBoard } from '../../components/SchoolParts.jsx'
 import { useKidSchool } from './useKidSchool.js'
+// A child's screens sit in a frame on a computer (styles/desk.css).
+import '../../styles/desk.css'
 
 /*
  * A child's own school page. They see their school's place in the district,

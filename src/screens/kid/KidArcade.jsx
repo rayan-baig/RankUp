@@ -12,6 +12,8 @@ import HeroArt from '../../components/HeroArt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
 import { picture as tileArt } from '../../data/art.js'
 import { lazyLoad } from '../../lib/lazy.js'
+// A child's screens sit in a frame on a computer (styles/desk.css).
+import '../../styles/desk.css'
 
 /*
  * Each game downloads when a child first starts it, not with the arcade: the

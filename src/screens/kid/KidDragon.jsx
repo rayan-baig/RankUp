@@ -5,6 +5,8 @@ import { navigate } from '../../lib/router.js'
 import BattleScene from '../../components/BattleScene.jsx'
 import { Screen, Card, Button, PageTitle, SectionTitle, ProgressBar } from '../../components/ui.jsx'
 import KidHome from './KidHome.jsx'
+// A child's screens sit in a frame on a computer (styles/desk.css).
+import '../../styles/desk.css'
 
 /** The most of the fight a single visit replays; older moves are in the list. */
 const REPLAY_MAX = 8

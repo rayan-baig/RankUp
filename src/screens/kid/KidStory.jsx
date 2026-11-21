@@ -8,6 +8,8 @@ import BattleScene from '../../components/BattleScene.jsx'
 import { Screen, Card, Button, PageTitle, SectionTitle } from '../../components/ui.jsx'
 import KidHome from './KidHome.jsx'
 import KidDragon from './KidDragon.jsx'
+// A child's screens sit in a frame on a computer (styles/desk.css).
+import '../../styles/desk.css'
 
 /**
  * One chapter of the theme's story, played as a battle scene, with the

@@ -12,6 +12,8 @@ import { formatXp, levelFromXp } from '../../lib/xp.js'
 import { Screen, Card, Banner, PageTitle, Segmented } from '../../components/ui.jsx'
 import ModeBadge from '../../components/ModeBadge.jsx'
 import { navigate } from '../../lib/router.js'
+// A child's screens sit in a frame on a computer (styles/desk.css).
+import '../../styles/desk.css'
 
 /**
  * The leaderboards, for a child.
