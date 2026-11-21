@@ -18,11 +18,16 @@
 # Vercel adds the same "*" to static files and has no way to take it away;
 # the same reasoning makes that harmless, and /api sends no CORS header there
 # either.
+#
+# microphone=(self): only for Pilot's optional voice button in Parent Mode
+# (the parent's own words, typed into the box by the browser's speech
+# recognition, to check before sending). Only when that button is pressed;
+# no other site's frame may ask. The camera stays off: RankUp takes no photos.
 /*
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+  Permissions-Policy: camera=(), microphone=(self), geolocation=(), interest-cohort=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   Origin-Agent-Cluster: ?1
   ! Access-Control-Allow-Origin

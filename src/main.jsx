@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
 import { AppProvider } from './state/AppContext.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import PilotGate from './components/PilotGate.jsx'
 import { reportEnvironment } from './lib/env.js'
 import { keepAppForOffline } from './lib/offline.js'
 import { listenForInstall } from './lib/installPrompt.js'
@@ -24,6 +25,8 @@ createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
       <AppProvider>
+        {/* Pilot, the AI helper: only for grown-ups (lib/pilotGate.js). */}
+        <PilotGate />
         <App />
       </AppProvider>
     </ErrorBoundary>

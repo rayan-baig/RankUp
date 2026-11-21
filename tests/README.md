@@ -94,6 +94,18 @@ banked; and no child's screen mentioning any of it. The Stripe side is the
 "Bring a friend" part of `billingwalk.mjs`, the rules
 `supabase/test/54-referral-rewards.sql`.
 
+**`pilot.mjs`**, **`pilottools.mjs`** and **`pilotui.mjs`** cover Pilot, the
+AI helper in Parent Mode (docs/PILOT.md). `pilot.mjs` (static) runs the shared
+core's own tests (`tests/js/pilot.test.js`, copied from the MTRX Horizyn site),
+checks the core is one version, that the security policy adds only Pilot's AI
+providers, that Pilot is never in the first load, and that children's names are
+marked private. `pilottools.mjs` (awards) drives every tool through the real
+reducer and the core's engine: nothing changes before Allow, every forbidden
+action is refused, nothing but first names and chore titles reaches the AI, and
+Pilot is shown in no child's view or child's phone in any state.
+`pilotui.mjs` (smoke) does the same in a browser, with the AI provider answered
+inside the page, and fails if a child's phone fetches a single Pilot file.
+
 **`gifts.mjs`** is "a year of RankUp" as a gift, in the app: the front
 door's link to the Give page, which needs no account, shows the plan list's
 yearly prices and refuses a rude word, a link or a missing email before

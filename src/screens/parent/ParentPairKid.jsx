@@ -110,7 +110,7 @@ export default function ParentPairKid() {
       <Screen>
         <div className="text-center py-10">
           <div className="text-5xl mb-3 anim-pop" aria-hidden="true">🔗</div>
-          <h1 className="font-display text-2xl font-extrabold mb-1">{linked.name} is linked</h1>
+          <h1 className="font-display text-2xl font-extrabold mb-1"><span data-pilot-private="">{linked.name}</span> is linked</h1>
           <p className="text-sm text-muted mb-6">
             Their device is now part of {state.family.name || 'your family'}. Quests you assign will
             show up there.
@@ -263,7 +263,7 @@ export default function ParentPairKid() {
             <Card key={kid.id} flat className="mb-2 flex items-center gap-3">
               <span className="text-xl" aria-hidden="true">📱</span>
               <div className="min-w-0 flex-1">
-                <div className="font-semibold text-sm truncate">{kid.name}</div>
+                <div className="font-semibold text-sm truncate" data-pilot-private="">{kid.name}</div>
                 <div className="text-xs text-muted">
                   Linked {new Date(kid.pairedDeviceAt).toLocaleDateString()}
                 </div>

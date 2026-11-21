@@ -298,3 +298,25 @@ Ask the lawyer whether the half-price month needs its own line in the terms
 beyond "a family may be offered one month at half price, once", and whether
 any place you sell in requires a cancellation to be confirmed by email (Stripe
 can send one: Settings, Emails).
+
+---
+
+## Pilot, the AI helper (0.24.0): no new consent version
+
+Pilot is an optional AI helper for parents, in Parent Mode only, running on
+the parent's own AI key from their own browser (docs/PILOT.md). **The consent
+notice stays 2026-12.** The rule above is that a new version is needed when
+RankUp collects more. Pilot makes RankUp collect nothing: RankUp's server
+receives no key, no message and no answer, and keeps nothing. What reaches the
+AI company is sent by the parent's browser, at the parent's own request, to a
+company the parent chose and has an account with, and about a child it is at
+most first names and chore titles the parent typed or asked Pilot to look up.
+The privacy policy (section "Pilot, the AI helper in Parent Mode") and the
+terms ("Pilot, the AI helper") describe it.
+
+Questions for the lawyer:
+
+- Is a parent sending their own child's first name and chore titles to an AI
+  company of their choosing, from their own browser, outside what the consent
+  notice needs to describe, given RankUp neither sends nor keeps it?
+- Is the 18+ line beside the key settings, and in the terms, enough?

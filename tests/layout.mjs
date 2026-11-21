@@ -145,7 +145,8 @@ async function walk(page, routes, label) {
     await page.waitForTimeout(900)
     // Folded sections are part of the screen too: open every one.
     // eslint-disable-next-line no-await-in-loop
-    await page.evaluate(() => document.querySelectorAll('[aria-expanded="false"]').forEach((b) => b.click()))
+    // Every closed section opened, but not Pilot's robot (the AI helper), whose button is aria-expanded too.
+    await page.evaluate(() => document.querySelectorAll('[aria-expanded="false"]').forEach((b) => { if (!b.closest('.pilot-root')) b.click() }))
     // eslint-disable-next-line no-await-in-loop
     await page.waitForTimeout(300)
     // eslint-disable-next-line no-await-in-loop

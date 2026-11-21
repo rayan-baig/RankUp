@@ -7,6 +7,7 @@ import { Button, Card, Field, TextInput, ProgressBar, Banner } from '../../compo
 import CodeInput from '../../components/CodeInput.jsx'
 import ThemePicker from '../../components/ThemePicker.jsx'
 import KidPairing from './KidPairing.jsx'
+import { useKidHere } from '../../components/PilotGate.jsx'
 
 /**
  * Setting up a child's own phone.
@@ -23,6 +24,8 @@ import KidPairing from './KidPairing.jsx'
 const STEPS = ['Your name', 'Pick a world', 'Connect']
 
 export default function KidDeviceSetup({ onBack }) {
+  // A child is setting this phone up: no Pilot (lib/pilotGate.js).
+  useKidHere()
   const { dispatch } = useApp()
   const [mode, setMode] = useState('code') // code | make
   const [code, setCode] = useState('')

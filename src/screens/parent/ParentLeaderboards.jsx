@@ -93,7 +93,7 @@ export default function ParentLeaderboards() {
         <Card key={k.kid_id} className="mb-2" data-testid={`arena-kid-${k.name}`}>
           <div className="flex items-center gap-3">
             <div className="min-w-0 flex-1">
-              <div className="font-semibold">{k.name}</div>
+              <div className="font-semibold" data-pilot-private="">{k.name}</div>
               <div className="text-xs text-muted truncate">Nickname: <strong>{k.nickname}</strong></div>
             </div>
             <ModeBadge mode={k.mode} />
@@ -143,7 +143,7 @@ export default function ParentLeaderboards() {
         )}>
         {confirm && (
           <div className="text-sm space-y-2">
-            <p>{confirm.name} will appear on the worldwide{data.country ? ' and country' : ''} leaderboards, where children in other families can see them as:</p>
+            <p><span data-pilot-private="">{confirm.name}</span> will appear on the worldwide{data.country ? ' and country' : ''} leaderboards, where children in other families can see them as:</p>
             <p className="font-display font-extrabold text-lg text-center" style={{ color: MODES.arena.color }}>
               {data.country ? `${countryFlag(data.country)} ` : ''}{confirm.nickname}
             </p>

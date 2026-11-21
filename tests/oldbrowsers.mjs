@@ -50,7 +50,8 @@ export const MISSING = [
 const GUARDED = [
   ['crypto.randomUUID', /randomUUID/, ['src/lib/id.js']],
   ['requestIdleCallback', /requestIdleCallback/, ['src/lib/offline.js']],
-  ['BroadcastChannel', /new BroadcastChannel/, ['src/lib/sync/localAdapter.js']],
+  // pilotRankUp.js: forgetting a family's Pilot chat in every tab, behind typeof BroadcastChannel.
+  ['BroadcastChannel', /new BroadcastChannel/, ['src/lib/sync/localAdapter.js', 'src/pilot/pilotRankUp.js']],
 ]
 
 function walk(dir, out = []) {

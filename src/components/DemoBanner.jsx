@@ -55,7 +55,7 @@ export default function DemoBanner() {
         <div className="flex items-center gap-2">
           <span className="demo-pill shrink-0">DEMO</span>
           <span className="text-xs min-w-0 flex-1">
-            The <strong>Rivera family</strong> is pretend. Nothing here is saved.
+            The <strong data-pilot-private="">Rivera family</strong> is pretend. Nothing here is saved.
           </span>
           <Button variant="primary" className="demo-start shrink-0" onClick={() => setConfirming(true)}>
             Start for free

@@ -4,6 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { EXTERNAL_GAMES } from './src/components/games/external/bridges.js'
+import { pilotConnectSources } from './src/lib/pilotHosts.js'
 
 /**
  * The Content-Security-Policy, written into the built page.
@@ -37,7 +38,14 @@ function contentSecurityPolicy(env) {
     // data: for the small pictures the build inlines. Not blob:, which was
     // for previewing a photo before it was sent; RankUp takes none.
     "img-src 'self' data:",
-    `connect-src 'self'${supabase ? ` ${supabase}` : ''}`,
+    // Pilot, the AI helper in Parent Mode, calls the AI provider a parent
+    // chose straight from the browser, with the parent's own key: exactly
+    // these hosts (src/lib/pilotHosts.js, the same list as the MTRX Horizyn
+    // site), plus the parent's own computer for a model they run there.
+    `connect-src 'self'${supabase ? ` ${supabase}` : ''} ${pilotConnectSources().join(' ')}`,
+    // blob: only for a video Pilot made with the parent's own video key,
+    // played from memory in Pilot's window. Nothing else plays media.
+    "media-src 'self' blob:",
     "worker-src 'self'",
     "manifest-src 'self'",
     "object-src 'none'",

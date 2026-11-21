@@ -265,6 +265,7 @@ export default function Onboarding() {
         and showed through the gap between the two buttons.
       */}
       <div
+        data-pilot-avoid=""
         className="flex gap-2 mt-6 sticky bottom-0 py-3"
         style={{
           background: 'linear-gradient(to top, var(--bg) 62%, transparent)',

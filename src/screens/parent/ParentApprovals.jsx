@@ -65,7 +65,7 @@ export default function ParentApprovals() {
               <div className="min-w-0">
                 <h2 className="font-display font-bold leading-tight">{quest.title}</h2>
                 <p className="text-xs text-muted">
-                  {kid.name} · {relativeTime(sub.submittedAt)}
+                  <span data-pilot-private="">{kid.name}</span> · {relativeTime(sub.submittedAt)}
                   {sub.elapsedMs ? ` · took ${formatDuration(sub.elapsedMs)}` : ''}
                 </p>
               </div>
@@ -74,7 +74,7 @@ export default function ParentApprovals() {
 
             {quest.requiresPhoto && (
               <Banner tone="info" icon="📷" title="Want to see it first?">
-                {kid.name} can send you a photo from their camera app. Look at it, then accept here.
+                <span data-pilot-private="">{kid.name}</span> can send you a photo from their camera app. Look at it, then accept here.
               </Banner>
             )}
 

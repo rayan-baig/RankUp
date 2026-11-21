@@ -61,6 +61,7 @@ const SUITES = {
     { file: 'failsoft.mjs' },
     { file: 'speed.mjs' },
     { file: 'seasonsdoc.mjs' },
+    { file: 'pilot.mjs' },
   ],
   // The app in a real browser, against the dev server on :5173 and the mock
   // API on :54321 (supabase/test/up.sh starts both).
@@ -117,6 +118,7 @@ const SUITES = {
     { file: 'secretworlds.mjs', weight: 143 },
     { file: 'plainsetup.mjs', weight: 25 },
     { file: 'layout.mjs', weight: 150 },
+    { file: 'pilotui.mjs', weight: 45 },
   ],
   // Two or more browsers against the mock API and a real Postgres.
   sync: [
@@ -160,6 +162,7 @@ const SUITES = {
     { file: 'firststeps.mjs' },
     { file: 'reviewrules.mjs' },
     { file: 'dealrules.mjs' },
+    { file: 'pilottools.mjs' },
   ],
   // The server functions under workerd on :8788 (supabase/test/up.sh --cf).
   api: [

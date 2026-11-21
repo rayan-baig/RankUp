@@ -77,7 +77,8 @@ ok('sent with the public key only, never the parent\'s sign-in',
 console.log('\n=== Help ===')
 const help = await text()
 ok('it is the help page', /Tap a question to see the answer/.test(help), help.slice(0, 200))
-const asked = await page.locator('[aria-expanded]').count()
+// Pilot's robot (the AI helper in Parent Mode) has aria-expanded too; it is not a question.
+const asked = await page.evaluate(() => [...document.querySelectorAll('[aria-expanded]')].filter((el) => !el.closest('.pilot-root')).length)
 ok(`it asks between 12 and 15 questions (${asked})`, asked >= 12 && asked <= 15)
 await page.screenshot({ path: `${SHOT_DIR}/launch-help.png` })
 await page.getByRole('button', { name: 'What do the plans cost?' }).click()
