@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
-import { levelFromXp, formatXp, xpToNext, liveStreak, DIFFICULTY } from '../../lib/xp.js'
+import { levelFromXp, formatXp, xpToNext, liveStreak, questPay } from '../../lib/xp.js'
 import { nextEvolution, storyChapters } from '../../data/kidThemes.js'
 import { storyProgress, dragonFight, DRAGON_HP, HERO_HP } from '../../lib/dragonFight.js'
 import { dayKey } from '../../lib/dates.js'
@@ -66,6 +66,8 @@ export default function KidHome() {
   const hasTokens = Boolean(state.demo) || (kid.playTokens || 0) > 0
   // A chore sent back comes first: it is the one a parent is waiting on.
   const nextQuest = active.find((q) => q.status === 'redo') || active[0] || null
+  // What it pays, worked out exactly as the quest cards and the quest page do.
+  const nextPay = nextQuest ? questPay(nextQuest, kid, { elite }) : null
   const next = hasTokens
     ? { icon: '🎮', to: '/kid/arcade', title: 'Nothing left to do', line: 'Spend a token in the arcade.' }
     : waiting.length
@@ -197,7 +199,7 @@ export default function KidHome() {
               <div className="text-xs text-muted">
                 {nextQuest.status === 'redo'
                   ? 'Sent back. Have another go.'
-                  : `+${nextQuest.xp ?? DIFFICULTY[nextQuest.difficulty]?.xp ?? 0} XP · ${theme.currency.icon} +${Math.max(1, Math.round((nextQuest.xp ?? DIFFICULTY[nextQuest.difficulty]?.xp ?? 0) / 5))}`}
+                  : `+${nextPay.xp} XP · ${theme.currency.icon} +${nextPay.coins}`}
               </div>
             </div>
           </div>

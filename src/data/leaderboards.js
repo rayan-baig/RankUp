@@ -7,8 +7,8 @@
  *
  * Two modes, per child:
  *   Adventure (every child starts here): play at your own pace. On no public
- *     board, and none is shown. Family and guild boards still show: they are
- *     among people the family already approved.
+ *     board, and none is shown. The family board still shows (and the
+ *     guild's, while guilds are on): people the family already approved.
  *   Arena: on the worldwide and country boards, by nickname and flag. Only a
  *     parent switches a child into Arena; a parent or the child can switch
  *     back to Adventure at any time, and that takes them off at once.
@@ -21,7 +21,10 @@ export const MODES = {
     name: 'Adventure',
     icon: '🧭',
     color: '#1baf7a',
-    line: 'Play at your own pace. Only your family and your guild see your scores.',
+    line: 'Play at your own pace. Only your family sees your scores.',
+    // While guilds are on (lib/guilds.js). They ship off, and words about a
+    // guild a child cannot have only confused: see modeLine.
+    guildLine: 'Play at your own pace. Only your family and your guild see your scores.',
   },
   arena: {
     id: 'arena',
@@ -30,6 +33,24 @@ export const MODES = {
     color: '#f05a28',
     line: 'You are on the worldwide and country leaderboards, by your nickname.',
   },
+}
+
+/** A mode's line, naming guilds only when guilds are on. */
+export function modeLine(mode, { guildsOn = false } = {}) {
+  const m = MODES[mode?.id || mode] || MODES.adventure
+  return guildsOn && m.guildLine ? m.guildLine : m.line
+}
+
+/** The leaderboards page's line under its title, for what is switched on. */
+export function boardsIntro({ guildsOn = false } = {}) {
+  return guildsOn ? 'Race your family, your guild, or the world.' : 'Race your family, or the world.'
+}
+
+/** "1 chore", "3 chores": a score with its unit, singular for one. */
+export function scoreWithUnit(n, board) {
+  const def = BOARD_MAP[board?.id || board] || {}
+  const unit = n === 1 && def.unitOne ? def.unitOne : def.unit || ''
+  return `${n} ${unit}`.trim()
 }
 
 /** The most XP one accepted chore counts for on a board (leaderboard_xp_per_chore). */
@@ -53,23 +74,23 @@ export const SCOPES = {
 const KID_SCOPES = ['world', 'country', 'guild', 'family']
 
 export const BOARDS = [
-  { id: 'chores', icon: '✅', title: 'Chores done', unit: 'chores', periods: ['week', 'month', 'all'], scopes: KID_SCOPES,
+  { id: 'chores', icon: '✅', title: 'Chores done', unit: 'chores', unitOne: 'chore', periods: ['week', 'month', 'all'], scopes: KID_SCOPES,
     explain: `Accepted chores. At most ${SCHOOL_DAILY_CHORES} count each day, so it is about doing them, not how fast a grown-up taps.` },
   { id: 'xp', icon: '⚡', title: 'XP earned', unit: 'XP', periods: ['week', 'month', 'all'], scopes: KID_SCOPES,
     explain: `XP from accepted chores, before any Elite boost, so nobody can buy a place. At most ${BOARD_XP_PER_CHORE} a chore and ${SCHOOL_DAILY_CHORES} chores a day.` },
   { id: 'level', icon: '⭐', title: 'Highest level', unit: 'level', periods: ['all'], scopes: KID_SCOPES,
     explain: 'The level your board XP reaches: no Elite boost, so it can be a little lower than on your Home.' },
-  { id: 'streak_best', icon: '🔥', title: 'Longest streak', unit: 'days', periods: ['all'], scopes: KID_SCOPES,
+  { id: 'streak_best', icon: '🔥', title: 'Longest streak', unit: 'days', unitOne: 'day', periods: ['all'], scopes: KID_SCOPES,
     explain: 'The most days in a row you have ever had a chore accepted.' },
-  { id: 'streak_now', icon: '📆', title: 'Current streak', unit: 'days', periods: ['all'], scopes: KID_SCOPES, periodLabel: 'Right now',
+  { id: 'streak_now', icon: '📆', title: 'Current streak', unit: 'days', unitOne: 'day', periods: ['all'], scopes: KID_SCOPES, periodLabel: 'Right now',
     explain: 'Days in a row, still going today.' },
-  { id: 'badges', icon: '🏅', title: 'Badges earned', unit: 'badges', periods: ['all'], scopes: KID_SCOPES,
+  { id: 'badges', icon: '🏅', title: 'Badges earned', unit: 'badges', unitOne: 'badge', periods: ['all'], scopes: KID_SCOPES,
     explain: 'Badges on your shelf, counted by RankUp\'s server.' },
   { id: 'rising', icon: '🚀', title: 'Rising stars', unit: 'XP', periods: ['week'], scopes: KID_SCOPES,
     explain: 'The biggest jump in board XP this week compared with last week.' },
-  { id: 'arcade', icon: '🕹️', title: 'Arcade high scores', unit: 'points', periods: ['week', 'month', 'all'], scopes: KID_SCOPES,
+  { id: 'arcade', icon: '🕹️', title: 'Arcade high scores', unit: 'points', unitOne: 'point', periods: ['week', 'month', 'all'], scopes: KID_SCOPES,
     explain: 'Your best score in one game, as the arcade recorded it (out of 100).' },
-  { id: 'seasons', icon: '🎨', title: 'Season themes', unit: 'themes', periods: ['all'], scopes: KID_SCOPES,
+  { id: 'seasons', icon: '🎨', title: 'Season themes', unit: 'themes', unitOne: 'theme', periods: ['all'], scopes: KID_SCOPES,
     explain: 'Themes you made that were picked for a RankUp Season.' },
   { id: 'guilds', icon: '🛡️', title: 'Top guilds', unit: 'XP each', periods: ['week'], scopes: ['world', 'country'], guilds: true,
     explain: 'Guilds by their members\' average board XP this week, so a big guild cannot win on size alone. Shown by a team name, never the guild\'s own name or anyone in it.' },

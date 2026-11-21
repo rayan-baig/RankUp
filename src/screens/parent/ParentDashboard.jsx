@@ -30,6 +30,7 @@ import { useDeals, GiftSaleBanner, GiftAYearCard } from '../../components/DealCa
 import EmptyNext from '../../components/EmptyNext.jsx'
 import { EMPTY_STATES } from '../../data/emptyStates.js'
 import { STARTER_REWARDS } from '../../lib/firstWeek.js'
+import { plural } from '../../lib/plural.js'
 
 export default function ParentDashboard() {
   const { state, dispatch } = useApp()
@@ -366,7 +367,7 @@ function describeEvent(e, kid) {
     case 'quest_approved': return `✅ ${who} earned ${e.meta?.xp} XP`
     case 'quest_rejected': return `↩️ You sent a quest back to ${who}`
     case 'quest_submitted': return `🙋 ${who} finished ${e.meta?.title ? `“${e.meta.title}”` : 'a quest'}`
-    case 'quests_assigned': return `📋 ${e.meta?.count} quest(s) assigned to ${who}`
+    case 'quests_assigned': return `📋 ${plural(e.meta?.count || 0, 'quest')} assigned to ${who}`
     case 'level_up': return `🎉 ${who} reached level ${e.meta?.to}`
     case 'reward_redeemed': return `🎁 ${who} redeemed ${e.meta?.name}`
     case 'override_applied': return `🛡️ ${OVERRIDE_NAMES[e.meta?.kind] || 'An override'} applied to ${who}`

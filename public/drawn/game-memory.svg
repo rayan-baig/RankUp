@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+<rect width="200" height="200" fill="#1e3a5f"/>
+<g stroke="#fff" stroke-width="3">
+<rect x="14" y="14" width="52" height="76" rx="8" fill="#7c5cd6"/><rect x="74" y="14" width="52" height="76" rx="8" fill="#fff"/><rect x="134" y="14" width="52" height="76" rx="8" fill="#7c5cd6"/>
+<rect x="14" y="110" width="52" height="76" rx="8" fill="#7c5cd6"/><rect x="74" y="110" width="52" height="76" rx="8" fill="#7c5cd6"/><rect x="134" y="110" width="52" height="76" rx="8" fill="#fff"/>
+</g>
+<g fill="#a98cf0"><path d="M40 40 l8 12 l-8 12 l-8 -12z"/><path d="M160 40 l8 12 l-8 12 l-8 -12z"/><path d="M40 136 l8 12 l-8 12 l-8 -12z"/><path d="M100 136 l8 12 l-8 12 l-8 -12z"/></g>
+<path d="M100 40 c-10 -12 -26 0 -12 14 l12 12 l12 -12 c14 -14 -2 -26 -12 -14z" fill="#ff4d6d"/>
+<path d="M160 136 c-10 -12 -26 0 -12 14 l12 12 l12 -12 c14 -14 -2 -26 -12 -14z" fill="#ff4d6d"/>
+<path d="M118 92 l12 18" stroke="#ffd166" stroke-width="3" stroke-dasharray="4 4"/>
+<g fill="#ffd166"><path d="M128 96 l2 5 l5 1 l-4 3 l1 5 l-4 -3 l-4 3 l1 -5 l-4 -3 l5 -1z"/></g>
+</svg>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+<rect width="200" height="200" fill="#1a2440"/><rect x="16" y="16" width="168" height="168" rx="14" fill="#26355e"/>
+<g fill="#33467a"><rect x="26" y="26" width="70" height="70" rx="10"/><rect x="104" y="104" width="70" height="70" rx="10"/></g>
+<rect x="104" y="26" width="70" height="70" rx="10" fill="#4ce0d3"/><text x="139" y="76" font-family="Arial,sans-serif" font-size="36" font-weight="900" fill="#0b3b38" text-anchor="middle">4</text>
+<rect x="26" y="104" width="70" height="70" rx="10" fill="#4ce0d3"/><text x="61" y="154" font-family="Arial,sans-serif" font-size="36" font-weight="900" fill="#0b3b38" text-anchor="middle">4</text>
+<path d="M139 100 V106 M134 101 l5 5 l5 -5 M100 139 H106 M101 134 l5 5 l-5 5" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="110" y="110" width="58" height="58" rx="10" fill="#b46bff" stroke="#fff" stroke-width="3"/><text x="139" y="152" font-family="Arial,sans-serif" font-size="32" font-weight="900" fill="#fff" text-anchor="middle">8</text>
+<g fill="#ffe27a"><circle cx="176" cy="104" r="4"/><circle cx="104" cy="178" r="3"/></g>
+</svg>

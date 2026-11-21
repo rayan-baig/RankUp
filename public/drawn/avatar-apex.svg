@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+<defs><linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a1a69"/><stop offset="1" stop-color="#120b2e"/></linearGradient></defs>
+<rect width="200" height="200" fill="url(#b)"/>
+<g fill="#4a2fa8" opacity=".55"><path d="M-20 60 L60 -20 H84 L-20 84Z"/><path d="M120 220 L220 120 V146 L146 220Z"/><path d="M40 220 L220 40 V54 L54 220Z" opacity=".5"/></g>
+<path d="M118 34 Q148 6 178 34 Z" fill="#ffd400"/><path d="M118 34 Q133 22 148 34 Z" fill="#00e5ff"/>
+<path d="M120 34 L144 58 M176 34 L152 58 M148 34 L148 58" stroke="#f4f0ff" stroke-width="1.5" opacity=".8"/>
+<rect x="142" y="56" width="12" height="10" rx="2" fill="#f4f0ff"/>
+<path d="M22 30 l6 -10 l6 8 l6 -8 l6 10 v6 h-24z" fill="#ffd400"/>
+<path d="M42 200 Q46 150 100 148 Q154 150 158 200Z" fill="#1e1350" stroke="#00e5ff" stroke-width="3"/>
+<path d="M96 160 l12 0 l-6 12 l10 0 l-18 22 l5 -16 l-9 0z" fill="#ffd400"/>
+<path d="M66 146 Q100 160 134 146 L132 156 Q100 170 68 156Z" fill="#ffd400"/>
+<ellipse cx="100" cy="104" rx="34" ry="37" fill="#f1c9a5"/>
+<path d="M64 98 Q60 56 100 54 Q140 56 136 98 Q130 76 112 72 Q96 82 74 80 Q66 86 64 98Z" fill="#3a2a6e"/>
+<rect x="64" y="66" width="72" height="20" rx="10" fill="#1e1350" stroke="#00e5ff" stroke-width="2"/>
+<ellipse cx="85" cy="76" rx="12" ry="8" fill="#00e5ff"/><ellipse cx="115" cy="76" rx="12" ry="8" fill="#00e5ff"/>
+<path d="M78 73 l8 -3" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="M108 73 l8 -3" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+<ellipse cx="86" cy="106" rx="5" ry="6" fill="#120b2e"/><ellipse cx="114" cy="106" rx="5" ry="6" fill="#120b2e"/>
+<circle cx="88" cy="104" r="1.8" fill="#fff"/><circle cx="116" cy="104" r="1.8" fill="#fff"/>
+<path d="M88 122 Q100 132 112 122" fill="#fff" stroke="#8a4a5a" stroke-width="2.5" stroke-linejoin="round"/>
+<circle cx="76" cy="118" r="5" fill="#ff5ea8" opacity=".35"/><circle cx="124" cy="118" r="5" fill="#ff5ea8" opacity=".35"/>
+</svg>

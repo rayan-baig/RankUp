@@ -71,6 +71,60 @@ export function artAny(...slots) {
   return null
 }
 
+/*
+ * RankUp's own drawn pictures, in public/drawn/: an original portrait
+ * for each world's picker card and first avatar form, a tile for each arcade
+ * game, and the banner behind each tab's title. Small SVG files, each its
+ * own file in the build (vite.config.js, inlineAsset) and fetched only when
+ * it is on the screen.
+ *
+ * They are the fallback, never the first choice: a file of the same name in
+ * src/assets/art/ wins, so the owner's own pictures replace them by being
+ * dropped in, with nothing to change here. Block Craft's pictures are the
+ * owner's, in src/assets/art/, and have no drawn stand-in.
+ */
+// The drawn pictures live in public/drawn/ and are served as they are, by
+// name: listing names here costs the first file far less than a table of
+// fingerprinted addresses (tests/fixes25.mjs keeps this list and the folder
+// in step).
+const DRAWN_NAMES = [
+  'avatar-apex', 'avatar-aura', 'avatar-campfire', 'avatar-coquette', 'avatar-cybergrid',
+  'avatar-glam', 'avatar-matrixblocks', 'avatar-monstertamer', 'avatar-neonpulse',
+  'avatar-pegasus', 'avatar-plumber', 'avatar-poparena', 'avatar-sugarrush', 'avatar-tactical',
+  'game-blocks', 'game-bricks', 'game-catch', 'game-chain', 'game-four', 'game-gofish',
+  'game-impostor', 'game-lights', 'game-memory', 'game-merge', 'game-sky', 'game-slide',
+  'game-snake', 'game-sports', 'game-stack', 'game-sweeper', 'game-sweets', 'game-tennis',
+  'game-track', 'game-turbo', 'game-wildfire', 'hero-city',
+]
+const DRAWN = {}
+for (const name of DRAWN_NAMES) DRAWN[name] = `${import.meta.env.BASE_URL}drawn/${name}.svg`
+
+/** RankUp's own drawing for a slot, or null. */
+export function drawn(slot) {
+  return DRAWN[slug(String(slot || ''))] || null
+}
+
+/**
+ * The picture for a slot: the owner's file if there is one, else the drawn
+ * one, else null. `{ url, drawn }`, so a caller can treat its own drawing
+ * differently (the tab banner tints it to the world; the owner's art is
+ * shown as it is).
+ */
+export function picture(...slots) {
+  const own = artAny(...slots)
+  if (own) return { url: own, drawn: false }
+  for (const s of slots) {
+    const d = drawn(s)
+    if (d) return { url: d, drawn: true }
+  }
+  return null
+}
+
+/** Every drawn slot. Used by the art check in tests. */
+export function drawnSlots() {
+  return Object.keys(DRAWN).sort()
+}
+
 /** Every slot currently supplied. Used by the art check in tests. */
 export function artSlots() {
   return Object.keys(BY_SLOT).sort()

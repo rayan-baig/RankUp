@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+<rect width="200" height="200" fill="#20184a"/>
+<rect x="16" y="36" width="168" height="148" rx="14" fill="#5b3fd6"/>
+<g fill="#20184a">
+<circle cx="40" cy="60" r="12"/><circle cx="70" cy="60" r="12"/><circle cx="100" cy="60" r="12"/><circle cx="130" cy="60" r="12"/><circle cx="160" cy="60" r="12"/>
+<circle cx="40" cy="90" r="12"/><circle cx="70" cy="90" r="12"/><circle cx="130" cy="90" r="12"/><circle cx="160" cy="90" r="12"/>
+<circle cx="40" cy="120" r="12"/><circle cx="160" cy="120" r="12"/><circle cx="40" cy="150" r="12"/>
+</g>
+<g fill="#ff5ea8"><circle cx="70" cy="150" r="12"/><circle cx="100" cy="120" r="12"/><circle cx="130" cy="150" r="12"/><circle cx="160" cy="150" r="12"/></g>
+<g fill="#4ce0d3"><circle cx="100" cy="150" r="12"/><circle cx="70" cy="120" r="12"/><circle cx="130" cy="120" r="12"/><circle cx="100" cy="90" r="12"/></g>
+<circle cx="130" cy="16" r="12" fill="#4ce0d3"/><path d="M130 30 v6" stroke="#4ce0d3" stroke-width="3" stroke-dasharray="2 3"/>
+</svg>

@@ -9,7 +9,10 @@ import { useDeals, FoundingCard, SeasonDealBanner } from '../../components/DealC
 import GiftPlanCard from '../../components/GiftPlanCard.jsx'
 import { giftState, giftDate } from '../../lib/giftRules.js'
 import { guildsEnabled } from '../../lib/guilds.js'
-import { usd, toCents, priceTag, priceWords, annualSaving, yearlyNote, yearlyOffered, planLines, upgradeReason } from '../../lib/plans.js'
+import { resolveKidTheme } from '../../data/kidThemes.js'
+import { levelFromXp } from '../../lib/xp.js'
+import { storyProgress } from '../../lib/dragonFight.js'
+import { usd, toCents, priceTag, priceWords, annualSaving, yearlyNote, yearlyOffered, planLines, upgradeReason, planButton } from '../../lib/plans.js'
 
 /*
  * What each plan gives, the answer to "why would I pay more than the tier
@@ -17,10 +20,16 @@ import { usd, toCents, priceTag, priceWords, annualSaving, yearlyNote, yearlyOff
  * (lib/plans.js), so this screen cannot say something the app does not do.
  * Guilds are only mentioned when this app has them switched on.
  */
-const PLAN_OPTS = { guilds: guildsEnabled() }
+const PLAN_BASE = { guilds: guildsEnabled() }
 
 export default function ParentPlan() {
   const { state, dispatch } = useApp()
+  /*
+   * The words for the plan lines: guilds only while they are on, and the
+   * arcade's winnings in the currency this family's children actually see
+   * (Gems, Star Shards…), never "coins".
+   */
+  const PLAN_OPTS = { ...PLAN_BASE, currencies: state.kids.map((k) => resolveKidTheme(k.themeId, levelFromXp(k.xp).level, storyProgress(state, k))?.currency?.name) }
   const current = TIERS[state.family.tier] ? state.family.tier : 'starter'
   const trialTier = onTrial(state) ? effectiveTier(state.family) : null
   const trialDays = trialTier ? trialDaysLeft(state.family) : null
@@ -315,19 +324,25 @@ export default function ParentPlan() {
                 ))}
               </ul>
 
-              {!active && (
+              {/*
+                The button says which way it goes from the plan this family
+                is on (planButton): an Elite family looking at Starter was
+                told "Stay on Starter". Moving to the free plan while paying
+                is cancelling, so with payments on it opens the same steps
+                as "Cancel my plan"; with nothing to cancel there is no
+                button, because there is nothing to do.
+              */}
+              {!active && (tier.price > 0 || !live || cancellable) && (
                 <Button
                   variant={tier.id === 'elite' ? 'primary' : 'soft'}
                   className="w-full mt-3"
                   disabled={busy}
-                  onClick={() => (live ? choosePlan(tier) : setConfirm(tier))}
+                  data-testid={`plan-button-${tier.id}`}
+                  onClick={() => (tier.price === 0 && live
+                    ? (offering ? setKeepOpen(true) : portal('cancel'))
+                    : live ? choosePlan(tier) : setConfirm(tier))}
                 >
-                  {busy
-                    ? 'Opening Stripe…'
-                    : tier.price === 0
-                      ? `Stay on ${tier.name}`
-                      : `${live ? 'Subscribe to' : 'Switch to'} ${tier.name} · `
-                        + priceTag(tier, yearly ? 'year' : 'month')}
+                  {busy ? 'Opening Stripe…' : planButton(tier, current, { live, period: yearly ? 'year' : 'month' })}
                 </Button>
               )}
             </Card>

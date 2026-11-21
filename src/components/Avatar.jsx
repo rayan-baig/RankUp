@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { SparkleBurst } from './ui.jsx'
 // The ladder lives in a plain module so it can be tested without a browser.
 import { avatarTier, nextTierLevel, tiersFor, DEFAULT_TIERS } from '../lib/avatarTiers.js'
-import { artAny } from '../data/art.js'
+import { picture } from '../data/art.js'
 
 /**
  * The avatar that grows with a child's level.
@@ -97,15 +97,18 @@ export default function Avatar({ theme, level = 1, size = 120, companion = false
   const [burst, setBurst] = useState(0)
   const tier = avatarTier(level, theme)
   /*
-   * The picture for this theme at this form, if one has been drawn. The
-   * per-form file wins; the theme's single portrait is the fallback; with
-   * neither, the generated character below is drawn instead. The art
-   * arrives a theme at a time, so all three states are normal.
+   * The picture for this theme at this form. The owner's per-form file
+   * wins (Block Craft has all nine); then the owner's single portrait for
+   * the theme; then RankUp's own drawing of the world's hero
+   * (public/drawn/avatar-<theme>.svg, one for each of the fourteen
+   * other worlds). With none, the generated character below is drawn
+   * instead, which is what a child's own Theme Genesis world without a
+   * mascot would get. See data/art.js.
    */
-  const portrait = artAny(
+  const portrait = picture(
     `avatar-${theme?.id}-${tiersFor(theme)[tier - 1]}`,
     `avatar-${theme?.id}`,
-  )
+  )?.url || null
   const hues = theme?.avatar?.hues || ['#888', '#999', '#aaa', '#bbb', '#ccc']
   const colour = hues[Math.min(tier, hues.length) - 1]
   const motif = MOTIFS[theme?.avatar?.motif] || MOTIFS.block

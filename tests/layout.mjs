@@ -255,7 +255,8 @@ for (const [width, height] of [[390, 844], [360, 740]]) {
       for (const plan of ['Standard', 'Elite Pass']) {
         await page.evaluate(() => { window.location.hash = '/parent/plan' })
         await page.waitForTimeout(600)
-        await page.getByRole('button', { name: new RegExp(`Switch to ${plan}`) }).first().click()
+        // An Elite family moves down to Standard, then switches back up (0.25.0's plan buttons).
+        await page.getByRole('button', { name: new RegExp(`(Switch to|Move down to) ${plan}`) }).first().click()
         await page.waitForTimeout(300)
         await page.getByRole('button', { name: 'Switch', exact: true }).click()
         await page.waitForTimeout(400)

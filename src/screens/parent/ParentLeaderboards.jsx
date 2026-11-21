@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { leaderboards, forgetMe } from '../../lib/leaderboards.js'
 import { MODES, boardError } from '../../data/leaderboards.js'
+import { guildsEnabled } from '../../lib/guilds.js'
 import { countryOptions, countryFlag, countryName } from '../../data/countries.js'
 import { Screen, Card, Button, Banner, Select, Field, Modal } from '../../components/ui.jsx'
 import ModeBadge from '../../components/ModeBadge.jsx'
@@ -65,7 +66,7 @@ export default function ParentLeaderboards() {
             <div className="font-display font-bold" style={{ color: m.color }}>{m.name}</div>
             <p className="text-[11px] text-muted mt-1">
               {m.id === 'adventure'
-                ? 'The default. Your child plays at their own pace. Family and guild boards only: people you already approved.'
+                ? `The default. Your child plays at their own pace. ${guildsEnabled() ? 'Family and guild boards only' : 'The family board only'}: people you already approved.`
                 : 'Your child also races on the worldwide and country boards, where children in other families can see them.'}
             </p>
           </Card>

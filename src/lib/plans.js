@@ -85,13 +85,30 @@ const children = (n) => (n === Infinity ? 'As many children as you have' : `${n}
  * What every plan has, in plain words. Nothing here changes with the plan:
  * chores, rewards, worlds and the arcade are the same on every one.
  */
-export function everyPlanHas() {
+export function everyPlanHas({ currencies = [] } = {}) {
   return [
     'As many chores and rewards as you like',
     'You accept every finished chore before it pays',
     `All ${KID_THEMES.length} worlds for your kids, and ${PARENT_THEMES.length} looks for you`,
-    `The arcade: up to ${MAX_TOKENS} game tokens saved, up to ${DAILY_COIN_CAP} coins a day`,
+    `The arcade: up to ${MAX_TOKENS} game tokens saved, ${arcadeWinnings(currencies)}`,
   ]
+}
+
+/**
+ * What the arcade pays a day, in the word the children see.
+ *
+ * A game pays in the child's world's own currency: Gems in Block Craft,
+ * Star Shards in Pegasus Horizon. The plan screen called it "coins", a word
+ * no child in the family had ever been shown. With the family's own
+ * children, their words ("up to 15 Gems a day"); with none to go by (a gift
+ * page), the rule itself.
+ */
+export function arcadeWinnings(currencies = []) {
+  const names = [...new Set((currencies || []).filter(Boolean))]
+  if (!names.length) return `up to ${DAILY_COIN_CAP} a day in their world's own currency`
+  const words = names.length === 1 ? names[0]
+    : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`
+  return `up to ${DAILY_COIN_CAP} ${words} a day`
 }
 
 /**
@@ -100,16 +117,17 @@ export function everyPlanHas() {
  * The cheapest plan says what it includes. Each plan after it says only what
  * it adds to the one below, because "why would I pay more" is the question a
  * parent is asking at that card. `guilds` is whether guilds are switched on
- * in this app: a plan must not sell a feature nobody can open.
+ * in this app: a plan must not sell a feature nobody can open. `currencies`
+ * are the names the family's children see for their winnings (arcadeWinnings).
  */
-export function planLines(tier, { guilds = false } = {}) {
+export function planLines(tier, { guilds = false, currencies = [] } = {}) {
   const i = TIER_LADDER.findIndex((t) => t.id === tier.id)
   const below = i > 0 ? TIER_LADDER[i - 1] : null
   const lines = []
   const l = tier.limits
   if (!below) {
     lines.push(children(l.maxKids))
-    lines.push(...everyPlanHas())
+    lines.push(...everyPlanHas({ currencies }))
     if (guilds && tier.guildSize) lines.push(`Guilds of up to ${tier.guildSize} players`)
     if (tier.xpMultiplier > 1) lines.push(`${tier.xpMultiplier}× XP on every accepted chore`)
     return lines
@@ -135,6 +153,23 @@ export function planLines(tier, { guilds = false } = {}) {
   if (l.alliances && !b.alliances) lines.push('Parent Alliances: a friendly monthly contest with other families')
   lines.push(`Everything in ${below.name}`)
   return lines
+}
+
+/**
+ * The words on a plan card's button, from the plan the family is on.
+ *
+ *   a dearer plan:   "Subscribe to Elite · $x/mo" (with payments), "Switch to Elite · …"
+ *   a cheaper paid:  "Move down to Standard · $x/mo"
+ *   the free plan:   "Move to Starter · free"
+ *
+ * Never "Stay on": a card for the plan the family is on has no button.
+ */
+export function planButton(tier, currentId, { live = false, period = 'month' } = {}) {
+  const rank = (id) => TIER_LADDER.findIndex((t) => t.id === id)
+  const lower = rank(tier.id) < rank(currentId)
+  if (tier.price === 0) return `Move to ${tier.name} · free`
+  if (lower) return `Move down to ${tier.name} · ${priceTag(tier, period)}`
+  return `${live ? 'Subscribe to' : 'Switch to'} ${tier.name} · ${priceTag(tier, period)}`
 }
 
 /** The one-line answer to "why pay more", beside the price: the first thing the plan adds. */

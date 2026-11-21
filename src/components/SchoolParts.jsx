@@ -1,5 +1,6 @@
 import { Card, Chip, SectionTitle, ProgressBar, DemoTag } from './ui.jsx'
 import { monthLabel, districtLabel, groupWord, SCHOOL_MIN_STUDENTS } from '../lib/schools.js'
+import { plural } from '../lib/plural.js'
 
 /*
  * The pieces of the School League that the staff page, the parent page and
@@ -257,7 +258,7 @@ export function HouseBoard({ houses, mine = [], title = null }) {
                 </div>
                 <span className="block text-[11px] text-muted">
                   {g.shown
-                    ? `${g.students} students · ${g.share_pct}% did a chore${g.chores != null ? ` · ${g.chores} chores` : ''}`
+                    ? `${g.students} students · ${g.share_pct}% did a chore${g.chores != null ? ` · ${plural(g.chores, 'chore')}` : ''}`
                     : 'Too few students taking part to show, yet'}
                 </span>
               </div>

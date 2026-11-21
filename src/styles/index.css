@@ -729,3 +729,81 @@ html[data-pilot-tabs='on'] .pilot-root.rk-pilot.pilot-at-bl {
 html[data-reduce-motion='true'] .pilot-root .pilot-robot,
 html[data-reduce-motion='true'] .pilot-root .pilot-launcher::before,
 html[data-reduce-motion='true'] .pilot-root .pilot-dot { animation: none; }
+
+/*
+ * A quest's difficulty, on its chip ("Medium") and its XP box ("+45 XP").
+ * The difficulty's colour alone was a mid blue on a navy card, about 2.5:1.
+ * Pulled toward the theme's ink it is lighter on a dark world and darker on
+ * a light one, past 4.5:1 on all fifteen (tests/fixes25.mjs). The plain colour first, for a
+ * browser without color-mix. Colours from DIFFICULTY in lib/xp.js.
+ */
+.diff-easy { --diff: #1baf7a; }
+.diff-medium { --diff: #2a78d6; }
+.diff-hard { --diff: #eb6834; }
+.diff-boss { --diff: #e34948; }
+.diff-chip {
+  color: var(--diff);
+  border-color: var(--diff);
+  color: color-mix(in srgb, var(--diff) 35%, var(--ink));
+  border-color: color-mix(in srgb, var(--diff) 70%, var(--ink));
+  background: color-mix(in srgb, var(--diff) 14%, var(--surface-2));
+}
+.pay-box {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 7px;
+  color: var(--diff);
+  border: 1px solid var(--diff);
+  color: color-mix(in srgb, var(--diff) 35%, var(--ink));
+  background: color-mix(in srgb, var(--diff) 16%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--diff) 55%, transparent);
+}
+
+/* "Sent!": the moment after Send to parent (lib/sentFlash.js). */
+.sent-moment {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius, 18px);
+  background: var(--surface);
+  border: 2px solid var(--good);
+  background: color-mix(in srgb, var(--good) 14%, var(--surface));
+  color: var(--ink);
+  box-shadow: 0 0 24px -12px var(--good);
+}
+.sent-moment-tick {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--good);
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+/*
+ * RankUp's drawn skyline behind a tab's title on a dark world (HeroArt).
+ * The picture keeps only its light and shade; the colour is the band's
+ * gradient beneath it, made of the theme's own accent and surfaces.
+ */
+.hero-city {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  mix-blend-mode: luminosity;
+  opacity: 0.6;
+}
+.hero-city-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(95deg, var(--surface) 8%, transparent 80%);
+  background: linear-gradient(95deg, color-mix(in srgb, var(--bg) 82%, transparent) 8%, color-mix(in srgb, var(--bg) 40%, transparent) 50%, transparent 88%);
+}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useApp, useKid, useKidTheme } from '../../state/AppContext.jsx'
 import QuestCard from '../../components/QuestCard.jsx'
 import { Screen, SectionTitle, Segmented, EmptyState } from '../../components/ui.jsx'
@@ -6,6 +6,7 @@ import HeroArt from '../../components/HeroArt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
 import { navigate } from '../../lib/router.js'
 import EmptyNext from '../../components/EmptyNext.jsx'
+import { peekSent, clearSent, SENT_MS } from '../../lib/sentFlash.js'
 
 const TABS = [
   { id: 'todo', name: 'To Do' },
@@ -18,6 +19,14 @@ export default function KidQuests() {
   const kid = useKid()
   const theme = useKidTheme()
   const [tab, setTab] = useState('todo')
+  // "Sent!", for a moment, when this list was opened by Send to parent.
+  const [sent, setSent] = useState(() => peekSent())
+  useEffect(() => { clearSent() }, [])
+  useEffect(() => {
+    if (!sent) return undefined
+    const t = setTimeout(() => setSent(null), SENT_MS)
+    return () => clearTimeout(t)
+  }, [sent])
   if (!kid) return null
 
   const all = state.quests.filter((q) => q.kidId === kid.id)
@@ -37,6 +46,19 @@ export default function KidQuests() {
         title="Quests"
         sub="Complete quests. Earn XP. Unlock rewards."
       />
+      {sent && (
+        <button type="button" className="sent-moment anim-pop" role="status" data-testid="sent-moment" onClick={() => setSent(null)}>
+          <span className="sent-moment-tick" aria-hidden="true">✓</span>
+          <span className="min-w-0 text-left">
+            <span className="block font-display font-extrabold text-lg leading-tight">Sent!</span>
+            <span className="block text-xs text-muted line-clamp-2">
+              {sent.queued
+                ? `“${sent.title}” is saved on your phone and goes to your parent when there is internet.`
+                : `“${sent.title}” is with your parent. XP lands when they accept it.`}
+            </span>
+          </span>
+        </button>
+      )}
       {/* The design counts each pill, so you can see what is waiting
           without opening it. */}
       <Segmented

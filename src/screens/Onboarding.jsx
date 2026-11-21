@@ -160,7 +160,7 @@ export default function Onboarding() {
           <Field label="Your name">
             <TextInput value={family.parentName} onChange={(e) => setFamily({ ...family, parentName: e.target.value })} placeholder="e.g. Sam" autoFocus />
           </Field>
-          <Field label="Family name" hint="Shown on the dashboard and the guild.">
+          <Field label="Family name" hint="Shown on your dashboard.">
             <TextInput value={family.name} onChange={(e) => setFamily({ ...family, name: e.target.value })} placeholder="e.g. The Rivera family" />
           </Field>
           <Field label="Parent PIN" hint="4 or more numbers. Keeps kids out of Parent Mode, so they cannot accept their own chores.">

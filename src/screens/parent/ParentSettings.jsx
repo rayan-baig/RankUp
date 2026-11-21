@@ -23,10 +23,14 @@ import { APP_VERSION } from '../../lib/version.js'
 import { PRODUCT_OF } from '../../data/legalText.js'
 import { SUPPORT_EMAIL } from '../../lib/support.js'
 import { STARTER_REWARDS } from '../../lib/firstWeek.js'
+import { hasPin } from '../../lib/parentPin.js'
+import { validPin } from '../../lib/pinReset.js'
 
 export default function ParentSettings({ open = null }) {
   const { state, dispatch } = useApp()
   const [reset, setReset] = useState(false)
+  const [newPin, setNewPin] = useState('')
+  const [pinSaved, setPinSaved] = useState(false)
   // A pack being opened at Stripe: one tap opens one checkout, not two.
   const [buying, setBuying] = useState(null)
   const [buyError, setBuyError] = useState('')
@@ -64,15 +68,31 @@ export default function ParentSettings({ open = null }) {
             onChange={(e) => dispatch({ type: 'UPDATE_FAMILY', patch: { name: e.target.value } })}
           />
         </Field>
-        <Field label="Parent PIN" hint="Used to open Parent Mode and to change a kid's theme. Hidden as you type.">
-          <TextInput
-            type="password"
-            autoComplete="new-password"
-            value={state.family.pin}
-            onChange={(e) => dispatch({ type: 'UPDATE_FAMILY', patch: { pin: e.target.value.replace(/\D/g, '').slice(0, 8) } })}
-            inputMode="numeric"
-            data-testid="settings-pin"
-          />
+        {/*
+          A new PIN, saved with a button. The PIN itself is never kept, only
+          its salted hash (lib/parentPin.js), so there is nothing to show
+          here: the box starts empty. It used to save every digit as it was
+          typed, so a PIN half-way through being changed was already the PIN.
+        */}
+        <Field label="Parent PIN" hint="Used to open Parent Mode and to change a kid's theme. Type a new one of 4 to 8 digits to change it. Hidden as you type.">
+          <div className="flex gap-2">
+            <TextInput
+              type="password"
+              autoComplete="new-password"
+              value={newPin}
+              placeholder={hasPin(state.family) ? 'New PIN' : 'Choose a PIN'}
+              onChange={(e) => { setNewPin(e.target.value.replace(/\D/g, '').slice(0, 8)); setPinSaved(false) }}
+              inputMode="numeric"
+              aria-label="New parent PIN"
+              className="field flex-1 min-w-0"
+              data-testid="settings-pin"
+            />
+            <Button className="shrink-0" disabled={!validPin(newPin)} data-testid="settings-pin-save"
+              onClick={() => { dispatch({ type: 'UPDATE_FAMILY', patch: { pin: newPin } }); setNewPin(''); setPinSaved(true) }}>
+              Save
+            </Button>
+          </div>
+          {pinSaved && <p className="text-xs mt-1.5 text-muted" role="status">New PIN saved.</p>}
         </Field>
         <Field label="Pocket money is shown in" hint="Only the sign in front of the amounts. Nothing is converted.">
           <Select

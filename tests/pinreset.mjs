@@ -35,6 +35,7 @@ const tryPassword = async (password) => {
 const dialogText = () => page.locator('[role="dialog"]').innerText().catch(() => '')
 
 console.log('\n=== The PIN screen offers a reset ===')
+const hashBefore = (await readState(page)).family.pinHash
 await openReset()
 const intro = await dialogText()
 ;/Sign in again/.test(intro) && /t•••@example\.com/.test(intro)
@@ -50,9 +51,10 @@ await tryPassword('not-the-password')
 ;(await page.getByLabel('New PIN', { exact: true }).count()) === 0
   ? pass('and no new PIN can be chosen')
   : fail('no PIN step after a wrong password', 'the new PIN box is showing')
-;(await readState(page)).family.pin === '1234'
+// The PIN is kept as a salted hash (lib/parentPin.js), never as typed.
+;(await readState(page)).family.pinHash === hashBefore && !('pin' in (await readState(page)).family)
   ? pass('the PIN is still the old one')
-  : fail('PIN unchanged', (await readState(page)).family.pin)
+  : fail('PIN unchanged', JSON.stringify((await readState(page)).family).slice(0, 200))
 
 console.log(`\n=== ${MAX_TRIES} wrong passwords, and it waits ${LOCK_MINUTES} minutes ===`)
 for (let i = 1; i < MAX_TRIES; i += 1) await tryPassword(`wrong-${i}`)
@@ -100,9 +102,9 @@ await page.getByLabel('The new PIN again').fill('9876')
 await page.getByRole('button', { name: 'Save the new PIN' }).click()
 await page.waitForTimeout(700)
 const after = await readState(page)
-after.family.pin === '9876'
-  ? pass('the new PIN is saved')
-  : fail('new PIN saved', after.family.pin)
+after.family.pinHash && after.family.pinHash !== hashBefore && !('pin' in after.family)
+  ? pass('the new PIN is saved, as its hash and never as typed')
+  : fail('new PIN saved', JSON.stringify(after.family).slice(0, 200))
 ;(await page.evaluate(() => location.hash)).startsWith('#/parent')
   ? pass('and Parent Mode opens')
   : fail('parent mode opened', await page.evaluate(() => location.hash))

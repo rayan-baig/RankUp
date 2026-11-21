@@ -37,6 +37,21 @@ export const CATEGORIES = [
  * enough for one line on a phone. tests/howtoplay.mjs holds every game, and
  * every sport in SportsMania, to that.
  */
+/*
+ * A game is "NEW" on its tile for NEW_GAME_DAYS after the day it joined the
+ * arcade (`addedOn`, YYYY-MM-DD on the game below), and only until the child
+ * has played it. Every game here came with the first arcade, so none carries
+ * an addedOn and none is new: the badge used to sit on every game a child
+ * had not played, twenty of twenty-one, which is the badge saying nothing.
+ */
+export const NEW_GAME_DAYS = 30
+
+/** Is this game new to the arcade (not merely unplayed)? */
+export function isNewGame(game, now = Date.now()) {
+  const added = game?.addedOn ? Date.parse(`${game.addedOn}T00:00:00Z`) : NaN
+  return Number.isFinite(added) && now >= added && now - added < NEW_GAME_DAYS * 86400000
+}
+
 export const MINIGAMES = [
   {
     id: 'sports',

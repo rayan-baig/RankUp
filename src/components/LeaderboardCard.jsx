@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { MODES } from '../data/leaderboards.js'
+import { MODES, modeLine } from '../data/leaderboards.js'
+import { guildsEnabled } from '../lib/guilds.js'
 import { leaderboards, forgetMe } from '../lib/leaderboards.js'
 import { navigate } from '../lib/router.js'
 import ModeBadge, { useLeaderboardMe } from './ModeBadge.jsx'
@@ -33,7 +34,7 @@ export default function LeaderboardCard({ kid, demo = false }) {
           <span className="text-3xl" aria-hidden="true">{mode.icon}</span>
           <div className="min-w-0 flex-1">
             <ModeBadge mode={mode.id} size="lg" />
-            <p className="text-xs text-muted mt-1">{mode.line}</p>
+            <p className="text-xs text-muted mt-1">{modeLine(mode, { guildsOn: guildsEnabled() })}</p>
           </div>
         </div>
         <div className="flex items-center justify-between gap-2 py-2" style={{ borderTop: '1px solid var(--line)' }}>

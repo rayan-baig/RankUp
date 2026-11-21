@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useApp } from '../state/AppContext.jsx'
 import { resolveKidTheme } from '../data/kidThemes.js'
 import { storyProgress } from '../lib/dragonFight.js'
@@ -7,7 +7,9 @@ import Avatar from '../components/Avatar.jsx'
 import { Card, Button, TextInput } from '../components/ui.jsx'
 import { navigate, afterUnlock } from '../lib/router.js'
 import Logo from '../components/Logo.jsx'
-import PinReset from '../components/PinReset.jsx'
+import { lazyLoad } from '../lib/lazy.js'
+import { hasPin, pinLength } from '../lib/parentPin.js'
+import { usePinLock } from '../components/usePinLock.js'
 
 /**
  * Who is holding the phone?
@@ -16,12 +18,23 @@ import PinReset from '../components/PinReset.jsx'
  * Mode is behind the PIN so a kid cannot approve their own quests — which is
  * the one piece of access control this build genuinely needs.
  */
+/*
+ * "Forgot your PIN?" is a piece of its own, fetched when it is tapped: it
+ * and its rules were a tenth of this screen, in the file every phone
+ * downloads first, for a form most parents never open.
+ */
+const PinReset = lazyLoad(() => import('../components/PinReset.jsx'))
+
 export default function RoleSwitch() {
   const { state, dispatch } = useApp()
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
   const [resetting, setResetting] = useState(false)
-  const needsPin = !(state.demo || !state.family.pin)
+  // The value last checked, so tapping Unlock on a PIN already refused as it
+  // was typed is not counted as a second wrong try.
+  const [checked, setChecked] = useState('')
+  const needsPin = !(state.demo || !hasPin(state.family))
+  const lock = usePinLock()
 
   const openParent = () => {
     /*
@@ -48,24 +61,38 @@ export default function RoleSwitch() {
     navigate(afterUnlock())
   }
 
+  /*
+   * One try at the PIN, counted (lib/parentPin.js): after five wrong ones the
+   * box waits a minute, then two, then four, and says so calmly. An empty
+   * box never matches, nor does a family with no PIN.
+   */
+  const check = (value) => {
+    setChecked(value)
+    const r = lock.attempt(state.family, value)
+    if (r.result === 'ok') unlock()
+    else { setError(r.message); if (r.result === 'locked') setPin('') }
+  }
+
   const submitPin = () => {
-    // An empty stored PIN must never be matched by an empty box.
-    if (state.family.pin && pin === state.family.pin) unlock()
-    else setError('That PIN is not right.')
+    if (lock.locked || !pin) return
+    if (pin === checked) { setError(error || 'That PIN is not right.'); return }
+    check(pin)
   }
 
   /*
    * The PIN box is on the screen rather than behind an "Enter PIN" button,
-   * and the right PIN opens Parent Mode as its last digit is typed. A wrong
-   * one waits for Unlock, so a mistyped digit is not met with an error
-   * halfway through. Opening on a match tells nobody more than tapping
-   * Unlock would have.
+   * and the PIN is checked as its last digit is typed: the right one opens
+   * Parent Mode, a wrong one of the same length is one wrong try. Shorter
+   * than the PIN, nothing is checked, so a half-typed PIN is neither met
+   * with an error nor a free guess. Only the length is known, never digits.
    */
   const typePin = (value) => {
+    if (lock.locked) return
     const next = value.replace(/\D/g, '').slice(0, 8)
     setPin(next)
     setError('')
-    if (state.family.pin && next === state.family.pin) unlock()
+    const length = pinLength(state.family)
+    if (length && next.length === length) check(next)
   }
 
   return (
@@ -115,14 +142,17 @@ export default function RoleSwitch() {
               type="password"
               placeholder="Parent PIN"
               aria-label="Parent PIN"
+              disabled={lock.locked}
               className="field flex-1 min-w-0 text-center"
             />
-            <Button className="shrink-0" onClick={submitPin} disabled={!pin}>Unlock</Button>
+            <Button className="shrink-0" onClick={submitPin} disabled={!pin || lock.locked}>Unlock</Button>
           </div>
         ) : (
           <Button className="w-full" onClick={openParent}>Open Parent Mode</Button>
         )}
-        {error && <p className="text-xs mt-2" style={{ color: 'var(--bad)' }} role="alert">{error}</p>}
+        {needsPin && lock.locked ? (
+          <p className="text-xs mt-2 text-muted" role="status" data-testid="pin-wait">{lock.lockText}</p>
+        ) : error && <p className="text-xs mt-2" style={{ color: 'var(--bad)' }} role="alert">{error}</p>}
         {needsPin && (
           <button
             type="button"
@@ -133,7 +163,11 @@ export default function RoleSwitch() {
           </button>
         )}
       </Card>
-      <PinReset open={resetting} onClose={() => setResetting(false)} onDone={unlock} />
+      {resetting && (
+        <Suspense fallback={null}>
+          <PinReset open={resetting} onClose={() => setResetting(false)} onDone={unlock} />
+        </Suspense>
+      )}
     </div>
   )
 }

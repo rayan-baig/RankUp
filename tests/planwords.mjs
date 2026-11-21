@@ -20,7 +20,7 @@ import { KID_THEMES } from '../src/data/kidThemes.js'
 import { PARENT_THEMES } from '../src/data/parentThemes.js'
 import { MAX_TOKENS, DAILY_COIN_CAP } from '../src/data/minigames.js'
 import {
-  planLines, everyPlanHas, upgradeReason, annualSaving, yearlyNote, yearlyOffered, priceTag, priceWords, toCents,
+  planLines, everyPlanHas, planButton, upgradeReason, annualSaving, yearlyNote, yearlyOffered, priceTag, priceWords, toCents,
 } from '../src/lib/plans.js'
 
 let fails = 0
@@ -45,8 +45,28 @@ console.log('\n=== Every plan: the same chores, worlds and arcade ===')
 const shared = everyPlanHas().join(' ')
 ok(`all ${KID_THEMES.length} worlds and ${PARENT_THEMES.length} parent looks`,
   shared.includes(`All ${KID_THEMES.length} worlds`) && shared.includes(`${PARENT_THEMES.length} looks`))
-ok(`the arcade's ${MAX_TOKENS} tokens and ${DAILY_COIN_CAP} coins a day`,
-  shared.includes(`${MAX_TOKENS} game tokens`) && shared.includes(`${DAILY_COIN_CAP} coins a day`))
+ok(`the arcade's ${MAX_TOKENS} tokens and ${DAILY_COIN_CAP} a day of winnings`,
+  shared.includes(`${MAX_TOKENS} game tokens`) && shared.includes(`up to ${DAILY_COIN_CAP} a day in their world's own currency`))
+// The arcade pays in the child's world's currency: the plan says the word the
+// children see, never "coins" (0.25.0).
+ok('never "coins": with no children to go by, the rule itself', !/coins/.test(shared))
+ok('with the family\'s children, their word: "up to 15 Gems a day"',
+  everyPlanHas({ currencies: ['Gems'] }).join(' ').includes(`up to ${DAILY_COIN_CAP} Gems a day`))
+ok('two worlds, both words, once each',
+  everyPlanHas({ currencies: ['Gems', 'Star Shards', 'Gems'] }).join(' ').includes(`up to ${DAILY_COIN_CAP} Gems or Star Shards a day`))
+ok('and the cheapest plan\'s lines carry them', planLines(TIER_LADDER[0], { ...ON, currencies: ['Gems'] }).some((l) => l.includes('Gems a day')))
+
+// The button on a plan card says which way it goes from the plan the family
+// is on. An Elite family looking at Starter was told "Stay on Starter".
+const [low, , top] = TIER_LADDER
+const mid = TIER_LADDER[1]
+ok('an Elite family: Starter says "Move to Starter · free", never "Stay on"',
+  planButton(low, top.id) === `Move to ${low.name} · free`)
+ok('an Elite family: the middle plan says "Move down to"', planButton(mid, top.id).startsWith(`Move down to ${mid.name} · `))
+ok('a Starter family: a dearer plan says "Switch to" (or "Subscribe to" with payments)',
+  planButton(top, low.id).startsWith(`Switch to ${top.name} · `) && planButton(top, low.id, { live: true }).startsWith(`Subscribe to ${top.name} · `))
+ok('no tier\'s button ever says "Stay on"',
+  TIER_LADDER.every((t) => TIER_LADDER.every((c) => !/Stay on/.test(planButton(t, c.id)))))
 ok('chores and rewards with no limit', /As many chores and rewards/.test(shared))
 ok('the cheapest plan lists them', everyPlanHas().every((line) => planLines(TIER_LADDER[0], ON).includes(line)))
 
