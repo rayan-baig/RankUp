@@ -944,10 +944,10 @@ export const KID_THEMES = [
   {
     id: 'plumber',
     story: 'Every pipe in the kingdom has sprung a leak. Grab your wrench and jump to it.',
-    name: 'Plumber Kingdom',
+    name: 'Wrench Kingdom',
     inspiredBy: 'Platform jumping',
-    blurb: 'Bright sky-blue boards with classic castle brick dividers.',
-    currency: { name: 'Star Coins', icon: '⭐' },
+    blurb: 'Bright sky-blue boards with chunky block dividers.',
+    currency: { name: 'Bolt Coins', icon: '🔩' },
     scene: 'bricks',
     ...base,
     mode: 'light',
@@ -1084,10 +1084,10 @@ export const KID_THEMES = [
   {
     id: 'monstertamer',
     story: 'Leave home, meet something wild, and convince it you are worth following.',
-    name: 'Monster Tamer',
+    name: 'Critter Crew',
     inspiredBy: 'Creature collecting',
-    blurb: 'Sunny handheld casing with a live companion readout.',
-    currency: { name: 'Tamer Coins', icon: '🪙' },
+    blurb: 'Sunny trail-map look with a live companion readout.',
+    currency: { name: 'Critter Coins', icon: '🪙' },
     scene: 'handheld',
     ...base,
     mode: 'light',
@@ -1113,7 +1113,7 @@ export const KID_THEMES = [
       {
         level: 10,
         label: 'First Trail',
-        story: 'Tall grass, a borrowed bag, and the first thing that rustles.',
+        story: 'A quiet meadow, a borrowed backpack, and the first thing that rustles.',
         sky: 'sun',
         colors: {
           bg: '#f0faf3', surface: '#ffffff', surface2: '#dff3e5', line: '#aedcbe',

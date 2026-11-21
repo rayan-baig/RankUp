@@ -5,6 +5,10 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.25.1 — 2026-11-21
+
+- **Two worlds renamed so they are clearly our own.** Plumber Kingdom is now **Wrench Kingdom** (its coins are Bolt Coins, its boards have chunky block dividers), and Monster Tamer is now **Critter Crew** (Critter Coins, a trail-map look, and its first world starts in a quiet meadow). Only names and words changed: every child keeps their world, levels, coins and progress, because the worlds' ids are unchanged.
+
 ## 0.25.0 — 2026-11-21
 
 Fixes from a strict re-review: the right pay on Home, a picture for every world, a safer parent PIN, and plainer words.
