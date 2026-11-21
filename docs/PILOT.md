@@ -8,10 +8,14 @@ only what is different in RankUp.
 
 ## Where it is
 
-- In **Parent Mode**, after the PIN, on every parent screen (the robot sits
-  above the tab bar), and on the signed-out front door and the gift and School
-  League pages (`#/gift`, `#/gift/card`, `#/school`, `#/school/help`,
-  `#/school/report`, `#/district`).
+- In **Parent Mode**, after the PIN, on every parent screen; on a phone the
+  robot sits in the tab bar's own slot at its right end (`.tabbar-dock`), on
+  no tab and on nothing on the screen; on a wider screen, beside the column.
+- On a signed-out phone **only after "I'm a parent"**: the sign-up and the
+  family's set-up (`useParentHere()` in Onboarding). **Never on the front
+  door** or anything shown before someone says whose phone it is (0.26.0).
+- On the gift and School League pages (`#/gift`, `#/gift/card`, `#/school`,
+  `#/school/help`, `#/school/report`, `#/district`).
 - **Never** on a child's screen (anything under `#/kid`, the PIN screen, the
   demo's Ava and Noah views), and never on a child's phone: set up, being set
   up (showing its code, or the "I'm a kid" screens), or unlinked from being one.
@@ -25,6 +29,20 @@ answer to the core as `kidView`, so `Pilot.mount` refuses and the engine
 offers no tools. When Pilot stops being allowed (leaving Parent Mode, "Hand to
 a kid"), its robot is taken out of the page before the next screen is drawn,
 and an `html[data-pilot='off']` rule hides it even if it arrives late.
+
+## Staying out of the way
+
+Core 1.1.1 keeps the robot clear of the page's own words and buttons
+wherever it is scrolled, of a box being typed in, and of everything in the
+config's `avoid`: `[data-pilot-avoid]` (the tab bar, the set-up's sticky
+buttons), `[data-pilot-primary]` (the dashboard's "chore waiting" card, the
+plan buttons, every Settings row, Review's Accept and Send back, "Hand to a
+kid") and `.demo-bar` (the demo's banner). In Parent Mode on a phone the
+robot's place is the tab bar's own slot: `src/pilot/pilotRankUp.js` wraps the
+core's `PilotMascot.placeNow` (without changing its files) to answer "bottom
+right, not tucked away" while the slot is showing, because what scrolls
+behind the bar is hidden by it. `gutter: false`: RankUp's screens keep their
+own side padding.
 
 ## The moving robot
 
@@ -40,7 +58,7 @@ on later; `src/styles/index.css` stops the resting robot's float).
 
 | File | What it is |
 |---|---|
-| `public/pilot/` | The shared core, **Pilot core 1.1.0** (MTRX Horizyn commit 710d52d), copied unchanged with its robot pictures, layers and the 18 pictures in `poses/`. |
+| `public/pilot/` | The shared core, **Pilot core 1.1.1** (MTRX Horizyn commit 8b0ecd7), copied unchanged with its robot pictures, layers and the 18 pictures in `poses/`. |
 | `src/lib/pilotGate.js`, `src/components/PilotGate.jsx` | The only part in the first load: where Pilot may be, and fetching the rest once the page has loaded. |
 | `src/pilot/pilotRankUp.js` | The config: the core's script tag, the screens, suggestions, `kidView`, hiding and showing, forgetting a family's chat. |
 | `src/pilot/pilotKnowledge.js` | The knowledge pack and the "why RankUp" list, every number read from the app's own code. |

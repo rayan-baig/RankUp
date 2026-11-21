@@ -246,11 +246,21 @@ export function rewardRedemptionsThisWeek(state, kidId, rewardId, now = clock())
 }
 
 /**
- * Has this child sent a chore today (their phone's day)? The daily chore
- * bonus is offered only then: it rewards doing a chore, not opening the app.
+ * Has this child sent a chore today (their phone's day)?
  */
 export function choreSentToday(state, kidId, today = dayKey()) {
   return (state.submissions || []).some((s) => s.kidId === kidId && s.submittedAt && dayKey(new Date(s.submittedAt)) === today)
+}
+
+/**
+ * Has a parent accepted one of this child's chores today (their phone's day)?
+ * The daily chore bonus is offered only then (0.26.0): it rewards a chore a
+ * grown-up has looked at and said yes to, not tapping "I did it!", and not a
+ * chore that was sent back. claim_login_bonus refuses it the same way.
+ */
+export function choreAcceptedToday(state, kidId, today = dayKey()) {
+  return (state.submissions || []).some((s) => s.kidId === kidId && s.status === 'approved'
+    && s.decidedAt && dayKey(new Date(s.decidedAt)) === today)
 }
 
 /** How many more times this child may take it in the next seven days; null when it has no limit. */
@@ -442,6 +452,11 @@ function reduce(state, action) {
             subscriptionEndsAt: family.subscription_ends_at || null,
             // The day weekly chores come back; see recurrenceDue.
             weekResetsOn: family.week_resets_on ?? null,
+            // Each child's weekly goal (lib/weeklyGoal.js). A choice still on
+            // its way to the server wins over the older answer.
+            weeklyChoreGoal: pending.has('set_weekly_chore_goal')
+              ? next.family.weeklyChoreGoal ?? null
+              : family.weekly_chore_goal ?? next.family.weeklyChoreGoal ?? null,
             // When the family was made: "Gift a year" waits a month (0.23.0).
             createdAt: family.created_at ? Date.parse(family.created_at) : next.family.createdAt ?? null,
             // The money sign for pocket money (set_family_currency). A choice
@@ -907,6 +922,18 @@ function reduce(state, action) {
       if (!CURRENCIES.some((c) => c.code === code)) return state
       return queueRpc({ ...state, family: { ...state.family, currency: code, currencyChosen: true } },
         'set_family_currency', { p_currency: code }, 'set_family_currency')
+    }
+
+    /**
+     * Each child's weekly goal: chores accepted a week, 1 to 50 (the same
+     * range as cleanWeeklyGoal in lib/weeklyGoal.js, which stays out of the
+     * first file: only the child's Home and Settings need it).
+     */
+    case 'SET_WEEKLY_CHORE_GOAL': {
+      const goal = Math.round(Number(action.goal))
+      if (!(goal >= 1 && goal <= 50)) return state
+      return queueRpc({ ...state, family: { ...state.family, weeklyChoreGoal: goal } },
+        'set_weekly_chore_goal', { p_goal: goal }, 'set_weekly_chore_goal')
     }
 
     case 'SET_WEEK_RESET_DAY': {
@@ -1432,6 +1459,20 @@ function reduce(state, action) {
             : reason === 'bad_credit'
               ? `${name} wasn’t sent: the credit can be a first name or a nickname, in letters only.`
               : `${name} couldn’t be sent to RankUp just now.`
+      } else if (fn === 'claim_login_bonus') {
+        /*
+         * The bonus this phone showed for a chore it thought accepted, which
+         * the server never accepted (another phone sent it back first). An
+         * acceptance is final in RankUp, so this is the only way one is
+         * undone: like any refusal, the phone's own picture goes back and the
+         * fresh pull confirms it. The coins come off, and the bonus is
+         * offered again once a chore really is accepted today.
+         */
+        const kid = state.kids.find((k) => k.id === args.p_kid_id)
+        if (kid) {
+          next = mapKid(next, kid.id, (k) => ({ ...k, coins: Math.max(0, (k.coins || 0) - 5), lastLoginBonus: null }))
+          message = 'The daily bonus waits for an accepted chore.'
+        }
       } else if (fn === 'mark_redemption_given') {
         next = {
           ...next,
@@ -1753,9 +1794,10 @@ function reduce(state, action) {
       const today = dayKey()
       // A day later than today (a zone change) still counts as claimed.
       if (!kid || (kid.lastLoginBonus && kid.lastLoginBonus >= today)) return state
-      // The daily chore bonus: for a chore sent today, never for opening the
-      // app (claim_login_bonus refuses it the same way).
-      if (!choreSentToday(state, kid.id)) return state
+      // The daily chore bonus: for a chore a parent accepted today, never for
+      // one only sent in or sent back, nor for opening the app
+      // (claim_login_bonus refuses it the same way).
+      if (!choreAcceptedToday(state, kid.id)) return state
       const coins = 5
       let next = mapKid(state, kid.id, (k) => ({ ...k, coins: k.coins + coins, lastLoginBonus: today }))
       // The zone, so the server stamps the claim with this phone's day rather

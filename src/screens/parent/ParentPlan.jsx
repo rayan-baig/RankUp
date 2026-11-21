@@ -338,6 +338,7 @@ export default function ParentPlan() {
                   className="w-full mt-3"
                   disabled={busy}
                   data-testid={`plan-button-${tier.id}`}
+                  data-pilot-primary=""
                   onClick={() => (tier.price === 0 && live
                     ? (offering ? setKeepOpen(true) : portal('cancel'))
                     : live ? choosePlan(tier) : setConfirm(tier))}

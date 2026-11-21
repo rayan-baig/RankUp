@@ -30,7 +30,7 @@ import { priceWords } from '../src/lib/plans.js'
 import { FLASH_TICKET_PACKS } from '../src/lib/billing.js'
 import { rankUpTools, pilotDispatch, PILOT_ACTIONS, RANKUP_FORBIDDEN } from '../src/pilot/pilotTools.js'
 import { knowledge, STRENGTHS } from '../src/pilot/pilotKnowledge.js'
-import { pilotRoute, childMayHaveIt, childsPhone, pilotShows, updatePilot, markKidScreen } from '../src/lib/pilotGate.js'
+import { pilotRoute, childMayHaveIt, childsPhone, pilotShows, updatePilot, markKidScreen, markParentScreen } from '../src/lib/pilotGate.js'
 import { privateNames, withoutNames, connect, _test as bridgeTest } from '../src/pilot/pilotRankUp.js'
 
 let fails = 0
@@ -205,7 +205,16 @@ const PUBLIC = ['/gift', '/gift/card', '/school', '/school/help', '/school/repor
 const shows = (state, route) => { updatePilot({ state, route, dispatch: () => {} }); return pilotShows() }
 ok('on every parent screen in Parent Mode', PARENT_ROUTES.every((r) => shows(parentState, r)))
 ok('on the plan, gift and schools pages, for a parent in Parent Mode', ['/parent/plan', ...PUBLIC].every((r) => shows(parentState, r)))
-ok('on the front door and the public pages, for a visitor', ['/welcome', '/', ...PUBLIC].every((r) => shows(visitor, r)))
+ok('on the public pages, for a visitor', PUBLIC.every((r) => shows(visitor, r)))
+ok('never on the front door, where nobody has said whose phone it is (0.26.0)', ['/welcome', '/'].every((r) => !shows(visitor, r)))
+ok('nor on a phone nobody has linked or set up yet, before a role is chosen', !shows(createInitialState(), '/welcome') && !pilotRoute('/welcome', visitor))
+markParentScreen(1)
+ok('after "I\'m a parent": on the family\'s own set-up screens', shows(visitor, '/welcome') && pilotRoute('/welcome', visitor, true))
+markKidScreen(1)
+ok('but a child\'s set-up screen still wins', !shows(visitor, '/welcome'))
+markKidScreen(-1)
+markParentScreen(-1)
+ok('back on the front door (choosing a role again): gone', !shows(visitor, '/welcome'))
 ok('on no child\'s screen, even with Parent Mode open', KID_ROUTES.every((r) => !shows(parentState, r)), KID_ROUTES.filter((r) => shows(parentState, r)).join(', '))
 ok('nor a visitor on the child\'s routes, legal pages or the operator page', ['/kid', '/kid/quests', '/legal/terms', '/operator'].every((r) => !shows(visitor, r)))
 const handedToAva = reducer(parentState, { type: 'SET_ROLE', role: 'kid', kidId: parentState.kids[0].id })
@@ -226,11 +235,15 @@ for (const [label, state] of STATES) {
   const anywhere = [...PARENT_ROUTES, ...PUBLIC, '/welcome', '/', ...KID_ROUTES].filter((r) => shows(state, r))
   ok(`never ${label}, on any route`, anywhere.length === 0 && childMayHaveIt(state), anywhere.join(', '))
 }
+markParentScreen(1)
+ok('a child\'s phone (set up, being set up, unlinked) never shows it, even on a parent\'s set-up screen',
+  [kidPhone, settingUp, unlinked, kidPhoneHalf].every((st) => !shows(st, '/welcome') && !shows(st, '/')))
+markParentScreen(-1)
 ok('a child\'s phone is known as one in each of those states', [kidPhone, settingUp, unlinked, kidPhoneHalf].every(childsPhone) && !childsPhone(parentState))
 markKidScreen(1)
-ok('and never while a child\'s set-up screen is open (no state says so yet)', !shows(visitor, '/welcome'))
+ok('and never while a child\'s set-up screen is open (no state says so yet)', !shows(visitor, '/gift') && !shows(visitor, '/welcome'))
 markKidScreen(-1)
-ok('back on the front door once it closes', shows(visitor, '/welcome'))
+ok('the gift page again once it closes, but still not the front door', shows(visitor, '/gift') && !shows(visitor, '/welcome'))
 ok('the route check alone: never a child\'s route', ['/kid', '/kid/shop', '/switch'].every((r) => !pilotRoute(r, parentState)))
 ok('the parent area needs a family', !pilotRoute('/parent', visitor) && pilotRoute('/parent', parentState))
 
@@ -256,6 +269,16 @@ ok('the engine offers no tools when kidView is true', (() => {
 ok('the storage prefix is RankUp\'s own', config.storagePrefix === 'rankup-pilot')
 ok('the window says the MTRX words', config.name === 'Pilot' && config.tagline === 'Your AI copilot. Powered by you.')
 ok('the AI keys are for grown-ups line', /AI keys are for grown-ups \(the AI companies require 18\+\)/.test(config.keyNote))
+ok('and one plain sentence first: what an AI key is, and where a grown-up gets one (0.26.0)',
+  /^An AI key is a private code a grown-up makes in the "API keys" part of an AI company's website/.test(config.keyNote)
+  && !/\b(token|endpoint|BYOK|model)\b/i.test(config.keyNote))
+console.log('\n=== The suggestions, RankUp\'s own first (0.26.0) ===')
+for (const r of ['/parent', '/parent/approvals', '/parent/assign', '/parent/kids', '/parent/settings', '/parent/plan', '/parent/money', '/parent/help']) {
+  updatePilot({ state: parentState, route: r, dispatch: () => {} })
+  const labels = bridgeTest.chips().map((c) => c.label)
+  ok(`${r}: "What's waiting for me?" and "Add a chore for…" lead, then one for the screen`,
+    labels[0] === "What's waiting for me?" && labels[1] === 'Add a chore for…' && labels.length === 3 && !/Explain this screen/.test(labels[2]), labels.join(' | '))
+}
 
 console.log('\n=== The knowledge pack ===')
 const guide = knowledge()

@@ -51,7 +51,8 @@ export default function KidStory({ chapter }) {
         <p className="text-sm">{done ? current.story : ' '}</p>
       </Card>
 
-      <div className="flex gap-2 mt-3">
+      {/* Room above the list's heading, so the two buttons do not sit on it. */}
+      <div className="story-actions flex gap-2 mt-4 mb-7" data-testid="story-actions">
         <Button variant="soft" className="flex-1" onClick={() => { setDone(false); setPlayKey((k) => k + 1) }}>
           ↻ Watch again
         </Button>

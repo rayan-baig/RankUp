@@ -757,7 +757,38 @@ end $$;
 revoke all on function set_history_note(uuid, text) from public, anon, authenticated;
 grant execute on function set_history_note(uuid, text) to authenticated;
 
-/** The daily login bonus. Server-side so it genuinely cannot be claimed twice. */
+/**
+ * The family's date of a moment, in the zone their phones show (0.26.0).
+ *
+ * family_today (schema.sql) is this for now(); the daily chore bonus needs it
+ * for the moment a chore was accepted too, worked out the same way: the zone
+ * the calling phone names, else the family's saved zone, else UTC. A zone
+ * Postgres does not know falls through rather than failing. The server's
+ * own: nothing a browser calls it with would mean anything.
+ */
+create or replace function family_day_of(p_family_id uuid, p_at timestamptz, p_tz text default null)
+returns date
+language plpgsql stable security definer set search_path = public as $$
+declare v_saved text;
+begin
+  select timezone into v_saved from families where id = p_family_id;
+  if nullif(trim(p_tz), '') is not null then
+    begin
+      return (p_at at time zone trim(p_tz))::date;
+    exception when others then
+      null;
+    end;
+  end if;
+  begin
+    return (p_at at time zone coalesce(nullif(v_saved, ''), 'UTC'))::date;
+  exception when others then
+    return (p_at at time zone 'UTC')::date;
+  end;
+end $$;
+
+revoke execute on function family_day_of(uuid, timestamptz, text) from public, anon, authenticated;
+
+/** The daily chore bonus. Server-side so it genuinely cannot be claimed twice. */
 -- Gained p_tz, the phone's time zone: see family_today.
 drop function if exists claim_login_bonus(uuid, int);
 create or replace function claim_login_bonus(p_kid_id uuid, p_coins int default 5, p_tz text default null)
@@ -787,12 +818,20 @@ begin
   if v_kid.last_login_bonus >= v_day then
     return jsonb_build_object('ok', false, 'reason', 'already_claimed');
   end if;
-  -- The daily chore bonus (0.22.0): paid for doing a chore, not for opening
-  -- the app. Any chore sent in the last day counts, so a phone that offers it
-  -- for a chore sent "today" (its own day) is never refused.
+  -- The daily chore bonus: paid for a chore a parent has ACCEPTED on the
+  -- family's day (0.26.0), not for sending one in (0.22.0), and never for
+  -- opening the app. A chore sent but not looked at yet, or sent back, does
+  -- not count: until 0.26.0 a child could claim it the moment they tapped
+  -- "I did it!", and kept it when the chore came back to redo. An acceptance
+  -- is final in RankUp (nothing reverses one; see ParentHistory.jsx), so a
+  -- bonus paid for one stays. One a phone showed that the server never made
+  -- (another phone sent the chore back first) is refused here, and the phone
+  -- puts its own picture back (RPC_REFUSED in the reducer).
   if not exists (select 1 from submissions
-                  where kid_id = p_kid_id and submitted_at > now() - interval '24 hours') then
-    return jsonb_build_object('ok', false, 'reason', 'no_chore_today');
+                  where kid_id = p_kid_id and status = 'approved'
+                    and decided_at > now() - interval '2 days'
+                    and family_day_of(v_kid.family_id, decided_at, p_tz) = v_day) then
+    return jsonb_build_object('ok', false, 'reason', 'no_chore_accepted');
   end if;
 
   update kids
@@ -872,6 +911,31 @@ begin
 end $$;
 revoke all on function set_week_reset_day(int) from public, anon, authenticated;
 grant execute on function set_week_reset_day(int) to authenticated;
+
+/**
+ * Each child's weekly goal (0.26.0): how many accepted chores a week the card
+ * on a child's Home counts toward (src/lib/weeklyGoal.js). One number for the
+ * family, set by a parent in Settings; null until they do, which the app
+ * shows as 5. On the family row so a child's own phone has it.
+ */
+alter table families add column if not exists weekly_chore_goal smallint
+  check (weekly_chore_goal between 1 and 50);
+
+create or replace function set_weekly_chore_goal(p_goal int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_family uuid := current_family_id();
+begin
+  if v_family is null or not is_parent() then
+    return jsonb_build_object('ok', false, 'reason', 'not_parent');
+  end if;
+  if p_goal is null or p_goal < 1 or p_goal > 50 then
+    return jsonb_build_object('ok', false, 'reason', 'bad_goal');
+  end if;
+  update families set weekly_chore_goal = p_goal where id = v_family;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke all on function set_weekly_chore_goal(int) from public, anon, authenticated;
+grant execute on function set_weekly_chore_goal(int) to authenticated;
 
 /**
  * Bring back every repeating chore in the caller's family that is due.

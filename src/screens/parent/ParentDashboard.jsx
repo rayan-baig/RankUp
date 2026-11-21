@@ -77,14 +77,14 @@ export default function ParentDashboard() {
     <Screen>
       <TrialBanner />
       {stopped && (
-        <Banner tone={stopped.tone} icon={stopped.icon} title={stopped.title}>
+        <Banner className="mb-3" tone={stopped.tone} icon={stopped.icon} title={stopped.title}>
           {stopped.body}{' '}
           <button type="button" className="underline font-semibold" onClick={() => navigate('/parent/plan')}>See your plan</button>
         </Banner>
       )}
       {giftEnding && (
         <div data-testid="gift-ending-notice">
-          <Banner tone={giftEnding.tone} icon={giftEnding.icon} title={giftEnding.title}>
+          <Banner className="mb-3" tone={giftEnding.tone} icon={giftEnding.icon} title={giftEnding.title}>
             {giftEnding.body}{' '}
             <button type="button" className="underline font-semibold" onClick={() => navigate('/parent/plan')}>See plans</button>
           </Banner>
@@ -109,6 +109,7 @@ export default function ParentDashboard() {
             variant="soft"
             className="shrink-0 px-3 py-2 min-h-0 text-xs mt-1"
             style={{ maxWidth: 150 }}
+            data-pilot-primary=""
             onClick={handOver}
           >
             <span className="truncate">👋 {state.kids.length === 1 ? `Hand to ${state.kids[0].name}` : 'Hand to a kid'}</span>
@@ -135,15 +136,15 @@ export default function ParentDashboard() {
       </div>
 
       {pending.length > 0 && (
-        <Card className="mb-3" style={{ borderColor: 'var(--warn)' }}>
+        <Card className="mb-3" style={{ borderColor: 'var(--warn)' }} data-pilot-primary="" data-testid="waiting-card">
           <div className="flex items-center gap-3">
             <span className="text-2xl" aria-hidden="true">✅</span>
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-sm">
-                {pending.length} {pending.length === 1 ? 'submission' : 'submissions'} waiting
+                {pending.length} {pending.length === 1 ? 'chore' : 'chores'} waiting for you
               </div>
               <div className="text-xs text-muted">
-                Waiting for you to accept
+                Accept {pending.length === 1 ? 'it' : 'them'}, or send back with a note
               </div>
             </div>
             <Button className="px-3 py-2 min-h-0 text-sm" onClick={() => navigate('/parent/approvals')}>Review</Button>

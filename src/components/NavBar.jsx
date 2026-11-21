@@ -13,10 +13,15 @@ import { navigate } from '../lib/router.js'
  * The bar itself is translucent and blurred, so the screen behind it keeps
  * going instead of stopping at a grey slab.
  */
-export default function NavBar({ items, path, badges = {} }) {
+export default function NavBar({ items, path, badges = {}, pilotDock = false }) {
   return (
     <nav
-      className="fixed left-0 right-0 z-40"
+      className="tabbar fixed left-0 right-0 z-40"
+      // Pilot, the AI helper, keeps clear of the bar (data-pilot-avoid), and
+      // in Parent Mode on a phone sits in the bar's own slot at its right end
+      // (data-pilot-dock), never on a tab or on the screen (index.css).
+      data-pilot-avoid=""
+      data-pilot-tabbar={pilotDock ? '' : undefined}
       style={{
         /*
          * An inset bar rather than a slab welded to the bottom edge, as
@@ -25,8 +30,8 @@ export default function NavBar({ items, path, badges = {} }) {
          * a world rather than a form with a toolbar.
          */
         bottom: 'calc(var(--safe-bottom) + 8px)',
-        marginLeft: 10,
-        marginRight: 10,
+        // The width and side margins are in index.css (.tabbar): as wide as
+        // the screen's own cards, on a phone and on a desktop.
         borderRadius: 20,
         background: 'color-mix(in srgb, var(--surface) 72%, transparent)',
         backdropFilter: 'blur(18px) saturate(1.3)',
@@ -36,7 +41,7 @@ export default function NavBar({ items, path, badges = {} }) {
       }}
       aria-label="Main"
     >
-      <div className="mx-auto max-w-phone flex px-1.5 py-1.5 gap-1">
+      <div className="flex px-1.5 py-1.5 gap-1">
         {items.map((item) => {
           const active =
             path === item.to ||
@@ -93,6 +98,7 @@ export default function NavBar({ items, path, badges = {} }) {
             </button>
           )
         })}
+        {pilotDock && <span className="tabbar-dock" data-pilot-dock="" aria-hidden="true" />}
       </div>
     </nav>
   )

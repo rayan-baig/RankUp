@@ -159,6 +159,8 @@ export function Section({ title, summary, icon, defaultOpen = false, children })
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
+        // A row a parent taps: Pilot's robot keeps clear of it.
+        data-pilot-primary=""
         className="w-full flex items-center gap-3 p-3 text-left"
       >
         {icon && <span className="text-lg leading-none" aria-hidden="true">{icon}</span>}
@@ -253,9 +255,10 @@ export function ProgressBar({ value, max = 1, height = 10, tone, label }) {
   )
 }
 
-export function Stat({ icon, value, label, tone }) {
+export function Stat({ icon, value, label, tone, ...rest }) {
   return (
     <div
+      {...rest}
       className="card-flat px-3 py-2.5 flex-1 min-w-0"
       style={{
         // A stat tile is a readout, so it gets its own faint edge light in

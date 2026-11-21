@@ -415,7 +415,9 @@ begin
     -- The Season autopilot: the daily job, the console and the deal's Season.
     'run_season_autopilot(date)', 'operator_set_launch_date(date)', 'operator_queue_theme(uuid)',
     'season_start_for(date,integer)', 'season_name_for(integer)', 'due_season_reminders()',
-    'mark_season_reminder_sent(integer)', 'current_season()']
+    'mark_season_reminder_sent(integer)', 'current_season()',
+    -- The family's date of a moment, for the daily chore bonus (0.26.0).
+    'family_day_of(uuid,timestamptz,text)']
   loop
     if to_regprocedure(f) is null then
       v_open := v_open || (f || ' (no longer exists — update this list)');

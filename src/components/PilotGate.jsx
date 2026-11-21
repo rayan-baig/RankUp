@@ -1,7 +1,7 @@
 import { useLayoutEffect } from 'react'
 import { useApp } from '../state/AppContext.jsx'
 import { useRoute } from '../lib/router.js'
-import { updatePilot, markKidScreen } from '../lib/pilotGate.js'
+import { updatePilot, markKidScreen, markParentScreen } from '../lib/pilotGate.js'
 
 /**
  * Tells Pilot (lib/pilotGate.js) where the app is, on every render. A layout
@@ -21,4 +21,17 @@ export function useKidHere() {
     markKidScreen(1)
     return () => markKidScreen(-1)
   }, [])
+}
+
+/**
+ * For a parent's own set-up screen, after "I'm a parent": the only place a
+ * signed-out phone shows Pilot. The front door, where nobody has said yet
+ * who is holding the phone, never does.
+ */
+export function useParentHere(on = true) {
+  useLayoutEffect(() => {
+    if (!on) return undefined
+    markParentScreen(1)
+    return () => markParentScreen(-1)
+  }, [on])
 }

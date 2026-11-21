@@ -66,36 +66,72 @@ do $$ begin
              pg_temp.fd_today() <> (now() at time zone 'UTC')::date, pg_temp.fd_tz());
 end $$;
 
--- ---------- the daily bonus is for doing a chore, not for opening the app ----------
+-- ---------- the daily bonus is for a chore a parent ACCEPTED today (0.26.0) ----------
+-- Until 0.26.0 any chore SENT in the last day counted: a child could claim it
+-- the moment they tapped "I did it!", and kept it when the chore came back.
 do $$
 declare res jsonb;
 begin
+  perform become('7a111111-0000-0000-0000-0000000000c1');
+  res := claim_login_bonus('7a444444-0000-0000-0000-0000000000a1');
+  perform ok('a chore sent just now but not looked at yet: the bonus is not paid',
+             res->>'reason' = 'no_chore_accepted', res::text);
+  perform ok('and nothing is recorded as claimed',
+             (select last_login_bonus from kids where id = '7a444444-0000-0000-0000-0000000000a1') is null);
   set local role postgres;
-  update submissions set submitted_at = now() - interval '2 days'
+  update submissions set status = 'rejected', decided_at = now()
    where id = '7a666666-0000-0000-0000-000000000001';
   set local role app_user;
   perform become('7a111111-0000-0000-0000-0000000000c1');
   res := claim_login_bonus('7a444444-0000-0000-0000-0000000000a1');
-  perform ok('with no chore sent today, the bonus is not paid', res->>'reason' = 'no_chore_today', res::text);
-  perform ok('and nothing is recorded as claimed',
-             (select last_login_bonus from kids where id = '7a444444-0000-0000-0000-0000000000a1') is null);
+  perform ok('a chore sent back today does not count either', res->>'reason' = 'no_chore_accepted', res::text);
   set local role postgres;
-  update submissions set submitted_at = now() where id = '7a666666-0000-0000-0000-000000000001';
+  update submissions set status = 'pending', decided_at = null
+   where id = '7a666666-0000-0000-0000-000000000001';
+  -- A chore accepted yesterday, where they live, a few minutes before their midnight.
+  insert into quests (id, family_id, kid_id, title, xp, status) values
+    ('7a555555-0000-0000-0000-000000000009', '7a222222-0000-0000-0000-00000000000a',
+     '7a444444-0000-0000-0000-0000000000a1', 'Tidy the shoes', 30, 'approved');
+  insert into submissions (id, family_id, quest_id, kid_id, status, decided_at) values
+    ('7a666666-0000-0000-0000-000000000009', '7a222222-0000-0000-0000-00000000000a',
+     '7a555555-0000-0000-0000-000000000009', '7a444444-0000-0000-0000-0000000000a1', 'approved',
+     (pg_temp.fd_today()::timestamp - interval '5 minutes') at time zone pg_temp.fd_tz());
+  set local role app_user;
+  perform become('7a111111-0000-0000-0000-0000000000c1');
+  res := claim_login_bonus('7a444444-0000-0000-0000-0000000000a1');
+  perform ok('a chore accepted yesterday (the family''s yesterday) does not count today',
+             res->>'reason' = 'no_chore_accepted', res::text);
 end $$;
 
 -- ---------- the daily bonus is stamped with the family's day ----------
 do $$
 declare res jsonb;
 begin
+  -- The parent accepts it now: today, for the family.
+  set local role postgres;
+  update submissions set decided_at = now() where id = '7a666666-0000-0000-0000-000000000009';
+  set local role app_user;
   perform become('7a111111-0000-0000-0000-0000000000c1');
   res := claim_login_bonus('7a444444-0000-0000-0000-0000000000a1');
-  perform ok('the bonus is paid', (res->>'ok')::boolean, res::text);
+  perform ok('once a parent has accepted a chore today, the bonus is paid', (res->>'ok')::boolean, res::text);
   perform ok('and recorded as claimed on the day the phone sees',
              (select last_login_bonus from kids where id = '7a444444-0000-0000-0000-0000000000a1') = pg_temp.fd_today(),
              (select last_login_bonus from kids where id = '7a444444-0000-0000-0000-0000000000a1')::text
                || ' vs ' || pg_temp.fd_today()::text);
   res := claim_login_bonus('7a444444-0000-0000-0000-0000000000a1');
   perform ok('a second claim the same day is refused', res->>'reason' = 'already_claimed', res::text);
+end $$;
+
+-- ---------- the family's date of a moment is the server's alone ----------
+do $$
+begin
+  set local role postgres;
+  perform ok('family_day_of gives the family''s date of a moment',
+             family_day_of('7a222222-0000-0000-0000-00000000000a', now()) = pg_temp.fd_today()
+             and family_day_of('7a222222-0000-0000-0000-00000000000a', now(), 'Not/AZone') = pg_temp.fd_today());
+  perform ok('and no browser can call it',
+             not has_function_privilege('anon', 'family_day_of(uuid,timestamptz,text)', 'execute')
+             and not has_function_privilege('authenticated', 'family_day_of(uuid,timestamptz,text)', 'execute'));
 end $$;
 
 -- A phone can say which zone it is in, which wins over the saved one.

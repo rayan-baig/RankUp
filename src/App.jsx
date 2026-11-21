@@ -158,6 +158,12 @@ export default function App() {
     document.documentElement.dataset.reduceMotion = state.settings.reduceMotion ? 'true' : 'false'
   }, [state.settings.reduceMotion])
 
+  // Which half of the app is showing: on a wide screen Parent Mode's column
+  // is a little wider than a child's (index.css, [data-area='parent']).
+  useEffect(() => {
+    document.documentElement.dataset.area = isParentArea ? 'parent' : ''
+  }, [isParentArea])
+
   // One attribute switches the whole Elite visual tier on. Every effect lives
   // in the stylesheet under [data-overdrive='true'], so no screen has to know.
   useEffect(() => {
@@ -419,7 +425,7 @@ export default function App() {
           path={route}
         />
       )}
-      {isParentArea && <NavBar items={PARENT_NAV} path={route} badges={{ '/parent/approvals': pending }} />}
+      {isParentArea && <NavBar items={PARENT_NAV} path={route} badges={{ '/parent/approvals': pending }} pilotDock />}
 
       {/* Only in the child's half of the app. A parent does not need to be told
           their child crossed a threshold by a toast in the corner of a review

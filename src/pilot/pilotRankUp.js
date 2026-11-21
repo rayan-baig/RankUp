@@ -6,7 +6,7 @@
  * the page has loaded, so it is never on a child's phone and never part of
  * the first load. It:
  *
- *   - adds the core's one script tag (public/pilot/, core 1.1.0, copied
+ *   - adds the core's one script tag (public/pilot/, core 1.1.1, copied
  *     unchanged from the MTRX Horizyn site), which
  *     then loads public/pilot-rankup.js, which calls start() here;
  *   - mounts Pilot with RankUp's config: who is using it, which screen, the
@@ -106,9 +106,10 @@ const SCREENS = {
 function screen() {
   const r = route()
   const s = state()
-  const name = SCREENS[r] || (r === '/welcome' || r === '/' ? "RankUp's front door (not signed in)" : document.title)
+  const name = SCREENS[r] || (r === '/welcome' || r === '/' ? 'Setting up a new family (the parent tapped "I\'m a parent")' : document.title)
   const facts = []
-  if (!s.onboarded) facts.push('The person is not signed in: a parent or a visitor reading about RankUp.')
+  if (!s.onboarded && (r === '/welcome' || r === '/')) facts.push('The person is a parent setting up their family: not signed in yet.')
+  else if (!s.onboarded) facts.push('The person is not signed in: a parent, grandparent or teacher reading about RankUp.')
   else {
     facts.push('The person is a parent in Parent Mode (after their PIN).')
     if (s.demo) facts.push('This is the demo family (pretend children): nothing is saved to a server and nothing is charged.')
@@ -124,24 +125,36 @@ function screen() {
 }
 
 const C = (label, prompt) => ({ label, prompt })
+/*
+ * The suggestions under the chat once it has started (the core shows three,
+ * then its own "Summarise this"). In Parent Mode RankUp's own two come first
+ * on every screen, in a parent's words: what is waiting, and adding a chore.
+ * The third is for the screen.
+ */
+const WAITING = C("What's waiting for me?", "What's waiting for me to review?")
+const ADD_CHORE = C('Add a chore for…', 'Add a chore for ')
 function chips() {
   const r = route()
   if (!state().onboarded && (r === '/welcome' || r === '/')) {
     return [C('How does RankUp work?', 'In plain words, how does RankUp work for a family?'),
-      C('What do the plans cost?', 'What do the RankUp plans cost, and what does each give?'),
-      C('Is it safe for my kids?', 'What does RankUp keep about my children, and what does it never do?')]
+      C('Is it safe for my kids?', 'What does RankUp keep about my children, and what does it never do?'),
+      C('What do the plans cost?', 'What do the RankUp plans cost, and what does each give?')]
   }
   if (r === '/gift' || r === '/gift/card') return [C('How does a gift work?', 'How does giving a year of RankUp work?'), C('Which plan to give?', 'What is the difference between the plans I can give?')]
   if (r.startsWith('/school') || r === '/district') return [C('What is the School League?', 'What is the School League, and what does a school see?'), C('Is it safe for students?', 'What does a school see about its students on RankUp?')]
-  if (r === '/parent/approvals') return [C("What's waiting?", "What's waiting for review?"), C('Accept one', 'Accept the oldest chore that is waiting.'), C('How does accepting work?', 'What happens when I accept or send back a chore?')]
-  if (r === '/parent/assign') return [C('Add a chore', 'Add a chore: '), C('3 starter chores', 'Add the 3 starter chores.'), C('How much XP?', 'How much XP should a chore pay?')]
-  if (r === '/parent/plan') return [C('What does Elite add?', `What does ${TIERS.elite.name} add?`), C('Any deals on?', 'Are there any deals on right now, and how do they work?'), C('Pause instead?', 'Can I pause my plan instead of cancelling?')]
-  if (r === '/parent/settings') return [C('What rewards are set up?', 'What rewards are set up?'), C('Add a reward', 'Add a reward: '), C("Link a kid's phone", "How do I link my child's phone?")]
-  if (r === '/parent/money') return [C('How does pocket money work?', 'How does pocket money work in RankUp?'), C('Change the currency', 'How do I change the money sign?')]
-  if (r === '/parent/override') return [C('How do pauses work?', 'How does Pause and limits work, and what does my child see?')]
-  if (r === '/parent/pair') return [C('How does pairing work?', "How does linking my child's phone with a code work?")]
-  if (r === '/parent') return [C("What's waiting?", "What's waiting for review?"), C('How are the kids doing?', 'How is each of my children doing this week?'), C('What rewards are set up?', 'What rewards are set up?')]
-  return [C('Explain this screen', 'Explain this screen.')]
+  const third = {
+    '/parent': C('How are the kids doing?', 'How is each of my children doing this week?'),
+    '/parent/approvals': C('Accept the oldest one', 'Accept the oldest chore that is waiting.'),
+    '/parent/assign': C('Add 3 starter chores', 'Add the 3 starter chores.'),
+    '/parent/kids': C('How are the kids doing?', 'How is each of my children doing this week?'),
+    '/parent/plan': C(`What does ${TIERS.elite.name} add?`, `What does ${TIERS.elite.name} add?`),
+    '/parent/settings': C('Add a reward', 'Add a reward: '),
+    '/parent/money': C('How does pocket money work?', 'How does pocket money work in RankUp?'),
+    '/parent/override': C('How do pauses work?', 'How does Pause and limits work, and what does my child see?'),
+    '/parent/pair': C("Link my child's phone", "How does linking my child's phone with a code work?"),
+    '/parent/history': C('How are the kids doing?', 'How is each of my children doing this week?'),
+  }[r] || C('What can I do here?', 'In plain words, what can I do on this screen?')
+  return [WAITING, ADD_CHORE, third]
 }
 
 function taskPrompt() {
@@ -232,15 +245,26 @@ const config = {
   storagePrefix: STORAGE_PREFIX,
   compatibleHosts: [...PILOT_COMPATIBLE_HOSTS, ...PILOT_LOCAL_HOSTS],
   privacyUrl: '#/legal/privacy',
-  keyNote: 'Pilot uses your own AI key. AI keys are for grown-ups (the AI companies require 18+).',
+  // One plain sentence on what a key is and where a grown-up gets one, then
+  // the 18+ line. Shown beside the key settings, in the greeting before a key
+  // is added, and in Pilot's help.
+  keyNote: 'An AI key is a private code a grown-up makes in the "API keys" part of an AI company\'s website, so Pilot can answer '
+    + 'on their account. AI keys are for grown-ups (the AI companies require 18+).',
   audienceNote: 'The person using Pilot here is a grown-up: a parent in RankUp\'s Parent Mode (after their PIN), or a parent, grandparent or teacher reading RankUp\'s public pages. '
     + 'Children never use Pilot: it is never shown on a child\'s screen or a child\'s phone. '
     + 'RankUp is a children\'s app. Never ask for anything about a child: no surname, age, birthday, school, photo or phone. '
     + 'Refer to a child by first name only, and only when the parent used it or a tool returned it. Keep answers suitable for a family.',
   themeClass: 'rk-pilot',
-  // Core 1.1.0 keeps the robot clear of these (a free corner, or tucked half
-  // away): a screen marks a bar the robot must not cover with data-pilot-avoid.
-  avoid: ['[data-pilot-avoid]'],
+  // The core keeps the robot clear of these (a free corner, or tucked half
+  // away), as well as of the page's own words and buttons (core 1.1.1): the tab bar and the sticky set-up bar (data-pilot-avoid), and in
+  // Parent Mode the things a parent taps most: the "waiting for you" card,
+  // the plan buttons, the rows of Settings, Review's Accept and Send back,
+  // and the header buttons in the top corners (data-pilot-primary), and the
+  // demo's banner with its "Start for free" (.demo-bar).
+  avoid: ['[data-pilot-avoid]', '[data-pilot-primary]', '.demo-bar'],
+  // RankUp's screens keep their own side padding: in Parent Mode on a phone
+  // the robot is in the tab bar's slot, never tucked at the edge.
+  gutter: false,
   // The second lock: true whenever the gate says no (a child's screen or
   // phone, Parent Mode locked). Pilot.mount refuses, and no tools are offered.
   kidView: () => !shows(),
@@ -258,9 +282,41 @@ let watching = false
 function start() {
   if (mounted || !window.Pilot || !window.PilotStore || !window.PilotMascot) return mounted
   if (!shows()) return false
+  placeAroundTabBar()
   mounted = window.Pilot.mount(config) === true
   if (mounted) watch()
   return mounted
+}
+
+/*
+ * Parent Mode's tab bar, as the core's placement sees it (0.26.0).
+ *
+ * The core decides where the robot sits (PilotMascot.placeNow, core 1.1.1):
+ * clear of everything in `avoid`, of the page's words and buttons, and of a
+ * box being typed in. On a phone in Parent Mode the robot's place is the tab
+ * bar's own slot (.tabbar-dock, index.css): on no tab, and on nothing on the
+ * screen, which scrolls behind the bar. The core can't know that what has
+ * scrolled behind the bar is hidden by it, and would move the robot off the
+ * slot for a card down there; so while the slot is showing, this says "the
+ * bottom right corner, not tucked away", without changing the core's files.
+ * Anywhere else (a wide screen, the parent's set-up, the gift and School
+ * League pages) the core decides on its own.
+ */
+let placing = false
+export function dockedPlace(doc = document) {
+  if (doc.documentElement?.dataset?.pilotTabs !== 'on') return null
+  const slot = doc.querySelector('[data-pilot-tabbar] [data-pilot-dock]')
+  const box = slot && slot.getBoundingClientRect()
+  return box && box.width > 0 ? { corner: 'br', peek: false, typing: false } : null
+}
+function placeAroundTabBar() {
+  const mascot = window.PilotMascot
+  if (placing || !mascot || typeof mascot.placeNow !== 'function') return
+  placing = true
+  const place = mascot.placeNow
+  mascot.placeNow = (opts) => {
+    try { return dockedPlace() || place(opts) } catch { return place(opts) }
+  }
 }
 
 /* While Pilot is not allowed, its robot is not in the page: one added late

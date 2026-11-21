@@ -105,6 +105,8 @@ RankUp turns a family's chores into a game. A parent assigns chores (called ques
 - No photos: RankUp never takes, sends or keeps a photo. A child who wants to show the job can send a picture by message with their own camera app.
 - A brand-new family's dashboard has "Getting started": add a child, link their phone, add a first chore (three starter chores in one tap), accept a finished one.
 - Streaks: chores accepted on days in a row build a streak, which adds a bonus to XP. Missing a day can use a streak freeze.
+- The daily chore bonus: once a parent has accepted one of a child's chores that day, the child can claim 5 coins on their Home, once a day. A chore only sent in, or sent back, does not count.
+- The weekly goal: each child's Home shows how many of their chores were accepted this week out of the family's goal, which a parent sets in Settings → Weekly goal (5 a week until they choose). The week starts on Monday, or on the family's weekly day.
 
 ## Coins, rewards, pocket money and currency
 - Every accepted chore also pays coins (each world gives them its own name, like Gems). Children spend coins on the family's **rewards** (made in Settings → Rewards catalogue, each with a cost and an optional "each child can take it" limit per week). A bought reward waits on the dashboard until the parent gives it and taps "Mark given". Starter rewards can be added in one tap.

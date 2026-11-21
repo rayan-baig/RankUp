@@ -34,6 +34,7 @@ export default function TrialBanner() {
 
   return (
     <Banner
+      className="mb-3"
       tone="info"
       icon="✨"
       title={days === 1 ? `Last day of your free ${plan.name} trial` : `${days} days left of ${plan.name}, free`}
