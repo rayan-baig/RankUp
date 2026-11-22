@@ -267,7 +267,7 @@ ok('the engine offers no tools when kidView is true', (() => {
   return e.tools().length === 0
 })())
 ok('the storage prefix is RankUp\'s own', config.storagePrefix === 'rankup-pilot')
-ok('the window says the MTRX words', config.name === 'Pilot' && config.tagline === 'Your AI copilot. Powered by you.')
+ok('the window says "Pilot" and RankUp\'s own tagline (0.28.0)', config.name === 'Pilot' && config.tagline === "Your family's chore helper")
 ok('the AI keys are for grown-ups line', /AI keys are for grown-ups \(the AI companies require 18\+\)/.test(config.keyNote))
 ok('and one plain sentence first: what an AI key is, and where a grown-up gets one (0.26.0)',
   /^An AI key is a private code a grown-up makes in the "API keys" part of an AI company's website/.test(config.keyNote)

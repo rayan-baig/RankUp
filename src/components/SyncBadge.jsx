@@ -33,7 +33,9 @@ export default function SyncBadge({ className = '' }) {
   if (signingIn) {
     const before = getSession()
     return (
-      <div className="fixed inset-0 z-50 overflow-y-auto" style={{ background: 'var(--bg)' }}>
+      // data-pilot-modal: a page-covering sheet that isn't a dialog; Pilot's
+      // robot steps back while it shows (src/pilot/pilotRankUp.js, modals).
+      <div className="fixed inset-0 z-50 overflow-y-auto" style={{ background: 'var(--bg)' }} data-pilot-modal="">
         {wrongAccount && (
           <p className="text-center text-sm px-5 pt-6" role="alert" style={{ color: 'var(--bad)' }}>
             That is a different account. Sign in with the one this family uses.

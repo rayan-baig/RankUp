@@ -4,7 +4,7 @@
  *
  *   - never on the front door (0.26.0): only after "I'm a parent", and in
  *     Parent Mode in the tab bar's own slot, on no tab; tapping it opens the
- *     window with the MTRX Horizyn words;
+ *     window with RankUp's own welcome (0.28.0);
  *   - with a (stand-in) AI provider asking to add a chore, the card says
  *     "Pilot wants to: add the chore “Feed the dog” for Ava (30 XP)"; Allow
  *     puts it on Ava's list through the app's own state;
@@ -135,7 +135,7 @@ check('the moving robot wakes up once the page is idle, inside Pilot\'s own elem
 await page.locator('.pilot-launcher').click()
 await page.waitForTimeout(1500)
 const head = await page.evaluate(() => ({ name: document.querySelector('.pilot-word')?.textContent, tag: document.querySelector('.pilot-tagline')?.textContent }))
-check('the window: "Pilot", "Your AI copilot. Powered by you."', head.name === 'Pilot' && head.tag === 'Your AI copilot. Powered by you.', JSON.stringify(head))
+check('the window: "Pilot", "Your family\'s chore helper" (RankUp\'s own, 0.28.0)', head.name === 'Pilot' && head.tag === "Your family's chore helper", JSON.stringify(head))
 check('the 18+ line beside the key settings', /AI keys are for grown-ups/.test(await page.locator('.pilot-root').innerText()))
 await shot(page, 'chat-window')
 

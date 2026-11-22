@@ -2,9 +2,8 @@
  * The fixes from the strict review at 80% (0.27.0), in a real browser.
  * tests/fixes27.mjs holds the rules in plain Node.
  *
- *   - Pilot's opening screen: RankUp's suggestions under the five pills with
- *     no key added, a tap writes the question in the box; no "Image
- *     generation" or "Video generation" in its settings;
+ *   - (Pilot's opening screen: since 0.28.0 tests/fixes28ui.mjs, with core
+ *     1.2.0's own welcome options in place of 0.27.0's row and style rule);
  *   - a computer: the front door in two columns with the demo beside the
  *     ways in, the parent dashboard in two columns from 1100px (one below),
  *     a child's column centred in a frame with the tab bar as wide as its
@@ -139,43 +138,6 @@ console.log('\n=== A child\'s screens on a computer: centred, in a frame ===')
   await go(page, '/kid', 1000)
   const phone = await page.evaluate(() => { const cs = getComputedStyle(document.querySelector('.shell')); return [parseFloat(cs.borderTopLeftRadius), parseFloat(cs.borderTopWidth)] })
   ok('on a phone a child\'s screen has no frame (unchanged)', phone[0] === 0 && phone[1] === 0, JSON.stringify(phone))
-  await ctx.close()
-}
-
-console.log('\n=== Pilot\'s opening screen: RankUp\'s suggestions, chat keys only ===')
-{
-  const { ctx, page } = await open(375, 812)
-  await demo(page)
-  ok('the robot is there in Parent Mode', await waitForPilot(page))
-  await page.locator('.pilot-root .pilot-launcher').click()
-  await page.waitForSelector('.pilot-root .pilot-welcome', { timeout: 8000 }).catch(() => {})
-  await page.waitForTimeout(600)
-  const pills = await page.locator('.pilot-root .pilot-pill').allInnerTexts()
-  ok('the design\'s five pills are unchanged', pills.length === 5 && /Ask anything/.test(pills[0]) && /Customize/.test(pills[4]), JSON.stringify(pills))
-  const starters = await page.locator('.pilot-root [data-testid="pilot-starters"] button').allInnerTexts()
-  ok('with no key added, RankUp\'s suggestions are there too', JSON.stringify(starters.slice(0, 2)) === JSON.stringify(["What's waiting for me?", 'Add a chore for…']) && starters.length === 3, JSON.stringify(starters))
-  const where = await page.evaluate(() => {
-    const row = document.querySelector('.pilot-root [data-testid="pilot-starters"]')
-    return { afterPills: row?.previousElementSibling?.classList.contains('pilot-pills'), inWelcome: Boolean(row?.closest('.pilot-welcome')) }
-  })
-  ok('right under the pills, inside the welcome (so it goes once a chat starts)', where.afterPills && where.inWelcome, JSON.stringify(where))
-  const rowBox = await box(page, '.pilot-root [data-testid="pilot-starters"] button')
-  ok('the first is on the screen without scrolling', rowBox && rowBox.bottom <= 812 && rowBox.top > 0, JSON.stringify(rowBox))
-  await shot(page, 'm-pilot-open')
-  await page.locator('.pilot-root [data-testid="pilot-starters"] button').first().click()
-  await page.waitForTimeout(300)
-  ok('a tap writes the question in the message box (no key: it waits there)', (await page.locator('.pilot-root .pilot-input').inputValue()) === "What's waiting for me to review?")
-  await page.locator('.pilot-root .pilot-pill', { hasText: 'Customize' }).click()
-  await page.waitForTimeout(700)
-  const settings = await page.evaluate(() => {
-    const view = document.querySelector('.pilot-root .pilot-settings-view')
-    const visible = (el) => el && el.getClientRects().length > 0 && getComputedStyle(el).display !== 'none'
-    const summaries = [...view.querySelectorAll('summary')].filter(visible).map((s) => s.innerText)
-    return { summaries, text: view.innerText, chatKeys: /Chat keys/.test(view.innerText) }
-  })
-  ok('Pilot\'s settings: chat keys are there', settings.chatKeys)
-  ok('and no "Image generation" or "Video generation"', !/Image generation|Video generation|image key|video key/i.test(settings.text) && settings.summaries.length === 0, JSON.stringify(settings.summaries))
-  await shot(page, 'm-pilot-settings')
   await ctx.close()
 }
 
