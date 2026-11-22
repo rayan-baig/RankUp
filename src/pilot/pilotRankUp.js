@@ -6,7 +6,7 @@
  * the page has loaded, so it is never on a child's phone and never part of
  * the first load. It:
  *
- *   - adds the core's one script tag (public/pilot/, core 1.2.0, copied
+ *   - adds the core's one script tag (public/pilot/, core 1.2.1, copied
  *     unchanged from the MTRX Horizyn site), which
  *     then loads public/pilot-rankup.js, which calls start() here;
  *   - mounts Pilot with RankUp's config: who is using it, which screen, its
@@ -289,15 +289,11 @@ const config = {
   // its corner instead of hanging off the screen's edge. In Parent Mode on a
   // phone it is never tucked: it sits in the tab bar's slot (dockedPlace).
   keepInViewport: true,
-  // No first look (core 1.2.0 shows the robot whole, with a glow, for 4
-  // seconds on a visit's first page). It marks Pilot's root with the class
-  // "pilot-hello", the same name as the window's greeting bubble, so a parent
-  // who taps the robot in those 4 seconds gets the bubble's style on the
-  // whole of Pilot: position: relative takes the robot out of the tab bar's
-  // slot and drops it below the screen, and the window's icons and key note
-  // lose their look until the 4 seconds are up. In the slot the first look
-  // adds nothing else: the robot is never tucked away there.
-  revealMs: 0,
+  // The first look is on (the core's 4 seconds, whole and with a glow, on a
+  // visit's first page). 0.28.0 turned it off, because core 1.2.0 marked it
+  // with the class of the window's greeting bubble; core 1.2.1 marks it
+  // "pilot-revealing", so opening Pilot in those seconds leaves the robot in
+  // the tab bar's slot. In the slot it adds only the glow: never tucked there.
   // RankUp's pop-ups are role="dialog" (components/ui.jsx Modal, the
   // moments), which the core already steps back for. The one that isn't, the
   // "sign in again" sheet (components/SyncBadge.jsx), carries data-pilot-modal.
@@ -367,7 +363,8 @@ function start() {
  * answer placeNow gives; in the slot this answers first and never tucks, so
  * it changes nothing there. Stepping back for a pop-up is decided before
  * placeNow is asked, so the robot still hides behind one in the slot. The
- * first look is off (revealMs: 0 in the config, which says why).
+ * first look (core 1.2.1, back on since 0.28.1) only adds its glow here:
+ * this answers "not tucked away" with or without it.
  */
 let placing = false
 export function dockedPlace(doc = document) {

@@ -11,9 +11,10 @@
  *     only fills the box;
  *   - the robot steps back for a pop-up (Review's "Send back" dialog, and a
  *     sheet marked data-pilot-modal), stays in the tab bar's slot on a phone
- *     (opened at once on a visit's first page too: no first look, whose class
- *     would take it out of the slot) and while scrolling, and on a computer
- *     and the gift page stays inside the screen and off the page while
+ *     (opened during a visit's first look too: since 0.28.1, core 1.2.1, the
+ *     first look is on, and its class is no longer the greeting bubble's)
+ *     and while scrolling, and on a computer (opened during the first look
+ *     too) and the gift page stays inside the screen and off the page while
  *     scrolling and typing;
  *   - still absent on the front door, the world picker and a child's screens.
  */
@@ -56,7 +57,7 @@ const robot = (page) => page.evaluate(() => {
   const root = document.querySelector('.pilot-root')
   const b = root.querySelector('.pilot-launcher').getBoundingClientRect()
   return { left: b.left, top: b.top, right: b.right, bottom: b.bottom, peek: root.classList.contains('pilot-peek'),
-    hello: root.classList.contains('pilot-hello'), yield: root.classList.contains('pilot-yield'),
+    revealing: root.classList.contains('pilot-revealing'), yield: root.classList.contains('pilot-yield'),
     hidden: getComputedStyle(root).visibility === 'hidden' }
 })
 const inside = (r, w, h) => r.left >= 0 && r.top >= 0 && r.right <= w + 0.5 && r.bottom <= h + 0.5
@@ -166,22 +167,29 @@ console.log('\n=== Out of the way: pop-ups, the tab bar\'s slot, scrolling, typi
   await waitForPilot(page)
   const first = await robot(page)
   const slot = await page.evaluate(() => { const b = document.querySelector('[data-pilot-dock]').getBoundingClientRect(); return { left: b.left, right: b.right } })
-  ok('375px: on the visit\'s first page, no first look (revealMs: 0); in the tab bar\'s slot, whole', !first.hello && !first.peek
+  ok('375px: on the visit\'s first page, the first look (0.28.1); in the tab bar\'s slot, whole', first.revealing && !first.peek
     && Math.abs((first.left + first.right) / 2 - (slot.left + slot.right) / 2) < 8 && inside(first, 375, 812), JSON.stringify({ first, slot }))
+  await shot(page, '375-first-look')
   await page.locator('.pilot-root .pilot-launcher').click()
   await page.waitForSelector('.pilot-root .pilot-welcome', { timeout: 8000 }).catch(() => {})
   await page.waitForTimeout(300)
   const early = await page.evaluate(() => {
     const root = document.querySelector('.pilot-root')
     const i = root.querySelector('.pilot-pill .pilot-icon')
-    return { position: getComputedStyle(root).position, padding: getComputedStyle(root).paddingTop, stroke: getComputedStyle(i).stroke !== 'none' }
+    const hello = root.querySelector('.pilot-panel .pilot-hello')
+    const win = root.querySelector('.pilot-panel').getBoundingClientRect()
+    return { revealing: root.classList.contains('pilot-revealing'), position: getComputedStyle(root).position, padding: getComputedStyle(root).paddingTop,
+      stroke: getComputedStyle(i).stroke !== 'none', bubble: Boolean(hello) && getComputedStyle(hello).position === 'relative',
+      win: { left: win.left, top: win.top, right: win.right, bottom: win.bottom } }
   })
-  ok('opened at once: Pilot stays fixed in its place, the window drawn as it should be (no greeting style on the robot)',
-    early.position === 'fixed' && early.padding === '0px' && early.stroke, JSON.stringify(early))
+  ok('opened during the first look: Pilot stays fixed in its place, the window drawn as it should be (no greeting style on the robot)',
+    early.revealing && early.position === 'fixed' && early.padding === '0px' && early.stroke && early.bubble, JSON.stringify(early))
+  ok('and the window is inside the screen', inside(early.win, 375, 812), JSON.stringify(early.win))
+  await shot(page, '375-first-look-open')
   await page.locator('.pilot-root .pilot-win[aria-label="Close Pilot"]').click().catch(() => {})
   await page.waitForTimeout(800)
   const closed = await robot(page)
-  ok('closed again: back in the slot', Math.abs(closed.left - first.left) < 2 && Math.abs(closed.top - first.top) < 2, JSON.stringify({ closed, first }))
+  ok('closed again: back in the slot (still in the first look or just after)', Math.abs(closed.left - first.left) < 2 && Math.abs(closed.top - first.top) < 2, JSON.stringify({ closed, first }))
   await page.waitForTimeout(3500)
   const afterLook = await robot(page)
   ok('a few seconds on, still in the slot, never tucked or shrunk', !afterLook.peek && Math.abs(afterLook.left - first.left) < 2 && Math.abs(afterLook.top - first.top) < 2, JSON.stringify(afterLook))
@@ -220,6 +228,28 @@ console.log('\n=== Out of the way: pop-ups, the tab bar\'s slot, scrolling, typi
   const { ctx, page } = await open(1440, 900)
   await demo(page)
   await waitForPilot(page)
+  // Opened during the visit's first look (0.28.1): the robot keeps its place
+  // and the window is drawn as it should be.
+  const look = await robot(page)
+  await page.locator('.pilot-root .pilot-launcher').click()
+  await page.waitForSelector('.pilot-root .pilot-welcome', { timeout: 8000 }).catch(() => {})
+  await page.waitForTimeout(300)
+  const wide = await page.evaluate(() => {
+    const root = document.querySelector('.pilot-root')
+    const i = root.querySelector('.pilot-pill .pilot-icon')
+    const win = root.querySelector('.pilot-panel').getBoundingClientRect()
+    return { revealing: root.classList.contains('pilot-revealing'), position: getComputedStyle(root).position, padding: getComputedStyle(root).paddingTop,
+      stroke: getComputedStyle(i).stroke !== 'none', win: { left: win.left, top: win.top, right: win.right, bottom: win.bottom } }
+  })
+  await page.mouse.move(10, 10) // off the robot, which lifts a little on hover
+  await page.waitForTimeout(300)
+  const opened = await robot(page)
+  ok('1440px: on the visit\'s first page, the first look, whole and inside the screen', look.revealing && !look.peek && inside(look, 1440, 900), JSON.stringify(look))
+  ok('1440px: opened during the first look: Pilot stays fixed, the robot where it was, the window inside the screen and drawn as it should be',
+    wide.revealing && wide.position === 'fixed' && wide.padding === '0px' && wide.stroke && inside(wide.win, 1440, 900)
+    && Math.abs(opened.left - look.left) < 3 && Math.abs(opened.top - look.top) < 3, JSON.stringify({ wide, look, opened }))
+  await shot(page, '1440-first-look-open')
+  await page.locator('.pilot-root .pilot-win[aria-label="Close Pilot"]').click().catch(() => {})
   await page.waitForTimeout(4500)
   for (const y of [0, 600, 1400]) {
     await page.evaluate((v) => window.scrollTo(0, v), y)

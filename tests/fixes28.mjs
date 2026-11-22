@@ -1,12 +1,12 @@
 /**
- * 0.28.0, in plain Node: Pilot core 1.2.0 and RankUp's own Pilot welcome.
+ * 0.28.0, in plain Node: Pilot core 1.2 and RankUp's own Pilot welcome.
  * tests/fixes28ui.mjs walks the same in a real browser.
  *
- *   1. the core is 1.2.0, the MTRX Horizyn site's files (commit 4c82361)
- *      byte for byte;
+ *   1. the core is 1.2.1 (since 0.28.1; 1.2.0 in 0.28.0), the MTRX Horizyn
+ *      site's files (commit 17b4711) byte for byte;
  *   2. RankUp's welcome: its tagline and five pills, chat keys only, kept on
- *      the screen, its one pop-up that isn't a dialog, the avoid list and the
- *      tab bar's slot as before;
+ *      the screen, the first look on again (0.28.1), its one pop-up that
+ *      isn't a dialog, the avoid list and the tab bar's slot as before;
  *   3. this screen's suggestions on the welcome come from the core now, with
  *      what a pill already does left out; the whole list once chatting;
  *   4. 0.27.0's workarounds are gone: the row RankUp put into the welcome
@@ -25,28 +25,28 @@ const ok = (label, cond, detail = '') => {
 const read = (f) => readFileSync(f, 'utf8')
 const code = (f) => read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-console.log('\n=== 1. Pilot core 1.2.0, copied unchanged ===')
+console.log('\n=== 1. Pilot core 1.2.1, copied unchanged ===')
 // The first 16 hex digits of each file's sha256 at MTRX Horizyn commit
-// 4c82361. A file edited here, or copied from another commit, fails.
+// 17b4711 (core 1.2.1). A file edited here, or copied from another commit, fails.
 const CORE = [
-  ['pilot.js', 'b08414622cf07124'],
-  ['pilot-store.js', 'b43fa177c626d5b7'],
-  ['pilot-mascot.js', 'd3e3c0d066f50c67'],
-  ['pilot-engine.js', '73df16d8c108676d'],
-  ['pilot-providers.js', '3d86f09a1186a80c'],
-  ['pilot-media.js', '630cdf62403c27c5'],
-  ['pilot-render.js', 'f970ba3fe286e30e'],
-  ['pilot-panel.js', 'fe80cdb71981b3a0'],
-  ['pilot-motion.js', 'b3e623dec9d46991'],
-  ['pilot-actor.js', '412fa7979ac219fe'],
-  ['pilot.css', '96ffe0be9cf86f25'],
-  ['pilot-panel.css', '51091b11ebcb2b77'],
-  ['pilot-actor.css', 'f1d7cddaaf7f84a9'],
+  ['pilot.js', 'e8ff2e6f98c895ba'],
+  ['pilot-store.js', '985ee4c2d35437e3'],
+  ['pilot-mascot.js', '147256f8a2e41923'],
+  ['pilot-engine.js', 'b49e7bca4079b883'],
+  ['pilot-providers.js', '230950ca5c0ea582'],
+  ['pilot-media.js', 'bdc4392467daf45e'],
+  ['pilot-render.js', '3d5d63605d88402a'],
+  ['pilot-panel.js', '040d17fded5c3e35'],
+  ['pilot-motion.js', 'f1d9c435b695218e'],
+  ['pilot-actor.js', 'fa7b58d8d86742a9'],
+  ['pilot.css', '109d82483332adad'],
+  ['pilot-panel.css', '89bfed4b1249e719'],
+  ['pilot-actor.css', '8fb7a9f5f2864a92'],
 ]
 const changed = CORE.filter(([f, want]) => createHash('sha256').update(readFileSync(`public/pilot/${f}`)).digest('hex').slice(0, 16) !== want)
-ok('all thirteen core files are 1.2.0 as the MTRX Horizyn site has them', changed.length === 0, changed.map(([f]) => f).join(', '))
-ok('each says "Pilot core 1.2.0" on its first line', CORE.every(([f]) => read(`public/pilot/${f}`).split('\n')[0].includes(`Pilot core 1.2.0 · ${f}`)))
-ok('and the loader\'s VERSION is 1.2.0', /const VERSION = "1\.2\.0"/.test(read('public/pilot/pilot.js')))
+ok('all thirteen core files are 1.2.1 as the MTRX Horizyn site has them', changed.length === 0, changed.map(([f]) => f).join(', '))
+ok('each says "Pilot core 1.2.1" on its first line', CORE.every(([f]) => read(`public/pilot/${f}`).split('\n')[0].includes(`Pilot core 1.2.1 · ${f}`)))
+ok('and the loader\'s VERSION is 1.2.1', /const VERSION = "1\.2\.1"/.test(read('public/pilot/pilot.js')))
 
 console.log('\n=== 2. RankUp\'s own welcome ===')
 const { pilotSnapshot, updatePilot } = await import('../src/lib/pilotGate.js')
@@ -77,10 +77,22 @@ ok('the design\'s five are not what RankUp shows', !pills.some((p) => /Ask anyth
 const hidden = JSON.parse(JSON.stringify([...Panel.hiddenSections(config.hideKeySections)]))
 ok('no picture or video key settings (hideKeySections)', JSON.stringify(hidden) === '["image","video"]', JSON.stringify(hidden))
 ok('kept on the screen when tucked away (keepInViewport)', config.keepInViewport === true)
-ok('no first look (revealMs: 0): its "pilot-hello" class on Pilot\'s root is also the greeting bubble\'s, whose style would take the robot out of the slot',
-  config.revealMs === 0 && /rootEl\.classList\.add\("pilot-hello"\)/.test(read('public/pilot/pilot.js'))
-  && /\.pilot-hello \{\s*position: relative;/.test(read('public/pilot/pilot-panel.css')))
-ok('and the core turns the first look off for 0', /M\(\)\.firstLook\(storage\("sessionStorage"\), `\$\{store\.prefix\}-hello`, config\.revealMs\)/.test(read('public/pilot/pilot.js'))
+// 0.28.1: core 1.2.1 marks the first look "pilot-revealing", so RankUp's
+// revealMs: 0 (0.28.0, which turned the first look off) is gone.
+const rootClasses = [...read('public/pilot/pilot.js').matchAll(/rootEl\.classList\.add\("([\w-]+)"\)/g)].map((m) => m[1])
+const panelCss = read('public/pilot/pilot-panel.css')
+ok('the first look is on again: no revealMs in RankUp\'s config, so the core\'s 4 seconds', !('revealMs' in config) && !/revealMs/.test(code('src/pilot/pilotRankUp.js')))
+ok('its class on Pilot\'s root is "pilot-revealing", never a class the chat window styles (core 1.2.0\'s "pilot-hello" was the greeting bubble\'s)',
+  rootClasses.includes('pilot-revealing') && !rootClasses.includes('pilot-hello')
+  && rootClasses.every((c) => !new RegExp(`\\.${c}(?![\\w-])`).test(panelCss)), rootClasses.join(', '))
+ok('and RankUp\'s own code and styles never use "pilot-hello" for it', !/pilot-hello/.test(code('src/pilot/pilotRankUp.js')) && !/pilot-hello/.test(read('src/styles/index.css')))
+const mascotBox = { window: {}, document: {} }
+vm.runInNewContext(read('public/pilot/pilot-mascot.js'), mascotBox)
+const tab = (() => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, String(v)) } })()
+ok('with RankUp\'s config the first page of a visit gets the 4 seconds, the next page none',
+  mascotBox.window.PilotMascot.firstLook(tab, 'rankup-pilot-hello', config.revealMs) === 4000
+  && mascotBox.window.PilotMascot.firstLook(tab, 'rankup-pilot-hello', config.revealMs) === 0)
+ok('the core still turns the first look off for 0, and on for nothing given', /M\(\)\.firstLook\(storage\("sessionStorage"\), `\$\{store\.prefix\}-hello`, config\.revealMs\)/.test(read('public/pilot/pilot.js'))
   && /if \(!ms\) return;/.test(read('public/pilot/pilot.js')))
 ok('the "sign in again" sheet, which isn\'t a dialog, is one of Pilot\'s pop-ups', JSON.stringify(config.modals) === '["[data-pilot-modal]"]'
   && /data-pilot-modal=""/.test(read('src/components/SyncBadge.jsx')))
