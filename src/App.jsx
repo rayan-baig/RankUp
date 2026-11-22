@@ -7,6 +7,7 @@ import { resolveKidTheme } from './data/kidThemes.js'
 import { storyProgress } from './lib/dragonFight.js'
 import { resolveParentTheme } from './data/parentThemes.js'
 import { levelFromXp } from './lib/xp.js'
+import { levelKey } from './lib/kidLevel.js'
 
 import ThemeBackground from './components/ThemeBackground.jsx'
 import Atmosphere from './components/Atmosphere.jsx'
@@ -451,7 +452,11 @@ export default function App() {
             state.pendingLevelUp.to,
           )}
           streak={state.pendingStreak?.kidId === state.pendingLevelUp.kidId ? state.pendingStreak : null}
-          onClose={() => dispatch({ type: 'CLEAR_LEVEL_UP' })}
+          onClose={() => {
+            // Seen by the child on their own phone: not shown again on Home (lib/kidLevel.js).
+            if (isKidArea) dispatch({ type: 'SEE_MOMENT', key: levelKey(state.pendingLevelUp.kidId, state.pendingLevelUp.to) })
+            dispatch({ type: 'CLEAR_LEVEL_UP' })
+          }}
         />
       )}
       {/* A streak on its own, in the child's half only: a parent does not need

@@ -3,9 +3,10 @@ import { useApp } from '../state/AppContext.jsx'
 import { trialDaysLeft, onTrial, planOf } from '../state/reducer.js'
 import { TIERS } from '../state/initialState.js'
 import PlanCompare from './PlanCompare.jsx'
-import { Banner, Button } from './ui.jsx'
+import { Button } from './ui.jsx'
 import { navigate } from '../lib/router.js'
 import { newFamily } from '../lib/firstWeek.js'
+import { trialHeadsUp } from '../lib/trialHeadsUp.js'
 
 /**
  * What the free fortnight is, and what the plan gives.
@@ -28,7 +29,13 @@ import { newFamily } from '../lib/firstWeek.js'
  * the full banner again, for everyone.
  *
  * "What you get" (and "Compare plans" on the full banner) opens a one-screen
- * comparison of the three plans, in words (0.29.0).
+ * comparison of the three plans, in words (0.29.0), across the banner's whole
+ * width with a Close button of its own (0.30.0). It starts closed every time.
+ *
+ * In the last three days (0.30.0) the full banner also gives a gentle
+ * heads-up: which of the trial's extras stop when it ends, by name (the
+ * children's 1.5× boost, the Elite tools), on the plan they pay for, and
+ * that nothing earned goes. Parent Mode only, never a price.
  */
 export default function TrialBanner() {
   const { state } = useApp()
@@ -53,7 +60,8 @@ export default function TrialBanner() {
     </>
   )
 
-  const compare = more && <PlanCompare trialTier={plan.id} />
+  const compare = more && <PlanCompare trialTier={plan.id} onClose={() => setMore(false)} />
+  const headsUp = days <= 3 ? trialHeadsUp(state, plan, paid, days) : null
 
   if (compact) {
     return (
@@ -76,27 +84,29 @@ export default function TrialBanner() {
     )
   }
 
+  /* The days and "See plans" on one line, then the words, the heads-up and
+     the comparison across the banner's whole width (0.30.0): beside the
+     button, on a phone, the words were a narrow column of eight lines. */
   return (
-    <div data-testid="trial-banner">
-    <Banner
-      className="mb-3"
-      tone="info"
-      icon="✨"
-      title={days === 1 ? `Last day of your free ${plan.name} trial` : `${days} days left of ${plan.name}, free`}
-      action={
-        <Button className="px-3 py-2 min-h-0 text-sm" onClick={() => navigate('/parent/plan')}>
+    <div className="card-flat trial-full mb-3 p-3" data-testid="trial-banner">
+      <div className="flex gap-2.5 items-center">
+        <span className="text-lg leading-none" aria-hidden="true">✨</span>
+        <div className="min-w-0 flex-1 font-semibold text-sm trial-slim-title">
+          {days === 1 ? `Last day of your free ${plan.name} trial` : `${days} days left of ${plan.name}, free`}
+        </div>
+        <Button className="px-3 py-2 min-h-0 text-sm shrink-0" onClick={() => navigate('/parent/plan')}>
           See plans
         </Button>
-      }
-    >
-      {words}
-      {' '}
-      <button type="button" className="tap-link underline font-semibold" aria-expanded={more} onClick={() => setMore((m) => !m)}>
-        Compare plans
-      </button>
+      </div>
+      <p className="text-sm text-muted trial-words mt-1.5">
+        {words}
+        {' '}
+        <button type="button" className="tap-inline underline font-semibold" aria-expanded={more} onClick={() => setMore((m) => !m)}>
+          Compare plans
+        </button>
+      </p>
+      {headsUp && <p className="trial-heads-up" data-testid="trial-heads-up">{headsUp}</p>}
       {compare}
-    </Banner>
     </div>
   )
 }
-

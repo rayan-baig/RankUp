@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useApp, useElite, pendingSubmissions } from '../../state/AppContext.jsx'
 import { levelFromXp, formatXp } from '../../lib/xp.js'
 import { lastSevenDays, relativeTime } from '../../lib/dates.js'
@@ -24,12 +24,14 @@ import { PickedNotice } from '../../components/KidThemesParent.jsx'
 import { ReferralRewardNotice } from '../../components/InviteCard.jsx'
 import HowItWorks from '../../components/HowItWorks.jsx'
 import FirstWeek from '../../components/FirstWeek.jsx'
+import ThisWeek from '../../components/ThisWeek.jsx'
 import DemoTour from '../../components/DemoTour.jsx'
 import UpgradeNudge from '../../components/UpgradeNudge.jsx'
 import { useDeals, GiftSaleBanner, GiftAYearCard } from '../../components/DealCards.jsx'
 import EmptyNext from '../../components/EmptyNext.jsx'
 import { EMPTY_STATES } from '../../data/emptyStates.js'
-import { STARTER_REWARDS, newFamily } from '../../lib/firstWeek.js'
+import { STARTER_REWARDS, newFamily, showFirstWeek, showHowItWorks } from '../../lib/firstWeek.js'
+import { weekCompare } from '../../lib/thisWeek.js'
 import { plural } from '../../lib/plural.js'
 import { useMedia } from '../../lib/useMedia.js'
 // The desktop layouts (two columns here), fetched with this screen.
@@ -85,6 +87,138 @@ export default function ParentDashboard() {
       <Stat icon="⭐" value={formatXp(totalWeekXp)} label="XP this week" />
     </div>
   )
+
+  /*
+   * The cards that may sit in either column on a computer (0.30.0). Each
+   * goes, in this order, to whichever column is shorter so far, by a rough
+   * height for what it holds, so the two columns end near each other
+   * whatever the family: one child and no checklist (once a big empty space
+   * under a single card), two, four or more. On a phone they all follow the
+   * numbers, in this order, as before.
+   */
+  const feedRows = Math.min(8, feed.length)
+  const floating = [
+    desk && { id: 'week', h: weekCompare(state).any ? 150 : 0, el: <ThisWeek /> },
+    state.familyGoal && {
+      id: 'goal',
+      h: 110,
+      el: (
+        <>
+          <SectionTitle>Family goal</SectionTitle>
+          <Card className="mb-3">
+            <div className="flex justify-between text-sm mb-2">
+              <span className="font-semibold">{state.familyGoal.name}</span>
+              <span className="text-muted">
+                {formatXp(familyGoalProgress(state))} / {formatXp(state.familyGoal.targetXp)} XP
+              </span>
+            </div>
+            <ProgressBar
+              value={familyGoalProgress(state)}
+              max={state.familyGoal.targetXp}
+              height={12}
+              label="Family goal progress"
+            />
+          </Card>
+        </>
+      ),
+    },
+    {
+      id: 'activity',
+      h: 88 + (feedRows ? feedRows * 29 : 30),
+      el: (
+        <>
+          <div className="flex items-baseline justify-between">
+            <SectionTitle>Recent activity</SectionTitle>
+            {state.submissions.length > 0 && (
+              <button type="button" className="tap-link text-xs underline text-muted" onClick={() => navigate('/parent/history')}>
+                Chore history
+              </button>
+            )}
+          </div>
+          <Card className="mb-3">
+            {feed.length === 0 ? (
+              <div data-testid="empty-activity">
+                <p className="text-sm font-semibold">{EMPTY_STATES.activity.title}</p>
+                <p className="text-xs text-muted">{EMPTY_STATES.activity.body}</p>
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {[...feed].reverse().slice(0, 8).map((e) => {
+                  const kid = state.kids.find((k) => k.id === e.kidId)
+                  return (
+                    <li key={e.id} className="flex items-baseline justify-between gap-2 text-sm">
+                      <span className="truncate" data-pilot-private="">{describeEvent(e, kid)}</span>
+                      <span className="text-[11px] text-muted shrink-0">{relativeTime(e.at)}</span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </Card>
+        </>
+      ),
+    },
+    {
+      id: 'tools',
+      h: newFamily(state) ? 72 : 150,
+      /* For a new family, one row that opens: the steps and their child come
+         first. Once the family is going, the three tiles as before. */
+      el: newFamily(state) ? (
+        <EliteToolsFold elite={elite} />
+      ) : (
+        <>
+          <SectionTitle>Elite tools</SectionTitle>
+          <div className="mb-3"><EliteTools elite={elite} /></div>
+        </>
+      ),
+    },
+    {
+      id: 'school',
+      h: 96,
+      /* Not an Elite tool: the school pays for the league, so every family
+         whose school plays can join it, on any plan. */
+      el: (
+        <button
+          type="button"
+          onClick={() => navigate('/parent/school')}
+          className="card w-full mb-3 p-3 flex items-center gap-3 text-left transition-transform active:scale-[0.98]"
+        >
+          <span className="text-2xl shrink-0" aria-hidden="true">🏫</span>
+          <span className="flex-1 min-w-0">
+            <span className="block font-semibold text-sm">School League</span>
+            <span className="block text-xs text-muted">Chores count for your child’s school. Best school in the district wins.</span>
+          </span>
+          <span aria-hidden="true" className="text-muted">›</span>
+        </button>
+      ),
+    },
+    !elite && {
+      id: 'elite',
+      h: 110,
+      el: (
+        <Banner tone="info" icon="⚡" title={`${TIERS.elite.name} — ${priceTag(TIERS.elite)}`} action={<Button className="px-3 py-2 min-h-0 text-xs shrink-0" onClick={() => navigate('/parent/plan')}>See it</Button>}>
+          {elitePitch()}
+        </Banner>
+      ),
+    },
+  ].filter(Boolean)
+  const left = []
+  const right = []
+  if (desk) {
+    // What is already in each column, roughly, in pixels.
+    let leftH = 44 + Math.max(1, state.kids.length) * 140
+      + (state.demo ? 300 : 0)
+      + (showFirstWeek(state) ? 380 : 0)
+      + (pending.length ? 92 : 0)
+      + (owed.length ? 50 + owed.length * 44 : 0)
+      + (state.kids.length > 0 && (state.rewards || []).length === 0 ? 170 : 0)
+    let rightH = 80 + (showHowItWorks(state) ? 200 : 0)
+    for (const c of floating) {
+      if (rightH <= leftH) { right.push(c); rightH += c.h } else { left.push(c); leftH += c.h }
+    }
+  } else {
+    right.push(...floating)
+  }
 
   /*
    * On a phone, one column. On a wide screen (1100px and up, styles/desk.css)
@@ -243,6 +377,7 @@ export default function ParentDashboard() {
       {/* Nothing for a child to save up for yet: three to start, one tap. */}
       {state.kids.length > 0 && (state.rewards || []).length === 0 && <StarterRewards />}
 
+      {left.map((c) => <Fragment key={c.id}>{c.el}</Fragment>)}
       </div>
 
       <div className="dash-side">
@@ -252,86 +387,8 @@ export default function ParentDashboard() {
           <HowItWorks />
         </>
       )}
-      {state.familyGoal && (
-        <>
-          <SectionTitle>Family goal</SectionTitle>
-          <Card className="mb-3">
-            <div className="flex justify-between text-sm mb-2">
-              <span className="font-semibold">{state.familyGoal.name}</span>
-              <span className="text-muted">
-                {formatXp(familyGoalProgress(state))} / {formatXp(state.familyGoal.targetXp)} XP
-              </span>
-            </div>
-            <ProgressBar
-              value={familyGoalProgress(state)}
-              max={state.familyGoal.targetXp}
-              height={12}
-              label="Family goal progress"
-            />
-          </Card>
-        </>
-      )}
-
-      <div className="flex items-baseline justify-between">
-        <SectionTitle>Recent activity</SectionTitle>
-        {state.submissions.length > 0 && (
-          <button type="button" className="tap-link text-xs underline text-muted" onClick={() => navigate('/parent/history')}>
-            Chore history
-          </button>
-        )}
-      </div>
-      <Card className="mb-3">
-        {feed.length === 0 ? (
-          <div data-testid="empty-activity">
-            <p className="text-sm font-semibold">{EMPTY_STATES.activity.title}</p>
-            <p className="text-xs text-muted">{EMPTY_STATES.activity.body}</p>
-          </div>
-        ) : (
-          <ul className="space-y-2">
-            {[...feed].reverse().slice(0, 8).map((e) => {
-              const kid = state.kids.find((k) => k.id === e.kidId)
-              return (
-                <li key={e.id} className="flex items-baseline justify-between gap-2 text-sm">
-                  <span className="truncate" data-pilot-private="">{describeEvent(e, kid)}</span>
-                  <span className="text-[11px] text-muted shrink-0">{relativeTime(e.at)}</span>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </Card>
-
-      {/* For a new family, one row that opens: the steps and their child come
-          first. Once the family is going, the three tiles as before. */}
-      {newFamily(state) ? (
-        <EliteToolsFold elite={elite} />
-      ) : (
-        <>
-          <SectionTitle>Elite tools</SectionTitle>
-          <div className="mb-3"><EliteTools elite={elite} /></div>
-        </>
-      )}
-
-      {/* Not an Elite tool: the school pays for the league, so every family
-          whose school plays can join it, on any plan. */}
-      <button
-        type="button"
-        onClick={() => navigate('/parent/school')}
-        className="card w-full mb-3 p-3 flex items-center gap-3 text-left transition-transform active:scale-[0.98]"
-      >
-        <span className="text-2xl shrink-0" aria-hidden="true">🏫</span>
-        <span className="flex-1 min-w-0">
-          <span className="block font-semibold text-sm">School League</span>
-          <span className="block text-xs text-muted">Chores count for your child’s school. Best school in the district wins.</span>
-        </span>
-        <span aria-hidden="true" className="text-muted">›</span>
-      </button>
-
-      {!elite && (
-        <Banner tone="info" icon="⚡" title={`${TIERS.elite.name} — ${priceTag(TIERS.elite)}`} action={<Button className="px-3 py-2 min-h-0 text-xs shrink-0" onClick={() => navigate('/parent/plan')}>See it</Button>}>
-          {elitePitch()}
-        </Banner>
-      )}
+      {!desk && <ThisWeek />}
+      {right.map((c) => <Fragment key={c.id}>{c.el}</Fragment>)}
       </div>
       </div>
     </Screen>

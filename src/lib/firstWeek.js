@@ -77,7 +77,10 @@ export function firstWeekSteps(state) {
     },
     {
       id: 'pair',
-      label: `Link ${kids[0] ? `${firstKid}'s` : 'their'} phone`,
+      // A family that shares one phone has nothing to link: the step says
+      // what they chose, not a crossed-out "Link Zed's phone" (0.30.0).
+      label: sharedPhone && !paired ? 'Phone: shared with a grown-up' : `Link ${kids[0] ? `${firstKid}'s` : 'their'} phone`,
+      plain: sharedPhone && !paired,
       // The code is made on the parent's phone for one child, and typed on
       // the child's: the way linking works since 0.22.0.
       line: `In Settings, Link a kid's device, tap “Code for ${firstKid}”.`,

@@ -26,7 +26,7 @@ const day = 86400000
  * Bump this whenever what the demo contains changes, so saved copies of
  * the old one are rebuilt instead of lingering for ever.
  */
-export const DEMO_VERSION = 6
+export const DEMO_VERSION = 7
 
 /**
  * The only names in the demo. Made up, fixed, first names only: no real
@@ -113,6 +113,18 @@ export function buildDemoFamily() {
         x.id === sub.id ? { ...x, submittedAt: ago(daysAgo), decidedAt: ago(daysAgo) } : x),
     }
   }
+
+  /*
+   * And the week before (0.30.0), so the dashboard's "This week" has a week
+   * to compare with: three small chores, unpaid, nine and ten days ago.
+   */
+  const LAST_WEEK = [
+    [ava.id, { title: 'Feed the pet', category: 'home', difficulty: 'easy' }, 10],
+    [ava.id, { title: 'Set the table', category: 'kitchen', difficulty: 'easy' }, 9],
+    [noah.id, { title: 'Sort the recycling', category: 'kitchen', difficulty: 'medium' }, 9],
+  ]
+  for (const [kidId, quest] of LAST_WEEK) s = run(s, assign(kidId, [quest]))
+  for (const [kidId, quest, daysAgo] of LAST_WEEK) s = finish(s, quest.title, kidId, daysAgo)
 
   s = finish(s, 'Make your bed', ava.id, 3)
   s = finish(s, 'Load the dishwasher', ava.id, 2)

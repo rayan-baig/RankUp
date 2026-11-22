@@ -67,6 +67,7 @@ const SUITES = {
     { file: 'fixes27.mjs' },
     { file: 'fixes28.mjs' },
     { file: 'fixes29.mjs' },
+    { file: 'fixes30.mjs' },
   ],
   // The app in a real browser, against the dev server on :5173 and the mock
   // API on :54321 (supabase/test/up.sh starts both).
@@ -129,6 +130,7 @@ const SUITES = {
     { file: 'fixes27ui.mjs', weight: 60 },
     { file: 'fixes28ui.mjs', weight: 70 },
     { file: 'fixes29ui.mjs', weight: 120 },
+    { file: 'fixes30ui.mjs', weight: 110 },
   ],
   // Two or more browsers against the mock API and a real Postgres.
   sync: [

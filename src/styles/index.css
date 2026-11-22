@@ -579,6 +579,102 @@
  * ------------------------------------------------------------------------- */
 @keyframes rankup-sweep   { from { width: 0 } to { width: 100% } }
 @keyframes rankup-fill    { from { width: 18% } to { width: 72% } }
+
+/*
+ * 0.30.0: the loop's phone shows a child's world screen, in Pegasus
+ * Horizon's own colours (data/kidThemes.js), whatever the front door's own
+ * theme: Noah's picture, level and XP bar, and on the last beat the bar
+ * filling and "Level up!". All of it here, so the component carries no
+ * inline style and almost nothing in the first file.
+ */
+.loop { max-width: 300px; }
+.loop-phone {
+  --lp-bg: #f2ecff; --lp-surface: #ffffff; --lp-line: #cfc2f5; --lp-ink: #33235e;
+  --lp-muted: #6a5a98; --lp-accent: #7c5cd6; --lp-accent-2: #1b9ae4;
+  width: 206px;
+  height: 252px;
+  border-radius: 26px;
+  border: 2px solid var(--line);
+  color: var(--lp-ink);
+  background:
+    radial-gradient(120px 90px at 85% 12%, rgb(27 154 228 / 0.22), transparent 70%),
+    radial-gradient(140px 110px at 10% 90%, rgb(124 92 214 / 0.25), transparent 70%),
+    linear-gradient(170deg, #f6f1ff, #e6ddff);
+  box-shadow: var(--shadow);
+}
+.loop-compact { height: 196px; }
+.loop-notch { position: absolute; top: 8px; left: 50%; width: 52px; height: 4px; margin-left: -26px; border-radius: 999px; background: var(--lp-line); }
+.loop-star { position: absolute; color: #a98cf0; opacity: 0.7; font-size: 10px; line-height: 1; animation: rankup-float 3.6s ease-in-out infinite; }
+.loop-star-a { top: 24px; right: 14px; }
+.loop-star-b { bottom: 30px; left: 10px; font-size: 8px; animation-delay: 1.2s; }
+.loop-star-c { top: 92px; right: 22px; font-size: 12px; color: #1b9ae4; animation-delay: 2.1s; }
+.loop-hero {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  margin-bottom: 7px;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 0.8);
+  border: 1px solid var(--lp-line);
+  box-shadow: 0 8px 18px -12px rgb(124 92 214 / 0.7);
+}
+.loop-art { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 999px; background: #e8e0ff; box-shadow: 0 0 0 2px #ffffff, 0 0 12px -2px var(--lp-accent); }
+.loop-name { font-family: var(--font-display), system-ui, sans-serif; font-weight: 800; font-size: 12px; }
+.loop-level { font-size: 9px; font-weight: 700; color: var(--lp-muted); }
+.loop-world { font-size: 8.5px; color: var(--lp-muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.loop-bar { height: 6px; margin-top: 4px; border-radius: 999px; overflow: hidden; background: #e8e0ff; }
+.loop-bar > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--lp-accent), var(--lp-accent-2)); }
+.loop-bar-on { width: 64%; }
+.loop-bar-won { width: 100%; animation: rankup-loop-fill 900ms 150ms ease-out both; }
+@keyframes rankup-loop-fill { from { width: 64%; } to { width: 100%; } }
+.loop-quest {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  border-radius: 12px;
+  background: var(--lp-surface);
+  border: 1px solid rgb(124 92 214 / 0.45);
+}
+.loop-quest-icon { font-size: 14px; line-height: 1; }
+.loop-quest-title { font-family: var(--font-display), system-ui, sans-serif; font-weight: 700; font-size: 11px; }
+.loop-quest-xp { margin-left: auto; font-family: var(--font-display), system-ui, sans-serif; font-weight: 800; font-size: 10px; color: var(--lp-accent); }
+.loop-in { animation: rankup-slide-up 420ms ease-out both; }
+.loop-note { margin-top: 8px; text-align: center; font-size: 9.5px; line-height: 1.3; color: var(--lp-muted); }
+.loop-strong { font-weight: 700; color: var(--lp-ink); }
+.loop-center { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 4px; }
+.loop-done {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 12px;
+  color: #ffffff;
+  background: linear-gradient(90deg, var(--lp-accent), var(--lp-accent-2));
+  box-shadow: 0 8px 18px -8px var(--lp-accent);
+  animation: rankup-pulse 900ms ease-in-out infinite;
+}
+.loop-bubble { margin-left: auto; max-width: 82%; padding: 6px 10px; border-radius: 14px 14px 4px 14px; font-size: 10px; background: rgb(124 92 214 / 0.18); }
+.loop-levelup {
+  text-align: center;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-weight: 900;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--lp-accent);
+  text-shadow: 0 2px 0 #ffffff, 0 0 18px rgb(124 92 214 / 0.55);
+  animation: rankup-burst 620ms 350ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+.loop-label { font-size: 14px; min-height: 20px; }
+.loop-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--line); transition: width 260ms ease, background 260ms ease; }
+.loop-dot-on { width: 18px; background: var(--accent); }
+.loop-still { transition: none; }
 /* A moment's time running out (LevelUpOverlay): full to empty. */
 @keyframes rankup-moment-bar { from { width: 100% } to { width: 0 } }
 
@@ -743,6 +839,12 @@ html[data-pilot='off'] .pilot-root { display: none !important; }
   border: 1px solid var(--line);
   border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--line));
   box-shadow: 0 10px 34px -14px rgb(0 0 0 / 0.85), 0 0 26px -14px var(--accent);
+}
+/* A child's bar (0.30.0): close to solid, so the words of the screen
+   scrolling under it never show through between the tabs. */
+html[data-area='kid'] .tabbar {
+  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 95%, var(--bg));
 }
 .tabbar-dock { display: none; }
 /* However wide the bar, the tabs stay a thumb's reach apart. */
@@ -926,6 +1028,42 @@ html[data-reduce-motion='true'] .pilot-root .pilot-dot { animation: none; }
 .plan-compare { border-top: 1px solid var(--line); padding-top: 8px; }
 .plan-compare tbody tr + tr { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
 .plan-compare .plan-compare-on { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+/* 0.30.0: the banner's whole width, readable words (12px on a phone, 13.5px
+   on a computer), a Close button a thumb can hit, and the link inside the
+   banner's sentence no taller than the line it sits on. */
+.plan-compare table, .plan-compare-title { font-size: 12px; }
+.plan-compare-note { font-size: 12px; line-height: 1.45; }
+.plan-compare th[scope='col'] { padding-left: 2px; padding-right: 2px; vertical-align: bottom; }
+.plan-compare-close {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin: 0 -6px 0 0;
+  border-radius: 999px;
+  color: var(--ink-muted);
+  font-size: 15px;
+}
+.plan-compare-close:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+@media (min-width: 1024px) {
+  .plan-compare table, .plan-compare-title, .plan-compare-note { font-size: 13.5px; }
+  /* Not stretched across a wide window: the columns stay near their labels. */
+  .plan-compare table { max-width: 46rem; }
+}
+.trial-full { border-color: var(--accent); }
+.trial-words { line-height: 1.5; }
+.tap-inline { padding: 10px 2px; margin: -10px 0; }
+.trial-heads-up {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
 
 /*
  * A child's small celebrations on Home (components/KidCheers.jsx, 0.29.0):
@@ -982,6 +1120,111 @@ html[data-reduce-motion='true'] .pilot-root .pilot-dot { animation: none; }
 .cheer-burst > span:nth-child(10) { --dx: -86px; --dy: -34px; animation-delay: 160ms; }
 
 /*
+ * Bigger celebrations (0.30.0, components/KidCheers.jsx).
+ *
+ * The bonus's coins fly from Claim into the coin tile: each coin lifts,
+ * spreads and lands, 28–32px, the last of them about 1.4s after the tap.
+ * --sx/--sy (where Claim was) and --tx/--ty (the way to the tile) are set
+ * from the component, never as a style attribute.
+ */
+.coin-flight { position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 70; pointer-events: none; }
+.coin-flight > span {
+  position: absolute;
+  left: var(--sx, 0px);
+  top: var(--sy, 0px);
+  width: 32px;
+  height: 32px;
+  margin: -16px 0 0 -16px;
+  font-size: 30px;
+  line-height: 32px;
+  text-align: center;
+  opacity: 0;
+  filter: drop-shadow(0 4px 8px rgb(0 0 0 / 0.35));
+  animation: rankup-coin-fly 1150ms cubic-bezier(0.45, 0, 0.3, 1) both;
+}
+.coin-flight > span:nth-child(1) { --jx: -26px; font-size: 32px; }
+.coin-flight > span:nth-child(2) { --jx: 18px;  font-size: 28px; animation-delay: 50ms; }
+.coin-flight > span:nth-child(3) { --jx: -8px;  font-size: 30px; animation-delay: 100ms; }
+.coin-flight > span:nth-child(4) { --jx: 30px;  font-size: 29px; animation-delay: 150ms; }
+.coin-flight > span:nth-child(5) { --jx: -34px; font-size: 31px; animation-delay: 200ms; }
+.coin-flight > span:nth-child(6) { --jx: 6px;   font-size: 28px; animation-delay: 250ms; }
+@keyframes rankup-coin-fly {
+  0%   { transform: translate(0, 0) scale(0.5); opacity: 0; }
+  12%  { opacity: 1; }
+  32%  { transform: translate(var(--jx, 0px), -56px) scale(1.15); }
+  88%  { opacity: 1; }
+  100% { transform: translate(var(--tx, 0px), var(--ty, 0px)) scale(0.7); opacity: 0; }
+}
+
+/* The weekly goal: confetti down the whole screen for a moment. */
+.goal-confetti { position: fixed; inset: 0; z-index: 70; overflow: hidden; pointer-events: none; }
+.goal-confetti > span {
+  position: absolute;
+  top: -24px;
+  left: var(--x, 50%);
+  width: 11px;
+  height: 17px;
+  border-radius: 3px;
+  background: var(--accent);
+  opacity: 0;
+  animation: rankup-confetti 1700ms cubic-bezier(0.25, 0.6, 0.45, 1) both;
+}
+.goal-confetti > span:nth-child(4n+1) { background: var(--warn); }
+.goal-confetti > span:nth-child(4n+2) { background: var(--accent-2); }
+.goal-confetti > span:nth-child(4n+3) { background: var(--good); width: 10px; height: 10px; border-radius: 999px; }
+.goal-confetti > span:nth-child(1)  { --x: 4%;  --r: 340deg; animation-delay: 0ms; }
+.goal-confetti > span:nth-child(2)  { --x: 11%; --r: -260deg; animation-delay: 120ms; }
+.goal-confetti > span:nth-child(3)  { --x: 18%; --r: 420deg; animation-delay: 60ms; }
+.goal-confetti > span:nth-child(4)  { --x: 25%; --r: -380deg; animation-delay: 200ms; }
+.goal-confetti > span:nth-child(5)  { --x: 32%; --r: 300deg; animation-delay: 30ms; }
+.goal-confetti > span:nth-child(6)  { --x: 39%; --r: -320deg; animation-delay: 160ms; }
+.goal-confetti > span:nth-child(7)  { --x: 46%; --r: 460deg; animation-delay: 90ms; }
+.goal-confetti > span:nth-child(8)  { --x: 53%; --r: -280deg; animation-delay: 240ms; }
+.goal-confetti > span:nth-child(9)  { --x: 60%; --r: 360deg; animation-delay: 10ms; }
+.goal-confetti > span:nth-child(10) { --x: 67%; --r: -400deg; animation-delay: 140ms; }
+.goal-confetti > span:nth-child(11) { --x: 74%; --r: 320deg; animation-delay: 70ms; }
+.goal-confetti > span:nth-child(12) { --x: 81%; --r: -340deg; animation-delay: 220ms; }
+.goal-confetti > span:nth-child(13) { --x: 88%; --r: 380deg; animation-delay: 40ms; }
+.goal-confetti > span:nth-child(14) { --x: 95%; --r: -300deg; animation-delay: 180ms; }
+.goal-confetti > span:nth-child(15) { --x: 8%;  --r: 280deg; animation-delay: 320ms; }
+.goal-confetti > span:nth-child(16) { --x: 15%; --r: -440deg; animation-delay: 380ms; }
+.goal-confetti > span:nth-child(17) { --x: 22%; --r: 360deg; animation-delay: 280ms; }
+.goal-confetti > span:nth-child(18) { --x: 29%; --r: -300deg; animation-delay: 420ms; }
+.goal-confetti > span:nth-child(19) { --x: 36%; --r: 400deg; animation-delay: 300ms; }
+.goal-confetti > span:nth-child(20) { --x: 43%; --r: -360deg; animation-delay: 360ms; }
+.goal-confetti > span:nth-child(21) { --x: 50%; --r: 320deg; animation-delay: 260ms; }
+.goal-confetti > span:nth-child(22) { --x: 57%; --r: -420deg; animation-delay: 400ms; }
+.goal-confetti > span:nth-child(23) { --x: 64%; --r: 300deg; animation-delay: 340ms; }
+.goal-confetti > span:nth-child(24) { --x: 71%; --r: -280deg; animation-delay: 440ms; }
+.goal-confetti > span:nth-child(25) { --x: 78%; --r: 440deg; animation-delay: 310ms; }
+.goal-confetti > span:nth-child(26) { --x: 85%; --r: -360deg; animation-delay: 390ms; }
+.goal-confetti > span:nth-child(27) { --x: 92%; --r: 340deg; animation-delay: 290ms; }
+.goal-confetti > span:nth-child(28) { --x: 98%; --r: -320deg; animation-delay: 450ms; }
+@keyframes rankup-confetti {
+  0%   { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0; }
+  8%   { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translate3d(var(--drift, 18px), 105vh, 0) rotate(var(--r, 360deg)); opacity: 0; }
+}
+.goal-confetti > span:nth-child(odd) { --drift: -22px; }
+
+/* The weekly goal's ring round the trophy, filling to full. */
+.goal-ring { width: 52px; height: 52px; flex-basis: 52px; }
+.goal-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.goal-ring circle { fill: none; stroke-width: 4.5; }
+.goal-ring-track { stroke: color-mix(in srgb, var(--warn) 22%, transparent); }
+.goal-ring-fill {
+  stroke: var(--warn);
+  stroke-linecap: round;
+  stroke-dasharray: 100 100;
+  stroke-dashoffset: 0;
+  animation: rankup-ring-fill 1100ms 150ms cubic-bezier(0.3, 0.7, 0.3, 1) both;
+}
+.goal-ring[data-still] .goal-ring-fill { animation: none; }
+.goal-ring-cup { font-size: 26px; }
+@keyframes rankup-ring-fill { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+
+/*
  * A child's world beside their frame on a wide screen
  * (components/KidWorldArt.jsx, 0.29.0): their character, large and soft, in
  * the band left of the frame, and a soft light in the world's colours in the
@@ -1028,3 +1271,19 @@ html[data-reduce-motion='true'] .pilot-root .pilot-dot { animation: none; }
   color: var(--accent);
   opacity: 0.8;
 }
+
+/*
+ * "This week" on the parent's dashboard (components/ThisWeek.jsx, 0.30.0):
+ * three numbers, each with how it moved since last week. Up is the world's
+ * own good colour; down is said quietly, never in red: a quieter week is not
+ * a telling-off.
+ */
+.week-cell {
+  min-width: 0;
+  padding: 10px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+}
+.week-change { margin-top: 6px; font-size: 11px; font-weight: 700; line-height: 1.25; color: var(--ink-muted); }
+.week-up { color: var(--good); color: color-mix(in srgb, var(--good) 75%, var(--ink)); }

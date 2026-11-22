@@ -49,7 +49,7 @@ export default function FirstWeek() {
                 {s.done ? '✓' : ''}
               </span>
               <span className="min-w-0 flex-1">
-                <span className={`block text-sm font-semibold ${s.done ? 'line-through text-muted' : ''}`}>
+                <span className={`block text-sm font-semibold ${s.done && !s.plain ? 'line-through text-muted' : ''}`}>
                   {s.label}
                 </span>
                 {!s.done && s.line && <span className="block text-xs text-muted">{s.line}</span>}
