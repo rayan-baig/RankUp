@@ -2,8 +2,8 @@
  * 0.28.0, in plain Node: Pilot core 1.2 and RankUp's own Pilot welcome.
  * tests/fixes28ui.mjs walks the same in a real browser.
  *
- *   1. the core is 1.2.1 (since 0.28.1; 1.2.0 in 0.28.0), the MTRX Horizyn
- *      site's files (commit 17b4711) byte for byte;
+ *   1. the core is 1.3.0 (since 0.29.0; 1.2.1 in 0.28.1, 1.2.0 in 0.28.0),
+ *      the MTRX Horizyn site's files (commit 9f55e67) byte for byte;
  *   2. RankUp's welcome: its tagline and five pills, chat keys only, kept on
  *      the screen, the first look on again (0.28.1), its one pop-up that
  *      isn't a dialog, the avoid list and the tab bar's slot as before;
@@ -25,28 +25,29 @@ const ok = (label, cond, detail = '') => {
 const read = (f) => readFileSync(f, 'utf8')
 const code = (f) => read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-console.log('\n=== 1. Pilot core 1.2.1, copied unchanged ===')
+console.log('\n=== 1. Pilot core 1.3.0, copied unchanged ===')
 // The first 16 hex digits of each file's sha256 at MTRX Horizyn commit
-// 17b4711 (core 1.2.1). A file edited here, or copied from another commit, fails.
+// 9f55e67 (core 1.3.0; unchanged at 12c9216). A file edited here, or copied
+// from another commit, fails.
 const CORE = [
-  ['pilot.js', 'e8ff2e6f98c895ba'],
-  ['pilot-store.js', '985ee4c2d35437e3'],
-  ['pilot-mascot.js', '147256f8a2e41923'],
-  ['pilot-engine.js', 'b49e7bca4079b883'],
-  ['pilot-providers.js', '230950ca5c0ea582'],
-  ['pilot-media.js', 'bdc4392467daf45e'],
-  ['pilot-render.js', '3d5d63605d88402a'],
-  ['pilot-panel.js', '040d17fded5c3e35'],
-  ['pilot-motion.js', 'f1d9c435b695218e'],
-  ['pilot-actor.js', 'fa7b58d8d86742a9'],
-  ['pilot.css', '109d82483332adad'],
-  ['pilot-panel.css', '89bfed4b1249e719'],
-  ['pilot-actor.css', '8fb7a9f5f2864a92'],
+  ['pilot.js', '405662c67747762a'],
+  ['pilot-store.js', '2b31f637cf9e930f'],
+  ['pilot-mascot.js', 'aad3c26534592777'],
+  ['pilot-engine.js', '3d263ff61d5ce77f'],
+  ['pilot-providers.js', '74eba88df717d5c8'],
+  ['pilot-media.js', '0eb72daafd62b94a'],
+  ['pilot-render.js', 'c3f2efb873862546'],
+  ['pilot-panel.js', 'f486c85f1282a28f'],
+  ['pilot-motion.js', '6aab493624a95b7e'],
+  ['pilot-actor.js', '1761b209061fafcf'],
+  ['pilot.css', '3e61aeb55739aa02'],
+  ['pilot-panel.css', 'bf8c19c7f76db7e0'],
+  ['pilot-actor.css', '485e0e46777d05ac'],
 ]
 const changed = CORE.filter(([f, want]) => createHash('sha256').update(readFileSync(`public/pilot/${f}`)).digest('hex').slice(0, 16) !== want)
-ok('all thirteen core files are 1.2.1 as the MTRX Horizyn site has them', changed.length === 0, changed.map(([f]) => f).join(', '))
-ok('each says "Pilot core 1.2.1" on its first line', CORE.every(([f]) => read(`public/pilot/${f}`).split('\n')[0].includes(`Pilot core 1.2.1 · ${f}`)))
-ok('and the loader\'s VERSION is 1.2.1', /const VERSION = "1\.2\.1"/.test(read('public/pilot/pilot.js')))
+ok('all thirteen core files are 1.3.0 as the MTRX Horizyn site has them', changed.length === 0, changed.map(([f]) => f).join(', '))
+ok('each says "Pilot core 1.3.0" on its first line', CORE.every(([f]) => read(`public/pilot/${f}`).split('\n')[0].includes(`Pilot core 1.3.0 · ${f}`)))
+ok('and the loader\'s VERSION is 1.3.0', /const VERSION = "1\.3\.0"/.test(read('public/pilot/pilot.js')))
 
 console.log('\n=== 2. RankUp\'s own welcome ===')
 const { pilotSnapshot, updatePilot } = await import('../src/lib/pilotGate.js')

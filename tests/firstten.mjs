@@ -13,8 +13,10 @@
  *   - "How RankUp works": shown, in the way of nothing, gone on "Got it" and
  *     still gone after a reload;
  *   - the first-week checklist: ticks itself from what really happened
- *     (adding a child, three chores, an accepted one, a phone paired from a
- *     second browser) and disappears once all four are done;
+ *     (adding a child, three chores, an accepted one, and, since the chore
+ *     was done on this one phone with no child's phone linked, the phone
+ *     step too) and disappears once all four are done; a phone paired from
+ *     a second browser afterwards changes nothing;
  *   - the child's home says what to do next, above the fold, in one button.
  */
 import { chromium } from 'playwright'
@@ -194,11 +196,14 @@ steps <= MAX_STEPS
 await page.evaluate(() => { location.hash = '/parent' })
 await page.waitForTimeout(700)
 list = await checklist()
-list?.accept && !list.pair
-  ? pass('an accepted chore ticks itself; the phone is still to pair')
-  : fail('accept ticks', JSON.stringify(list))
+// 0.29.0: the chore was done and accepted on this one phone, with no child's
+// phone linked, so the family shares one: the phone step ticks itself too,
+// and with all four done the list is gone.
+list === null
+  ? pass('an accepted chore ticks itself, and on a phone the family shares, the phone step too: the list is done')
+  : fail('accept ticks, and the shared phone with it', JSON.stringify(list))
 
-console.log('\n=== Pairing a phone finishes the list ===')
+console.log('\n=== Pairing a phone later ===')
 const kid = await ctx.newPage()
 track(kid, 'kid')
 await kid.goto(`${BASE}?device=kid`, { waitUntil: 'networkidle' })
@@ -213,11 +218,12 @@ await kid.getByRole('button', { name: 'Get my code' }).click()
 await kid.waitForTimeout(1500)
 const code = await kid.evaluate(() => JSON.parse(localStorage.getItem('rankup.state.v1.kid'))?.pendingPairing?.code)
 
-await page.locator('[data-step="pair"] [data-testid="step-go"]').click()
+// The list is done, so the way to the linking screen is Settings'.
+await page.evaluate(() => { location.hash = '/parent/pair' })
 await page.waitForTimeout(700)
 ;(await hash()) === '#/parent/pair'
-  ? pass('"Link Ava\'s phone" opens the linking screen')
-  : fail('checklist links to pairing', await hash())
+  ? pass('a second phone can still be linked afterwards')
+  : fail('linking screen', await hash())
 await page.locator('input[inputmode=numeric]').fill(code || '')
 await page.waitForTimeout(2500)
 await kid.waitForTimeout(4000)
@@ -225,8 +231,8 @@ await kid.waitForTimeout(4000)
 await page.evaluate(() => { location.hash = '/parent' })
 await page.waitForTimeout(800)
 ;(await page.getByTestId('first-week').count()) === 0
-  ? pass('with all four done, the list is gone')
-  : fail('checklist disappears when done', JSON.stringify(await checklist()))
+  ? pass('and the list stays gone')
+  : fail('checklist stays gone', JSON.stringify(await checklist()))
 
 console.log('\n=== The child\'s own phone ===')
 ;(await kid.evaluate(() => location.hash)) === '#/kid'

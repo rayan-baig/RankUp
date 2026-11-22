@@ -12,8 +12,10 @@ import { plural } from '../lib/plural.js'
  * from tapping the row, and the card goes for good once all four are done.
  * Two steps can be done from right here: three starter chores in one tap,
  * and "We share one phone" for a family that will never link a second one
- * (a list that can never finish should not sit on their dashboard). "Hide
- * this list" puts it away for anyone who would rather not have it.
+ * (a list that can never finish should not sit on their dashboard): a
+ * button beside "Link a phone", and ticked by itself once a chore is
+ * accepted with no child's phone linked. "Hide this list" puts it away for
+ * anyone who would rather not have it.
  */
 export default function FirstWeek() {
   const { state, dispatch } = useApp()
@@ -73,11 +75,21 @@ export default function FirstWeek() {
                       ✨ Add 3 starter chores for {s.starter.name}
                     </Button>
                   )}
+                  {/* Two ways through, as two buttons of the same size: a
+                      second phone to link, or one phone for the family (it
+                      used to be a small link under the step, easily missed,
+                      and the list never finished for a one-phone family). */}
                   {s.skip && (
-                    <button type="button" data-testid="shared-phone" className="tap-link text-xs underline text-muted"
-                      onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { sharedPhone: true } })}>
-                      {s.skip}
-                    </button>
+                    <div className="grid grid-cols-2 gap-2 w-full">
+                      <Button variant="soft" className="py-2 px-2.5 min-h-[44px] text-[13px] leading-tight" data-testid="link-phone"
+                        onClick={() => navigate(s.to)}>
+                        📱 Link a phone
+                      </Button>
+                      <Button variant="soft" className="py-2 px-2.5 min-h-[44px] text-[13px] leading-tight" data-testid="shared-phone"
+                        onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { sharedPhone: true } })}>
+                        🤝 {s.skip}
+                      </Button>
+                    </div>
                   )}
                 </div>
               )}

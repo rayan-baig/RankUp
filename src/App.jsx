@@ -76,6 +76,7 @@ const ParentRedeem = lazyLoad(() => import('./screens/parent/ParentRedeem.jsx'))
  * The level-up and streak moments arrive a few times a week, never on the
  * first screen: fetched the first time one is due, not with the first file.
  */
+const KidWorldArt = lazyLoad(() => import('./components/KidWorldArt.jsx'))
 const LevelUpOverlay = lazyLoad(() => import('./components/LevelUpOverlay.jsx'))
 const StreakMoment = lazyLoad(() => import('./components/LevelUpOverlay.jsx').then((m) => ({ default: m.StreakMoment })))
 
@@ -407,6 +408,8 @@ export default function App() {
     <>
       {isParentArea ? <ParentBackground theme={parentTheme} /> : <ThemeBackground theme={kidTheme} glitch={glitch} />}
       {!isParentArea && <Atmosphere theme={kidTheme} />}
+      {/* The child's world beside their frame on a wide screen (0.29.0). */}
+      {isKidArea && activeKid && <Suspense fallback={null}><KidWorldArt theme={kidTheme} level={levelFromXp(activeKid.xp).level} /></Suspense>}
 
       {/* Outside the boundary: if a screen crashes, the way out of the demo
           must still be on screen. */}

@@ -26,6 +26,7 @@ import { STARTER_REWARDS } from '../../lib/firstWeek.js'
 import { hasPin } from '../../lib/parentPin.js'
 import { validPin } from '../../lib/pinReset.js'
 import { weeklyGoalOf, WEEKLY_GOAL_CHOICES } from '../../lib/weeklyGoal.js'
+import { soundsOn } from '../../lib/chime.js'
 
 const WEEK_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -430,14 +431,20 @@ export default function ParentSettings({ open = null }) {
         )}
       </Card>
       </Section>
-      <Section title="Accessibility & motion" icon="♿"
-        summary={state.settings.reduceMotion ? 'Reduced motion on' : 'Full animation'}>
+      <Section title="Accessibility, motion & sound" icon="♿"
+        summary={`${state.settings.reduceMotion ? 'Reduced motion on' : 'Full animation'} · ${soundsOn(state) ? 'sounds on' : 'sounds off'}`}>
       <Card flat>
         <Toggle
           checked={state.settings.reduceMotion}
           onChange={(v) => dispatch({ type: 'UPDATE_SETTINGS', patch: { reduceMotion: v } })}
           label="Reduce motion"
-          hint="Stops background animation and avatar effects."
+          hint="Stops background animation, avatar effects and the coins that fly when a bonus is claimed."
+        />
+        <Toggle
+          checked={soundsOn(state)}
+          onChange={(v) => dispatch({ type: 'UPDATE_SETTINGS', patch: { soundOn: v } })}
+          label="Sounds"
+          hint="A short chime on this phone when a child claims a bonus or hits the weekly goal. Children can switch it on their You screen too."
         />
       </Card>
 

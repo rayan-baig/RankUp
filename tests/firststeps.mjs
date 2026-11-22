@@ -74,9 +74,14 @@ ok('a chore waiting sends the last step to Review', step(s, 'accept').to === '/p
 const sub = s.submissions[s.submissions.length - 1]
 s = run(s, { type: 'APPROVE_SUBMISSION', submissionId: sub.id, sticker: 'proud' })
 ok('accepting it ticks the last step', step(s, 'accept').done)
-ok('with a phone still to link, the list stays', showFirstWeek(s))
+// 0.29.0: a chore done and accepted with no child's phone linked was done on
+// a grown-up's phone, so the family shares one and the list finishes.
+ok('accepted with no child\'s phone linked: the phone step ticks itself (a one-phone family)', step(s, 'pair').done && !step(s, 'pair').skip)
+ok('so all four are done and the list is gone for good', !showFirstWeek(s))
+const linkedLater = { ...s, submissions: s.submissions.map((x) => ({ ...x, status: 'pending' })) }
+ok('before anything is accepted, the phone step still waits (and offers both ways)', !step(linkedLater, 'pair').done && step(linkedLater, 'pair').skip === 'We share one phone')
 const allDone = run(s, { type: 'UPDATE_SETTINGS', patch: { sharedPhone: true } })
-ok('all four done: the list is gone for good', !showFirstWeek(allDone))
+ok('"We share one phone" tapped as well changes nothing', !showFirstWeek(allDone))
 ok('"Hide this list" hides it before then', !showFirstWeek(run(createInitialState(), { type: 'UPDATE_SETTINGS', patch: { firstWeekHidden: true } })))
 ok('never in the demo', !showFirstWeek({ ...createInitialState(), demo: true }))
 

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useApp } from '../state/AppContext.jsx'
 import { trialDaysLeft, onTrial, planOf } from '../state/reducer.js'
 import { TIERS } from '../state/initialState.js'
+import PlanCompare from './PlanCompare.jsx'
 import { Banner, Button } from './ui.jsx'
 import { navigate } from '../lib/router.js'
 import { newFamily } from '../lib/firstWeek.js'
@@ -25,6 +26,9 @@ import { newFamily } from '../lib/firstWeek.js'
  * folded under "What you get": a parent who has just signed up came for
  * their child's first chore, not for the plan. In the last three days it is
  * the full banner again, for everyone.
+ *
+ * "What you get" (and "Compare plans" on the full banner) opens a one-screen
+ * comparison of the three plans, in words (0.29.0).
  */
 export default function TrialBanner() {
   const { state } = useApp()
@@ -49,6 +53,8 @@ export default function TrialBanner() {
     </>
   )
 
+  const compare = more && <PlanCompare trialTier={plan.id} />
+
   if (compact) {
     return (
       <div className="card-flat trial-slim mb-3 px-3 py-2" data-testid="trial-banner" data-compact="">
@@ -65,6 +71,7 @@ export default function TrialBanner() {
           </Button>
         </div>
         {more && <p className="text-xs text-muted mt-1">{words}</p>}
+        {compare}
       </div>
     )
   }
@@ -83,7 +90,13 @@ export default function TrialBanner() {
       }
     >
       {words}
+      {' '}
+      <button type="button" className="tap-link underline font-semibold" aria-expanded={more} onClick={() => setMore((m) => !m)}>
+        Compare plans
+      </button>
+      {compare}
     </Banner>
     </div>
   )
 }
+
