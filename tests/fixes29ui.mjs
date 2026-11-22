@@ -150,8 +150,13 @@ for (const [w, h] of [[1440, 900], [1920, 1080]]) {
   const { ctx, page } = await open(w, h)
   await page.goto(BASE, { waitUntil: 'networkidle' })
   await page.waitForTimeout(900)
+  // 0.32.0: the strip of screens under the door (tests/fixes32ui.mjs) is centred with it.
+  await page.waitForSelector('[data-testid="door-strip"]', { timeout: 4000 }).catch(() => {})
   const g = await box(page, '.door-grid')
-  ok(`${w}x${h}: the front door is centred up and down`, g && Math.abs(g.top - (h - g.bottom)) <= 4 && g.top > 40, JSON.stringify(g))
+  const strip = await box(page, '[data-testid="door-strip"]')
+  const group = g && { top: g.top, bottom: Math.max(g.bottom, strip ? strip.bottom : 0) }
+  ok(`${w}x${h}: the front door (with its strip of screens) is centred up and down`, group && Math.abs(group.top - (h - group.bottom)) <= 4 && group.top >= 30,
+    JSON.stringify({ g, strip }))
   const phone = await box(page, '.door-demo > :first-child')
   ok(`${w}px: a bigger demo phone (over 280px across)`, phone && phone.width >= 280, JSON.stringify(phone))
   const steps = await box(page, '.door-steps')

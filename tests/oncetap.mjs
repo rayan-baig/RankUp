@@ -135,7 +135,8 @@ await page.evaluate(() => {
     buy.click()
   }
 })
-await page.getByTestId('level-up').waitFor({ state: 'detached', timeout: 5000 })
+// The level-up stays LEVEL_UP_MS (5.5 seconds since 0.32.0): wait a little longer than that.
+await page.getByTestId('level-up').waitFor({ state: 'detached', timeout: LEVEL_UP_MS + 2500 })
 ok('the tap landed as the level-up closed', await page.evaluate(() => window.__tapped === true))
 // The price asks first (0.22.0); the purchase is "Yes, get it".
 await page.getByTestId('confirm-reward').click()
