@@ -5,10 +5,10 @@
  *   - at 320, 375 and 1440: Pilot opens with "Your family's chore helper"
  *     on one line and RankUp's five pills; Review's own suggestion under
  *     them; no picture or video key settings;
- *   - with no key, "What's waiting for me?" stays in the box, key settings
- *     say it is waiting, and it is sent the moment a key is saved (to a
- *     stand-in provider: nothing leaves this machine); "Add a chore for…"
- *     only fills the box;
+ *   - with no key, a question typed for the AI stays in the box, key
+ *     settings say it is waiting, and it is sent the moment a key is saved
+ *     (to a stand-in provider: nothing leaves this machine). Since 0.31.0
+ *     the pills need no key (tests/fixes31ui.mjs);
  *   - the robot steps back for a pop-up (Review's "Send back" dialog, and a
  *     sheet marked data-pilot-modal), stays in the tab bar's slot on a phone
  *     (opened during a visit's first look too: since 0.28.1, core 1.2.1, the
@@ -104,13 +104,7 @@ for (const [w, h] of [[320, 640], [375, 812], [1440, 900]]) {
   const lastPill = await page.locator('.pilot-root .pilot-pill').last().boundingBox()
   ok(`${w}px: the pills fit across the window`, lastPill && lastPill.x >= 0 && lastPill.x + lastPill.width <= w, JSON.stringify(lastPill))
   await shot(page, `${w}-welcome`)
-  if (w === 375) {
-    await page.locator('.pilot-root .pilot-pill', { hasText: 'Add a chore for' }).click()
-    await page.waitForTimeout(300)
-    ok('"Add a chore for…" fills the box for the parent to finish, and stays on the chat', (await page.locator('.pilot-root .pilot-input').inputValue()) === 'Add a chore for '
-      && !(await page.locator('.pilot-root .pilot-settings-view').isVisible()))
-    await page.locator('.pilot-root .pilot-input').fill('')
-  }
+  // Since 0.31.0 (core 1.4.0) "Add a chore for…" opens Assign: tests/fixes31ui.mjs.
   await page.locator('.pilot-root .pilot-pill', { hasText: 'Add my AI key' }).click()
   await page.waitForTimeout(600)
   const settings = await page.evaluate(() => document.querySelector('.pilot-root .pilot-settings-view').innerText)
@@ -138,7 +132,10 @@ console.log('\n=== With no key: the question waits, and goes once a key is saved
   await page.locator('.pilot-root .pilot-launcher').click()
   await page.waitForSelector('.pilot-root .pilot-welcome', { timeout: 8000 }).catch(() => {})
   await page.waitForTimeout(500)
-  await page.locator('.pilot-root .pilot-pill', { hasText: "What's waiting for me?" }).click()
+  // Since 0.31.0 (core 1.4.0) the pills are answered with no key, so the
+  // question for the AI is typed (the waiting flow is for AI questions only).
+  await page.locator('.pilot-root .pilot-input').fill("What's waiting for me to review?")
+  await page.locator('.pilot-root .pilot-send').click()
   await page.waitForTimeout(600)
   ok('no key: the question stays in the box', (await page.locator('.pilot-root .pilot-input').inputValue()) === "What's waiting for me to review?")
   ok('and key settings open, saying it is waiting', /Your message is waiting in the box\. It sends as soon as you add a key\./.test(await page.locator('.pilot-root .pilot-settings-view').innerText()))

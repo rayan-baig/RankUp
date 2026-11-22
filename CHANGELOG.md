@@ -5,6 +5,20 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.31.0 — 2026-11-22
+
+Pilot core 1.4.0: Pilot is useful before an AI key.
+
+- **Pilot answers the common questions itself, with no key.** In Parent Mode, "What's waiting for me?" now answers at once with how many chores are waiting for review and the name of each (with how many of each), and an "Open Review" link. "How is my kid doing?" gives the dashboard's This week numbers (chores done, XP earned, days in a row, each against last week). "Explain this screen" says what the screen is for in plain words, with what is on it now as counts. "Add a chore for…" opens Assign. Before, every one of these led to "add an AI key". Nothing is sent anywhere: the answers are built on the phone from the family's own chores.
+- **The suggestions too.** Once a chat has started, "What's waiting for me?" and "How are the kids doing?" answer at once and "Add a chore for…" opens Assign; on the plan screen "What does Elite Pass add?" answers from the plan list; on a screen with no suggestion of its own, "What can I do here?" explains it. During a parent's set-up, "How does RankUp work?", "Is it safe for my kids?" and "What do the plans cost?" answer at once (the prices are read from the plan list; none changed). Questions that really need the AI ("Accept the oldest one", "Add 3 starter chores") still ask for a key.
+- **The key, offered gently.** Under an answer, while there is no key, Pilot says "Want more? Add your AI key to ask anything." with a Key settings button. A question typed with no key still waits in the box and is sent once a key is saved.
+- **No names in an answer.** Pilot keeps an answer in the chat, and once a key is added the chat goes with the next question to the parent's AI company. So the answers use counts and chore names only, never a child's, the family's or a grown-up's name; a chore name that mentions a child shows "[name]".
+- **Pilot core 1.4.0.** The shared Pilot files are now core 1.4.0 from the MTRX Horizyn site (commit 3908422), copied unchanged. Where the robot is not in its slot (the parent's set-up, the gift and School League pages), a phone now tries the bottom corners first and takes a top corner only where it covers no link or button; core 1.3.0 tucked it into the top right of the gift page, over the page's own button. In Parent Mode it stays in the tab bar's slot on a phone and at the foot of the sidebar on a computer, as before.
+- **Unchanged:** no Pilot on the front door, before someone says whose phone it is, on the world picker, on any child's screen or on a child's phone.
+- **Still a light first load.** Pilot's answers come with Pilot's own files, fetched only where Pilot is allowed and after the page has loaded, so the first file is unchanged.
+- **Before deploying:** nothing to run on the database and no new setting.
+- Tests: new `tests/fixes31.mjs` (static) and `tests/fixes31ui.mjs` (smoke). Updated: `tests/js/pilot.test.js` (core 1.4.0's own tests, without the MTRX-only ones), `tests/fixes28.mjs` (core 1.4.0's fingerprints; the pills are answers and a link), `tests/fixes28ui.mjs` (the waiting question is typed, since the pills need no key; "Add a chore for…" is checked in fixes31ui), `tests/fixes29.mjs` (core 1.3.0 or later), `tests/fixes26.mjs` (RankUp's two suggestions are now an answer and a link), `tests/run-suite.mjs` (the two new files).
+
 ## 0.30.0 — 2026-11-22
 
 Fixes from a strict review: bigger celebrations for children, a parent dashboard that fits what is in it, the plans compared properly on a phone, a "This week" card, a livelier front door, and a gentle heads-up before a trial ends.

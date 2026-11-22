@@ -48,6 +48,18 @@ right, not tucked away" while the slot is showing, because what scrolls
 behind the bar is hidden by it. `gutter: false`: RankUp's screens keep their
 own side padding.
 
+Off the slot (the parent's set-up, the gift and School League pages, a
+tablet) the core places the robot. Since core 1.4.0 a phone tries the bottom
+corners first, counts a bar that stays put as busy, and takes a top corner
+only where it covers no link or button; core 1.3.0 tucked it into the top
+right of the gift page, over the page's own button. In the slot nothing
+changed: `dockedPlace` answers first, and the core's new "tucked until the
+first scroll" on a small screen never applies there. RankUp had no
+placement workaround of its own for 1.4.0 to replace: `dockedPlace` stays
+(the core can't know the slot is the robot's own place, and 1.4.0 would
+count the fixed tab bar as busy), and so does the avoid list, which marks
+the buttons a parent taps most rather than working round a corner.
+
 On a computer (1100px and up, 0.29.0) Parent Mode's tab bar is a sidebar down
 the left edge, and the slot is at its foot: `dockedPlace` answers "bottom
 left" when the slot is on the left half of the window, so the robot sits in
@@ -84,20 +96,21 @@ Since core 1.2.0 a website can make the welcome its own, and RankUp does
 (`src/pilot/pilotRankUp.js`):
 
 - **Tagline:** "Your family's chore helper" (one line, even at 320px).
-- **Five pills** (`welcomePills`): **What's waiting for me?** (sent at once),
-  **Add a chore for…** (puts "Add a chore for " in the box for the parent to
-  finish), **How is my kid doing?** (sent at once), **Explain this screen**
-  (the core's `explain-screen`, through RankUp's `screenText`, which keeps the
-  family's names out) and **Add my AI key** (key settings). With no key yet,
-  the core keeps the question in the box, opens key settings ("Your message is
-  waiting in the box…") and sends it the moment a key is saved.
+- **Five pills** (`welcomePills`): **What's waiting for me?**, **Add a chore
+  for…**, **How is my kid doing?**, **Explain this screen** and **Add my AI
+  key** (key settings). Since 0.31.0 (core 1.4.0) the first four need no key
+  at all: see **Useful before a key** below. With no key, a question the
+  parent types (or an AI suggestion) stays in the box, key settings open
+  ("Your message is waiting in the box…") and it is sent the moment a key is
+  saved.
 - **This screen's suggestions** (`chips`): the core now shows them on the
   welcome too, under the pills. There RankUp leaves out what a pill already
   does, and any suggestion that ends on a gap for the parent to finish (only a
   pill can leave words in the box): on Home all three are pills, so none show;
   on Review "Accept the oldest one" does. Once a chat has started the pills
   are gone and the suggestions are the whole list again ("What's waiting for
-  me?" and "Add a chore for…" first, then one for the screen).
+  me?" and "Add a chore for…" first, then one for the screen). A suggestion
+  carries the `id` of the pill that does the same (`welcomeChips`).
 - **Chat keys only** (`hideKeySections: ['image', 'video']`): RankUp has no
   use for pictures or videos made by an AI.
 - **The key, asked for once** (core 1.3.0, RankUp 0.29.0): because RankUp's
@@ -106,6 +119,40 @@ Since core 1.2.0 a website can make the welcome its own, and RankUp does
   design's "Bring Your Own API Key"). Above the message box the welcome shows
   `keyNoteShort`, one line ("AI keys are for grown-ups (18+)."); the whole
   `keyNote` stays in the key settings, in help and on that line's tooltip.
+
+## Useful before a key (core 1.4.0, RankUp 0.31.0)
+
+Core 1.4.0 lets a pill or a suggestion be an `answer` (shown at once as
+Pilot's message, through the core's safe renderer, with no key and no network
+call) or a `link` (a page of this site: Pilot closes and goes there).
+RankUp's answers are built in the parent's browser, when asked, from the
+family's own data (`src/pilot/pilotAnswers.js`, pure functions of the state):
+
+| Pill or suggestion | What it does with no key |
+|---|---|
+| **What's waiting for me?** | How many chores are waiting for review, and each chore's name with how many of it (oldest first, eight at most, then "and N more"), with **Open Review**. |
+| **Add a chore for…** | Opens Assign (`#/parent/assign`), where the child is picked. |
+| **How is my kid doing?** (and the suggestion **How are the kids doing?**) | The dashboard's **This week** numbers (`lib/thisWeek.js`): chores done, XP earned and days in a row, each beside last week in words, for the whole family, with links to Kids and Review. |
+| **Explain this screen** (and **What can I do here?** on a screen with no suggestion of its own) | That screen in a few plain sentences (one for every screen Pilot is on), with what is on it now as counts: children, chores to do, waiting for review. With a key it adds "Ask me anything about it in the box below." |
+| **What does Elite Pass add?** (the plan screen) | Elite's extras by name, from the plan list, with a link to the plan screen. |
+| **How does RankUp work?**, **Is it safe for my kids?**, **What do the plans cost?** (the parent's set-up) | The loop, the privacy promises, and the prices from `TIERS` with the trial. |
+
+The AI prompts left are the ones that take the AI: "Accept the oldest one",
+"Add 3 starter chores", "Add a reward", and the gift and School League
+pages' questions. Under an answer, while there is no key, the core shows
+**"Want more? Add your AI key to ask anything."** (`answerMore`) with Key
+settings. Links in an answer are RankUp's own screens (`/#/parent/…`), and
+open in the same tab.
+
+**No names in an answer.** An answer stays on the phone when it is shown, but
+the core keeps it as part of the chat (marked `local`), and once a key is
+added the chat goes with the next question to the parent's AI company. So the
+answers use counts and chore titles only, never a child's, the family's or a
+grown-up's name; every chore title loses any markdown of its own and goes
+through `withoutNames` (a title like "Help Noah with his bike" is shown as
+"Help [name] with his bike"). On a page with no family yet (the parent's
+set-up), the family answers say what they will show once the family is set
+up.
 
 0.27.0 did the suggestions and the hidden key sections from RankUp's own files
 (a row put into the welcome by a MutationObserver, and a style rule); both are
@@ -125,9 +172,10 @@ on later; `src/styles/index.css` stops the resting robot's float).
 
 | File | What it is |
 |---|---|
-| `public/pilot/` | The shared core, **Pilot core 1.3.0** (MTRX Horizyn commit 9f55e67), copied unchanged with its robot pictures, layers and the 18 pictures in `poses/`. |
+| `public/pilot/` | The shared core, **Pilot core 1.4.0** (MTRX Horizyn commit 3908422), copied unchanged with its robot pictures, layers and the 18 pictures in `poses/`. |
 | `src/lib/pilotGate.js`, `src/components/PilotGate.jsx` | The only part in the first load: where Pilot may be, and fetching the rest once the page has loaded. |
 | `src/pilot/pilotRankUp.js` | The config: the core's script tag, the welcome (tagline and pills), the screens, suggestions, `kidView`, hiding and showing, forgetting a family's chat. |
+| `src/pilot/pilotAnswers.js` | The answers Pilot gives with no key (core 1.4.0): what's waiting, This week, each screen explained, Elite, the plans. |
 | `src/pilot/pilotKnowledge.js` | The knowledge pack and the "why RankUp" list, every number read from the app's own code. |
 | `src/pilot/pilotTools.js` | The tools. |
 | `public/pilot-rankup.js`, `public/pilot-rankup-pack.js` | The core's "app config" and "pack" files: they hand over to the two above. |
@@ -177,6 +225,7 @@ if the core's files disagree on their version.
 
 ## Tests
 
-`tests/pilot.mjs` and `tests/fixes28.mjs` (static), `tests/pilottools.mjs`
-(awards), `tests/pilotui.mjs` and `tests/fixes28ui.mjs` (smoke), and the Pilot
-checks in `tests/bundle.mjs` and `tests/isolation.mjs`.
+`tests/pilot.mjs`, `tests/fixes28.mjs` and `tests/fixes31.mjs` (static),
+`tests/pilottools.mjs` (awards), `tests/pilotui.mjs`, `tests/fixes28ui.mjs`
+and `tests/fixes31ui.mjs` (smoke), and the Pilot checks in `tests/bundle.mjs`
+and `tests/isolation.mjs`.

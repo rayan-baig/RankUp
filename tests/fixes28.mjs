@@ -2,8 +2,9 @@
  * 0.28.0, in plain Node: Pilot core 1.2 and RankUp's own Pilot welcome.
  * tests/fixes28ui.mjs walks the same in a real browser.
  *
- *   1. the core is 1.3.0 (since 0.29.0; 1.2.1 in 0.28.1, 1.2.0 in 0.28.0),
- *      the MTRX Horizyn site's files (commit 9f55e67) byte for byte;
+ *   1. the core is 1.4.0 (since 0.31.0; 1.3.0 in 0.29.0, 1.2.1 in 0.28.1,
+ *      1.2.0 in 0.28.0), the MTRX Horizyn site's files (commit 3908422)
+ *      byte for byte;
  *   2. RankUp's welcome: its tagline and five pills, chat keys only, kept on
  *      the screen, the first look on again (0.28.1), its one pop-up that
  *      isn't a dialog, the avoid list and the tab bar's slot as before;
@@ -25,29 +26,29 @@ const ok = (label, cond, detail = '') => {
 const read = (f) => readFileSync(f, 'utf8')
 const code = (f) => read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-console.log('\n=== 1. Pilot core 1.3.0, copied unchanged ===')
+console.log('\n=== 1. Pilot core 1.4.0, copied unchanged ===')
 // The first 16 hex digits of each file's sha256 at MTRX Horizyn commit
-// 9f55e67 (core 1.3.0; unchanged at 12c9216). A file edited here, or copied
-// from another commit, fails.
+// 3908422 (core 1.4.0). A file edited here, or copied from another commit,
+// fails.
 const CORE = [
-  ['pilot.js', '405662c67747762a'],
-  ['pilot-store.js', '2b31f637cf9e930f'],
-  ['pilot-mascot.js', 'aad3c26534592777'],
-  ['pilot-engine.js', '3d263ff61d5ce77f'],
-  ['pilot-providers.js', '74eba88df717d5c8'],
-  ['pilot-media.js', '0eb72daafd62b94a'],
-  ['pilot-render.js', 'c3f2efb873862546'],
-  ['pilot-panel.js', 'f486c85f1282a28f'],
-  ['pilot-motion.js', '6aab493624a95b7e'],
-  ['pilot-actor.js', '1761b209061fafcf'],
-  ['pilot.css', '3e61aeb55739aa02'],
-  ['pilot-panel.css', 'bf8c19c7f76db7e0'],
-  ['pilot-actor.css', '485e0e46777d05ac'],
+  ['pilot.js', 'a44494f9b059eb50'],
+  ['pilot-store.js', 'd35be1ea8751db51'],
+  ['pilot-mascot.js', 'e6cb3e84cbe1fbf9'],
+  ['pilot-engine.js', '6288e7cff6baf8ba'],
+  ['pilot-providers.js', '3202b5484b5099fb'],
+  ['pilot-media.js', 'e0bf06644d2806a0'],
+  ['pilot-render.js', '02f308052bf31f23'],
+  ['pilot-panel.js', '05483379e52612de'],
+  ['pilot-motion.js', '84b420c9a4b9df6c'],
+  ['pilot-actor.js', 'a5f18326230d0b88'],
+  ['pilot.css', '4691f2f93a83808c'],
+  ['pilot-panel.css', '555d7abdb99d743a'],
+  ['pilot-actor.css', '9566af637b0d19c9'],
 ]
 const changed = CORE.filter(([f, want]) => createHash('sha256').update(readFileSync(`public/pilot/${f}`)).digest('hex').slice(0, 16) !== want)
-ok('all thirteen core files are 1.3.0 as the MTRX Horizyn site has them', changed.length === 0, changed.map(([f]) => f).join(', '))
-ok('each says "Pilot core 1.3.0" on its first line', CORE.every(([f]) => read(`public/pilot/${f}`).split('\n')[0].includes(`Pilot core 1.3.0 · ${f}`)))
-ok('and the loader\'s VERSION is 1.3.0', /const VERSION = "1\.3\.0"/.test(read('public/pilot/pilot.js')))
+ok('all thirteen core files are 1.4.0 as the MTRX Horizyn site has them', changed.length === 0, changed.map(([f]) => f).join(', '))
+ok('each says "Pilot core 1.4.0" on its first line', CORE.every(([f]) => read(`public/pilot/${f}`).split('\n')[0].includes(`Pilot core 1.4.0 · ${f}`)))
+ok('and the loader\'s VERSION is 1.4.0', /const VERSION = "1\.4\.0"/.test(read('public/pilot/pilot.js')))
 
 console.log('\n=== 2. RankUp\'s own welcome ===')
 const { pilotSnapshot, updatePilot } = await import('../src/lib/pilotGate.js')
@@ -59,18 +60,19 @@ ok('the tagline is RankUp\'s: "Your family\'s chore helper"', config.tagline ===
 ok('short enough for one line on a 320px phone (under 30 characters)', config.tagline.length < 30)
 
 // The pills as the core itself cleans them (pilot-panel.js welcomePills).
-const sandbox = { window: {}, document: {} }
+// Since 0.31.0 (core 1.4.0) all but the key work with no AI key: three are
+// RankUp's own answers and "Add a chore for…" opens Assign (tests/fixes31.mjs).
+const sandbox = { window: {}, document: {}, URL }
 vm.runInNewContext(read('public/pilot/pilot-panel.js'), sandbox)
 const Panel = sandbox.window.PilotPanel
-const pills = JSON.parse(JSON.stringify(Panel.welcomePills(config.welcomePills)))
+const pills = Panel.welcomePills(config.welcomePills, 'https://rankup.example/#/parent')
 ok('five pills, in this order, through the core\'s own cleaning', JSON.stringify(pills.map((p) => p.label)) === JSON.stringify(
   ["What's waiting for me?", 'Add a chore for…', 'How is my kid doing?', 'Explain this screen', 'Add my AI key']), pills.map((p) => p.label).join(' | '))
 const pill = (label) => pills.find((p) => p.label === label) || {}
-ok('"What\'s waiting for me?" is sent at once', pill("What's waiting for me?").send === true && pill("What's waiting for me?").action === "What's waiting for me to review?")
-ok('"Add a chore for…" fills the box for the parent to finish (not sent, the gap after "for" kept)',
-  pill('Add a chore for…').send === false && pill('Add a chore for…').builtin === false && pill('Add a chore for…').action === 'Add a chore for ')
-ok('"How is my kid doing?" is sent at once', pill('How is my kid doing?').send === true && /How is each of my children doing this week\?/.test(pill('How is my kid doing?').action))
-ok('"Explain this screen" is the core\'s explain-screen (RankUp\'s screenText keeps names out)', pill('Explain this screen').builtin === true && pill('Explain this screen').action === 'explain-screen')
+ok('"What\'s waiting for me?" is answered at once (core 1.4.0)', typeof pill("What's waiting for me?").answer === 'function' && !pill("What's waiting for me?").builtin)
+ok('"Add a chore for…" opens Assign, on this site (core 1.4.0)', pill('Add a chore for…').link === 'https://rankup.example/#/parent/assign')
+ok('"How is my kid doing?" is answered at once (core 1.4.0)', typeof pill('How is my kid doing?').answer === 'function')
+ok('"Explain this screen" is answered at once, from RankUp\'s own words for the screen (core 1.4.0)', typeof pill('Explain this screen').answer === 'function' && !pill('Explain this screen').builtin)
 ok('"Add my AI key" opens key settings', pill('Add my AI key').builtin === true && pill('Add my AI key').action === 'settings')
 ok('each with one of the window\'s own icons', JSON.stringify(pills.map((p) => p.icon)) === JSON.stringify(['chat', 'bolt', 'spark', 'bars', 'key']))
 ok('the design\'s five are not what RankUp shows', !pills.some((p) => /Ask anything|Help with code|Customize with your API key/.test(p.label)))
@@ -131,8 +133,8 @@ ok('Settings: "Add a reward" ends on a gap for the parent to finish, which only 
 at('/parent/plan')
 ok('Plans: "What does Elite add?" on the welcome', labels(withChat(0, () => chips())).length === 1 && /add\?$/.test(labels(withChat(0, () => chips()))[0]))
 ok('no store to ask (Node, an old core): the whole list', labels(chips()).length === 3)
-ok('welcomeChips leaves out a pill\'s words, by label or by prompt', rankup.welcomeChips([{ label: "What's waiting for me?", prompt: 'x' },
-  { label: 'x', prompt: 'How is each of my children doing this week?' }, { label: 'Keep', prompt: 'Keep this.' }]).map((c) => c.label).join() === 'Keep')
+ok('welcomeChips leaves out what a pill does (by its id since 0.31.0) and a gap to finish', rankup.welcomeChips([{ id: 'waiting', label: 'x', answer: 'x' },
+  { id: 'week', label: 'How are the kids doing?', answer: 'x' }, { label: 'Gap', prompt: 'Add a reward: ' }, { label: 'Keep', prompt: 'Keep this.' }]).map((c) => c.label).join() === 'Keep')
 ok('the core shows them on the welcome itself (pilot-chips-welcome)', /class: "pilot-chips pilot-chips-welcome"/.test(read('public/pilot/pilot-panel.js')))
 
 console.log('\n=== 4. 0.27.0\'s workarounds are gone ===')

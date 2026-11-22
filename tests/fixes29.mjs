@@ -70,7 +70,7 @@ const box2 = { window: {}, document: {} }
 vm.runInNewContext(read('public/pilot/pilot-panel.js'), box2)
 const Panel = box2.window.PilotPanel
 const { config: pilotConfig } = (await import('../src/pilot/pilotRankUp.js'))._test
-ok('the core is 1.3.0', Panel.VERSION === '1.3.0' && /const VERSION = "1\.3\.0"/.test(read('public/pilot/pilot.js')))
+ok('the core is 1.3.0 or later (1.4.0 since 0.31.0)', /^1\.([3-9]|\d\d)\.\d+$/.test(Panel.VERSION) && /const VERSION = "1\.([3-9]|\d\d)\.\d+"/.test(read('public/pilot/pilot.js')))
 ok('RankUp\'s own "Add my AI key" pill means no key card under the pills as well (core 1.3.0)', Panel.keyPillGiven(pilotConfig.welcomePills) === true)
 ok('and the key words are a website\'s: "AI key", not the design\'s "Bring Your Own API Key"', Panel.keyWords(pilotConfig.welcomePills).title === 'Your own AI key')
 ok('on the welcome the grown-ups note is one line (keyNoteShort); the whole note stays in settings and help',
