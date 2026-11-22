@@ -223,6 +223,9 @@ console.log('\n=== A new family: no Pilot on the world picker, a quiet dashboard
   await page.waitForTimeout(1000)
   ok('step 2 again: no Pilot', !(await pilotShown(page)))
   await page.locator('input[placeholder="e.g. Ava"]').fill('Mia')
+  // Since 0.29.0 sign-up shows six worlds first; Campfire Cozy is under "See all".
+  await page.getByTestId('see-all-worlds').click({ timeout: 2000 }).catch(() => {})
+  await page.waitForTimeout(300)
   await page.getByText('Campfire Cozy').first().click()
   await page.getByRole('button', { name: 'Start playing' }).click()
   await page.waitForTimeout(2500)
