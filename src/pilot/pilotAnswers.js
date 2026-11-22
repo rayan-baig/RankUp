@@ -134,6 +134,29 @@ const trialLeft = (state, now = Date.now()) => {
   if (!f.trialTier || !(f.trialEndsAt > now)) return 0
   return Math.max(1, Math.ceil((f.trialEndsAt - now) / DAY))
 }
+const RANK = { starter: 0, standard: 1, elite: 2 }
+/** The plan paid for, as it counts now: Starter while paused (as reducer.js paidTierNow; kept here so the answers import only plain rules). */
+const paidTierNow = (f, now = Date.now()) => (f?.pausedUntil && f.pausedUntil > now ? 'starter' : TIERS[f?.tier] ? f.tier : 'starter')
+/** The trial being tried, while it gives more than the plan paid for (as reducer.js onTrial): its tier, or null. */
+const trying = (state, now = Date.now()) => {
+  const f = state.family || {}
+  const paid = paidTierNow(f, now)
+  return trialLeft(state, now) && (RANK[f.trialTier] ?? 0) > (RANK[paid] ?? 0) ? f.trialTier : null
+}
+/**
+ * The plan in a parent's words (0.33.0): "you're trying Elite Pass free — 14
+ * days left" during a trial, "you're on Starter, the free plan", "you pay for
+ * Standard", or in the demo "you're on Elite Pass in the demo (nothing is
+ * charged)". 0.32.0 said "you pay for Elite Pass" beside "14 days left of the
+ * free Elite Pass trial", which can't both be true.
+ */
+export function planWords(state, now = Date.now()) {
+  const trial = trying(state, now)
+  if (trial) return `you're trying ${TIERS[trial]?.name || TIERS.elite.name} free — ${noun(trialLeft(state, now), 'day')} left`
+  const paid = TIERS[paidTierNow(state.family || {}, now)] || TIERS.starter
+  if (state.demo) return `you're on ${paid.name} in the demo (nothing is charged)`
+  return paid.price ? `you pay for ${paid.name}` : `you're on ${paid.name}, the free plan`
+}
 
 /*
  * Every parent screen (and the public pages Pilot is on): what it is for, in
@@ -186,7 +209,7 @@ const SCREEN_HELP = {
     title: 'Settings',
     what: 'This is **Settings**: your parent account, the rewards children spend coins on, the weekly and family goals, your kids\' phones and worlds, reminders, the look, the plan, help and your data. Tap a heading to open it.',
     now: (s) => [noun((s.rewards || []).length, 'reward'), `a weekly goal of ${noun(weeklyGoalOf(s), 'chore')} each`,
-      `${noun(linkedOf(s), 'child\'s phone', 'children\'s phones')} linked`, `the ${planName(s)} plan`],
+      `${noun(linkedOf(s), 'child\'s phone', 'children\'s phones')} linked`, planWords(s)],
   },
   '/parent/rewards': {
     title: 'Rewards',
@@ -202,9 +225,8 @@ const SCREEN_HELP = {
     title: 'Plans',
     what: `This is the **plan screen**: what ${TIER_LADDER.map((t) => t.name).join(', ')} each give, side by side, with their prices. Children keep everything they have earned whichever plan you are on.`,
     now: (s, t) => {
-      const days = trialLeft(s, t)
       const max = (TIERS[s.family?.tier] || TIERS.starter).limits?.maxKids
-      return [`you pay for ${planName(s)}`, days ? `${noun(days, 'day')} left of the free ${TIERS[s.family.trialTier]?.name || TIERS.elite.name} trial` : '',
+      return [planWords(s, t),
         Number.isFinite(max) ? `${noun(kidsOf(s), 'child', 'children')}, and ${planName(s)} has room for ${count(max)}` : noun(kidsOf(s), 'child', 'children')]
     },
   },
@@ -230,7 +252,10 @@ const SCREEN_HELP = {
   '/parent/alliance': {
     title: 'Parent Alliances',
     what: `This is **Parent Alliances** (${TIERS.elite.name}): a friendly monthly contest with other families, counted on chores accepted.`,
-    now: (s, t) => [`${noun(weekCompare(s, t).now.chores, 'chore')} accepted in the last 7 days counts for your family`],
+    now: (s, t) => {
+      const n = weekCompare(s, t).now.chores
+      return [`${noun(n, 'chore')} accepted in the last 7 days ${n === 1 ? 'counts' : 'count'} toward your family's total`]
+    },
   },
   '/parent/school': {
     title: 'School League',
@@ -250,7 +275,7 @@ const SCREEN_HELP = {
   '/parent/redeem': {
     title: 'Redeem a gift',
     what: 'This is where a **gift code is redeemed**: type the code from the gift card and the plan it gives starts.',
-    now: (s) => [`you are on ${planName(s)} now`],
+    now: (s, t) => [planWords(s, t)],
   },
   '/parent/help': {
     title: 'Help',
@@ -313,19 +338,72 @@ export function explainAnswer(route, state, { now = Date.now() } = {}) {
   return facts.length ? `${help.what}\n\nRight now: ${facts.join(', ')}.` : help.what
 }
 
-/**
- * "Summarise this" with no AI key (0.32.0): the core's own follow-up sends
- * the screen to the AI, which with no key meant the key settings. RankUp
- * answers it here instead, in a few short points: the screen in one line,
- * then its own counts, then where to go. Built on the phone; nothing sent.
+/*
+ * Each screen's one next step, for "Summarise this" (0.33.0): the thing a
+ * parent would do next on it, from what is on it now. Counts and chore
+ * titles only (titles through `scrub`), never a child's or family's name.
  */
-export function summaryAnswer(route, state, { now = Date.now() } = {}) {
+const link = (label, route) => `[${label}](${screenLink(route)})`
+const oldestTitle = (s, scrub) => {
+  const first = pendingOf(s).sort((a, b) => (a.submittedAt || 0) - (b.submittedAt || 0))[0]
+  const quest = first && (s.quests || []).find((q) => q.id === first.questId)
+  return first ? keep(scrub)(plainWords(quest?.title || '')) || 'the chore at the top' : ''
+}
+const NEXT = {
+  '/parent': (s, t, scrub) => {
+    const waiting = pendingOf(s).length
+    if (waiting) return `${link('Open Review', '/parent/approvals')} and accept ${waiting === 1 ? `**${oldestTitle(s, scrub)}**` : `the oldest, **${oldestTitle(s, scrub)}**`}.`
+    if (owedOf(s)) return `Hand over the ${noun(owedOf(s), 'reward')} your children chose, then tap **Mark given** in ${link('Rewards', '/parent/rewards')}.`
+    if (!openChores(s).length) return `${link('Add a chore', '/parent/assign')}: there is nothing on anyone's list right now.`
+    return 'Nothing needs you now. When a child taps "I did it!", it shows up here to accept.'
+  },
+  '/parent/approvals': (s, t, scrub) => (pendingOf(s).length
+    ? `Accept **${oldestTitle(s, scrub)}**, at the top: it has waited longest.`
+    : `Nothing to accept. ${link('Add a chore', '/parent/assign')} for when they're ready.`),
+  '/parent/assign': (s) => (openChores(s).length
+    ? 'Pick a child and add one more, or choose **Quest packs** to add a ready-made set.'
+    : 'Pick a child and add their first chore, or choose **Quest packs** to add a ready-made set.'),
+  '/parent/kids': (s) => (kidsOf(s) && linkedOf(s) < kidsOf(s)
+    ? `Link a phone for a child who has their own (${link('Link a phone', '/parent/pair')}), or skip it if you share one.`
+    : 'Tap a child to see their world, level and open chores.'),
+  '/parent/settings': (s) => ((s.rewards || []).length ? 'Check the weekly goal fits your week: it is under **Weekly goal**.' : `Add a few rewards in ${link('Rewards', '/parent/rewards')}: coins mean more with something to save for.`),
+  '/parent/rewards': (s) => {
+    if (!(s.rewards || []).length) return `Tap **Add reward**, or "Add 3 starter rewards" on ${link('Home', '/parent')}.`
+    if (owedOf(s)) return `Hand over the ${noun(owedOf(s), 'reward')} waiting, then tap **Mark given**.`
+    return 'Add one bigger reward to save up for, so there is always a next thing.'
+  },
+  '/parent/plan': (s, t) => {
+    const trial = trying(s, t)
+    if (trial) return `Nothing to do yet: after the trial you're on ${TIERS[paidTierNow(s.family || {}, t)]?.name || TIERS.starter.name} unless you choose a plan, and nothing is charged by itself.`
+    return 'Compare the three side by side below; children keep everything they earned on any plan.'
+  },
+  '/parent/pair': (s) => (linkedOf(s) < kidsOf(s) ? 'Tap the code button for a child, then type the digits on their phone after **I\'m a kid**.' : 'Every child has a linked phone: nothing to do here.'),
+  '/parent/override': () => 'Write one house rule in your own words; a pause is there for when you need it.',
+  '/parent/blueprint': () => 'Look for the day of the week with the fewest chores, and give that day an easy one.',
+  '/parent/alliance': (s) => (pendingOf(s).length
+    ? `Accept the ${noun(pendingOf(s).length, 'chore')} waiting in ${link('Review', '/parent/approvals')}: each one counts toward your family's total this month.`
+    : 'Keep accepting chores as they come in: each one counts toward your family\'s total this month.'),
+  '/parent/history': (s) => (pendingOf(s).length ? `${noun(pendingOf(s).length, 'chore')} still ${pendingOf(s).length === 1 ? 'waits' : 'wait'} in ${link('Review', '/parent/approvals')}.` : 'Nothing waiting: everything sent in has an answer.'),
+  '/parent/money': () => 'When you hand money over, tap **Paid** so the record matches.',
+  '/parent/genesis': (s) => ((s.kidThemes || []).some((x) => x.useAsk || (x.sendAsk && !x.sentAt)) ? 'Answer the world waiting for you: yes or not yet.' : 'Nothing waiting for your answer.'),
+}
+
+/**
+ * "Summarise this" with no AI key (0.32.0; since 0.33.0 RankUp's own
+ * suggestion, core 1.4.2 config.screenChip). Not a repeat of "Explain this
+ * screen": it leads with the screen's numbers, as short points, then one
+ * next step (NEXT). Built on the phone; nothing sent.
+ */
+export function summaryAnswer(route, state, { now = Date.now(), scrub } = {}) {
   const help = screenHelp(route)
   if (!help) return NOT_A_SCREEN
-  const first = help.what.replace(/\*\*/g, '').split(/(?<=\.)\s/)[0]
-  const facts = String(route || '').startsWith('/parent') ? nowFacts(help, state, now) : []
-  const points = [first, ...facts.map((f) => f.charAt(0).toUpperCase() + f.slice(1) + '.')]
-  return `**${help.title}, in short:**\n\n${points.map((p) => `- ${p}`).join('\n')}`
+  const parent = String(route || '').startsWith('/parent')
+  const facts = parent ? nowFacts(help, state, now) : []
+  const cap = (f) => f.charAt(0).toUpperCase() + f.slice(1)
+  const points = facts.length ? facts.map(cap) : [help.what.replace(/\*\*/g, '').split(/(?<=\.)\s/)[0].replace(/\.$/, '')]
+  let next = ''
+  if (parent && hasFamily(state)) { try { next = NEXT[help.route]?.(state, now, scrub) || '' } catch { next = '' } }
+  return `**${help.title}, in short:**\n\n${points.map((p) => `- ${p}`).join('\n')}${next ? `\n\n**Next:** ${next}` : ''}`
 }
 
 // ---------------------------------------------------------------- the plans, and RankUp itself
@@ -359,7 +437,11 @@ export function plansAnswer() {
 
 // ---------------------------------------------------------------- each screen's own suggestion, with no key (0.32.0)
 
-/** "Accept the oldest one", with no key: which chore it is, how long it has waited, and where to accept it. */
+/**
+ * "Which chore is oldest?" (with no key; "Accept the oldest one" once there
+ * is one, for the AI): which chore it is, how long it has waited, and an
+ * "Open it" link to Review, where it is at the top (0.33.0).
+ */
 export function oldestAnswer(state, { scrub, now = Date.now() } = {}) {
   if (!hasFamily(state)) return `Nothing yet. ${SET_UP_FIRST}`
   const waiting = pendingOf(state).sort((a, b) => (a.submittedAt || 0) - (b.submittedAt || 0))
@@ -368,7 +450,8 @@ export function oldestAnswer(state, { scrub, now = Date.now() } = {}) {
   const quest = (state.quests || []).find((q) => q.id === waiting[0].questId)
   const title = keep(scrub)(plainWords(quest?.title || '')) || 'A chore'
   const when = ago(waiting[0].submittedAt, now)
-  return `The oldest chore waiting is **${title}**${when ? `, sent ${when}` : ''}. It is at the top of [Review](${review}): **Accept** pays its XP and coins, **Send back** returns it to redo, with a note if you like.`
+  return `The oldest chore waiting is **${title}**${when ? `, sent ${when}` : ''}. It is at the top of Review.\n\n`
+    + `[Open it](${review}): **Accept** pays its XP and coins, **Send back** returns it to redo, with a note if you like.`
     + (waiting.length > 1 ? `\n\n${noun(waiting.length - 1, 'more chore')} ${waiting.length === 2 ? 'is' : 'are'} waiting after it.` : '')
 }
 

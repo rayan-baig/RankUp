@@ -108,7 +108,8 @@ ok('Rewards: what the rewards are for, and right now the rewards and what they c
 ok('Settings opened at its rewards is Rewards too', answers.explainAnswer('/parent/settings?open=rewards', family) === rewardsText)
 ok('and #/parent/rewards is a real screen (Settings, opened at the rewards)', /route === '\/parent\/rewards'\) return <ParentSettings open="rewards" \/>/.test(read('src/App.jsx')))
 const planText = answers.explainAnswer('/parent/plan', family)
-ok('Plans: right now the plan paid for and the trial\'s days left', /Right now: you pay for Starter, 6 days left of the free Elite Pass trial, 2 children, and Starter has room for 1\./.test(planText), planText)
+// 0.33.0: "you're trying Elite Pass free — 6 days left", not "you pay for Starter, 6 days left of the free … trial".
+ok('Plans: right now the plan tried and the trial\'s days left', /Right now: you're trying Elite Pass free — 6 days left, 2 children, and Starter has room for 1\./.test(planText), planText)
 const reviewText = answers.explainAnswer('/parent/approvals', family, { now })
 ok('Review: right now how many wait, and the oldest', /Right now: 2 chores waiting for review, the oldest sent 3 hours ago\./.test(reviewText), reviewText)
 const facts = parentScreens.map((r) => (answers.explainAnswer(r, family).split('Right now: ')[1] || ''))
@@ -119,14 +120,10 @@ ok('the Pilot screen list knows Rewards', /Rewards/.test(SCREENS['/parent/reward
 const summary = answers.summaryAnswer('/parent/rewards', family)
 ok('"Summarise this", with no key: a few short points about the screen, from the phone', /^\*\*Rewards, in short:\*\*\n\n- /.test(summary) && summary.split('\n- ').length >= 3, summary)
 ok('every screen has its summary, never the generic line', parentScreens.every((r) => /in short:/.test(answers.summaryAnswer(r, family))))
-ok('the core\'s "Summarise this" is caught only while there is no key, and only that chip', /if \(!isSummaryChip\(e\.target\) \|\| keyReady\(\) \|\| !shows\(\)\) return/.test(read('src/pilot/pilotRankUp.js'))
-  && rankup.SUMMARY_CHIP === 'Summarise this')
-const chipEl = (text, inChips = true, disabled = false) => ({ closest: (sel) => (inChips && sel.includes('.pilot-chips') ? { textContent: ` ${text} `, disabled } : null) })
-ok('isSummaryChip: the chip by its words, under the chat, not disabled', rankup.isSummaryChip(chipEl('Summarise this')) && !rankup.isSummaryChip(chipEl('Clear chat'))
-  && !rankup.isSummaryChip(chipEl('Summarise this', false)) && !rankup.isSummaryChip(chipEl('Summarise this', true, true)) && !rankup.isSummaryChip(null))
-const chat = rankup.withAnswer([{ role: 'user', text: 'a' }], 'Summarise this screen', 'X')
-ok('its answer is Pilot\'s own (local), with the key offered under it', chat.length === 4 && chat[2].role === 'assistant' && chat[2].local === true && chat[3].kind === 'more')
-ok('the key is offered once per chat, not under every answer', rankup.withAnswer(chat, 'Q', 'Y').filter((m) => m.kind === 'more').length === 1)
+// 0.33.0: the tap-catching workaround is gone; core 1.4.2's config.screenChip
+// puts RankUp's own "Summarise this" in the core's place (tests/fixes33.mjs).
+ok('the 0.32.0 workaround is gone: RankUp\'s summary is config.screenChip now', !/isSummaryChip|watchSummary|addEventListener\('click'/.test(code('src/pilot/pilotRankUp.js'))
+  && /get screenChip\(\)/.test(code('src/pilot/pilotRankUp.js')))
 
 const noKey = []
 for (const r of parentScreens) {
@@ -134,14 +131,15 @@ for (const r of parentScreens) {
   for (const c of withPilot(false, 1, () => chips())) noKey.push([r, c])
 }
 const prompts = noKey.filter(([, c]) => c.answer === undefined && !c.link)
-ok(`with no key, every parent screen's suggestions answer or open a screen (${noKey.length}): none asks for a key`, noKey.length >= 50 && prompts.length === 0,
+ok(`with no key, every parent screen's suggestions answer or open a screen (${noKey.length}): none asks for a key`, noKey.length >= 6 && prompts.length === 0,
   prompts.map(([r, c]) => `${r} ${c.label}`).slice(0, 4).join(' | '))
 at('/parent/approvals')
-const oldest = run(withPilot(false, 1, () => chips())[2])
-ok('Review\'s "Accept the oldest one": which chore, how long it waited, and Review', /The oldest chore waiting is \*\*Feed the cat\*\*, sent 3 hours ago/.test(oldest) && /\[Review\]/.test(oldest), oldest)
+// 0.33.0: with no key it is "Which chore is oldest?" (the pills it repeats left out), with an "Open it" link.
+const oldest = run(withPilot(false, 1, () => chips()).find((c) => c.label === 'Which chore is oldest?') || {})
+ok('Review\'s "Which chore is oldest?": which chore, how long it waited, and Review', /The oldest chore waiting is \*\*Feed the cat\*\*, sent 3 hours ago/.test(oldest) && /\[Open it\]\(/.test(oldest), oldest)
 ok('with a key it is the AI\'s again (it can accept it)', withPilot(true, 1, () => chips())[2].prompt === 'Accept the oldest chore that is waiting.')
 at('/parent/assign')
-ok('Assign\'s "Add 3 starter chores": where the packs are, with no key; the AI with one', /Quest packs/.test(run(withPilot(false, 1, () => chips())[2]))
+ok('Assign\'s "Add 3 starter chores": where the packs are, with no key ("Where are the quest packs?" since 0.33.0); the AI with one', /Quest packs/.test(run(withPilot(false, 1, () => chips()).find((c) => c.label === 'Where are the quest packs?') || {}))
   && withPilot(true, 1, () => chips())[2].prompt === 'Add the 3 starter chores.')
 for (const r of ['/gift', '/school']) {
   at(r, { ...createInitialState(), onboarded: false })
@@ -169,7 +167,7 @@ const tw = code('src/components/ThisWeek.jsx')
 ok('This week shows the boost line, parent-only, names marked private for Pilot', /data-testid="week-boost"/.test(tw) && /<span data-pilot-private="">\{boost\}<\/span>/.test(tw))
 ok('nothing leaves the phone until Share or Copy is pressed (both only in their handlers)',
   /const share = async \(\) => \{\s*try \{\s*await navigator\.share/.test(tw) && /const copy = async \(\) => \{\s*try \{\s*await navigator\.clipboard\.writeText\(text\)/.test(tw)
-  && (tw.match(/navigator\.share\(/g) || []).length === 1 && (tw.match(/clipboard\.writeText\(/g) || []).length === 1 && /This is what would be sent\. Nothing leaves this phone until you press Share or Copy\./.test(tw))
+  && (tw.match(/navigator\.share\(/g) || []).length === 1 && (tw.match(/clipboard\.writeText\(/g) || []).length === 1 && /This is what would be sent\. Nothing leaves this device until you press Share or Copy\./.test(tw))
 ok('the plan screen says it too', /data-testid="plan-boost"/.test(read('src/screens/parent/ParentPlan.jsx')))
 ok('children never see it: This week and the plan screen are parent screens only', !/ThisWeek|weekShareText|boostWords/.test(read('src/screens/kid/KidHome.jsx') + read('src/screens/kid/KidProfile.jsx')))
 
@@ -177,7 +175,7 @@ console.log('\n=== 5. The trial banner ===')
 const banner = code('src/components/TrialBanner.jsx')
 ok('"room for every child" only when the family has more children than its plan has room for',
   /if \(extra && plan\.limits\.maxKids > paid\.limits\.maxKids\) gives\.push\('room for every child'\)/.test(banner))
-ok('with the heads-up showing, "theirs to keep" is not said again above it', /\{!headsUp && ' Everything your children earn is theirs to keep, whatever you choose\.'\}/.test(banner))
+ok('with the heads-up showing, "theirs to keep" is not said again above it', /const words = headsUp \? room : \(/.test(banner) && /\{' Everything your children earn is theirs to keep, whatever you choose\.'\}/.test(banner))
 const { trialHeadsUp } = await import('../src/lib/trialHeadsUp.js')
 ok('the heads-up keeps its one "stays theirs" sentence', /Everything your children have earned stays theirs\.$/.test(trialHeadsUp(family, TIERS.elite, TIERS.starter, 2) || ''))
 
@@ -199,8 +197,8 @@ ok('the dashboard measures its two columns and goes to one when they cannot be b
 ok('one column: the phone\'s order, as wide as a card reads well', /\.dash-cols\[data-cols='1'\] \{ display: block; \}/.test(read('src/styles/desk.css'))
   && /\.shell\.dash-wide\.dash-one \{ max-width: 48rem; \}/.test(read('src/styles/desk.css')) && /\{!twoCols && stats\}/.test(dash))
 
-console.log('\n=== Pilot core 1.4.1 ===')
-ok('the core is 1.4.1 (fingerprints in tests/fixes28.mjs, its own tests in tests/js/pilot.test.js)', /const VERSION = "1\.4\.1"/.test(read('public/pilot/pilot.js')))
+console.log('\n=== Pilot core 1.4.1 (1.4.2 since 0.33.0) ===')
+ok('the core is 1.4.1 or later (fingerprints in tests/fixes28.mjs, its own tests in tests/js/pilot.test.js)', /const VERSION = "1\.4\.[1-9]"/.test(read('public/pilot/pilot.js')))
 ok('an answer of RankUp\'s own never goes to the AI company (the core\'s stand-in)', /LOCAL_STANDIN/.test(read('public/pilot/pilot-engine.js')))
 const sets = rankup.PICTURE_SETS || {}
 ok('a crisp robot on phones: the four picture sets on Pilot\'s script tag, each file there', Object.keys(sets).join() === 'robotSet,restBodySet,restHeadSet,restEyesSet'

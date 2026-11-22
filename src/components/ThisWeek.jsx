@@ -84,7 +84,7 @@ export default function ThisWeek() {
         </Button>
       ) : (
         <div className="week-share" data-testid="week-share">
-          <p className="text-[11px] text-muted mb-1.5">This is what would be sent. Nothing leaves this phone until you press Share or Copy.</p>
+          <p className="text-[11px] text-muted mb-1.5">This is what would be sent. Nothing leaves this device until you press Share or Copy.</p>
           <p className="week-share-text" data-pilot-private="" data-testid="week-share-text">{text}</p>
           <div className="flex flex-wrap gap-2 mt-2">
             {canShare && <Button className="px-4 py-2 min-h-0 text-sm" onClick={share}>Share…</Button>}

@@ -911,6 +911,23 @@ html[data-area='kid'] .tabbar {
   html[data-area='parent'] .tabbar .tabs { min-height: 100%; }
   html[data-area='parent'][data-pilot-tabs='on'] .tabbar .tabbar-dock { display: block; flex: 0 0 104px; margin-top: auto; }
   html[data-area='parent'][data-pilot-tabs='on'] .pilot-root.rk-pilot.pilot-at-bl { left: 8px; bottom: 12px; }
+  /*
+   * Pilot's chat, docked (0.33.0). Beside the sidebar it opened over the
+   * screen (the plan cards, the dashboard's left column). Now it is a panel
+   * down the right edge, the whole height, and while it is open
+   * (data-pilot-open, set by src/pilot/pilotRankUp.js) the screen moves over
+   * by its width, so nothing is under it. The robot stays in the sidebar's
+   * slot. Below 1400px the dashboard drops to one column and the plans to
+   * one card a row while it is open (ParentDashboard, .plan-cards).
+   */
+  html[data-area='parent'][data-pilot-tabs='on'] { --rk-dock: clamp(372px, 28vw, 420px); }
+  html[data-area='parent'][data-pilot-tabs='on'] .pilot-root.rk-pilot .pilot-panel {
+    left: auto; right: 16px; top: 16px; bottom: 16px; width: var(--rk-dock); height: auto;
+  }
+  html[data-area='parent'][data-pilot-tabs='on'][data-pilot-open='on'] body { padding-right: calc(var(--rk-dock) + 32px); }
+}
+@media (min-width: 1100px) and (max-width: 1399px) {
+  html[data-area='parent'][data-pilot-tabs='on'][data-pilot-open='on'] .plan-cards { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* RankUp's own "Reduce motion" (Settings) keeps the robot still too, as the

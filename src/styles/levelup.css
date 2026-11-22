@@ -6,7 +6,9 @@
  * the overlay draws none of these (it is given `still`), and the global
  * rules in index.css stop any animation that is left.
  */
-.levelup-card { max-width: 26rem; }
+/* The card above the confetti (0.33.0): the pieces fall behind the words
+   and the button, never across "Carry on" or "Or tap anywhere". */
+.levelup-card { max-width: 26rem; z-index: 1; }
 
 .levelup-kicker { font-size: 13px; letter-spacing: 0.28em; font-weight: 700; }
 .levelup-number {
@@ -20,7 +22,7 @@
 .levelup-ok { min-width: 9rem; }
 
 /* Confetti, like the weekly goal's (index.css), longer and fuller. */
-.levelup-confetti { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
+.levelup-confetti { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 .levelup-confetti > span {
   position: absolute;
   top: -24px;

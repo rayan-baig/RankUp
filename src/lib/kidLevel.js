@@ -16,7 +16,7 @@
  * only the level-ups this phone logged in the last few days count (on the
  * demo, only those of the last hour: the demo's own history is not news).
  */
-import { levelFromXp } from './xp.js'
+import { levelFromXp, totalXpForLevel } from './xp.js'
 
 const DAY = 86400000
 
@@ -52,5 +52,27 @@ export function levelNews(state, kid, now = Date.now()) {
       && Number(e.at) >= since && Number.isFinite(Number(e.meta?.from)))
     from = recent.length ? Math.min(...recent.map((e) => Number(e.meta.from))) : level
   }
-  return { level, news: level > from ? { kidId: kid.id, from, to: level } : null }
+  return { level, news: level > from ? { kidId: kid.id, from, to: level, chores: choresBehind(state, kid, from) } : null }
+}
+
+/**
+ * How many accepted chores took this child up from level `from` (0.33.0), so
+ * the moment can say "Your chore was accepted" for one: the most recent
+ * accepted chores, newest first, until taking their XP away would leave the
+ * child below level `from + 1`. 0 when it can't be told (XP from elsewhere),
+ * which reads as "chores".
+ */
+export function choresBehind(state, kid, from) {
+  const below = totalXpForLevel(from + 1)
+  let xp = Number(kid?.xp) || 0
+  const accepted = (state?.submissions || [])
+    .filter((s) => s.kidId === kid?.id && s.status === 'approved' && Number(s.awarded?.xp) > 0)
+    .sort((a, b) => (Number(b.decidedAt) || 0) - (Number(a.decidedAt) || 0))
+  let n = 0
+  for (const s of accepted) {
+    if (xp < below) break
+    xp -= Number(s.awarded.xp)
+    n += 1
+  }
+  return xp < below ? n : 0
 }

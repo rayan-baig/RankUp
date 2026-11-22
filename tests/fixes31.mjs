@@ -91,7 +91,10 @@ ok('only "Add my AI key" is left for the key, so the key is still asked for once
   && Panel.keyPillGiven(config.welcomePills) === true && pills.filter((p) => p.builtin).length === 1)
 ok('the line under an answer while there is no key (answerMore)', config.answerMore === 'Want more? Add your AI key to ask anything.')
 ok('(the gate sees Parent Mode)', at('/parent'))
-const homeChips = withChat(2, () => chips())
+// 0.33.0: with no key, what a pill does is left out once chatting too (core
+// 1.4.2 offers the pills again under each answer); with a key, all three.
+const keyedChat = (n, fn) => { globalThis.window = { Pilot: { ready: () => true, store: { loadChat: () => Array.from({ length: n }, () => ({ role: 'user', text: 'hi' })) } } }; try { return fn() } finally { delete globalThis.window } }
+const homeChips = keyedChat(2, () => chips())
 ok('Home once chatting: "What\'s waiting for me?" (an answer), "Add a chore for…" (Assign), "How are the kids doing?" (an answer)',
   JSON.stringify(homeChips.map((c) => c.label)) === JSON.stringify(["What's waiting for me?", 'Add a chore for…', 'How are the kids doing?'])
   && typeof homeChips[0].answer === 'function' && /#\/parent\/assign$/.test(homeChips[1].link) && typeof homeChips[2].answer === 'function')
@@ -104,7 +107,7 @@ at('/parent/plan')
 const planChip = withChat(0, () => chips())[0] || {}
 ok(`the plan screen: "What does ${TIERS.elite.name} add?" is answered at once`, typeof planChip.answer === 'function' && new RegExp(TIERS.elite.name).test(run(planChip)))
 at('/parent/help')
-const helpThird = withChat(1, () => chips())[2] || {}
+const helpThird = keyedChat(1, () => chips())[2] || {}
 ok('a screen with no suggestion of its own: "What can I do here?" explains it, at once', helpThird.label === 'What can I do here?' && /\*\*Help\*\*/.test(run(helpThird)))
 at('/parent/approvals')
 // 0.32.0: with no key it is answered too (tests/fixes32.mjs); with a key it is the AI's.

@@ -58,11 +58,15 @@ export default function TrialBanner() {
      earned stays theirs.", so the words above it leave that sentence out:
      said once, not twice (0.32.0). */
   const headsUp = days <= 3 ? trialHeadsUp(state, plan, paid, days) : null
-  const words = (
+  /* While the heads-up shows, the pitch line ("Elite Pass gives you…") is
+     left out (0.33.0): the heads-up already names what the trial gives, so
+     the banner is the title, the heads-up and "Compare plans". */
+  const room = extra ? `On the free plan, ${paid.limits.maxKids === 1 ? 'one child plays' : `${paid.limits.maxKids} children play`} at a time.` : ''
+  const words = headsUp ? room : (
     <>
       {gives.length > 0 ? `${plan.name} gives you ${gives.slice(0, 2).join(' and ')}.` : 'You are on the full product with no card on file.'}
-      {!headsUp && ' Everything your children earn is theirs to keep, whatever you choose.'}
-      {extra && ` On the free plan, ${paid.limits.maxKids === 1 ? 'one child plays' : `${paid.limits.maxKids} children play`} at a time.`}
+      {' Everything your children earn is theirs to keep, whatever you choose.'}
+      {room && ` ${room}`}
     </>
   )
 
@@ -103,14 +107,14 @@ export default function TrialBanner() {
           See plans
         </Button>
       </div>
-      <p className="text-sm text-muted trial-words mt-1.5">
+      {headsUp && <p className="trial-heads-up" data-testid="trial-heads-up" data-pilot-private="">{headsUp}</p>}
+      <p className={`text-sm text-muted trial-words ${headsUp ? 'mt-2' : 'mt-1.5'}`} data-testid="trial-words">
         {words}
-        {' '}
+        {words ? ' ' : ''}
         <button type="button" className="tap-inline underline font-semibold" aria-expanded={more} onClick={() => setMore((m) => !m)}>
           Compare plans
         </button>
       </p>
-      {headsUp && <p className="trial-heads-up" data-testid="trial-heads-up">{headsUp}</p>}
       {compare}
     </div>
   )

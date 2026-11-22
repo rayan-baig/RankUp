@@ -109,6 +109,29 @@ export function kidsThisWeek(state, now = Date.now(), multiplier = 1) {
   return (state?.kids || []).filter((k) => per.has(k.id)).map((k) => ({ kidId: k.id, name: k.name, ...per.get(k.id) }))
 }
 
+/**
+ * Each child's boost since `since` (0.33.0: the start of a free trial), up
+ * to `now`: the extra XP the plan's multiplier paid on the chores accepted
+ * in that time. Same rules as kidsThisWeek; a child it gave nothing is left
+ * out.
+ */
+export function boostSince(state, since, now = Date.now(), multiplier = 1) {
+  const per = new Map()
+  for (const s of state?.submissions || []) {
+    const at = Number(s.decidedAt)
+    if (s.status !== 'approved' || !(at > 0) || at < since || at > now) continue
+    const boost = boostOf(s, { multiplier })
+    if (boost > 0) per.set(s.kidId, (per.get(s.kidId) || 0) + boost)
+  }
+  return (state?.kids || []).filter((k) => per.has(k.id)).map((k) => ({ kidId: k.id, name: k.name, boost: per.get(k.id) }))
+}
+
+/** "Mia +15 XP", "Ava +46 XP and Noah +78 XP": null when it gave nothing. */
+export function soFarWords(kids) {
+  const got = (kids || []).filter((k) => k.boost > 0)
+  return got.length ? list(got.map((k) => `${k.name} +${k.boost.toLocaleString()} XP`)) : null
+}
+
 const list = (words) => (words.length <= 1 ? words.join('') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`)
 
 /**

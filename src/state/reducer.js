@@ -1131,7 +1131,8 @@ function reduce(state, action) {
       }
       return logEvent(queueRpc(next, 'reset_due_recurring_quests', action.tz ? { p_tz: action.tz } : {}), {
         type: 'quests_returned',
-        meta: { count: due.length },
+        // daily (0.33.0): Recent activity says "daily chores" only when they all are.
+        meta: { count: due.length, daily: due.every((q) => q.recurrence === 'daily') },
       })
     }
 
