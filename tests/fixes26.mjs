@@ -95,7 +95,8 @@ ok('a refused claim is undone on the phone', /fn === 'claim_login_bonus'/.test(r
 console.log('\n=== 4. Pilot\'s words for parents ===')
 ok('the design\'s five pills are still the core\'s default (RankUp sets its own since 0.28.0, tests/fixes28.mjs)', /\{ icon: "gear", label: "Customize with your API key", action: "settings" \}/.test(read('public/pilot/pilot-panel.js')))
 ok('core 1.1.1 puts the suggestions above the conversation once chatting', read('public/pilot/pilot-panel.js').includes('welcome, chips, log, cardBox'))
-ok('RankUp\'s chips: "What\'s waiting for me?" and "Add a chore for…"', /C\("What's waiting for me\?"/.test(rankup) && /C\('Add a chore for…'/.test(rankup))
+// Since 0.31.0 (core 1.4.0) the first is answered at once and the second opens Assign.
+ok('RankUp\'s chips: "What\'s waiting for me?" and "Add a chore for…"', /label: "What's waiting for me\?"/.test(rankup) && /label: 'Add a chore for…'/.test(rankup))
 ok('one plain sentence on what an AI key is and where to get one', /An AI key is a private code a grown-up makes in the "API keys" part of an AI company/.test(rankup))
 
 console.log('\n=== 5. A real weekly goal, a bar as wide as the column ===')

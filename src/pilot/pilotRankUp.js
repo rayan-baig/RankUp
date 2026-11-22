@@ -6,12 +6,15 @@
  * the page has loaded, so it is never on a child's phone and never part of
  * the first load. It:
  *
- *   - adds the core's one script tag (public/pilot/, core 1.2.1, copied
+ *   - adds the core's one script tag (public/pilot/, core 1.4.0, copied
  *     unchanged from the MTRX Horizyn site), which
  *     then loads public/pilot-rankup.js, which calls start() here;
  *   - mounts Pilot with RankUp's config: who is using it, which screen, its
  *     own welcome (tagline and five pills), the suggestions, and kidView, which refuses whenever the gate says no (the
  *     second lock: Pilot.mount refuses on it, and the engine offers no tools);
+ *   - answers the common questions itself, with no AI key and nothing sent
+ *     (core 1.4.0, pilotAnswers.js): what's waiting, this week's numbers,
+ *     this screen explained, and a link to Assign;
  *   - takes the robot off the page the moment Pilot is not allowed (leaving
  *     Parent Mode, "Hand to Ava") and puts it back when it is;
  *   - forgets the chat, the memory and any key kept for this tab only when
@@ -30,6 +33,7 @@ import { TIERS } from '../state/initialState.js'
 import { isElite } from '../state/reducer.js'
 import { rankUpTools } from './pilotTools.js'
 import { knowledge, STRENGTHS } from './pilotKnowledge.js'
+import { waitingAnswer, weekAnswer, explainAnswer, eliteAnswer, plansAnswer, screenLink, HOW_IT_WORKS, SAFE_FOR_KIDS } from './pilotAnswers.js'
 
 export const STORAGE_PREFIX = 'rankup-pilot'
 const ACCOUNT_MARK = `${STORAGE_PREFIX}-account`
@@ -125,21 +129,38 @@ function screen() {
 }
 
 const C = (label, prompt) => ({ label, prompt })
+
+/*
+ * Answers Pilot gives at once, with no AI key and nothing sent anywhere (core
+ * 1.4.0): built in this browser from the family's own chores, when asked
+ * (pilotAnswers.js). No child's or family's name is in any of them: the
+ * chore titles go through `scrub` as well. The core keeps an answer in the
+ * chat, and once a key is added the chat goes with the next question.
+ */
+const scrub = (text) => withoutNames(text, privateNames())
+const answerWaiting = () => waitingAnswer(state(), { scrub })
+const answerWeek = () => weekAnswer(state())
+const answerExplain = (ctx) => `${explainAnswer(route(), state())}${ctx && ctx.ready ? '\n\nAsk me anything about it in the box below.' : ''}`
+
 /*
  * The suggestions above the chat once it has started (the core shows three,
  * then its own "Summarise this"), and on the welcome (see welcomeChips). In
  * Parent Mode RankUp's own two come first on every screen, in a parent's
- * words: what is waiting, and adding a chore. The third is for the screen.
+ * words: what is waiting (answered at once), and adding a chore (Assign).
+ * The third is for the screen: answered at once where RankUp can, an AI
+ * prompt where it takes the AI (accepting a chore, the starter chores).
+ * `id` ties a suggestion to the welcome pill that does the same.
  */
-const WAITING = C("What's waiting for me?", "What's waiting for me to review?")
-const ADD_CHORE = C('Add a chore for…', 'Add a chore for ')
-const KIDS_DOING = C('How are the kids doing?', 'How is each of my children doing this week?')
+const WAITING = { id: 'waiting', label: "What's waiting for me?", answer: answerWaiting }
+const ADD_CHORE = { id: 'add', label: 'Add a chore for…', link: screenLink('/parent/assign') }
+const KIDS_DOING = { id: 'week', label: 'How are the kids doing?', answer: answerWeek }
+const WHAT_HERE = { id: 'explain', label: 'What can I do here?', answer: answerExplain }
 function screenChips() {
   const r = route()
   if (!state().onboarded && (r === '/welcome' || r === '/')) {
-    return [C('How does RankUp work?', 'In plain words, how does RankUp work for a family?'),
-      C('Is it safe for my kids?', 'What does RankUp keep about my children, and what does it never do?'),
-      C('What do the plans cost?', 'What do the RankUp plans cost, and what does each give?')]
+    return [{ label: 'How does RankUp work?', answer: HOW_IT_WORKS },
+      { label: 'Is it safe for my kids?', answer: SAFE_FOR_KIDS },
+      { label: 'What do the plans cost?', answer: () => plansAnswer() }]
   }
   if (r === '/gift' || r === '/gift/card') return [C('How does a gift work?', 'How does giving a year of RankUp work?'), C('Which plan to give?', 'What is the difference between the plans I can give?')]
   if (r.startsWith('/school') || r === '/district') return [C('What is the School League?', 'What is the School League, and what does a school see?'), C('Is it safe for students?', 'What does a school see about its students on RankUp?')]
@@ -148,44 +169,44 @@ function screenChips() {
     '/parent/approvals': C('Accept the oldest one', 'Accept the oldest chore that is waiting.'),
     '/parent/assign': C('Add 3 starter chores', 'Add the 3 starter chores.'),
     '/parent/kids': KIDS_DOING,
-    '/parent/plan': C(`What does ${TIERS.elite.name} add?`, `What does ${TIERS.elite.name} add?`),
+    '/parent/plan': { label: `What does ${TIERS.elite.name} add?`, answer: () => eliteAnswer() },
     '/parent/settings': C('Add a reward', 'Add a reward: '),
     '/parent/money': C('How does pocket money work?', 'How does pocket money work in RankUp?'),
     '/parent/override': C('How do pauses work?', 'How does Pause and limits work, and what does my child see?'),
     '/parent/pair': C("Link my child's phone", "How does linking my child's phone with a code work?"),
     '/parent/history': KIDS_DOING,
-  }[r] || C('What can I do here?', 'In plain words, what can I do on this screen?')
+  }[r] || WHAT_HERE
   return [WAITING, ADD_CHORE, third]
 }
 
 /*
- * RankUp's own welcome (core 1.2.0, 0.28.0). The five pills a parent sees
- * when Pilot opens, before any chat and before a key: the two things a
- * parent does most, how the children are doing, the screen explained, and
- * the key. A pill that asks a whole question is sent at once; "Add a chore
- * for…" fills the box for the parent to finish. With no key yet, the core
- * keeps the question in the box, opens key settings, and sends it the moment
- * a key is saved.
+ * RankUp's own welcome (core 1.2.0, 0.28.0; useful before a key since core
+ * 1.4.0, 0.31.0). The five pills a parent sees when Pilot opens, before any
+ * chat: the two things a parent does most, how the children are doing, the
+ * screen explained, and the key. All but the key work with no AI key and
+ * send nothing: three are answered at once from the family's own data, and
+ * "Add a chore for…" opens Assign, where the child is picked. Under an answer,
+ * while there is no key, the core offers one (answerMore).
  */
 export const WELCOME_PILLS = [
-  { icon: 'chat', label: WAITING.label, action: WAITING.prompt, send: true },
-  { icon: 'bolt', label: ADD_CHORE.label, action: ADD_CHORE.prompt },
-  { icon: 'spark', label: 'How is my kid doing?', action: KIDS_DOING.prompt, send: true },
-  { icon: 'bars', label: 'Explain this screen', action: 'explain-screen' },
+  { icon: 'chat', id: 'waiting', label: WAITING.label, answer: answerWaiting },
+  { icon: 'bolt', id: 'add', label: ADD_CHORE.label, link: ADD_CHORE.link },
+  { icon: 'spark', id: 'week', label: 'How is my kid doing?', answer: answerWeek },
+  { icon: 'bars', id: 'explain', label: 'Explain this screen', answer: answerExplain },
   { icon: 'key', label: 'Add my AI key', action: 'settings' },
 ]
 
 /*
  * The core (1.2.0) shows this screen's suggestions on the welcome too, under
- * the pills, and sends one at once when tapped. There, the ones a pill
- * already does are left out (on Home all three are pills), and so is one
- * that ends on a gap for the parent to finish ("Add a reward: "): only a
- * pill can leave words in the box. Once a chat has started the pills are
- * gone, and the suggestions are the whole list again.
+ * the pills. There, the ones a pill already does are left out (on Home all
+ * three are pills), and so is one that ends on a gap for the parent to
+ * finish ("Add a reward: "): only a pill can leave words in the box. Once a
+ * chat has started the pills are gone, and the suggestions are the whole
+ * list again.
  */
-const PILL_WORDS = new Set(WELCOME_PILLS.flatMap((p) => [p.label, p.action]))
+const PILL_IDS = new Set(WELCOME_PILLS.map((p) => p.id).filter(Boolean))
 export function welcomeChips(list) {
-  return list.filter((c) => !PILL_WORDS.has(c.label) && !PILL_WORDS.has(c.prompt) && !/\s$/.test(c.prompt || ''))
+  return list.filter((c) => !(c.id && PILL_IDS.has(c.id)) && !/\s$/.test(c.prompt || ''))
 }
 /* No chat yet: the welcome is what is showing. */
 function onWelcome() {
@@ -283,6 +304,8 @@ const config = {
   // RankUp's own welcome (core 1.2.0): one line, even on a 320px phone.
   tagline: "Your family's chore helper",
   welcomePills: WELCOME_PILLS,
+  // Under an answer Pilot gives itself, while there is no key (core 1.4.0).
+  answerMore: 'Want more? Add your AI key to ask anything.',
   // RankUp has no use for pictures or videos made by an AI: chat keys only.
   hideKeySections: ['image', 'video'],
   // Tucked away (on a wide screen or a public page), the robot shrinks into
