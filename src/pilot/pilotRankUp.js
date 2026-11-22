@@ -6,11 +6,11 @@
  * the page has loaded, so it is never on a child's phone and never part of
  * the first load. It:
  *
- *   - adds the core's one script tag (public/pilot/, core 1.1.1, copied
+ *   - adds the core's one script tag (public/pilot/, core 1.2.0, copied
  *     unchanged from the MTRX Horizyn site), which
  *     then loads public/pilot-rankup.js, which calls start() here;
- *   - mounts Pilot with RankUp's config: who is using it, which screen, the
- *     suggestions, and kidView, which refuses whenever the gate says no (the
+ *   - mounts Pilot with RankUp's config: who is using it, which screen, its
+ *     own welcome (tagline and five pills), the suggestions, and kidView, which refuses whenever the gate says no (the
  *     second lock: Pilot.mount refuses on it, and the engine offers no tools);
  *   - takes the robot off the page the moment Pilot is not allowed (leaving
  *     Parent Mode, "Hand to Ava") and puts it back when it is;
@@ -126,14 +126,15 @@ function screen() {
 
 const C = (label, prompt) => ({ label, prompt })
 /*
- * The suggestions under the chat once it has started (the core shows three,
- * then its own "Summarise this"). In Parent Mode RankUp's own two come first
- * on every screen, in a parent's words: what is waiting, and adding a chore.
- * The third is for the screen.
+ * The suggestions above the chat once it has started (the core shows three,
+ * then its own "Summarise this"), and on the welcome (see welcomeChips). In
+ * Parent Mode RankUp's own two come first on every screen, in a parent's
+ * words: what is waiting, and adding a chore. The third is for the screen.
  */
 const WAITING = C("What's waiting for me?", "What's waiting for me to review?")
 const ADD_CHORE = C('Add a chore for…', 'Add a chore for ')
-function chips() {
+const KIDS_DOING = C('How are the kids doing?', 'How is each of my children doing this week?')
+function screenChips() {
   const r = route()
   if (!state().onboarded && (r === '/welcome' || r === '/')) {
     return [C('How does RankUp work?', 'In plain words, how does RankUp work for a family?'),
@@ -143,106 +144,56 @@ function chips() {
   if (r === '/gift' || r === '/gift/card') return [C('How does a gift work?', 'How does giving a year of RankUp work?'), C('Which plan to give?', 'What is the difference between the plans I can give?')]
   if (r.startsWith('/school') || r === '/district') return [C('What is the School League?', 'What is the School League, and what does a school see?'), C('Is it safe for students?', 'What does a school see about its students on RankUp?')]
   const third = {
-    '/parent': C('How are the kids doing?', 'How is each of my children doing this week?'),
+    '/parent': KIDS_DOING,
     '/parent/approvals': C('Accept the oldest one', 'Accept the oldest chore that is waiting.'),
     '/parent/assign': C('Add 3 starter chores', 'Add the 3 starter chores.'),
-    '/parent/kids': C('How are the kids doing?', 'How is each of my children doing this week?'),
+    '/parent/kids': KIDS_DOING,
     '/parent/plan': C(`What does ${TIERS.elite.name} add?`, `What does ${TIERS.elite.name} add?`),
     '/parent/settings': C('Add a reward', 'Add a reward: '),
     '/parent/money': C('How does pocket money work?', 'How does pocket money work in RankUp?'),
     '/parent/override': C('How do pauses work?', 'How does Pause and limits work, and what does my child see?'),
     '/parent/pair': C("Link my child's phone", "How does linking my child's phone with a code work?"),
-    '/parent/history': C('How are the kids doing?', 'How is each of my children doing this week?'),
+    '/parent/history': KIDS_DOING,
   }[r] || C('What can I do here?', 'In plain words, what can I do on this screen?')
   return [WAITING, ADD_CHORE, third]
 }
 
 /*
- * RankUp's suggestions on Pilot's opening screen, before any chat and before
- * a key is added (0.27.0).
- *
- * The core (1.1.1) shows `chips` only once a conversation has started, and a
- * conversation can't start without a key, so a parent opening Pilot for the
- * first time saw only the design's five pills, which say nothing about
- * RankUp. The five pills stay (the owner's decision). The core has no option
- * for suggestions on its welcome, so RankUp adds a row of its own, the same
- * `chips` as above, between the pills and the key card, without changing the
- * core's files: the core redraws its welcome, and the row is put back each
- * time (a MutationObserver, before the next paint). It goes with the welcome
- * once a conversation starts, where the core's own chips take over.
- *
- * A tap writes the question into the message box, as the core's own "Get
- * things done…" pill does. With a key it is sent; without one it waits in
- * the box, with the core's note about keys just under it.
+ * RankUp's own welcome (core 1.2.0, 0.28.0). The five pills a parent sees
+ * when Pilot opens, before any chat and before a key: the two things a
+ * parent does most, how the children are doing, the screen explained, and
+ * the key. A pill that asks a whole question is sent at once; "Add a chore
+ * for…" fills the box for the parent to finish. With no key yet, the core
+ * keeps the question in the box, opens key settings, and sends it the moment
+ * a key is saved.
  */
-let starters = null
-let startersFor = ''
-let welcomeSeen = null
-export function starterRow(doc = document) {
-  const list = chips().slice(0, 3)
-  const key = list.map((c) => c.label).join('|')
-  if (!starters) {
-    starters = doc.createElement('div')
-    starters.className = 'rk-starters'
-    starters.setAttribute('role', 'group')
-    starters.setAttribute('aria-label', 'Suggestions for RankUp')
-    starters.dataset.testid = 'pilot-starters'
-  }
-  if (key !== startersFor) {
-    startersFor = key
-    starters.replaceChildren(...list.map((c) => {
-      const b = doc.createElement('button')
-      b.type = 'button'
-      b.className = 'pilot-chip'
-      b.textContent = c.label
-      b.addEventListener('click', () => askFromStarter(c.prompt || c.label))
-      return b
-    }))
-  }
-  return starters
-}
+export const WELCOME_PILLS = [
+  { icon: 'chat', label: WAITING.label, action: WAITING.prompt, send: true },
+  { icon: 'bolt', label: ADD_CHORE.label, action: ADD_CHORE.prompt },
+  { icon: 'spark', label: 'How is my kid doing?', action: KIDS_DOING.prompt, send: true },
+  { icon: 'bars', label: 'Explain this screen', action: 'explain-screen' },
+  { icon: 'key', label: 'Add my AI key', action: 'settings' },
+]
 
-function askFromStarter(prompt) {
-  const root = document.querySelector('.pilot-root')
-  const input = root?.querySelector('.pilot-input')
-  if (!input) return
-  input.value = prompt
-  input.dispatchEvent(new Event('input', { bubbles: true }))
-  input.focus()
-  try { input.setSelectionRange(prompt.length, prompt.length) } catch { /* fine */ }
-  // A question that ends on a gap ("Add a chore for ") is for the parent to finish.
-  if (window.Pilot?.ready?.() && !/\s$/.test(prompt)) input.closest('form')?.requestSubmit?.()
+/*
+ * The core (1.2.0) shows this screen's suggestions on the welcome too, under
+ * the pills, and sends one at once when tapped. There, the ones a pill
+ * already does are left out (on Home all three are pills), and so is one
+ * that ends on a gap for the parent to finish ("Add a reward: "): only a
+ * pill can leave words in the box. Once a chat has started the pills are
+ * gone, and the suggestions are the whole list again.
+ */
+const PILL_WORDS = new Set(WELCOME_PILLS.flatMap((p) => [p.label, p.action]))
+export function welcomeChips(list) {
+  return list.filter((c) => !PILL_WORDS.has(c.label) && !PILL_WORDS.has(c.prompt) && !/\s$/.test(c.prompt || ''))
 }
-
-/* Puts the row back into the core's welcome whenever the core redraws it. */
-function placeStarters() {
-  const root = document.querySelector('.pilot-root')
-  const welcome = root?.querySelector('.pilot-welcome')
-  if (!welcome) return false
-  const row = starterRow()
-  const pills = welcome.querySelector('.pilot-pills')
-  if (pills && row.previousElementSibling !== pills) pills.after(row)
-  else if (!pills && row.parentNode !== welcome) welcome.append(row)
-  if (welcomeSeen !== welcome && typeof MutationObserver === 'function') {
-    welcomeSeen = welcome
-    new MutationObserver(() => { if (row.parentNode !== welcome || row.previousElementSibling !== welcome.querySelector('.pilot-pills')) placeStarters() })
-      .observe(welcome, { childList: true })
-  }
-  return true
+/* No chat yet: the welcome is what is showing. */
+function onWelcome() {
+  try { return window.Pilot?.store?.loadChat?.().length === 0 } catch { return false }
 }
-
-/* The welcome is built the first time Pilot is opened, inside Pilot's root,
-   which the core adds to the page a moment after mounting: wait for each once. */
-let waitingForWelcome = false
-function watchForWelcome() {
-  if (placeStarters() || waitingForWelcome || typeof MutationObserver !== 'function') return
-  waitingForWelcome = true
-  const root = document.querySelector('.pilot-root')
-  const seen = new MutationObserver(() => {
-    if (placeStarters()) { seen.disconnect(); return }
-    if (!root && document.querySelector('.pilot-root')) { seen.disconnect(); waitingForWelcome = false; watchForWelcome() }
-  })
-  seen.observe(root || document.body, root ? { childList: true, subtree: true } : { childList: true })
+function chips() {
+  const list = screenChips()
+  return onWelcome() ? welcomeChips(list) : list
 }
 
 function taskPrompt() {
@@ -329,7 +280,28 @@ const pack = () => ({
 const config = {
   appName: 'RankUp',
   name: 'Pilot',
-  tagline: 'Your AI copilot. Powered by you.',
+  // RankUp's own welcome (core 1.2.0): one line, even on a 320px phone.
+  tagline: "Your family's chore helper",
+  welcomePills: WELCOME_PILLS,
+  // RankUp has no use for pictures or videos made by an AI: chat keys only.
+  hideKeySections: ['image', 'video'],
+  // Tucked away (on a wide screen or a public page), the robot shrinks into
+  // its corner instead of hanging off the screen's edge. In Parent Mode on a
+  // phone it is never tucked: it sits in the tab bar's slot (dockedPlace).
+  keepInViewport: true,
+  // No first look (core 1.2.0 shows the robot whole, with a glow, for 4
+  // seconds on a visit's first page). It marks Pilot's root with the class
+  // "pilot-hello", the same name as the window's greeting bubble, so a parent
+  // who taps the robot in those 4 seconds gets the bubble's style on the
+  // whole of Pilot: position: relative takes the robot out of the tab bar's
+  // slot and drops it below the screen, and the window's icons and key note
+  // lose their look until the 4 seconds are up. In the slot the first look
+  // adds nothing else: the robot is never tucked away there.
+  revealMs: 0,
+  // RankUp's pop-ups are role="dialog" (components/ui.jsx Modal, the
+  // moments), which the core already steps back for. The one that isn't, the
+  // "sign in again" sheet (components/SyncBadge.jsx), carries data-pilot-modal.
+  modals: ['[data-pilot-modal]'],
   storagePrefix: STORAGE_PREFIX,
   compatibleHosts: [...PILOT_COMPATIBLE_HOSTS, ...PILOT_LOCAL_HOSTS],
   privacyUrl: '#/legal/privacy',
@@ -344,7 +316,8 @@ const config = {
     + 'Refer to a child by first name only, and only when the parent used it or a tool returned it. Keep answers suitable for a family.',
   themeClass: 'rk-pilot',
   // The core keeps the robot clear of these (a free corner, or tucked half
-  // away), as well as of the page's own words and buttons (core 1.1.1): the tab bar and the sticky set-up bar (data-pilot-avoid), and in
+  // away), as well as of the page's own words and buttons (core 1.1.1 and
+  // later): the tab bar and the sticky set-up bar (data-pilot-avoid), and in
   // Parent Mode the things a parent taps most: the "waiting for you" card,
   // the plan buttons, the rows of Settings, Review's Accept and Send back,
   // and the header buttons in the top corners (data-pilot-primary), and the
@@ -372,14 +345,14 @@ function start() {
   if (!shows()) return false
   placeAroundTabBar()
   mounted = window.Pilot.mount(config) === true
-  if (mounted) { watch(); watchForWelcome() }
+  if (mounted) watch()
   return mounted
 }
 
 /*
  * Parent Mode's tab bar, as the core's placement sees it (0.26.0).
  *
- * The core decides where the robot sits (PilotMascot.placeNow, core 1.1.1):
+ * The core decides where the robot sits (PilotMascot.placeNow, core 1.1.1 and later):
  * clear of everything in `avoid`, of the page's words and buttons, and of a
  * box being typed in. On a phone in Parent Mode the robot's place is the tab
  * bar's own slot (.tabbar-dock, index.css): on no tab, and on nothing on the
@@ -389,6 +362,12 @@ function start() {
  * bottom right corner, not tucked away", without changing the core's files.
  * Anywhere else (a wide screen, the parent's set-up, the gift and School
  * League pages) the core decides on its own.
+ *
+ * Core 1.2.0's keepInViewport (tucked away, it shrinks into its corner) is an
+ * answer placeNow gives; in the slot this answers first and never tucks, so
+ * it changes nothing there. Stepping back for a pop-up is decided before
+ * placeNow is asked, so the robot still hides behind one in the slot. The
+ * first look is off (revealMs: 0 in the config, which says why).
  */
 let placing = false
 export function dockedPlace(doc = document) {
@@ -533,11 +512,8 @@ export function connect() {
       if (!start()) return
       unpark()
       robotStill(reduceMotion())
-      // The screen may have changed: the row follows it.
-      if (starters) starterRow()
-      watchForWelcome()
     },
   }
 }
 
-export const _test = { accountOf, chips, screen, SCREENS, CORE_FILES, config, starterRow }
+export const _test = { accountOf, chips, screenChips, screen, SCREENS, CORE_FILES, config }

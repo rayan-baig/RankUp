@@ -3,9 +3,9 @@
  * and the files that carry them. tests/fixes27ui.mjs walks the same fixes in
  * a real browser.
  *
- *   1. Pilot's opening screen: RankUp's own suggestions under the five pills
- *      (before any chat and before a key), and no "Image generation" or
- *      "Video generation" in RankUp's Pilot settings; the core untouched;
+ *   1. (Pilot's opening screen: since 0.28.0 core 1.2.0's own options do
+ *      what 0.27.0 did from RankUp's files, and tests/fixes28.mjs checks
+ *      them; the 0.27.0 row and style rule are gone);
  *   2. a computer gets a computer's layout: the parent dashboard in two
  *      columns from 1100px, the front door with the demo beside the ways in,
  *      a child's column in a frame; all of it in styles/desk.css, which comes
@@ -25,55 +25,9 @@ const ok = (label, cond, detail = '') => {
 const read = (f) => readFileSync(f, 'utf8')
 const code = (f) => read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/^\s*\/\/.*$/gm, '')
 
-console.log('\n=== 1. Pilot\'s opening screen speaks RankUp ===')
-const rankup = await import('../src/pilot/pilotRankUp.js')
-const { pilotSnapshot } = await import('../src/lib/pilotGate.js')
-ok('there is a row of RankUp suggestions for the welcome (starterRow)', typeof rankup.starterRow === 'function')
-
-// A small stand-in for the document: enough for the row to be built.
-function fakeDoc() {
-  const make = (tag) => {
-    const node = {
-      tag, children: [], dataset: {}, attrs: {}, listeners: {}, className: '', textContent: '', type: '',
-      setAttribute(k, v) { this.attrs[k] = v },
-      replaceChildren(...kids) { this.children = kids },
-      addEventListener(ev, fn) { this.listeners[ev] = fn },
-    }
-    return node
-  }
-  return { createElement: make }
-}
 const { updatePilot, markParentScreen } = await import('../src/lib/pilotGate.js')
 const { createInitialState } = await import('../src/state/initialState.js')
-const parent = { ...createInitialState(), onboarded: true, session: { role: 'parent', parentUnlocked: true }, kids: [{ id: 'k', name: 'Mo' }] }
-updatePilot({ state: parent, route: '/parent', dispatch: () => {} })
-ok('(the gate sees Parent Mode)', pilotSnapshot()?.route === '/parent')
-const starterRow = typeof rankup.starterRow === 'function' ? rankup.starterRow : () => ({ children: [{}, {}, {}], attrs: {} })
-const row = starterRow(fakeDoc())
-const labels = row.children.map((b) => b.textContent)
-ok('before any chat and with no key, the welcome offers RankUp\'s own suggestions first',
-  labels[0] === "What's waiting for me?" && labels[1] === 'Add a chore for…' && labels.length === 3, JSON.stringify(labels))
-ok('in the core\'s own chip style, as buttons', row.children.every((b) => b.className === 'pilot-chip' && b.type === 'button'))
-ok('marked as a group for a screen reader', row.attrs.role === 'group' && /RankUp/.test(row.attrs['aria-label']))
-updatePilot({ state: parent, route: '/parent/approvals', dispatch: () => {} })
-ok('the third follows the screen (Review: "Accept the oldest one")', starterRow(fakeDoc()).children[2].textContent === 'Accept the oldest one')
-markParentScreen(0)
-const src = read('src/pilot/pilotRankUp.js')
-ok('the row is put back after the core redraws its welcome, between the pills and the key card',
-  /pills\.after\(row\)/.test(src) && /observe\(welcome, \{ childList: true \}\)/.test(src))
-ok('a tap fills the message box; it is sent only with a key, and never when the question ends on a gap',
-  /input\.value = prompt/.test(src) && /window\.Pilot\?\.ready\?\.\(\) && !\/\\s\$\/\.test\(prompt\)/.test(src))
-ok('the five pills stay (the core draws them; RankUp only finds where they end)', !/pilot-pill(?!s)/.test(code('src/pilot/pilotRankUp.js')) && !/pills\.(remove|replace)/.test(src))
-
 const css = read('src/styles/index.css')
-ok('"Image generation" and "Video generation" are hidden, only in RankUp\'s Pilot and only those sections',
-  /\.pilot-root\.rk-pilot \.pilot-settings-view > details\.pilot-section \{ display: none; \}/.test(css))
-const panel = read('public/pilot/pilot-panel.js')
-const sections = [...panel.matchAll(/el\("details", \{ class: "pilot-section"/g)].length
-ok('in the core those are the settings\' only <details class="pilot-section"> (so nothing else is hidden)',
-  sections === 1 && /mediaSection\("image", "Image generation"/.test(panel) && /mediaSection\("video", "Video generation"/.test(panel))
-ok('RankUp\'s Pilot carries the class that rule needs (themeClass rk-pilot)', /themeClass: 'rk-pilot'/.test(src))
-ok('the core is 1.1.1, unchanged by this', /const VERSION = "1\.1\.1"/.test(read('public/pilot/pilot.js')))
 
 console.log('\n=== 2. A computer\'s layout, kept out of the first file ===')
 const desk = (() => { try { return read('src/styles/desk.css') } catch { return '' } })()

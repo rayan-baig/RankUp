@@ -34,7 +34,7 @@ and an `html[data-pilot='off']` rule hides it even if it arrives late.
 
 ## Staying out of the way
 
-Core 1.1.1 keeps the robot clear of the page's own words and buttons
+The core (1.1.1 and later) keeps the robot clear of the page's own words and buttons
 wherever it is scrolled, of a box being typed in, and of everything in the
 config's `avoid`: `[data-pilot-avoid]` (the tab bar, the set-up's sticky
 buttons), `[data-pilot-primary]` (the dashboard's "chore waiting" card, the
@@ -46,29 +46,60 @@ right, not tucked away" while the slot is showing, because what scrolls
 behind the bar is hidden by it. `gutter: false`: RankUp's screens keep their
 own side padding.
 
-## The opening screen and the settings (0.27.0)
+Core 1.2.0's options, as RankUp sets them (0.28.0):
 
-The design's five pills stay, as the owner decided. Under them RankUp adds a
-row of its own suggestions ("What's waiting for me?", "Add a chore for…" and
-one for the screen, the same `chips` the core shows once a chat has started),
-so they are there before any chat and before a key is added. The core (1.1.1)
-shows `chips` only once a conversation has started and has no option for the
-welcome, so `src/pilot/pilotRankUp.js` puts the row into the core's welcome,
-after `.pilot-pills`, and puts it back whenever the core redraws it (a
-MutationObserver), without changing the core's files. A tap writes the
-question into the message box, like the core's "Get things done…" pill; with
-a key it is sent, unless it ends on a gap for the parent to finish.
+- `keepInViewport: true`: where the robot tucks away (a wide screen, the
+  parent's set-up, the gift and School League pages) it shrinks into its
+  corner instead of hanging off the edge. In the tab bar's slot it is never
+  tucked, so this changes nothing there.
+- `modals: ['[data-pilot-modal]']`: the robot steps back while a pop-up is
+  open. RankUp's pop-ups are dialogs (the `Modal` in `components/ui.jsx`, the
+  Season and Arena moments), which the core already knows; the one that isn't,
+  the "sign in again" sheet in `components/SyncBadge.jsx`, carries
+  `data-pilot-modal`. The pop-up check comes before `placeNow`, so it works in
+  the slot too.
+- `revealMs: 0`: **no first look.** Core 1.2.0 shows the robot whole, with a
+  glow, for 4 seconds on a visit's first page, by putting the class
+  `pilot-hello` on Pilot's root. That is also the class of the window's
+  greeting bubble, so a parent who taps the robot in those 4 seconds gets the
+  bubble's style on the whole of Pilot: `position: relative` takes the robot
+  out of the tab bar's slot and drops it below the screen (after closing the
+  window it sat halfway up the left edge), and the window's icons and key note
+  lose their look until the 4 seconds are up. In the slot the first look adds
+  nothing else, since the robot is never tucked away there. Worth fixing in
+  the core (a class name of its own for the first look); until then RankUp
+  leaves it off.
 
-RankUp's Pilot settings show chat keys only. The core has no option to leave
-out "Image generation" and "Video generation", so one rule in
-`src/styles/index.css`, scoped to RankUp's Pilot (`.pilot-root.rk-pilot`, the
-config's `themeClass`), hides the settings view's `details.pilot-section`
-elements, which in core 1.1.1 are exactly those two (`tests/fixes27.mjs`
-checks that against the core's file).
+## Pilot's welcome (0.28.0)
+
+Since core 1.2.0 a website can make the welcome its own, and RankUp does
+(`src/pilot/pilotRankUp.js`):
+
+- **Tagline:** "Your family's chore helper" (one line, even at 320px).
+- **Five pills** (`welcomePills`): **What's waiting for me?** (sent at once),
+  **Add a chore for…** (puts "Add a chore for " in the box for the parent to
+  finish), **How is my kid doing?** (sent at once), **Explain this screen**
+  (the core's `explain-screen`, through RankUp's `screenText`, which keeps the
+  family's names out) and **Add my AI key** (key settings). With no key yet,
+  the core keeps the question in the box, opens key settings ("Your message is
+  waiting in the box…") and sends it the moment a key is saved.
+- **This screen's suggestions** (`chips`): the core now shows them on the
+  welcome too, under the pills. There RankUp leaves out what a pill already
+  does, and any suggestion that ends on a gap for the parent to finish (only a
+  pill can leave words in the box): on Home all three are pills, so none show;
+  on Review "Accept the oldest one" does. Once a chat has started the pills
+  are gone and the suggestions are the whole list again ("What's waiting for
+  me?" and "Add a chore for…" first, then one for the screen).
+- **Chat keys only** (`hideKeySections: ['image', 'video']`): RankUp has no
+  use for pictures or videos made by an AI.
+
+0.27.0 did the suggestions and the hidden key sections from RankUp's own files
+(a row put into the welcome by a MutationObserver, and a style rule); both are
+gone, and `tests/fixes28.mjs` checks they stay gone.
 
 ## The moving robot
 
-Core 1.1.0's moving robot is inside Pilot's own element, so it is only ever
+The moving robot (core 1.1.0 and later) is inside Pilot's own element, so it is only ever
 where Pilot is: never on a child's screen or phone. When Pilot is put away it
 is sent home and kept still first. It keeps still, and its files are never
 fetched, under the browser's "reduce motion" (the core's rule) or RankUp's own
@@ -80,9 +111,9 @@ on later; `src/styles/index.css` stops the resting robot's float).
 
 | File | What it is |
 |---|---|
-| `public/pilot/` | The shared core, **Pilot core 1.1.1** (MTRX Horizyn commit 8b0ecd7), copied unchanged with its robot pictures, layers and the 18 pictures in `poses/`. |
+| `public/pilot/` | The shared core, **Pilot core 1.2.0** (MTRX Horizyn commit 4c82361), copied unchanged with its robot pictures, layers and the 18 pictures in `poses/`. |
 | `src/lib/pilotGate.js`, `src/components/PilotGate.jsx` | The only part in the first load: where Pilot may be, and fetching the rest once the page has loaded. |
-| `src/pilot/pilotRankUp.js` | The config: the core's script tag, the screens, suggestions, `kidView`, hiding and showing, forgetting a family's chat. |
+| `src/pilot/pilotRankUp.js` | The config: the core's script tag, the welcome (tagline and pills), the screens, suggestions, `kidView`, hiding and showing, forgetting a family's chat. |
 | `src/pilot/pilotKnowledge.js` | The knowledge pack and the "why RankUp" list, every number read from the app's own code. |
 | `src/pilot/pilotTools.js` | The tools. |
 | `public/pilot-rankup.js`, `public/pilot-rankup-pack.js` | The core's "app config" and "pack" files: they hand over to the two above. |
@@ -126,10 +157,12 @@ On a child's phone everything under `rankup-pilot` is deleted.
 
 Copy every file of the newer core from the MTRX Horizyn site's `static/pilot/`
 into `public/pilot/` unchanged, copy its `tests/js/pilot.test.js` without the
-MTRX-only tests, and check the pose list in `src/pilot/pilotRankUp.js`.
-`tests/pilot.mjs` fails if the core's files disagree on their version.
+MTRX-only tests, check the pose list in `src/pilot/pilotRankUp.js`, and
+update the files' fingerprints in `tests/fixes28.mjs`. `tests/pilot.mjs` fails
+if the core's files disagree on their version.
 
 ## Tests
 
-`tests/pilot.mjs` (static), `tests/pilottools.mjs` (awards), `tests/pilotui.mjs`
-(smoke), and the Pilot checks in `tests/bundle.mjs` and `tests/isolation.mjs`.
+`tests/pilot.mjs` and `tests/fixes28.mjs` (static), `tests/pilottools.mjs`
+(awards), `tests/pilotui.mjs` and `tests/fixes28ui.mjs` (smoke), and the Pilot
+checks in `tests/bundle.mjs` and `tests/isolation.mjs`.

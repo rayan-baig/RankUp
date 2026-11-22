@@ -761,22 +761,6 @@ html[data-pilot='off'] .pilot-root { display: none !important; }
   /* Plans sets the three plans side by side, wider: the bar follows. */
   html[data-area='parent']:has(.shell.lg\:max-w-5xl) .tabbar { max-width: 62rem; }
 }
-/*
- * Pilot's settings on RankUp (0.27.0): chat keys only. RankUp has no use for
- * pictures or videos made by an AI, and the core (1.1.1) has no option to
- * leave out its "Image generation" and "Video generation" sections, so they
- * are hidden here, only inside RankUp's Pilot (.rk-pilot, config.themeClass)
- * and only those two: they are the settings view's only <details> sections.
- * The core's files are unchanged.
- */
-.pilot-root.rk-pilot .pilot-settings-view > details.pilot-section { display: none; }
-
-/* RankUp's suggestions on Pilot's opening screen (src/pilot/pilotRankUp.js),
-   under the five pills, in the core's chip style, a little smaller so two
-   share a line on a phone. */
-.pilot-root.rk-pilot .rk-starters { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
-.pilot-root.rk-pilot .rk-starters .pilot-chip { padding: 6px 11px; font-size: 13px; }
-
 /* RankUp's own "Reduce motion" (Settings) keeps the robot still too, as the
    browser's setting already does in the core's stylesheet. */
 html[data-reduce-motion='true'] .pilot-root .pilot-robot,

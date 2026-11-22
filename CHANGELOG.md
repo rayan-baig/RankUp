@@ -5,6 +5,19 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.28.0 — 2026-11-22
+
+Pilot core 1.2.0, and a Pilot welcome that is RankUp's own.
+
+- **Pilot opens with RankUp's own buttons.** Under "Your family's chore helper" a parent now sees five buttons made for RankUp: **What's waiting for me?**, **Add a chore for…** (it starts the sentence in the box for the parent to finish), **How is my kid doing?**, **Explain this screen** and **Add my AI key**, instead of the general five ("Ask anything…", "Help with code…" and so on). Under them, the screen's own suggestion where it adds something (on Review: "Accept the oldest one"). Once a chat has started the suggestions are "What's waiting for me?", "Add a chore for…" and one for the screen, as before.
+- **Nothing typed is lost before there is a key.** A question asked with no key stays in the box, key settings open saying it is waiting, and it is sent the moment a key is saved.
+- **Chat keys only, done properly.** Pilot's settings still show no "Image generation" or "Video generation": the shared core now has a setting for that, so RankUp's own style rule that hid them is gone, and so is the row of suggestions RankUp used to put into Pilot's welcome itself. RankUp no longer changes anything inside Pilot's window from the outside.
+- **Pilot core 1.2.0.** The shared Pilot files are now core 1.2.0 from the MTRX Horizyn site, copied unchanged. Where the robot tucks away (a computer, the parent's set-up, the gift and School League pages) it now shrinks into its corner instead of hanging off the screen's edge, and it steps back for any pop-up, the "sign in again" sheet included. On a phone in Parent Mode it stays in its own slot in the tab bar, as before.
+- **No "first look".** Core 1.2.0 can show the robot with a glow for the first 4 seconds of a visit. RankUp leaves that off: tapping the robot during those seconds made it drop out of its slot in the tab bar to below the screen, and drew the window with the wrong icons, because the core uses the same name for the glow and for the greeting's bubble. In the slot the glow added nothing else. It can come back once the shared core gives the glow a name of its own.
+- **Still a light first load.** Pilot's files are fetched only where Pilot is allowed and after the page has loaded, so the first file is unchanged.
+- **Before deploying:** nothing to run on the database and no new setting.
+- Tests: new `tests/fixes28.mjs` (static) and `tests/fixes28ui.mjs` (smoke). Updated: `tests/js/pilot.test.js` (core 1.2.0's own tests, without the MTRX-only ones), `tests/fixes27.mjs` and `tests/fixes27ui.mjs` (0.27.0's welcome row and style rule are gone, so their checks are too), `tests/fixes26.mjs` (core 1.1.1 or later), `tests/pilottools.mjs` and `tests/pilotui.mjs` (the new tagline).
+
 ## 0.27.0 — 2026-11-21
 
 Fixes from a strict review: a computer gets a computer's layout, Pilot opens with RankUp's own suggestions, and a new family's dashboard is quieter.

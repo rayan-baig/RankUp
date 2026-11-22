@@ -73,7 +73,7 @@ ok('slot hidden (a wide screen): the core decides', dockedPlace(fakeDoc('on', 0)
 ok('off Parent Mode: the core decides', dockedPlace(fakeDoc('off')) === null)
 ok('the core\'s own placeNow is wrapped, its files untouched', /mascot\.placeNow = \(opts\) =>/.test(rankup))
 const core = read('public/pilot/pilot.js')
-ok('Pilot core 1.1.1, which asks placeNow where to sit', /const VERSION = "1\.1\.1"/.test(core) && /M\(\)\.placeNow\(/.test(core))
+ok('Pilot core 1.1.1 or later (1.2.0 since 0.28.0), which asks placeNow where to sit', /const VERSION = "1\.(1\.1|2\.\d+)"/.test(core) && /M\(\)\.placeNow\(/.test(core))
 
 console.log('\n=== 3. The daily chore bonus waits for an acceptance ===')
 const kid = { ...makeKid({ name: 'Mo', themeId: 'pegasus' }), id: 'k1', coins: 20 }
@@ -93,7 +93,7 @@ ok('family_day_of is the server\'s alone (revoked from public, anon, authenticat
 ok('a refused claim is undone on the phone', /fn === 'claim_login_bonus'/.test(read('src/state/reducer.js')))
 
 console.log('\n=== 4. Pilot\'s words for parents ===')
-ok('the five pills are the core\'s own, unchanged', /pill\("gear", "Customize with your API key"/.test(read('public/pilot/pilot-panel.js')))
+ok('the design\'s five pills are still the core\'s default (RankUp sets its own since 0.28.0, tests/fixes28.mjs)', /\{ icon: "gear", label: "Customize with your API key", action: "settings" \}/.test(read('public/pilot/pilot-panel.js')))
 ok('core 1.1.1 puts the suggestions above the conversation once chatting', read('public/pilot/pilot-panel.js').includes('welcome, chips, log, cardBox'))
 ok('RankUp\'s chips: "What\'s waiting for me?" and "Add a chore for…"', /C\("What's waiting for me\?"/.test(rankup) && /C\('Add a chore for…'/.test(rankup))
 ok('one plain sentence on what an AI key is and where to get one', /An AI key is a private code a grown-up makes in the "API keys" part of an AI company/.test(rankup))
