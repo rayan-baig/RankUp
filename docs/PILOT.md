@@ -46,7 +46,7 @@ right, not tucked away" while the slot is showing, because what scrolls
 behind the bar is hidden by it. `gutter: false`: RankUp's screens keep their
 own side padding.
 
-Core 1.2.0's options, as RankUp sets them (0.28.0):
+Core 1.2's options, as RankUp sets them (0.28.0; the first look back on in 0.28.1):
 
 - `keepInViewport: true`: where the robot tucks away (a wide screen, the
   parent's set-up, the gift and School League pages) it shrinks into its
@@ -58,17 +58,17 @@ Core 1.2.0's options, as RankUp sets them (0.28.0):
   the "sign in again" sheet in `components/SyncBadge.jsx`, carries
   `data-pilot-modal`. The pop-up check comes before `placeNow`, so it works in
   the slot too.
-- `revealMs: 0`: **no first look.** Core 1.2.0 shows the robot whole, with a
-  glow, for 4 seconds on a visit's first page, by putting the class
-  `pilot-hello` on Pilot's root. That is also the class of the window's
-  greeting bubble, so a parent who taps the robot in those 4 seconds gets the
-  bubble's style on the whole of Pilot: `position: relative` takes the robot
-  out of the tab bar's slot and drops it below the screen (after closing the
-  window it sat halfway up the left edge), and the window's icons and key note
-  lose their look until the 4 seconds are up. In the slot the first look adds
-  nothing else, since the robot is never tucked away there. Worth fixing in
-  the core (a class name of its own for the first look); until then RankUp
-  leaves it off.
+- **The first look is on** (no `revealMs`, so the core's 4 seconds): on a
+  visit's first page the robot shows whole, with a glow, so a parent notices
+  it. In the tab bar's slot it is never tucked away anyway, so there the first
+  look adds only the glow. 0.28.0 set `revealMs: 0`, because core 1.2.0 put
+  the class `pilot-hello` on Pilot's root for those seconds, the same class as
+  the window's greeting bubble: a parent who tapped the robot then got the
+  bubble's style on the whole of Pilot (`position: relative` took the robot
+  out of the slot and below the screen). Core 1.2.1 (0.28.1) names it
+  `pilot-revealing`, so the override is gone; `tests/fixes28.mjs` checks the
+  root's class is one the window never styles, and `tests/fixes28ui.mjs`
+  opens Pilot during the first look at 375px and 1440px.
 
 ## Pilot's welcome (0.28.0)
 
@@ -111,7 +111,7 @@ on later; `src/styles/index.css` stops the resting robot's float).
 
 | File | What it is |
 |---|---|
-| `public/pilot/` | The shared core, **Pilot core 1.2.0** (MTRX Horizyn commit 4c82361), copied unchanged with its robot pictures, layers and the 18 pictures in `poses/`. |
+| `public/pilot/` | The shared core, **Pilot core 1.2.1** (MTRX Horizyn commit 17b4711), copied unchanged with its robot pictures, layers and the 18 pictures in `poses/`. |
 | `src/lib/pilotGate.js`, `src/components/PilotGate.jsx` | The only part in the first load: where Pilot may be, and fetching the rest once the page has loaded. |
 | `src/pilot/pilotRankUp.js` | The config: the core's script tag, the welcome (tagline and pills), the screens, suggestions, `kidView`, hiding and showing, forgetting a family's chat. |
 | `src/pilot/pilotKnowledge.js` | The knowledge pack and the "why RankUp" list, every number read from the app's own code. |

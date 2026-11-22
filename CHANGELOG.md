@@ -5,6 +5,16 @@ is the one in `package.json`; the app shows it under Settings → Help & about, 
 `/api/health` reports it. `tests/release.mjs` fails if this file has no entry
 for that version.
 
+## 0.28.1 — 2026-11-22
+
+Pilot core 1.2.1, and Pilot's first look is back.
+
+- **Pilot is noticed again on a visit's first page.** For the first 4 seconds the robot glows softly so a parent sees it. 0.28.0 left this off because tapping the robot during those seconds dropped it out of its slot in the tab bar. The shared core now gives the glow a name of its own, so opening Pilot then keeps the robot in its slot and the window looks as it should, on a phone and on a computer.
+- **Pilot core 1.2.1.** The shared Pilot files are now core 1.2.1 from the MTRX Horizyn site, copied unchanged. Nothing else about Pilot changes.
+- **Still a light first load.** Pilot's files are still fetched only where Pilot is allowed and after the page has loaded.
+- **Before deploying:** nothing to run on the database and no new setting.
+- Tests: `tests/fixes28.mjs` (the core's fingerprints for 1.2.1, the first look on, its class never one the window styles), `tests/fixes28ui.mjs` (Pilot opened during the first look at 375px and 1440px) and `tests/js/pilot.test.js` (core 1.2.1's own tests).
+
 ## 0.28.0 — 2026-11-22
 
 Pilot core 1.2.0, and a Pilot welcome that is RankUp's own.
