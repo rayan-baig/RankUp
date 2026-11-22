@@ -18,16 +18,22 @@ import { totalXpForLevel, levelFromXp } from '../src/lib/xp.js'
 import { kids as kidMapper } from '../src/lib/sync/mappers.js'
 import { KID_THEME_MAP } from '../src/data/kidThemes.js'
 import {
-  LEVEL_UP_MS, NEW_WORLD_MS, STREAK_MS, BADGE_MS, MOMENT_MAX_MS, foldLevelUp, foldStreak, foldBadges,
+  LEVEL_UP_MS, NEW_WORLD_MS, STREAK_MS, BADGE_MS, MOMENT_MAX_MS, LEVEL_UP_MAX_MS, LEVEL_UP_GRACE_MS, foldLevelUp, foldStreak, foldBadges,
 } from '../src/lib/moments.js'
 
 const { fails, pass, fail } = reporter()
 const ok = (label, cond, detail = '') => (cond ? pass(label) : fail(label, detail))
 
-console.log('\n=== Every moment is two to three seconds ===')
-for (const [name, ms] of Object.entries({ LEVEL_UP_MS, NEW_WORLD_MS, STREAK_MS, BADGE_MS })) {
+console.log('\n=== Every small moment is two to three seconds; the level-up waits longer ===')
+for (const [name, ms] of Object.entries({ STREAK_MS, BADGE_MS })) {
   ok(`${name} is ${ms} ms`, ms >= 2000 && ms <= MOMENT_MAX_MS && MOMENT_MAX_MS <= 3000)
 }
+// 0.32.0: the level-up is the loop's biggest moment: about five and a half
+// seconds (a new world six and a half), or until it is tapped.
+for (const [name, ms] of Object.entries({ LEVEL_UP_MS, NEW_WORLD_MS })) {
+  ok(`${name} is ${ms} ms (five seconds or more, at most ${LEVEL_UP_MAX_MS})`, ms >= 5000 && ms <= LEVEL_UP_MAX_MS && LEVEL_UP_MAX_MS <= 7000)
+}
+ok(`a tap in its first ${LEVEL_UP_GRACE_MS} ms does not close it`, LEVEL_UP_GRACE_MS >= 300 && LEVEL_UP_GRACE_MS <= 1000)
 
 console.log('\n=== Several level-ups at once are one moment ===')
 {
@@ -145,8 +151,8 @@ const card = await page.getByTestId('level-up').innerText({ timeout: 1500 }).cat
 await page.waitForTimeout(400)
 await page.screenshot({ path: `${SHOT_DIR}/moment-levelup.png` })
 ok('three levels in one card, with the streak riding along', /3 levels up/i.test(card) && /4 days in a row/.test(card), card)
-await page.clock.runFor(MOMENT_MAX_MS)
-ok('and it goes by itself, within three seconds', await goneBy('level-up'))
+await page.clock.runFor(LEVEL_UP_MAX_MS)
+ok('and it goes by itself, within seven seconds', await goneBy('level-up'))
 
 const oneUp = levelUpMs(ava.themeId, lvl, lvl + 1)
 await arrive({ pendingLevelUp: { from: lvl, to: lvl + 1 } })
@@ -181,8 +187,12 @@ ok('and the same tap closed the level-up', upBeforeTap && closedByTap,
 await page.evaluate(() => { window.location.hash = '/kid' })
 await arrive({ pendingLevelUp: { from: lvl, to: lvl + 1 } })
 await page.getByTestId('level-up').waitFor({ state: 'visible', timeout: 4000 })
+// A tap in its first moment (the second tap of a double tap on Accept) leaves it up.
 await page.getByTestId('level-up').locator('h2').click({ timeout: 5000 })
-ok('tapping the card itself skips it', await goneBy('level-up', 2000))
+ok(`a tap in its first ${LEVEL_UP_GRACE_MS} ms leaves it up`, await shown('level-up'))
+await page.clock.runFor(LEVEL_UP_GRACE_MS)
+await page.getByTestId('level-up').locator('h2').click({ timeout: 5000 })
+ok('after that, tapping the card itself skips it', await goneBy('level-up', 2000))
 
 await arrive({ pendingStreak: { count: 6 } })
 await page.getByTestId('streak-moment').waitFor({ state: 'visible', timeout: 4000 })

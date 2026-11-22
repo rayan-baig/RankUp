@@ -6,7 +6,7 @@
  * the page has loaded, so it is never on a child's phone and never part of
  * the first load. It:
  *
- *   - adds the core's one script tag (public/pilot/, core 1.4.0, copied
+ *   - adds the core's one script tag (public/pilot/, core 1.4.1, copied
  *     unchanged from the MTRX Horizyn site), which
  *     then loads public/pilot-rankup.js, which calls start() here;
  *   - mounts Pilot with RankUp's config: who is using it, which screen, its
@@ -33,7 +33,10 @@ import { TIERS } from '../state/initialState.js'
 import { isElite } from '../state/reducer.js'
 import { rankUpTools } from './pilotTools.js'
 import { knowledge, STRENGTHS } from './pilotKnowledge.js'
-import { waitingAnswer, weekAnswer, explainAnswer, eliteAnswer, plansAnswer, screenLink, HOW_IT_WORKS, SAFE_FOR_KIDS } from './pilotAnswers.js'
+import {
+  waitingAnswer, weekAnswer, explainAnswer, summaryAnswer, eliteAnswer, plansAnswer, oldestAnswer, screenLink, HOW_IT_WORKS, SAFE_FOR_KIDS,
+  STARTERS_ANSWER, REWARD_ANSWER, MONEY_ANSWER, PAUSE_ANSWER, PAIR_ANSWER, GIFT_ANSWER, GIFT_PLANS_ANSWER, SCHOOL_ANSWER, SCHOOL_SAFE_ANSWER,
+} from './pilotAnswers.js'
 
 export const STORAGE_PREFIX = 'rankup-pilot'
 const ACCOUNT_MARK = `${STORAGE_PREFIX}-account`
@@ -72,7 +75,22 @@ export const POSES = [
 /* The moving robot's files: left out under RankUp's own "Reduce motion". */
 const MOVING = ['motion', 'actor', 'actorCss', 'restBody', 'restHead', 'restEyes']
 
-const route = () => String(pilotSnapshot()?.route || '').split('?')[0]
+/*
+ * A crisp robot on phones (core 1.4.1, optional): the robot and the resting
+ * robot's layers in the sizes they are drawn at, so a phone shows a file at
+ * its own size instead of shrinking the 128px or 192px one. Same pictures,
+ * same look; the browser picks one. The resting layers are the moving
+ * robot's, so they are left out under "Reduce motion" too.
+ */
+export const PICTURE_SETS = {
+  robotSet: [['pilot/pilot-robot-112.webp', 112], ['pilot/pilot-robot-168.webp', 168], ['pilot/pilot-robot-176.webp', 176]],
+  restBodySet: [['pilot/pilot-rest-body-112.webp', 112], ['pilot/pilot-rest-body-168.webp', 168]],
+  restHeadSet: [['pilot/pilot-rest-head-112.webp', 112], ['pilot/pilot-rest-head-168.webp', 168]],
+  restEyesSet: [['pilot/pilot-rest-eyes-112.webp', 112], ['pilot/pilot-rest-eyes-168.webp', 168]],
+}
+
+const fullRoute = () => String(pilotSnapshot()?.route || '')
+const route = () => fullRoute().split('?')[0]
 const reduceMotion = () => Boolean(pilotSnapshot()?.state?.settings?.reduceMotion)
 const state = () => pilotSnapshot()?.state || {}
 const shows = () => pilotShows()
@@ -86,6 +104,7 @@ const SCREENS = {
   '/parent/assign': 'Assign: add chores (quests) for a child',
   '/parent/kids': "Kids: the children's profiles",
   '/parent/settings': 'Settings',
+  '/parent/rewards': 'Rewards: what the children spend their coins on',
   '/parent/plan': `The plan screen (${TIERS.starter.name}, ${TIERS.standard.name}, ${TIERS.elite.name})`,
   '/parent/pair': "Link a kid's device (pairing with a code)",
   '/parent/override': `Pause and limits (${TIERS.elite.name})`,
@@ -135,12 +154,24 @@ const C = (label, prompt) => ({ label, prompt })
  * 1.4.0): built in this browser from the family's own chores, when asked
  * (pilotAnswers.js). No child's or family's name is in any of them: the
  * chore titles go through `scrub` as well. The core keeps an answer in the
- * chat, and once a key is added the chat goes with the next question.
+ * chat on screen; since core 1.4.1 it never goes to the AI company, even
+ * once a key is added (a stand-in is sent in its place).
  */
 const scrub = (text) => withoutNames(text, privateNames())
 const answerWaiting = () => waitingAnswer(state(), { scrub })
 const answerWeek = () => weekAnswer(state())
-const answerExplain = (ctx) => `${explainAnswer(route(), state())}${ctx && ctx.ready ? '\n\nAsk me anything about it in the box below.' : ''}`
+const answerExplain = (ctx) => `${explainAnswer(fullRoute(), state())}${ctx && ctx.ready ? '\n\nAsk me anything about it in the box below.' : ''}`
+const answerSummary = () => summaryAnswer(fullRoute(), state())
+const answerOldest = () => oldestAnswer(state(), { scrub })
+
+/* A key is set: the AI can do it (accept a chore, add the starter chores). */
+const keyReady = () => { try { return Boolean(window.Pilot?.ready?.()) } catch { return false } }
+/*
+ * A suggestion that the AI does best once there is a key, and that RankUp
+ * answers itself before then (0.32.0): every suggestion on a parent's screen
+ * now does something with no key, instead of asking for one.
+ */
+const keyOr = (withKey, withoutKey) => (keyReady() ? withKey : { ...withoutKey, label: withKey.label })
 
 /*
  * The suggestions above the chat once it has started (the core shows three,
@@ -162,18 +193,19 @@ function screenChips() {
       { label: 'Is it safe for my kids?', answer: SAFE_FOR_KIDS },
       { label: 'What do the plans cost?', answer: () => plansAnswer() }]
   }
-  if (r === '/gift' || r === '/gift/card') return [C('How does a gift work?', 'How does giving a year of RankUp work?'), C('Which plan to give?', 'What is the difference between the plans I can give?')]
-  if (r.startsWith('/school') || r === '/district') return [C('What is the School League?', 'What is the School League, and what does a school see?'), C('Is it safe for students?', 'What does a school see about its students on RankUp?')]
+  if (r === '/gift' || r === '/gift/card') return [{ label: 'How does a gift work?', answer: GIFT_ANSWER }, { label: 'Which plan to give?', answer: GIFT_PLANS_ANSWER }]
+  if (r.startsWith('/school') || r === '/district') return [{ label: 'What is the School League?', answer: SCHOOL_ANSWER }, { label: 'Is it safe for students?', answer: SCHOOL_SAFE_ANSWER }]
   const third = {
     '/parent': KIDS_DOING,
-    '/parent/approvals': C('Accept the oldest one', 'Accept the oldest chore that is waiting.'),
-    '/parent/assign': C('Add 3 starter chores', 'Add the 3 starter chores.'),
+    '/parent/approvals': keyOr(C('Accept the oldest one', 'Accept the oldest chore that is waiting.'), { answer: answerOldest }),
+    '/parent/assign': keyOr(C('Add 3 starter chores', 'Add the 3 starter chores.'), { answer: STARTERS_ANSWER }),
     '/parent/kids': KIDS_DOING,
     '/parent/plan': { label: `What does ${TIERS.elite.name} add?`, answer: () => eliteAnswer() },
-    '/parent/settings': C('Add a reward', 'Add a reward: '),
-    '/parent/money': C('How does pocket money work?', 'How does pocket money work in RankUp?'),
-    '/parent/override': C('How do pauses work?', 'How does Pause and limits work, and what does my child see?'),
-    '/parent/pair': C("Link my child's phone", "How does linking my child's phone with a code work?"),
+    '/parent/settings': keyOr(C('Add a reward', 'Add a reward: '), { answer: REWARD_ANSWER }),
+    '/parent/rewards': keyOr(C('Add a reward', 'Add a reward: '), { answer: REWARD_ANSWER }),
+    '/parent/money': { label: 'How does pocket money work?', answer: MONEY_ANSWER },
+    '/parent/override': { label: 'How do pauses work?', answer: PAUSE_ANSWER },
+    '/parent/pair': { label: "Link my child's phone", answer: PAIR_ANSWER },
     '/parent/history': KIDS_DOING,
   }[r] || WHAT_HERE
   return [WAITING, ADD_CHORE, third]
@@ -329,10 +361,12 @@ const config = {
   // is added, and in Pilot's help.
   keyNote: 'An AI key is a private code a grown-up makes in the "API keys" part of an AI company\'s website, so Pilot can answer '
     + 'on their account. AI keys are for grown-ups (the AI companies require 18+).',
-  // On the welcome (core 1.3.0) a one-line version, so the key is asked for
-  // once there: by the "Add my AI key" pill, which since core 1.3.0 also
-  // means no "AI key" card under the pills. The whole note stays in the key
-  // settings and in help, and on the line's tooltip.
+  // A one-line version (core 1.3.0), so the key is asked for once: by the
+  // "Add my AI key" pill, which since core 1.3.0 also means no "AI key" card
+  // under the pills. Since core 1.4.1 (RankUp 0.32.0) the one line stays for
+  // the whole chat, with a "More" link that opens the whole note, so the
+  // answers keep their room. The whole note stays in the key settings and in
+  // help, and on the line's tooltip.
   keyNoteShort: 'AI keys are for grown-ups (18+).',
   audienceNote: 'The person using Pilot here is a grown-up: a parent in RankUp\'s Parent Mode (after their PIN), or a parent, grandparent or teacher reading RankUp\'s public pages. '
     + 'Children never use Pilot: it is never shown on a child\'s screen or a child\'s phone. '
@@ -358,7 +392,56 @@ const config = {
   taskPrompt,
 }
 
+/*
+ * "Summarise this" with no AI key (0.32.0). The core adds this follow-up
+ * under every chat and, with no key, its only answer was the key settings
+ * ("Pilot will look at this screen as soon as you add a key"). Without
+ * changing the core's files, RankUp answers it itself while there is no key:
+ * the tap on that one suggestion is caught first (capture phase, on the
+ * window) and the screen's own summary (pilotAnswers.js, summaryAnswer) is
+ * put in the chat as Pilot's own answer, through the core's channel between
+ * tabs, as forgetFamily() clears it. Built on the phone; nothing is sent.
+ * With a key, the tap is left to the core, which asks the AI.
+ */
+export const SUMMARY_CHIP = 'Summarise this'
+export function isSummaryChip(target) {
+  const chip = target && typeof target.closest === 'function' ? target.closest('.pilot-root .pilot-chips .pilot-chip') : null
+  return Boolean(chip && chip.textContent.trim() === SUMMARY_CHIP && !chip.disabled)
+}
+/** The chat with this question and answer added, and the key offered once per chat (as core 1.4.1 does). */
+export function withAnswer(chat, label, text, more = config.answerMore) {
+  const list = Array.isArray(chat) ? chat.slice() : []
+  const add = [{ role: 'user', text: label }, { role: 'assistant', text, local: true }]
+  if (more && !list.some((m) => m && m.role === 'note' && m.kind === 'more')) add.push({ role: 'note', kind: 'more', text: more })
+  return list.concat(add)
+}
+function answerInChat(label, text) {
+  const store = window.Pilot?.store
+  if (!store || typeof store.loadChat !== 'function' || typeof BroadcastChannel !== 'function') return false
+  try {
+    const next = withAnswer(store.loadChat(), label, text)
+    store.saveChat(next)
+    const channel = new BroadcastChannel(`${STORAGE_PREFIX}-sync`)
+    channel.postMessage({ type: 'chat', messages: next, from: 'rankup' })
+    channel.close()
+    return true
+  } catch { return false }
+}
+let summaryWatch = false
+function watchSummary() {
+  if (summaryWatch) return
+  summaryWatch = true
+  window.addEventListener('click', (e) => {
+    if (!isSummaryChip(e.target) || keyReady() || !shows()) return
+    const text = answerSummary()
+    if (!text || !answerInChat('Summarise this screen', text)) return
+    e.preventDefault()
+    e.stopImmediatePropagation()
+  }, true)
+}
+
 let mounted = false
+let lastRoute = null
 let parked = null
 let on = false
 let watching = false
@@ -369,7 +452,7 @@ function start() {
   if (!shows()) return false
   placeAroundTabBar()
   mounted = window.Pilot.mount(config) === true
-  if (mounted) watch()
+  if (mounted) { watch(); watchSummary() }
   return mounted
 }
 
@@ -493,6 +576,10 @@ function addCoreTag() {
     if (still && MOVING.includes(key)) continue
     tag.dataset[key] = at(file)
   }
+  for (const [key, list] of Object.entries(PICTURE_SETS)) {
+    if (still && key !== 'robotSet') continue
+    tag.dataset[key] = list.map(([file, w]) => `${at(file)} ${w}w`).join(', ')
+  }
   if (!still) tag.dataset.poses = POSES.map((pose) => `${pose}=${at(`pilot/poses/${pose}.webp`)}`).join(' ')
   tag.dataset.hosts = config.compatibleHosts.join(' ')
   tag.src = at('pilot/pilot.js')
@@ -555,8 +642,16 @@ export function connect() {
       if (!start()) return
       unpark()
       robotStill(reduceMotion())
+      // Another screen while Pilot is open (on a computer it stays open
+      // beside the page): its suggestions are redrawn for the new screen
+      // (0.32.0), through the core's own "something changed".
+      const at = String(snapshot.route || '')
+      if (at !== lastRoute) {
+        lastRoute = at
+        try { window.Pilot?.changed?.() } catch { /* an older core: the next draw catches up */ }
+      }
     },
   }
 }
 
-export const _test = { accountOf, chips, screenChips, screen, SCREENS, CORE_FILES, config }
+export const _test = { accountOf, chips, screenChips, screen, SCREENS, CORE_FILES, config, answerSummary }

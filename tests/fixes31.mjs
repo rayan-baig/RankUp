@@ -107,7 +107,9 @@ at('/parent/help')
 const helpThird = withChat(1, () => chips())[2] || {}
 ok('a screen with no suggestion of its own: "What can I do here?" explains it, at once', helpThird.label === 'What can I do here?' && /\*\*Help\*\*/.test(run(helpThird)))
 at('/parent/approvals')
-ok('what really takes the AI stays an AI prompt (Review\'s "Accept the oldest one")', withChat(0, () => chips())[0]?.prompt === 'Accept the oldest chore that is waiting.')
+// 0.32.0: with no key it is answered too (tests/fixes32.mjs); with a key it is the AI's.
+const withKey = (fn) => { globalThis.window = { Pilot: { ready: () => true, store: { loadChat: () => [] } } }; try { return fn() } finally { delete globalThis.window } }
+ok('what really takes the AI is an AI prompt once there is a key (Review\'s "Accept the oldest one")', withKey(() => chips())[0]?.prompt === 'Accept the oldest chore that is waiting.')
 const fresh = { ...createInitialState(), onboarded: false }
 at('/welcome', fresh)
 const doorChips = withChat(1, () => chips())
@@ -144,7 +146,7 @@ const missing = [...Object.keys(SCREENS), '/welcome'].filter((r) => answers.expl
 ok('every screen Pilot is on has its own explanation', missing.length === 0, missing.join(', '))
 at('/parent/approvals')
 const explained = run(pill('Explain this screen'))
-ok('Review, explained in plain words, with what is on it now (counts only)', /This is \*\*Review\*\*/.test(explained) && /Right now: 2 children, 1 chore to do, 3 waiting for review\./.test(explained), explained)
+ok('Review, explained in plain words, with what is on it now (its own counts, 0.32.0)', /This is \*\*Review\*\*/.test(explained) && /Right now: 3 chores waiting for review, the oldest sent 3 hours ago\./.test(explained), explained)
 ok('with a key, it says the box is there for more', /Ask me anything about it/.test(run(pill('Explain this screen'), { ready: true })) && !/Ask me anything/.test(explained))
 at('/gift', fresh)
 ok('a public page: its explanation, no family numbers', /\*\*Give page\*\*/.test(run(pill('Explain this screen'))) && !/Right now/.test(run(pill('Explain this screen'))))
@@ -161,7 +163,7 @@ ok(`no child's, family's or grown-up's name in any answer (${everyAnswer.length}
 ok('a chore title naming a child is shown as [name]', /Help \[name\] with/.test(waiting))
 const answersCode = code('src/pilot/pilotAnswers.js')
 ok('the answers\' code calls no network and reads no storage', answersCode.length > 2000 && !/fetch\(|XMLHttpRequest|sendBeacon|WebSocket|EventSource|transport|localStorage|sessionStorage|import\(/.test(answersCode))
-ok('it imports only RankUp\'s own rules and words', [...answersCode.matchAll(/from '([^']+)'/g)].map((m) => m[1]).every((m) => /^\.\.\/(state\/initialState|lib\/(plans|thisWeek|xp))\.js$/.test(m)))
+ok('it imports only RankUp\'s own rules and words', [...answersCode.matchAll(/from '([^']+)'/g)].map((m) => m[1]).every((m) => /^\.\.\/(state\/initialState|lib\/(plans|thisWeek|xp|weeklyGoal))\.js$/.test(m)))
 const realFetch = globalThis.fetch
 let called = 0
 globalThis.fetch = () => { called += 1; throw new Error('no network') }
@@ -177,8 +179,8 @@ const waitingLinks = links(waiting)
 ok('the waiting answer\'s link is this site\'s Review (opens in the same tab)', JSON.stringify(waitingLinks) === '["/#/parent/approvals"]'
   && Render.sameSite(Render.safeHref(waitingLinks[0], HERE), HERE), JSON.stringify(waitingLinks))
 ok('a chore title can\'t add a link or bold of its own', !waitingLinks.includes('/x') && !/\*\*his\*\*/.test(waiting))
-ok('every link in every answer is one of RankUp\'s own screens', everyAnswer.every(([, , t]) => links(t).every((h) => /^\/#\/parent\/[a-z]+$/.test(h))),
-  everyAnswer.flatMap(([, , t]) => links(t)).filter((h) => !/^\/#\/parent\/[a-z]+$/.test(h)).join())
+ok('every link in every answer is one of RankUp\'s own screens', everyAnswer.every(([, , t]) => links(t).every((h) => /^\/#\/parent(\/[a-z]+)?$/.test(h))),
+  everyAnswer.flatMap(([, , t]) => links(t)).filter((h) => !/^\/#\/parent(\/[a-z]+)?$/.test(h)).join())
 ok('screenLink: the app\'s base path and the hash route', answers.screenLink?.('/parent/assign') === '/#/parent/assign')
 ok('plainWords keeps the family\'s words as words', answers.plainWords?.('**Big** [x](/y) `z` <b>') === 'Big x(/y) z b')
 

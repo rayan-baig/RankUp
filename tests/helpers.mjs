@@ -119,8 +119,8 @@ export async function launch() {
 export const readState = (page) =>
   page.evaluate(() => JSON.parse(localStorage.getItem('rankup.state.v1')))
 
-/** Run onboarding and assign the 7-quest kid pack. */
-export async function setUpFamily(page) {
+/** Run onboarding and assign the 7-quest kid pack (`pack: false`: no chores yet, a brand-new family). */
+export async function setUpFamily(page, { pack = true } = {}) {
   await page.goto(BASE, { waitUntil: 'networkidle' })
   await page.waitForTimeout(400)
   // Setup now opens by asking whose phone this is.
@@ -147,6 +147,7 @@ export async function setUpFamily(page) {
   await page.locator('input[placeholder="e.g. Ava"]').fill('Ava')
   await page.getByRole('button', { name: 'Start playing' }).click()
   await page.waitForTimeout(1000)
+  if (!pack) return
   await page.evaluate(() => { window.location.hash = '/parent/assign' })
   await page.waitForTimeout(500)
   await page.getByRole('tab', { name: 'Quest packs' }).click()

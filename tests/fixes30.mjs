@@ -55,7 +55,8 @@ ok('and a ring round the trophy, filling (simply full when still)', /function Go
   && /@keyframes rankup-ring-fill \{ from \{ stroke-dashoffset: 100; \} to \{ stroke-dashoffset: 0; \} \}/.test(css) && /\.goal-ring\[data-still\] \.goal-ring-fill \{ animation: none; \}/.test(css))
 ok('the goal waits for a level-up on screen to finish', /const cheerGoal = goalMoment && !levelUp && !showingMine && !news/.test(home))
 const chime = read('src/lib/chime.js')
-ok('a level-up has its own chime, through chime() (which follows Sounds)', /level: \[[\d., ]+\]/.test(chime) && /chime\(state, 'level'\)/.test(home))
+// 0.32.0: the level-up plays its chime itself, on every screen it shows on (tests/fixes32.mjs).
+ok('a level-up has its own chime, through chime() (which follows Sounds)', /level: \[[\d., ]+\]/.test(chime) && /chime\(state, 'level'\)/.test(read('src/components/LevelUpOverlay.jsx')))
 const { chime: play } = await import('../src/lib/chime.js')
 ok('no sound with Sounds off', play({ settings: { soundOn: false } }, 'level') === false)
 
@@ -89,7 +90,7 @@ ok('the cards that can go either side are placed in order, each in the shorter c
 ok('the left column\'s length counts the kids, the checklist, Review and the starter rewards',
   /let leftH = 44 \+ Math\.max\(1, state\.kids\.length\) \* 140/.test(dash) && /showFirstWeek\(state\) \? 380 : 0/.test(dash) && /pending\.length \? 92 : 0/.test(dash))
 ok('the numbers still head the right-hand column, and on a phone the order is as before',
-  /<div className="dash-side">\s*\{desk && \(\s*<>\s*\{stats\}/.test(dash) && /\} else \{\s*right\.push\(\.\.\.floating\)\s*\}/.test(dash))
+  /<div className="dash-side"( ref=\{sideCol\})?>\s*\{(desk|twoCols) && \(\s*<>\s*\{stats\}/.test(dash) && /\} else \{\s*right\.push\(\.\.\.floating/.test(dash))
 ok('each card drawn once (activity, tools, school League)', (dash.match(/Recent activity/g) || []).length === 1 && (dash.match(/School League/g) || []).length === 1)
 
 console.log('\n=== 3. The plans compared, across the banner ===')

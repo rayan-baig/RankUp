@@ -1287,3 +1287,16 @@ html[data-reduce-motion='true'] .pilot-root .pilot-dot { animation: none; }
 }
 .week-change { margin-top: 6px; font-size: 11px; font-weight: 700; line-height: 1.25; color: var(--ink-muted); }
 .week-up { color: var(--good); color: color-mix(in srgb, var(--good) 75%, var(--ink)); }
+/* What the boost gave, and the week to share (0.32.0). */
+.week-boost { margin-top: 10px; font-size: 13px; line-height: 1.4; font-weight: 600; }
+.week-share { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.week-share-text {
+  white-space: pre-line;
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgb(0 0 0 / 0.18);
+  border: 1px solid var(--line);
+  user-select: text;
+}

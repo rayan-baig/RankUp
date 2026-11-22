@@ -125,7 +125,8 @@ for (const [w, h] of [[320, 640], [375, 667], [375, 812], [1440, 900]]) {
   if (await page.locator('.pilot-root .pilot-pill:visible', { hasText: 'Explain this screen' }).count()) await pressPill(page, 'Explain this screen')
   else await pressChip(page, 'What can I do here?')
   const three = await log(page)
-  ok(`${w}x${h}: "Explain this screen" on Review: the screen in plain words, with its counts`, /This is Review\./.test(three) && /Right now: 2 children, \d+ chores? to do, \d+ waiting for review\./.test(three), three.slice(-400))
+  // 0.32.0: Review's own counts (the chores waiting and the oldest), tests/fixes32.mjs.
+  ok(`${w}x${h}: "Explain this screen" on Review: the screen in plain words, with its counts`, /This is Review\./.test(three) && /Right now: \d+ chores? waiting for review, the oldest sent [^.]+\./.test(three), three.slice(-400))
   if (w === 320) await shot(page, '320-explain')
   ok(`${w}x${h}: nothing left the site (no AI call, no key, nothing sent)`, away.length === 0, away.slice(0, 3).join(' | '))
   await ctx.close()

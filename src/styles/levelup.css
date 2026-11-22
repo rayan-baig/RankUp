@@ -1,0 +1,136 @@
+/*
+ * The level-up (components/LevelUpOverlay.jsx, 0.32.0): as big as the other
+ * celebrations. Confetti down the whole screen, a slow burst of light and a
+ * ring of stars behind the avatar, and the new level as a big number. This
+ * file comes with the level-up, never in the first load. Under reduce motion
+ * the overlay draws none of these (it is given `still`), and the global
+ * rules in index.css stop any animation that is left.
+ */
+.levelup-card { max-width: 26rem; }
+
+.levelup-kicker { font-size: 13px; letter-spacing: 0.28em; font-weight: 700; }
+.levelup-number {
+  font-size: 84px;
+  line-height: 0.95;
+  margin: 2px 0 6px;
+  text-shadow: 0 0 28px rgb(255 255 255 / 0.25), 0 4px 0 rgb(0 0 0 / 0.25);
+  text-shadow: 0 0 28px color-mix(in srgb, currentColor 55%, transparent), 0 4px 0 rgb(0 0 0 / 0.25);
+}
+.levelup-words { font-size: 16px; line-height: 1.35; }
+.levelup-ok { min-width: 9rem; }
+
+/* Confetti, like the weekly goal's (index.css), longer and fuller. */
+.levelup-confetti { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
+.levelup-confetti > span {
+  position: absolute;
+  top: -24px;
+  left: var(--x, 50%);
+  width: 11px;
+  height: 17px;
+  border-radius: 3px;
+  background: var(--accent);
+  opacity: 0;
+  animation: rankup-confetti 2200ms cubic-bezier(0.25, 0.6, 0.45, 1) both;
+}
+.levelup-confetti > span:nth-child(4n+1) { background: var(--warn); }
+.levelup-confetti > span:nth-child(4n+2) { background: var(--accent-2); }
+.levelup-confetti > span:nth-child(4n+3) { background: var(--good); width: 10px; height: 10px; border-radius: 999px; }
+.levelup-confetti > span:nth-child(odd) { --drift: -26px; }
+.levelup-confetti > span:nth-child(1) { --x: 0.6%; --r: -292deg; animation-delay: 197ms; animation-duration: 1944ms; }
+.levelup-confetti > span:nth-child(2) { --x: 3.0%; --r: 467deg; animation-delay: 518ms; animation-duration: 2114ms; }
+.levelup-confetti > span:nth-child(3) { --x: 6.6%; --r: 377deg; animation-delay: 499ms; animation-duration: 2364ms; }
+.levelup-confetti > span:nth-child(4) { --x: 9.3%; --r: 472deg; animation-delay: 412ms; animation-duration: 1991ms; }
+.levelup-confetti > span:nth-child(5) { --x: 12.3%; --r: 439deg; animation-delay: 273ms; animation-duration: 2432ms; }
+.levelup-confetti > span:nth-child(6) { --x: 14.9%; --r: -445deg; animation-delay: 116ms; animation-duration: 2578ms; }
+.levelup-confetti > span:nth-child(7) { --x: 17.3%; --r: 358deg; animation-delay: 635ms; animation-duration: 2286ms; }
+.levelup-confetti > span:nth-child(8) { --x: 19.7%; --r: 346deg; animation-delay: 240ms; animation-duration: 1988ms; }
+.levelup-confetti > span:nth-child(9) { --x: 23.5%; --r: 408deg; animation-delay: 145ms; animation-duration: 2521ms; }
+.levelup-confetti > span:nth-child(10) { --x: 25.2%; --r: 385deg; animation-delay: 198ms; animation-duration: 2051ms; }
+.levelup-confetti > span:nth-child(11) { --x: 30.1%; --r: -446deg; animation-delay: 598ms; animation-duration: 2355ms; }
+.levelup-confetti > span:nth-child(12) { --x: 31.3%; --r: -478deg; animation-delay: 436ms; animation-duration: 2038ms; }
+.levelup-confetti > span:nth-child(13) { --x: 33.7%; --r: 396deg; animation-delay: 321ms; animation-duration: 2265ms; }
+.levelup-confetti > span:nth-child(14) { --x: 38.5%; --r: -388deg; animation-delay: 638ms; animation-duration: 2102ms; }
+.levelup-confetti > span:nth-child(15) { --x: 39.7%; --r: -395deg; animation-delay: 291ms; animation-duration: 2422ms; }
+.levelup-confetti > span:nth-child(16) { --x: 43.3%; --r: 348deg; animation-delay: 249ms; animation-duration: 1912ms; }
+.levelup-confetti > span:nth-child(17) { --x: 45.2%; --r: 328deg; animation-delay: 34ms; animation-duration: 2333ms; }
+.levelup-confetti > span:nth-child(18) { --x: 47.9%; --r: -473deg; animation-delay: 426ms; animation-duration: 2079ms; }
+.levelup-confetti > span:nth-child(19) { --x: 51.6%; --r: 302deg; animation-delay: 679ms; animation-duration: 1926ms; }
+.levelup-confetti > span:nth-child(20) { --x: 53.3%; --r: 336deg; animation-delay: 119ms; animation-duration: 1913ms; }
+.levelup-confetti > span:nth-child(21) { --x: 57.5%; --r: -347deg; animation-delay: 174ms; animation-duration: 2482ms; }
+.levelup-confetti > span:nth-child(22) { --x: 59.4%; --r: 295deg; animation-delay: 419ms; animation-duration: 2477ms; }
+.levelup-confetti > span:nth-child(23) { --x: 62.2%; --r: -280deg; animation-delay: 602ms; animation-duration: 1971ms; }
+.levelup-confetti > span:nth-child(24) { --x: 64.6%; --r: 268deg; animation-delay: 87ms; animation-duration: 2579ms; }
+.levelup-confetti > span:nth-child(25) { --x: 66.9%; --r: -299deg; animation-delay: 517ms; animation-duration: 2399ms; }
+.levelup-confetti > span:nth-child(26) { --x: 71.2%; --r: 308deg; animation-delay: 17ms; animation-duration: 2043ms; }
+.levelup-confetti > span:nth-child(27) { --x: 73.1%; --r: 450deg; animation-delay: 306ms; animation-duration: 2259ms; }
+.levelup-confetti > span:nth-child(28) { --x: 75.8%; --r: -260deg; animation-delay: 661ms; animation-duration: 2410ms; }
+.levelup-confetti > span:nth-child(29) { --x: 78.3%; --r: 454deg; animation-delay: 593ms; animation-duration: 2076ms; }
+.levelup-confetti > span:nth-child(30) { --x: 81.0%; --r: -373deg; animation-delay: 123ms; animation-duration: 1985ms; }
+.levelup-confetti > span:nth-child(31) { --x: 83.8%; --r: 387deg; animation-delay: 484ms; animation-duration: 2058ms; }
+.levelup-confetti > span:nth-child(32) { --x: 87.1%; --r: 408deg; animation-delay: 463ms; animation-duration: 2563ms; }
+.levelup-confetti > span:nth-child(33) { --x: 89.2%; --r: -391deg; animation-delay: 92ms; animation-duration: 2382ms; }
+.levelup-confetti > span:nth-child(34) { --x: 93.1%; --r: -376deg; animation-delay: 230ms; animation-duration: 1952ms; }
+.levelup-confetti > span:nth-child(35) { --x: 94.9%; --r: -288deg; animation-delay: 110ms; animation-duration: 2116ms; }
+.levelup-confetti > span:nth-child(36) { --x: 99.0%; --r: 427deg; animation-delay: 372ms; animation-duration: 2342ms; }
+
+/* A slow turn of soft rays behind the avatar, which fades in and stays. */
+.levelup-rays {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 340px;
+  height: 340px;
+  margin: -170px 0 0 -170px;
+  border-radius: 999px;
+  pointer-events: none;
+  background: repeating-conic-gradient(from 0deg, rgb(255 255 255 / 0.14) 0deg 9deg, transparent 9deg 24deg);
+  background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--accent) 34%, transparent) 0deg 9deg, transparent 9deg 24deg);
+  -webkit-mask: radial-gradient(closest-side, #000 30%, transparent 100%);
+  mask: radial-gradient(closest-side, #000 30%, transparent 100%);
+  animation: rankup-rays-in 700ms cubic-bezier(0.2, 0.9, 0.3, 1.1) both, rankup-rays-turn 14s linear infinite;
+}
+@keyframes rankup-rays-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rankup-rays-turn { from { transform: rotate(0deg) scale(0.92); } to { transform: rotate(360deg) scale(0.92); } }
+
+/* Twelve stars thrown out round the avatar, once. */
+.levelup-stars { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+.levelup-stars > span {
+  position: absolute;
+  left: -9px;
+  top: -12px;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--warn);
+  opacity: 0;
+  animation: rankup-star-out 1100ms cubic-bezier(0.15, 0.8, 0.3, 1) both;
+}
+.levelup-stars > span:nth-child(3n) { color: var(--accent-2); font-size: 16px; }
+.levelup-stars > span:nth-child(3n+1) { color: #fff; }
+.levelup-stars > span:nth-child(1) { --a: 8deg; --d: -122px; animation-delay: 40ms; }
+.levelup-stars > span:nth-child(2) { --a: 24deg; --d: -144px; animation-delay: 80ms; }
+.levelup-stars > span:nth-child(3) { --a: 68deg; --d: -100px; animation-delay: 120ms; }
+.levelup-stars > span:nth-child(4) { --a: 84deg; --d: -122px; animation-delay: 0ms; }
+.levelup-stars > span:nth-child(5) { --a: 128deg; --d: -144px; animation-delay: 40ms; }
+.levelup-stars > span:nth-child(6) { --a: 144deg; --d: -100px; animation-delay: 80ms; }
+.levelup-stars > span:nth-child(7) { --a: 188deg; --d: -122px; animation-delay: 120ms; }
+.levelup-stars > span:nth-child(8) { --a: 204deg; --d: -144px; animation-delay: 0ms; }
+.levelup-stars > span:nth-child(9) { --a: 248deg; --d: -100px; animation-delay: 40ms; }
+.levelup-stars > span:nth-child(10) { --a: 264deg; --d: -122px; animation-delay: 80ms; }
+.levelup-stars > span:nth-child(11) { --a: 308deg; --d: -144px; animation-delay: 120ms; }
+.levelup-stars > span:nth-child(12) { --a: 324deg; --d: -100px; animation-delay: 0ms; }
+@keyframes rankup-star-out {
+  0%   { transform: rotate(var(--a, 0deg)) translateY(0) scale(0.3); opacity: 0; }
+  20%  { opacity: 1; }
+  75%  { opacity: 1; }
+  100% { transform: rotate(var(--a, 0deg)) translateY(var(--d, -110px)) scale(1); opacity: 0; }
+}
+
+/* On a computer: a bigger card, number and words. */
+@media (min-width: 1024px) {
+  .levelup-card { max-width: 32rem; }
+  .levelup-number { font-size: 128px; }
+  .levelup-kicker { font-size: 15px; }
+  .levelup-words { font-size: 19px; }
+  .levelup-rays { width: 460px; height: 460px; margin: -230px 0 0 -230px; }
+  .levelup-stars > span { font-size: 26px; }
+}
