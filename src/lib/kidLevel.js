@@ -9,8 +9,10 @@
  * whose level has gone up since sees the moment there, the next time they
  * open it.
  *
- * A child this phone has never shown a level to starts from now, so a phone
- * just linked, or an update, does not celebrate levels reached long ago:
+ * On a child's own phone the level-up already arrives with the sync that
+ * brings it (state/reducer.js), so there this only remembers. A child this
+ * phone has never shown a level to starts from now, so an update does not
+ * celebrate levels reached long ago:
  * only the level-ups this phone logged in the last few days count (on the
  * demo, only those of the last hour: the demo's own history is not news).
  */
@@ -39,7 +41,10 @@ export function lastSeenLevel(state, kidId) {
  */
 export function levelNews(state, kid, now = Date.now()) {
   const level = levelFromXp(kid?.xp || 0).level
-  if (!kid) return { level, news: null }
+  /* A child's own phone already shows each level-up as it arrives by sync
+     (state/reducer.js), and its first pull brings levels reached long ago,
+     which are not news: there Home only remembers. */
+  if (!kid || state?.device?.role === 'kid') return { level, news: null }
   let from = lastSeenLevel(state, kid.id)
   if (from === null) {
     const since = now - (state?.demo ? DAY / 24 : 3 * DAY)

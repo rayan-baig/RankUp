@@ -70,6 +70,8 @@ ok('an old one is not news', levelNews({ seen: {}, events: [{ type: 'level_up', 
 ok('nor, in the demo, its own history (a day old)', levelNews({ demo: true, seen: {}, events: [{ type: 'level_up', kidId: 'k1', at: now - day, meta: { from: 3, to: 5 } }] }, kid, now).news === null)
 ok('a level above the last one shown on this phone is news, from that level',
   JSON.stringify(levelNews({ seen: { [levelKey('k1', 4)]: 1, [levelKey('k1', 2)]: 1 } }, kid, now).news) === JSON.stringify({ kidId: 'k1', from: 4, to: 5 }))
+ok('on a child\'s own phone, never (sync already shows it, and its first pull is old news)',
+  levelNews({ device: { role: 'kid', linkedKidId: 'k1' }, seen: { [levelKey('k1', 1)]: 1 } }, kid, now).news === null)
 ok('the same level is not', levelNews({ seen: { [levelKey('k1', 5)]: 1 } }, kid, now).news === null && lastSeenLevel({ seen: { [levelKey('k1', 5)]: 1, 'kid-level:k2:9': 1 } }, 'k1') === 5)
 ok('Home shows it (the level-up moment, speaking to the child), and remembers it at once',
   /<LevelUpOverlay levelUp=\{levelUp\} kid=\{kid\} theme=\{theme\} away onClose=\{\(\) => setLevelUp\(null\)\} \/>/.test(home)
