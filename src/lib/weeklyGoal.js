@@ -58,3 +58,12 @@ export function weeklyGoalProgress(state, kidId, now = clock()) {
   const done = acceptedThisWeek(state, kidId, now)
   return { done, goal, met: done >= goal }
 }
+
+/**
+ * The name of this week's "You hit your weekly goal!" moment for a child, so
+ * it is shown once a week on a phone (state.seen, SEE_MOMENT), and again the
+ * next week the goal is reached.
+ */
+export function weeklyGoalMomentKey(state, kidId, now = clock()) {
+  return `weekly-goal:${kidId}:${weekStartOf(now, state?.family?.weekResetsOn ?? null)}`
+}

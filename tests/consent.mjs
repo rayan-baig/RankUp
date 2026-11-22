@@ -69,6 +69,10 @@ await page.waitForTimeout(1200)
   ? pass('the consent notice appears before any child is added')
   : fail('consent gate appears', await page.locator('body').innerText().then((t) => t.slice(0, 150)))
 
+// Each part is folded under its heading since 0.29.0; "Open all" shows every
+// line (tests/fixes29ui.mjs checks the folding itself).
+await page.getByTestId('consent-all').click()
+await page.waitForTimeout(200)
 const shown = await page.locator('body').innerText()
 ;/No photographs/i.test(shown) && /never takes, sends or keeps photographs/.test(shown)
   ? pass('it says RankUp takes no photographs')

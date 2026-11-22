@@ -20,11 +20,13 @@
 .door-steps { display: none; }
 
 @media (min-width: 960px) {
+  /* Centred up and down in the window, whatever its height. */
   .shell.door {
-    max-width: 66rem;
-    padding: 56px 40px 40px;
+    max-width: 68rem;
+    padding: 40px;
     justify-content: center;
   }
+  .door-grid { margin-top: auto; margin-bottom: auto; }
   /* Words and the ways in on the left, the demo on the right. */
   .door-grid {
     display: grid;
@@ -64,13 +66,21 @@
   }
 }
 
+/* A wide screen: a bigger demo phone (0.29.0), the same drawing scaled by
+   zoom (not transform, which would make it a containing block), with room
+   kept for the four steps beside it. */
+@media (min-width: 1280px) {
+  .shell.door { max-width: 76rem; }
+  .door-demo > :first-child { zoom: 1.3; }
+  .door-steps { max-width: 18rem; }
+}
+
 /* ---------------------------------------------------------------- the parent dashboard */
 
 @media (min-width: 1100px) {
   html[data-area='parent'] body .shell.dash-wide { max-width: 72rem; padding-left: 24px; padding-right: 24px; }
-  /* The tab bar stays Parent Mode's 38rem (index.css), centred under the two
-     columns: its five tabs a thumb apart, and room beside it for Pilot's
-     robot, which on a computer sits beside the bar, never on it. */
+  /* The tab bar is a sidebar down the left edge here (index.css), so it is
+     beside the two columns, never over them. */
   .dash-cols {
     display: grid;
     grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);

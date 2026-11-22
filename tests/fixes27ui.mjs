@@ -98,7 +98,8 @@ for (const [w, h, two] of [[1440, 900, true], [1100, 800, true], [1024, 768, fal
   ok(`${w}px: nothing scrolls sideways`, await noSideScroll(page))
   if (w === 1440) {
     const nav = await box(page, 'nav.tabbar')
-    ok('the tab bar stays Parent Mode\'s width, centred under the columns', nav && Math.abs(nav.width - 608) <= 2 && Math.abs((nav.left + nav.right) / 2 - 720) <= 2, JSON.stringify(nav))
+    // Since 0.29.0 the bar is a sidebar on a computer (tests/fixes29ui.mjs).
+    ok('the tab bar is a sidebar beside the columns, never under or over them', nav && nav.left === 0 && Math.abs(nav.width - 104) <= 1 && nav.right <= m.left, JSON.stringify({ nav, m }))
     await shot(page, 'd-dashboard')
   }
   if (w === 375) await shot(page, 'm-dashboard')
@@ -151,6 +152,9 @@ console.log('\n=== The daily chore bonus is in view at 375px ===')
   await as(page, 'Ava')
   await go(page, '/kid', 1200)
   for (const name of [/Continue|Awesome|Nice|Close|Keep going/]) await page.getByRole('button', { name }).first().click({ timeout: 1500 }).catch(() => {})
+  // Since 0.29.0 a weekly goal reached is celebrated at the top of Home first
+  // (tests/fixes29ui.mjs); "Yay!" puts it away.
+  await page.getByTestId('weekly-goal-moment').getByRole('button', { name: 'Yay!' }).click({ timeout: 1500 }).catch(() => {})
   await page.waitForTimeout(600)
   await page.evaluate(() => window.scrollTo(0, 0))
   await page.waitForTimeout(300)

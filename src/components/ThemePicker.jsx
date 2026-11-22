@@ -5,6 +5,9 @@ import { KID_THEMES, resolveKidTheme, extraThemes } from '../data/kidThemes.js'
 import Avatar from './Avatar.jsx'
 import { Card } from './ui.jsx'
 
+/** How many worlds the short picker shows before "See all". */
+const SHORT_LIST = 6
+
 /** A world's first-form picture, for its card: see data/art.js. */
 function portraitFor(theme) {
   return picture(`avatar-${theme.id}-${tiersFor(theme)[0]}`, `avatar-${theme.id}`)?.url || null
@@ -17,9 +20,20 @@ function portraitFor(theme) {
  * than by reading. The level slider lets you see how a theme evolves without
  * having to actually reach level 100 first.
  */
-export default function ThemePicker({ value, onChange, previewLevel = 1, showEvolutionPreview = true, kidId = null, onMake = null }) {
+export default function ThemePicker({ value, onChange, previewLevel = 1, showEvolutionPreview = true, kidId = null, onMake = null, short = false }) {
   const [level, setLevel] = useState(previewLevel)
   const selected = resolveKidTheme(value, level)
+  /*
+   * Short (sign-up, 0.29.0): no big card repeating the world that is already
+   * lit in the grid, and six worlds with "See all 15" under them, so the
+   * step is not three phone screens of cards. The world picked is always
+   * among those showing.
+   */
+  const [all, setAll] = useState(!short)
+  const firstSix = KID_THEMES.slice(0, SHORT_LIST)
+  const worlds = all ? KID_THEMES
+    : firstSix.some((t) => t.id === value) ? firstSix
+      : [...KID_THEMES.slice(0, SHORT_LIST - 1), KID_THEMES.find((t) => t.id === value)].filter(Boolean)
   /*
    * Beside the fifteen: this Season's official themes, for everybody, and
    * the child's own finished themes from Theme Genesis, for them alone (a
@@ -31,6 +45,7 @@ export default function ThemePicker({ value, onChange, previewLevel = 1, showEvo
 
   return (
     <div>
+      {!short && (
       <Card className="mb-3 relative overflow-hidden" style={{ background: selected.colors.surface, borderColor: selected.colors.line }}>
         <div className="flex items-center gap-4">
           <Avatar theme={selected} level={level} size={86} companion={Boolean(selected.evolution?.companion)} />
@@ -74,6 +89,7 @@ export default function ThemePicker({ value, onChange, previewLevel = 1, showEvo
           </label>
         )}
       </Card>
+      )}
 
       <div className="grid grid-cols-2 gap-2.5">
         {extra.map((theme) => {
@@ -108,7 +124,7 @@ export default function ThemePicker({ value, onChange, previewLevel = 1, showEvo
             </button>
           )
         })}
-        {KID_THEMES.map((theme) => {
+        {worlds.map((theme) => {
           const isSelected = theme.id === value
           return (
             <button
@@ -159,9 +175,17 @@ export default function ThemePicker({ value, onChange, previewLevel = 1, showEvo
                   EVOLVES
                 </span>
               )}
+              {/* With no big card above, the world picked says so itself. */}
+              {short && isSelected && <span className="pick-tick" aria-hidden="true">✓</span>}
             </button>
           )
         })}
+        {!all && (
+          <button type="button" onClick={() => setAll(true)} data-testid="see-all-worlds"
+            className="btn btn-soft col-span-2 text-sm">
+            See all {KID_THEMES.length} worlds
+          </button>
+        )}
         {onMake && (
           <button type="button" onClick={onMake} data-testid="make-own-theme"
                   className="p-2.5 grid place-items-center text-center transition-transform active:scale-[0.97]"

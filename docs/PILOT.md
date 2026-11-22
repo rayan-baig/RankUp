@@ -10,7 +10,9 @@ only what is different in RankUp.
 
 - In **Parent Mode**, after the PIN, on every parent screen; on a phone the
   robot sits in the tab bar's own slot at its right end (`.tabbar-dock`), on
-  no tab and on nothing on the screen; on a wider screen, beside the column.
+  no tab and on nothing on the screen; on a tablet, beside the column; on a
+  computer (1100px and up), in the same slot at the foot of the sidebar the
+  tab bar becomes there (0.29.0).
 - On a signed-out phone **only after "I'm a parent"**: the sign-up and the
   family's set-up (`useParentHere()` in Onboarding). **Never on the front
   door** or anything shown before someone says whose phone it is (0.26.0),
@@ -45,6 +47,12 @@ core's `PilotMascot.placeNow` (without changing its files) to answer "bottom
 right, not tucked away" while the slot is showing, because what scrolls
 behind the bar is hidden by it. `gutter: false`: RankUp's screens keep their
 own side padding.
+
+On a computer (1100px and up, 0.29.0) Parent Mode's tab bar is a sidebar down
+the left edge, and the slot is at its foot: `dockedPlace` answers "bottom
+left" when the slot is on the left half of the window, so the robot sits in
+the sidebar (`src/styles/index.css` puts it 8px in) and the chat window opens
+beside it, over no card.
 
 Core 1.2's options, as RankUp sets them (0.28.0; the first look back on in 0.28.1):
 
@@ -92,6 +100,12 @@ Since core 1.2.0 a website can make the welcome its own, and RankUp does
   me?" and "Add a chore for…" first, then one for the screen).
 - **Chat keys only** (`hideKeySections: ['image', 'video']`): RankUp has no
   use for pictures or videos made by an AI.
+- **The key, asked for once** (core 1.3.0, RankUp 0.29.0): because RankUp's
+  pills include the core's key-settings pill, the core shows no "AI key" card
+  under them as well, and calls it an "AI key" (a website's words, not the
+  design's "Bring Your Own API Key"). Above the message box the welcome shows
+  `keyNoteShort`, one line ("AI keys are for grown-ups (18+)."); the whole
+  `keyNote` stays in the key settings, in help and on that line's tooltip.
 
 0.27.0 did the suggestions and the hidden key sections from RankUp's own files
 (a row put into the welcome by a MutationObserver, and a style rule); both are
@@ -111,7 +125,7 @@ on later; `src/styles/index.css` stops the resting robot's float).
 
 | File | What it is |
 |---|---|
-| `public/pilot/` | The shared core, **Pilot core 1.2.1** (MTRX Horizyn commit 17b4711), copied unchanged with its robot pictures, layers and the 18 pictures in `poses/`. |
+| `public/pilot/` | The shared core, **Pilot core 1.3.0** (MTRX Horizyn commit 9f55e67), copied unchanged with its robot pictures, layers and the 18 pictures in `poses/`. |
 | `src/lib/pilotGate.js`, `src/components/PilotGate.jsx` | The only part in the first load: where Pilot may be, and fetching the rest once the page has loaded. |
 | `src/pilot/pilotRankUp.js` | The config: the core's script tag, the welcome (tagline and pills), the screens, suggestions, `kidView`, hiding and showing, forgetting a family's chat. |
 | `src/pilot/pilotKnowledge.js` | The knowledge pack and the "why RankUp" list, every number read from the app's own code. |

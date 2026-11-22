@@ -6,7 +6,9 @@
  * child's phone linked from another one, ticks it on every parent's phone, and
  * the list cannot claim something is done that is not. The one exception is
  * "we share one phone", which is a choice, not something that happens: it
- * stands in for linking a phone that does not exist.
+ * stands in for linking a phone that does not exist. It is also read from
+ * what happened: a chore accepted while no child's phone is linked was done
+ * on a grown-up's phone, so that family shares one.
  */
 import { QUEST_PACKS } from '../data/questTemplates.js'
 import { DIFFICULTY } from './xp.js'
@@ -60,7 +62,11 @@ export function firstWeekSteps(state) {
   const firstKid = kids[0]?.name || 'your child'
   const pending = subs.some((s) => s.status === 'pending')
   const paired = kids.some((k) => k.pairedDeviceAt)
-  const sharedPhone = Boolean(state.settings?.sharedPhone)
+  const accepted = subs.some((s) => s.status === 'approved')
+  // A chore done and accepted with no child's phone linked was done on a
+  // grown-up's phone: the family shares one (0.29.0). The list then finishes
+  // by itself instead of waiting on a phone that does not exist.
+  const sharedPhone = Boolean(state.settings?.sharedPhone) || (accepted && !paired)
 
   return [
     {
@@ -95,7 +101,7 @@ export function firstWeekSteps(state) {
       line: pending
         ? 'One is waiting for you.'
         : `When ${firstKid} taps “I did it!”, it lands in Review.`,
-      done: subs.some((s) => s.status === 'approved'),
+      done: accepted,
       to: pending ? '/parent/approvals' : null,
     },
   ]

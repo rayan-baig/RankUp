@@ -262,7 +262,7 @@ export default function Onboarding() {
           <p className="text-muted text-sm mb-4">
             It sets the look, the avatar and what the coins are called. Changing it later needs your PIN.
           </p>
-          <ThemePicker value={themeId} onChange={setThemeId} />
+          <ThemePicker value={themeId} onChange={setThemeId} short />
         </div>
       )}
 

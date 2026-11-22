@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { CONSENT_NOTICE, CONSENT_VERSION } from '../data/legalText.js'
 import { transport } from '../lib/sync/transport.js'
-import { Button, Card, Field, TextInput, Banner, SectionTitle } from '../components/ui.jsx'
+import { Button, Card, Field, TextInput, Banner } from '../components/ui.jsx'
 import { humanError } from '../lib/errors.js'
 
 /**
@@ -20,6 +20,9 @@ export default function ParentalConsent({ onDone, onBack }) {
   const [affirmed, setAffirmed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // Which parts of the notice are open (by heading). All folded to start.
+  const [open, setOpen] = useState({})
+  const allOpen = CONSENT_NOTICE.sections.every((x) => open[x.heading])
 
   const submit = async () => {
     if (!affirmed || signature.trim().length < 2) return
@@ -67,23 +70,50 @@ export default function ParentalConsent({ onDone, onBack }) {
         <h1 className="font-display text-2xl font-extrabold leading-tight">{CONSENT_NOTICE.title}</h1>
         <p className="text-sm text-muted mt-1">
           RankUp collects nothing about your child until you agree to this. Please read it — it is
-          short on purpose.
+          short on purpose. Tap a heading to open it.
         </p>
       </header>
 
-      {CONSENT_NOTICE.sections.map((section) => (
-        <Card key={section.heading} flat className="mb-2.5">
-          <SectionTitle>{section.heading}</SectionTitle>
-          <ul className="space-y-1.5">
-            {section.body.map((line, i) => (
-              <li key={i} className="text-sm text-muted flex gap-2">
-                <span aria-hidden="true" style={{ color: 'var(--accent)' }}>•</span>
-                <span>{line}</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ))}
+      {/*
+        * Each part folded under its heading (0.29.0), so the signature is on
+        * the first screens rather than after five cards of bullets. Every
+        * word is still here, unchanged: one tap opens a part, "Open all"
+        * opens the lot.
+        */}
+      <div className="flex justify-end mb-1.5">
+        <button type="button" className="tap-link text-xs underline text-muted" data-testid="consent-all"
+          onClick={() => setOpen(allOpen ? {} : Object.fromEntries(CONSENT_NOTICE.sections.map((x) => [x.heading, true])))}>
+          {allOpen ? 'Fold all' : 'Open all'}
+        </button>
+      </div>
+      {CONSENT_NOTICE.sections.map((section, n) => {
+        const shown = Boolean(open[section.heading])
+        return (
+          <div key={section.heading} className="card-flat mb-2" data-testid="consent-part">
+            <button
+              type="button"
+              className="w-full flex items-center gap-3 px-4 py-3 text-left min-h-[48px]"
+              aria-expanded={shown}
+              aria-controls={`consent-part-${n}`}
+              onClick={() => setOpen((o) => ({ ...o, [section.heading]: !o[section.heading] }))}
+            >
+              <span className="flex-1 min-w-0 font-semibold text-sm">{section.heading}</span>
+              <span className="text-xs text-muted shrink-0">{section.body.length === 1 ? '1 point' : `${section.body.length} points`}</span>
+              <span className={`text-muted shrink-0 transition-transform${shown ? ' rotate-90' : ''}`} aria-hidden="true">›</span>
+            </button>
+            {shown && (
+              <ul id={`consent-part-${n}`} className="space-y-1.5 px-4 pb-3">
+                {section.body.map((line, i) => (
+                  <li key={i} className="text-sm text-muted flex gap-2">
+                    <span aria-hidden="true" className="consent-dot">•</span>
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )
+      })}
 
       <Card className="mt-2" style={{ borderColor: 'var(--accent)' }}>
         <label className="flex items-start gap-3 cursor-pointer mb-3">

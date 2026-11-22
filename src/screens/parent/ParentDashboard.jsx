@@ -31,6 +31,7 @@ import EmptyNext from '../../components/EmptyNext.jsx'
 import { EMPTY_STATES } from '../../data/emptyStates.js'
 import { STARTER_REWARDS, newFamily } from '../../lib/firstWeek.js'
 import { plural } from '../../lib/plural.js'
+import { useMedia } from '../../lib/useMedia.js'
 // The desktop layouts (two columns here), fetched with this screen.
 import '../../styles/desk.css'
 
@@ -38,6 +39,8 @@ export default function ParentDashboard() {
   const { state, dispatch } = useApp()
   const deals = useDeals()
   const elite = useElite()
+  // Two columns from 1100px (styles/desk.css): some cards move across.
+  const desk = useMedia('(min-width: 1100px)')
   const pending = pendingSubmissions(state)
   // Rewards a child has spent their currency on and is waiting to be given.
   // These were only listed inside the collapsed rewards panel in Settings, so
@@ -75,11 +78,22 @@ export default function ParentDashboard() {
     }
   }
 
+  const stats = (
+    <div className="flex gap-2 mb-3">
+      <Stat icon="📥" value={pending.length} label="To review" tone={pending.length ? 'var(--warn)' : undefined} />
+      <Stat icon="👧" value={state.kids.length} label="Kid profiles" />
+      <Stat icon="⭐" value={formatXp(totalWeekXp)} label="XP this week" />
+    </div>
+  )
+
   /*
    * On a phone, one column. On a wide screen (1100px and up, styles/desk.css)
    * two: what needs the parent (getting started, Review, the kids) on the
-   * left, and how the family is doing (activity, the family goal, the tools)
-   * on the right.
+   * left, and how the family is doing (the three numbers, the family goal,
+   * the activity, the tools) on the right. So that the two columns come out
+   * about the same length (0.29.0), two cards that sit high on a phone move
+   * to the head of the right-hand column on a computer: the three numbers
+   * and "How RankUp works". Each is drawn in one place only.
    */
   return (
     <Screen className="dash-wide">
@@ -128,7 +142,7 @@ export default function ParentDashboard() {
       <div className="dash-cols">
       <div className="dash-main">
       <DemoTour />
-      <HowItWorks />
+      {!desk && <HowItWorks />}
       <FirstWeek />
       {/* Elite, offered at a moment it is true; once a fortnight at most. */}
       <UpgradeNudge />
@@ -140,11 +154,7 @@ export default function ParentDashboard() {
       <GiftSaleBanner sale={deals?.gift_sale || null} />
       {!deals?.gift_sale && <GiftAYearCard />}
 
-      <div className="flex gap-2 mb-3">
-        <Stat icon="📥" value={pending.length} label="To review" tone={pending.length ? 'var(--warn)' : undefined} />
-        <Stat icon="👧" value={state.kids.length} label="Kid profiles" />
-        <Stat icon="⭐" value={formatXp(totalWeekXp)} label="XP this week" />
-      </div>
+      {!desk && stats}
 
       {pending.length > 0 && (
         <Card className="mb-3" style={{ borderColor: 'var(--warn)' }} data-pilot-primary="" data-testid="waiting-card">
@@ -236,6 +246,12 @@ export default function ParentDashboard() {
       </div>
 
       <div className="dash-side">
+      {desk && (
+        <>
+          {stats}
+          <HowItWorks />
+        </>
+      )}
       {state.familyGoal && (
         <>
           <SectionTitle>Family goal</SectionTitle>

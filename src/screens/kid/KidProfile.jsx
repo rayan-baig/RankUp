@@ -6,7 +6,8 @@ import { storyProgress } from '../../lib/dragonFight.js'
 import { PROFILE_FRAMES, DROP_SELECTORS } from '../../state/initialState.js'
 import Avatar, { avatarTier, tiersFor } from '../../components/Avatar.jsx'
 import ThemePicker from '../../components/ThemePicker.jsx'
-import { Screen, Card, Button, SectionTitle, Modal, TextInput, Banner, Chip, DemoTag } from '../../components/ui.jsx'
+import { Screen, Card, Button, SectionTitle, Modal, TextInput, Banner, Chip, DemoTag, Toggle } from '../../components/ui.jsx'
+import { soundsOn } from '../../lib/chime.js'
 import HeroArt from '../../components/HeroArt.jsx'
 import AppHeader from '../../components/AppHeader.jsx'
 import KidPot from '../../components/KidPot.jsx'
@@ -247,6 +248,17 @@ export default function KidProfile() {
         </div>
       </Card>
       </>)}
+
+      {/* The chime for a claimed bonus and a weekly goal (lib/chime.js). The
+          same switch as in Parent Mode's Settings: this phone's. */}
+      <Card className="mb-3" data-testid="kid-sounds">
+        <Toggle
+          checked={soundsOn(state)}
+          onChange={(v) => dispatch({ type: 'UPDATE_SETTINGS', patch: { soundOn: v } })}
+          label="🔊 Sounds"
+          hint="A little chime when you claim a bonus or hit your weekly goal."
+        />
+      </Card>
 
       <SectionTitle>Theme</SectionTitle>
       <Card className="mb-3">

@@ -12,36 +12,27 @@ import { navigate } from '../lib/router.js'
  *
  * The bar itself is translucent and blurred, so the screen behind it keeps
  * going instead of stopping at a grey slab.
+ *
+ * In Parent Mode on a computer (1100px and up) the same bar is a sidebar
+ * down the left edge: a floating bar at the bottom of a desk-sized screen
+ * sat over the dashboard's cards (0.29.0).
  */
 export default function NavBar({ items, path, badges = {}, pilotDock = false }) {
   return (
     <nav
-      className="tabbar fixed left-0 right-0 z-40"
+      // The look (an inset, blurred bar that lets the scene carry on round
+      // it) and where it sits are in index.css (.tabbar): at the bottom, as
+      // wide as the screen's own cards; in Parent Mode on a computer, a
+      // sidebar down the left edge, beside the screen rather than over it.
+      className="tabbar"
       // Pilot, the AI helper, keeps clear of the bar (data-pilot-avoid), and
       // in Parent Mode on a phone sits in the bar's own slot at its right end
       // (data-pilot-dock), never on a tab or on the screen (index.css).
       data-pilot-avoid=""
       data-pilot-tabbar={pilotDock ? '' : undefined}
-      style={{
-        /*
-         * An inset bar rather than a slab welded to the bottom edge, as
-         * the design has it — the scene carries on underneath and round
-         * the sides, which is what makes the app feel like a window onto
-         * a world rather than a form with a toolbar.
-         */
-        bottom: 'calc(var(--safe-bottom) + 8px)',
-        // The width and side margins are in index.css (.tabbar): as wide as
-        // the screen's own cards, on a phone and on a desktop.
-        borderRadius: 20,
-        background: 'color-mix(in srgb, var(--surface) 72%, transparent)',
-        backdropFilter: 'blur(18px) saturate(1.3)',
-        WebkitBackdropFilter: 'blur(18px) saturate(1.3)',
-        border: '1px solid color-mix(in srgb, var(--accent) 38%, var(--line))',
-        boxShadow: '0 10px 34px -14px rgb(0 0 0 / 0.85), 0 0 26px -14px var(--accent)',
-      }}
       aria-label="Main"
     >
-      <div className="flex px-1.5 py-1.5 gap-1">
+      <div className="tabs flex px-1.5 py-1.5 gap-1">
         {items.map((item) => {
           const active =
             path === item.to ||
@@ -54,7 +45,7 @@ export default function NavBar({ items, path, badges = {}, pilotDock = false }) 
               type="button"
               onClick={() => navigate(item.to)}
               aria-current={active ? 'page' : undefined}
-              className="flex-1 py-2 flex flex-col items-center gap-1 relative rounded-2xl transition-colors"
+              className="tab flex-1 py-2 flex flex-col items-center gap-1 relative rounded-2xl transition-colors"
               style={{
                 color: active ? 'var(--accent)' : 'var(--ink-muted)',
                 background: active

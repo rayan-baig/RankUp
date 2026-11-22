@@ -306,6 +306,11 @@ const config = {
   // is added, and in Pilot's help.
   keyNote: 'An AI key is a private code a grown-up makes in the "API keys" part of an AI company\'s website, so Pilot can answer '
     + 'on their account. AI keys are for grown-ups (the AI companies require 18+).',
+  // On the welcome (core 1.3.0) a one-line version, so the key is asked for
+  // once there: by the "Add my AI key" pill, which since core 1.3.0 also
+  // means no "AI key" card under the pills. The whole note stays in the key
+  // settings and in help, and on the line's tooltip.
+  keyNoteShort: 'AI keys are for grown-ups (18+).',
   audienceNote: 'The person using Pilot here is a grown-up: a parent in RankUp\'s Parent Mode (after their PIN), or a parent, grandparent or teacher reading RankUp\'s public pages. '
     + 'Children never use Pilot: it is never shown on a child\'s screen or a child\'s phone. '
     + 'RankUp is a children\'s app. Never ask for anything about a child: no surname, age, birthday, school, photo or phone. '
@@ -356,8 +361,11 @@ function start() {
  * scrolled behind the bar is hidden by it, and would move the robot off the
  * slot for a card down there; so while the slot is showing, this says "the
  * bottom right corner, not tucked away", without changing the core's files.
- * Anywhere else (a wide screen, the parent's set-up, the gift and School
- * League pages) the core decides on its own.
+ * On a computer (1100px and up, 0.29.0) the tab bar is a sidebar down the
+ * left edge with the slot at its foot, so the answer is the bottom left
+ * corner, and the chat opens beside the sidebar. Anywhere else (a tablet,
+ * the parent's set-up, the gift and School League pages) the core decides
+ * on its own.
  *
  * Core 1.2.0's keepInViewport (tucked away, it shrinks into its corner) is an
  * answer placeNow gives; in the slot this answers first and never tucks, so
@@ -371,7 +379,12 @@ export function dockedPlace(doc = document) {
   if (doc.documentElement?.dataset?.pilotTabs !== 'on') return null
   const slot = doc.querySelector('[data-pilot-tabbar] [data-pilot-dock]')
   const box = slot && slot.getBoundingClientRect()
-  return box && box.width > 0 ? { corner: 'br', peek: false, typing: false } : null
+  if (!box || !(box.width > 0)) return null
+  // On a phone the slot is at the bar's right end; on a computer (0.29.0)
+  // the bar is a sidebar down the left edge and the slot is at its foot.
+  const view = doc.defaultView?.innerWidth || 0
+  const left = Number.isFinite(box.left) && view > 0 && box.left + box.width / 2 < view / 2
+  return { corner: left ? 'bl' : 'br', peek: false, typing: false }
 }
 function placeAroundTabBar() {
   const mascot = window.PilotMascot
@@ -389,6 +402,16 @@ function watch() {
   if (watching || typeof MutationObserver !== 'function') return
   watching = true
   new MutationObserver(() => { if (!on) park() }).observe(document.body, { childList: true })
+  // Parent Mode's layout is chosen on the page's root (data-area, and
+  // data-pilot-tabs for the tab bar's slot), which the core doesn't watch:
+  // when either changes, it is asked to look again (it re-places on
+  // resize), so on a computer the robot goes straight to the sidebar's slot
+  // instead of waiting in the corner it started in (0.29.0).
+  new MutationObserver(lookAgain).observe(document.documentElement, { attributes: true, attributeFilter: ['data-area', 'data-pilot-tabs'] })
+  lookAgain()
+}
+function lookAgain() {
+  try { window.dispatchEvent(new Event('resize')) } catch { /* nothing to place */ }
 }
 
 /*

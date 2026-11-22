@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
 import { levelFromXp, formatXp, xpToNext, liveStreak, questPay } from '../../lib/xp.js'
 import { nextEvolution, storyChapters } from '../../data/kidThemes.js'
@@ -18,7 +18,9 @@ import SeasonMoment from '../../components/SeasonMoment.jsx'
 import { PickedNotice } from '../../components/KidThemesParent.jsx'
 import { useKidSchool } from './useKidSchool.js'
 import { familyGoalProgress, planPaused, choreAcceptedToday } from '../../state/reducer.js'
-import { weeklyGoalProgress } from '../../lib/weeklyGoal.js'
+import { weeklyGoalProgress, weeklyGoalMomentKey } from '../../lib/weeklyGoal.js'
+import { chime } from '../../lib/chime.js'
+import { ClaimMoment, WeeklyGoalMoment } from '../../components/KidCheers.jsx'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
 import ModeBadge, { useLeaderboardMe } from '../../components/ModeBadge.jsx'
 import ArenaMoment from '../../components/ArenaMoment.jsx'
@@ -33,6 +35,16 @@ export default function KidHome() {
   const [levelPop, setLevelPop] = useState(false)
   const school = useKidSchool(kid)
   const [me] = useLeaderboardMe(kid, Boolean(state.demo))
+  // The bonus just claimed, for its moment (components/KidCheers.jsx).
+  const [claimed, setClaimed] = useState(null)
+  const endClaim = useCallback(() => setClaimed(null), [])
+  // This week's goal reached and its moment not yet shown on this phone.
+  const goalKey = kid ? weeklyGoalMomentKey(state, kid.id) : null
+  const goalMoment = Boolean(kid && weeklyGoalProgress(state, kid.id).met && !state.seen?.[goalKey])
+  useEffect(() => {
+    if (goalMoment) chime(state, 'goal')
+    // Once when the moment appears, not on every change to the state.
+  }, [goalMoment, goalKey])
 
   if (!kid) return null
 
@@ -129,6 +141,12 @@ export default function KidHome() {
             Your XP, coins and items are all kept. A few extras are resting for a while, and they come back by themselves.
           </Banner>
         </div>
+      )}
+
+      {/* The week's goal reached: said once a week, until it is tapped away. */}
+      {goalMoment && (
+        <WeeklyGoalMoment done={week.done} goal={week.goal}
+          onSeen={() => dispatch({ type: 'SEE_MOMENT', key: goalKey })} />
       )}
 
       {/* The header card: who you are and how far along you are. */}
@@ -243,11 +261,17 @@ export default function KidHome() {
             <div className="font-semibold text-sm">Daily chore bonus</div>
             <div className="text-xs text-muted">+5 {theme.currency.name}: a grown-up accepted a chore of yours today.</div>
           </div>
-          <Button className="px-3 py-2 min-h-0 shrink-0" onClick={() => dispatch({ type: 'CLAIM_LOGIN_BONUS', kidId: kid.id })}>
+          <Button className="px-3 py-2 min-h-0 shrink-0" onClick={() => {
+            dispatch({ type: 'CLAIM_LOGIN_BONUS', kidId: kid.id })
+            setClaimed({ coins: 5 })
+            chime(state, 'coin')
+          }}>
             Claim
           </Button>
         </Card>
       )}
+      {/* Just claimed: the world's coins burst out, then it goes by itself. */}
+      {claimed && <ClaimMoment coins={claimed.coins} currency={theme.currency} onDone={endClaim} />}
 
       {/* The story: a new chapter to watch, or the fight that is on. */}
       {newChapter && (

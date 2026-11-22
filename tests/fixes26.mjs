@@ -73,7 +73,7 @@ ok('slot hidden (a wide screen): the core decides', dockedPlace(fakeDoc('on', 0)
 ok('off Parent Mode: the core decides', dockedPlace(fakeDoc('off')) === null)
 ok('the core\'s own placeNow is wrapped, its files untouched', /mascot\.placeNow = \(opts\) =>/.test(rankup))
 const core = read('public/pilot/pilot.js')
-ok('Pilot core 1.1.1 or later (1.2.0 since 0.28.0), which asks placeNow where to sit', /const VERSION = "1\.(1\.1|2\.\d+)"/.test(core) && /M\(\)\.placeNow\(/.test(core))
+ok('Pilot core 1.1.1 or later (1.3.0 since 0.29.0), which asks placeNow where to sit', /const VERSION = "1\.(1\.1|[2-9]\.\d+)"/.test(core) && /M\(\)\.placeNow\(/.test(core))
 
 console.log('\n=== 3. The daily chore bonus waits for an acceptance ===')
 const kid = { ...makeKid({ name: 'Mo', themeId: 'pegasus' }), id: 'k1', coins: 20 }

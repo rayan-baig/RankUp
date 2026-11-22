@@ -103,7 +103,7 @@ console.log('\n=== Parent Mode on a phone: the robot in the bar\'s slot, on noth
   await ctx.close()
 }
 
-console.log('\n=== A desktop: a bar as wide as the column, the robot beside it ===')
+console.log('\n=== A desktop: the bar a sidebar beside the column, the robot in it ===')
 {
   const { ctx, page } = await open(1440, 900)
   await demo(page)
@@ -115,10 +115,11 @@ console.log('\n=== A desktop: a bar as wide as the column, the robot beside it =
     const card = document.querySelector('.shell .card').getBoundingClientRect()
     return { nav: [nav.left, nav.right], card: [card.left, card.right] }
   })
-  ok('the tab bar is exactly as wide as the cards', Math.abs(m.nav[0] - m.card[0]) <= 1 && Math.abs(m.nav[1] - m.card[1]) <= 1, JSON.stringify(m))
+  // Since 0.29.0 Parent Mode's bar is a sidebar on a computer (tests/fixes29ui.mjs).
+  ok('the tab bar is a sidebar on the left, beside the cards', m.nav[0] === 0 && m.nav[1] <= m.card[0] - 16, JSON.stringify(m))
   ok('Parent Mode\'s column is a little wider on a desktop (40rem)', m.card[1] - m.card[0] > 560, JSON.stringify(m))
   const box = await robot(page)
-  ok('the robot sits beside the column, not on it', box && box.left > m.card[1] && (await coveredBy(page, box)).length === 0, JSON.stringify(box))
+  ok('the robot sits in the sidebar, beside the column, not on it', box && box.right <= m.card[0] && box.right <= m.nav[1] + 1, JSON.stringify(box))
   await shot(page, 'd-parent')
   await as(page, 'Noah')
   await go(page, '/kid', 1000)

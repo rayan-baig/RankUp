@@ -146,7 +146,8 @@ console.log('\n=== With no key: the question waits, and goes once a key is saved
   await shot(page, '375-waiting')
   await page.locator('.pilot-root .pilot-settings-view').getByRole('button', { name: '+ Add a key' }).click()
   await page.locator('.pilot-root select[aria-label="Provider"]').selectOption('anthropic')
-  await page.locator('.pilot-root input[aria-label="API key"]').fill('test-key')
+  // "AI key" since core 1.3.0 (a website's words), "API key" before.
+  await page.locator('.pilot-root input[aria-label="AI key"], .pilot-root input[aria-label="API key"]').first().fill('test-key')
   await page.locator('.pilot-root input[aria-label="Model name"]').fill('test-model')
   await page.locator('.pilot-root .pilot-keyform').getByRole('button', { name: 'Save' }).click()
   for (let t = 0; t < 6000 && !bodies.length; t += 200) await page.waitForTimeout(200)
@@ -228,6 +229,9 @@ console.log('\n=== Out of the way: pop-ups, the tab bar\'s slot, scrolling, typi
   const { ctx, page } = await open(1440, 900)
   await demo(page)
   await waitForPilot(page)
+  // The core places the robot on the frame after it is built: on a computer
+  // since 0.29.0 that is the sidebar's slot (bottom left), so let it settle.
+  await page.waitForTimeout(300)
   // Opened during the visit's first look (0.28.1): the robot keeps its place
   // and the window is drawn as it should be.
   const look = await robot(page)
