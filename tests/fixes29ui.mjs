@@ -256,7 +256,9 @@ console.log('\n=== 5. A child\'s celebrations ===')
   await page.waitForTimeout(200)
   ok('Sounds switched off on the You screen: Claim plays nothing', (await page.evaluate(() => window.__notes)) === n0, String(n0))
   const still = await page.evaluate(() => [...document.querySelectorAll('[data-testid="claim-moment"] .cheer-burst > span')].map((s) => getComputedStyle(s).opacity))
-  ok('reduce motion: the moment shows, the coins are already gone (nothing flies)', (await page.getByTestId('claim-moment').count()) === 1 && still.length === 10 && still.every((o) => Number(o) === 0), still.join(','))
+  // Since 0.30.0 reduce motion draws no burst and no flight at all: words only (tests/fixes30ui.mjs).
+  ok('reduce motion: the moment shows, nothing flies (no burst, no coins in flight)', (await page.getByTestId('claim-moment').count()) === 1
+    && still.every((o) => Number(o) === 0) && (await page.getByTestId('coin-flight').count()) === 0, still.join(','))
   await ctx.close()
 }
 

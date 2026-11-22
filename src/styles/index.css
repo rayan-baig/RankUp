@@ -1040,7 +1040,7 @@ html[data-reduce-motion='true'] .pilot-root .pilot-dot { animation: none; }
   place-items: center;
   width: 40px;
   height: 40px;
-  margin: -8px -6px -8px 0;
+  margin: 0 -6px 0 0;
   border-radius: 999px;
   color: var(--ink-muted);
   font-size: 15px;

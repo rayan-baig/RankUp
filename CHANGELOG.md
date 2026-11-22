@@ -21,7 +21,7 @@ Fixes from a strict review: bigger celebrations for children, a parent dashboard
 - **A gentle heads-up before the trial ends.** In the last three days, the trial banner in Parent Mode says which extras stop and on which plan, by name, for example: "Heads-up: the trial ends in 3 days. On Starter, Ava's 1.5× boost and the Elite tools stop. Everything your children have earned stays theirs." There is no price in it and no warning colour, and children never see it.
 - **Still a light first load.** The front door's demo phone takes its look from the stylesheet now, so the first file grew by only about 350 bytes compressed (81.5 KB, budget 82.4 KB).
 - **Before deploying:** nothing to run on the database and no new setting.
-- Tests: new `tests/fixes30.mjs` (static) and `tests/fixes30ui.mjs` (smoke). Updated: `tests/fixes27.mjs` (the activity, family goal and tools are placed by column length), `tests/fixes29.mjs` (Claim's moment takes `still`, the goal's chime waits for a level-up, the comparison has a Close button).
+- Tests: new `tests/fixes30.mjs` (static) and `tests/fixes30ui.mjs` (smoke). Updated: `tests/fixes27.mjs` (the activity, family goal and tools are placed by column length), `tests/fixes29.mjs` (Claim's moment takes `still`, the goal's chime waits for a level-up, the comparison has a Close button), `tests/fixes29ui.mjs` (under reduce motion nothing is drawn flying at all).
 
 ## 0.29.0 — 2026-11-22
 
