@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useApp, useKid, useKidTheme, useElite } from '../../state/AppContext.jsx'
 import { levelFromXp, formatXp, xpToNext, liveStreak, questPay } from '../../lib/xp.js'
 import { nextEvolution, storyChapters } from '../../data/kidThemes.js'
@@ -10,7 +10,7 @@ import { foundingSeason, foundingSeasonChores, FOUNDING_SEASON_CHORES } from '..
 import { isMarketOpen } from '../../data/marketSkins.js'
 import QuestCard from '../../components/QuestCard.jsx'
 import { Screen, Card, Button, ProgressBar, Stat, SectionTitle, EmptyState, Banner, Chip } from '../../components/ui.jsx'
-import { Words, CountUp } from '../../components/Motion.jsx'
+import { Words, CountUp, useStillness } from '../../components/Motion.jsx'
 import SyncBadge from '../../components/SyncBadge.jsx'
 import { navigate } from '../../lib/router.js'
 import AppHeader from '../../components/AppHeader.jsx'
@@ -20,12 +20,17 @@ import { useKidSchool } from './useKidSchool.js'
 import { familyGoalProgress, planPaused, choreAcceptedToday } from '../../state/reducer.js'
 import { weeklyGoalProgress, weeklyGoalMomentKey } from '../../lib/weeklyGoal.js'
 import { chime } from '../../lib/chime.js'
-import { ClaimMoment, WeeklyGoalMoment } from '../../components/KidCheers.jsx'
+import { ClaimMoment, WeeklyGoalMoment, CoinFlight, GoalConfetti, FLY_MS } from '../../components/KidCheers.jsx'
+import { levelNews, levelKey } from '../../lib/kidLevel.js'
+import { lazyLoad } from '../../lib/lazy.js'
 import { CATEGORY_MAP } from '../../data/questTemplates.js'
 import ModeBadge, { useLeaderboardMe } from '../../components/ModeBadge.jsx'
 import ArenaMoment from '../../components/ArenaMoment.jsx'
 // A child's screens sit in a frame on a computer (styles/desk.css).
 import '../../styles/desk.css'
+
+// The level-up moment, for a level reached since this child last looked.
+const LevelUpOverlay = lazyLoad(() => import('../../components/LevelUpOverlay.jsx'))
 
 export default function KidHome() {
   const { state, dispatch } = useApp()
@@ -35,16 +40,48 @@ export default function KidHome() {
   const [levelPop, setLevelPop] = useState(false)
   const school = useKidSchool(kid)
   const [me] = useLeaderboardMe(kid, Boolean(state.demo))
+  // Reduce motion, RankUp's own or the device's: the celebrations are words only.
+  const deviceStill = useStillness()
+  const still = deviceStill || Boolean(state.settings?.reduceMotion)
   // The bonus just claimed, for its moment (components/KidCheers.jsx).
   const [claimed, setClaimed] = useState(null)
   const endClaim = useCallback(() => setClaimed(null), [])
+  /* The coins in flight to the coin tile (0.30.0), and how many of them the
+     tile is still waiting for: it shows that many fewer until they land, then
+     ticks up. */
+  const [flight, setFlight] = useState(null)
+  const [held, setHeld] = useState(0)
+  const landing = useRef(0)
+  useEffect(() => () => clearTimeout(landing.current), [])
   // This week's goal reached and its moment not yet shown on this phone.
   const goalKey = kid ? weeklyGoalMomentKey(state, kid.id) : null
   const goalMoment = Boolean(kid && weeklyGoalProgress(state, kid.id).met && !state.seen?.[goalKey])
+  /* A level reached since this child last opened Home on this phone
+     (lib/kidLevel.js): shown here, once. One the app is already showing
+     (it came in by sync) only needs remembering. */
+  const { level: levelNow, news } = kid ? levelNews(state, kid) : { level: 0, news: null }
+  const showingMine = Boolean(kid && state.pendingLevelUp?.kidId === kid.id)
+  const [levelUp, setLevelUp] = useState(null)
+  // The goal's chime and confetti wait for a level-up showing to finish.
+  const cheerGoal = goalMoment && !levelUp && !showingMine && !news
+  const [confetti, setConfetti] = useState(false)
+  const endConfetti = useCallback(() => setConfetti(false), [])
   useEffect(() => {
-    if (goalMoment) chime(state, 'goal')
+    if (cheerGoal) {
+      chime(state, 'goal')
+      if (!still) setConfetti(true)
+    }
     // Once when the moment appears, not on every change to the state.
-  }, [goalMoment, goalKey])
+  }, [cheerGoal, goalKey])
+  useEffect(() => {
+    if (!kid) return
+    if (news && !showingMine && !levelUp) {
+      setLevelUp(news)
+      chime(state, 'level')
+    }
+    if (!state.seen?.[levelKey(kid.id, levelNow)]) dispatch({ type: 'SEE_MOMENT', key: levelKey(kid.id, levelNow) })
+    // When the child or their level changes, not on every change to the state.
+  }, [kid?.id, levelNow, showingMine])
 
   if (!kid) return null
 
@@ -93,6 +130,33 @@ export default function KidHome() {
   const week = weeklyGoalProgress(state, kid.id)
   // A day later than today (the server's, after a zone change) counts as claimed.
   const bonusAvailable = !kid.lastLoginBonus || kid.lastLoginBonus < dayKey()
+
+  /* Claim: the bonus is added at once, and the coins fly from the button
+     into the coin tile, which ticks up as they land. Under reduce motion,
+     the words only (the tile simply shows the new number). */
+  const claim = (e) => {
+    const button = e.currentTarget.getBoundingClientRect()
+    const tile = document.querySelector('[data-testid="coin-tile"]')?.getBoundingClientRect()
+    dispatch({ type: 'CLAIM_LOGIN_BONUS', kidId: kid.id })
+    setClaimed({ coins: 5 })
+    chime(state, 'coin')
+    if (still || !tile) return
+    /* The tile below the tab bar (a phone, with a card above): brought up
+       into view while the coins fly, so the child sees them land and the
+       number tick. The coins aim where it will be. */
+    const room = window.innerHeight - 100
+    const lift = tile.bottom > room ? Math.round(tile.bottom - room) : 0
+    if (lift) window.scrollBy({ top: lift, behavior: 'smooth' })
+    const y = Math.min(Math.max(tile.top - lift + tile.height / 2, 40), window.innerHeight - 110)
+    setFlight({
+      key: Date.now(),
+      from: { x: button.left + button.width / 2, y: button.top + button.height / 2 },
+      to: { x: tile.left + Math.min(28, tile.width / 2), y },
+    })
+    setHeld(5)
+    clearTimeout(landing.current)
+    landing.current = setTimeout(() => { setHeld(0); setFlight(null) }, FLY_MS)
+  }
 
   const unreadNotes = state.notes.filter((n) => n.kidId === kid.id && n.from === 'parent' && !n.read)
 
@@ -145,9 +209,10 @@ export default function KidHome() {
 
       {/* The week's goal reached: said once a week, until it is tapped away. */}
       {goalMoment && (
-        <WeeklyGoalMoment done={week.done} goal={week.goal}
+        <WeeklyGoalMoment done={week.done} goal={week.goal} still={still}
           onSeen={() => dispatch({ type: 'SEE_MOMENT', key: goalKey })} />
       )}
+      {confetti && <GoalConfetti onDone={endConfetti} />}
 
       {/* The header card: who you are and how far along you are. */}
       <Card className="mb-3 fx-hero">
@@ -261,17 +326,53 @@ export default function KidHome() {
             <div className="font-semibold text-sm">Daily chore bonus</div>
             <div className="text-xs text-muted">+5 {theme.currency.name}: a grown-up accepted a chore of yours today.</div>
           </div>
-          <Button className="px-3 py-2 min-h-0 shrink-0" onClick={() => {
-            dispatch({ type: 'CLAIM_LOGIN_BONUS', kidId: kid.id })
-            setClaimed({ coins: 5 })
-            chime(state, 'coin')
-          }}>
+          <Button className="px-3 py-2 min-h-0 shrink-0" data-testid="claim-bonus" onClick={claim}>
             Claim
           </Button>
         </Card>
       )}
       {/* Just claimed: the world's coins burst out, then it goes by itself. */}
-      {claimed && <ClaimMoment coins={claimed.coins} currency={theme.currency} onDone={endClaim} />}
+      {claimed && <ClaimMoment coins={claimed.coins} currency={theme.currency} onDone={endClaim} still={still} />}
+      {flight && <CoinFlight key={flight.key} from={flight.from} to={flight.to} icon={theme.currency.icon} />}
+
+      {/* Three small cards, as in the design. Just under the bonus since
+          0.30.0, so the coins claimed land in a tile that is in view. */}
+      <div className="flex gap-2 mb-3 anim-stagger">
+        {/*
+          * Counting, not just displaying.
+          *
+          * This is the one piece of motion in the app doing a job rather than
+          * being nice: a child who watches 158 climb to 203 has felt the
+          * reward. One who finds the number already sitting there has been
+          * told about it.
+          */}
+        <Stat
+          icon={theme.currency.icon}
+          value={<CountUp value={Math.max(0, kid.coins - held)} format={formatXp} />}
+          label={theme.currency.name}
+          tone="var(--accent)"
+          data-testid="coin-tile"
+        />
+        {/* Chores accepted this week, out of the goal a parent set in
+            Settings (lib/weeklyGoal.js). It used to count sent against open,
+            which is no goal at all. */}
+        <Stat
+          icon={week.met ? '🏆' : '🎯'}
+          value={`${week.done}/${week.goal}`}
+          label="Weekly goal"
+          tone="var(--accent-2)"
+          title={`${week.done} of ${week.goal} chores accepted this week`}
+          data-testid="weekly-goal"
+        />
+        {/* The design's third card is what you are saving towards. A
+            number you cannot spend is a worse thing to look at than the
+            reward you are three chores away from. */}
+        <Stat
+          icon="🎁"
+          value={nextReward ? `${theme.currency.icon} ${nextReward.cost}` : '—'}
+          label={nextReward ? nextReward.name : 'No rewards set'}
+        />
+      </div>
 
       {/* The story: a new chapter to watch, or the fight that is on. */}
       {newChapter && (
@@ -369,43 +470,6 @@ export default function KidHome() {
         </button>
       )}
 
-      {/* Three small cards, as in the design. */}
-      <div className="flex gap-2 mb-3 anim-stagger">
-        {/*
-          * Counting, not just displaying.
-          *
-          * This is the one piece of motion in the app doing a job rather than
-          * being nice: a child who watches 158 climb to 203 has felt the
-          * reward. One who finds the number already sitting there has been
-          * told about it.
-          */}
-        <Stat
-          icon={theme.currency.icon}
-          value={<CountUp value={kid.coins} format={formatXp} />}
-          label={theme.currency.name}
-          tone="var(--accent)"
-        />
-        {/* Chores accepted this week, out of the goal a parent set in
-            Settings (lib/weeklyGoal.js). It used to count sent against open,
-            which is no goal at all. */}
-        <Stat
-          icon={week.met ? '🏆' : '🎯'}
-          value={`${week.done}/${week.goal}`}
-          label="Weekly goal"
-          tone="var(--accent-2)"
-          title={`${week.done} of ${week.goal} chores accepted this week`}
-          data-testid="weekly-goal"
-        />
-        {/* The design's third card is what you are saving towards. A
-            number you cannot spend is a worse thing to look at than the
-            reward you are three chores away from. */}
-        <Stat
-          icon="🎁"
-          value={nextReward ? `${theme.currency.icon} ${nextReward.cost}` : '—'}
-          label={nextReward ? nextReward.name : 'No rewards set'}
-        />
-      </div>
-
       {unreadNotes.length > 0 && (
         <Card className="mb-3" style={{ borderColor: 'var(--accent-2)' }}>
           <SectionTitle>Note from your parent</SectionTitle>
@@ -475,6 +539,12 @@ export default function KidHome() {
             {waiting.length} {waiting.length === 1 ? 'quest is' : 'quests are'} with your parent. XP lands when they approve.
           </Banner>
         </>
+      )}
+
+      {levelUp && !showingMine && (
+        <Suspense fallback={null}>
+          <LevelUpOverlay levelUp={levelUp} kid={kid} theme={theme} away onClose={() => setLevelUp(null)} />
+        </Suspense>
       )}
     </Screen>
   )

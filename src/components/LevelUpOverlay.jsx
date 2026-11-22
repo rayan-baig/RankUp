@@ -52,8 +52,15 @@ function TimeBar({ ms, color }) {
  *
  * About two and a half seconds, three if a new world opened. It does not hold
  * the screen: the page under it can still be tapped, and that tap closes it.
+ *
+ * `away` (0.30.0): shown on the child's own Home for a level reached since
+ * they last looked (lib/kidLevel.js), so it speaks to them.
+ *
+ * It is marked data-pilot-modal (0.30.0): on a parent's screen Pilot's robot
+ * steps back while it shows, as it does for every other pop-up, instead of
+ * sitting on top of the celebration.
  */
-export default function LevelUpOverlay({ levelUp, streak = null, kid, theme, onClose }) {
+export default function LevelUpOverlay({ levelUp, streak = null, kid, theme, onClose, away = false }) {
   const card = useRef(null)
   const tierBefore = avatarTier(levelUp.from, theme)
   const tierAfter = avatarTier(levelUp.to, theme)
@@ -71,7 +78,7 @@ export default function LevelUpOverlay({ levelUp, streak = null, kid, theme, onC
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center px-6 pointer-events-none"
-         role="status" aria-live="polite" data-testid="level-up">
+         role="status" aria-live="polite" data-testid="level-up" data-pilot-modal="">
       <div className="absolute inset-0" style={{ background: `${theme.colors.bg}f2`, backdropFilter: 'blur(3px)' }} />
       <div ref={card} className="relative text-center anim-pop fx-burst pointer-events-auto cursor-pointer"
            onClick={(e) => { if (!e.target.closest('button')) onClose() }}>
@@ -86,7 +93,9 @@ export default function LevelUpOverlay({ levelUp, streak = null, kid, theme, onC
           <CountUp value={levelUp.to} from={levelUp.from} duration={800} />
         </h2>
         <p className="text-sm text-muted mb-2">
-          {kid.name} went from level {levelUp.from} to {levelUp.to}.
+          {away
+            ? `Your chores were accepted. You went from level ${levelUp.from} to ${levelUp.to}!`
+            : `${kid.name} went from level ${levelUp.from} to ${levelUp.to}.`}
         </p>
         {streak && (
           <p className="text-sm font-semibold mb-2" style={{ color: theme.colors.accent2 }}>

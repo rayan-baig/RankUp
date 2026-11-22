@@ -135,10 +135,11 @@ const nextMonday = new Date(2026, 10, 23, 12).getTime()
 ok('the weekly goal moment is once a week for each child', weeklyGoalMomentKey({}, 'k', monday) === weeklyGoalMomentKey({}, 'k', sunday)
   && weeklyGoalMomentKey({}, 'k', sunday) !== weeklyGoalMomentKey({}, 'k', nextMonday) && weeklyGoalMomentKey({}, 'j', monday) !== weeklyGoalMomentKey({}, 'k', monday))
 const home = read('src/screens/kid/KidHome.jsx')
+// 0.30.0 adds the coins' flight and words-only under reduce motion (tests/fixes30.mjs).
 ok('Claim: the bonus, then its moment and the chime', /dispatch\(\{ type: 'CLAIM_LOGIN_BONUS', kidId: kid\.id \}\)\s*setClaimed\(\{ coins: 5 \}\)\s*chime\(state, 'coin'\)/.test(home)
-  && /\{claimed && <ClaimMoment coins=\{claimed\.coins\} currency=\{theme\.currency\} onDone=\{endClaim\} \/>\}/.test(home))
+  && /\{claimed && <ClaimMoment coins=\{claimed\.coins\} currency=\{theme\.currency\} onDone=\{endClaim\} still=\{still\} \/>\}/.test(home))
 ok('the weekly goal: shown when it is met and not yet seen on this phone, tapped away for the week', /weeklyGoalProgress\(state, kid\.id\)\.met && !state\.seen\?\.\[goalKey\]/.test(home)
-  && /dispatch\(\{ type: 'SEE_MOMENT', key: goalKey \}\)/.test(home) && /if \(goalMoment\) chime\(state, 'goal'\)/.test(home))
+  && /dispatch\(\{ type: 'SEE_MOMENT', key: goalKey \}\)/.test(home) && /if \(cheerGoal\) \{\s*chime\(state, 'goal'\)/.test(home))
 const cheers = read('src/components/KidCheers.jsx')
 ok('the moments say so in words', /Bonus claimed\. Nice work today\./.test(cheers) && /You hit your weekly goal!/.test(cheers) && /role="status"/.test(cheers))
 ok('the coins burst from the stylesheet, each animation filling "both" (reduce motion jumps to the end: the coins gone)',
@@ -162,12 +163,12 @@ ok('the child\'s own character at their form (the owner\'s Block Craft pictures 
 
 console.log('\n=== 7. What each plan gives, inside the trial banner ===')
 const trial = read('src/components/TrialBanner.jsx')
-ok('"What you get" (and "Compare plans" on the full banner) opens the comparison', /const compare = more && <PlanCompare trialTier=\{plan\.id\} \/>/.test(trial) && />\s*Compare plans\s*</.test(trial))
+ok('"What you get" (and "Compare plans" on the full banner) opens the comparison', /const compare = more && <PlanCompare trialTier=\{plan\.id\} onClose=\{\(\) => setMore\(false\)\} \/>/.test(trial) && />\s*Compare plans\s*</.test(trial))
 // Its own file (components/PlanCompare.jsx): the banner itself makes no
 // claim about guilds (tests/trialbanner.mjs).
 const pc = read('src/components/PlanCompare.jsx')
 const pcCode = code('src/components/PlanCompare.jsx')
-ok('in a file of its own, brought by the banner', /import PlanCompare from '\.\/PlanCompare\.jsx'/.test(trial) && /export default function PlanCompare\(\{ trialTier \}\)/.test(pc))
+ok('in a file of its own, brought by the banner', /import PlanCompare from '\.\/PlanCompare\.jsx'/.test(trial) && /export default function PlanCompare\(\{ trialTier, onClose \}\)/.test(pc))
 ok('its rows are the plan screen\'s own table, only the ones that differ', /PLAN_COMPARISON\s*\.filter\(\(row\) => !row\.needs \|\| \(row\.needs === 'guilds' && guildsEnabled\(\)\)\)\s*\.filter\(\(row\) => new Set\(TIER_LADDER\.map/.test(pc))
 ok('words only: no price, no "$", no priceTag', !/\$\d|price|priceTag|yearPrice/i.test(pcCode))
 ok('a plain line: Pilot is optional and uses the parent\'s own AI key', /Pilot, the AI helper for grown-ups, is optional on every plan\. It uses your own AI key, so RankUp never charges for it\./.test(pc))

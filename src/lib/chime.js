@@ -1,7 +1,7 @@
 /**
  * A little sound for a child's good moments (0.29.0): a two-note chime when
  * the daily chore bonus is claimed, a four-note one when the weekly goal is
- * reached.
+ * reached, and (0.30.0) five rising notes for a level-up seen on Home.
  *
  * Made on the spot with the browser's own audio, so there is no sound file
  * to download and nothing in the first file. It plays only while Sounds is
@@ -21,6 +21,8 @@ const NOTES = {
   coin: [987.77, 1318.51],
   // Up an arpeggio: a fanfare, small.
   goal: [523.25, 659.25, 783.99, 1046.5],
+  // A level reached, seen on the child's own Home (0.30.0): up and up again.
+  level: [659.25, 783.99, 987.77, 1318.51, 1567.98],
 }
 
 /** Play one of the chimes, if Sounds is on. True when it played. */
