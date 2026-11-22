@@ -12,16 +12,30 @@
  * level-up is waiting rides along inside it rather than following it.
  */
 
-/** How long a level-up stays up. */
-export const LEVEL_UP_MS = 2500
+/**
+ * How long a level-up stays up (0.32.0): about five and a half seconds, or
+ * until it is tapped. It was 2.5 seconds, gone before a child had read the
+ * number they had worked for; the level-up is the loop's biggest moment, so
+ * it is the one moment that waits. A tap still closes it at once (after the
+ * first LEVEL_UP_GRACE_MS) and still reaches whatever is underneath.
+ */
+export const LEVEL_UP_MS = 5500
 /** A level-up that opens a new world has a line of story to read. */
-export const NEW_WORLD_MS = 3000
+export const NEW_WORLD_MS = 6500
+/**
+ * A tap in the level-up's first 0.6 seconds does not close it (it still
+ * reaches the screen below): the second tap of a quick double tap on
+ * Accept, or a child already tapping, would otherwise end it unseen.
+ */
+export const LEVEL_UP_GRACE_MS = 600
+/** The longest a level-up may last. tests/moments.mjs holds both to it. */
+export const LEVEL_UP_MAX_MS = 7000
 /** A streak on its own: a smaller moment, so a shorter one. */
 export const STREAK_MS = 2000
 /** A badge, or several earned at once, in one toast. */
 export const BADGE_MS = 3000
 
-/** The longest any moment may last. tests/moments.mjs holds every one to it. */
+/** The longest any other moment may last. tests/moments.mjs holds every one to it. */
 export const MOMENT_MAX_MS = 3000
 
 /**

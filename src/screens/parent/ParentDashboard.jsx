@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useApp, useElite, pendingSubmissions } from '../../state/AppContext.jsx'
 import { levelFromXp, formatXp } from '../../lib/xp.js'
 import { lastSevenDays, relativeTime } from '../../lib/dates.js'
@@ -37,12 +37,19 @@ import { useMedia } from '../../lib/useMedia.js'
 // The desktop layouts (two columns here), fetched with this screen.
 import '../../styles/desk.css'
 
+/** The shorter column under this share of the longer, as drawn: one column on a computer too. */
+export const ONE_COLUMN_BELOW = 0.72
+
 export default function ParentDashboard() {
   const { state, dispatch } = useApp()
   const deals = useDeals()
   const elite = useElite()
   // Two columns from 1100px (styles/desk.css): some cards move across.
   const desk = useMedia('(min-width: 1100px)')
+  // One column or two on a computer, for the layout it was measured for.
+  const [oneCol, setOneCol] = useState({ key: null, one: false })
+  const mainCol = useRef(null)
+  const sideCol = useRef(null)
   const pending = pendingSubmissions(state)
   // Rewards a child has spent their currency on and is waiting to be given.
   // These were only listed inside the collapsed rewards panel in Settings, so
@@ -98,7 +105,8 @@ export default function ParentDashboard() {
    */
   const feedRows = Math.min(8, feed.length)
   const floating = [
-    desk && { id: 'week', h: weekCompare(state).any ? 150 : 0, el: <ThisWeek /> },
+    // This week, with its boost line and Share button (0.32.0).
+    desk && { id: 'week', h: weekCompare(state).any ? 215 : 0, el: <ThisWeek /> },
     state.familyGoal && {
       id: 'goal',
       h: 110,
@@ -204,21 +212,43 @@ export default function ParentDashboard() {
   ].filter(Boolean)
   const left = []
   const right = []
-  if (desk) {
-    // What is already in each column, roughly, in pixels.
-    let leftH = 44 + Math.max(1, state.kids.length) * 140
-      + (state.demo ? 300 : 0)
-      + (showFirstWeek(state) ? 380 : 0)
-      + (pending.length ? 92 : 0)
-      + (owed.length ? 50 + owed.length * 44 : 0)
-      + (state.kids.length > 0 && (state.rewards || []).length === 0 ? 170 : 0)
-    let rightH = 80 + (showHowItWorks(state) ? 200 : 0)
+  // What is already in each column, roughly, in pixels.
+  let leftH = 44 + Math.max(1, state.kids.length) * 140
+    + (state.demo ? 300 : 0)
+    + (showFirstWeek(state) ? 380 : 0)
+    + (pending.length ? 92 : 0)
+    + (owed.length ? 50 + owed.length * 44 : 0)
+    + (state.kids.length > 0 && (state.rewards || []).length === 0 ? 170 : 0)
+  let rightH = 80 + (showHowItWorks(state) ? 200 : 0)
+  /*
+   * One column on a computer when the two cannot be balanced (0.32.0): with
+   * one child and the "Getting started" list, the left column ran on past
+   * the screen while the right one ended half way down, a big empty space
+   * at the bottom right. The columns are measured as drawn (the layout
+   * effect below, before the screen is painted); when the shorter is under
+   * ONE_COLUMN_BELOW of the longer, every card goes in one column, in the
+   * phone's order, as wide as a card reads well. Measured again only when
+   * what the dashboard holds changes.
+   */
+  const layoutKey = [desk, state.kids.length, showFirstWeek(state), pending.length > 0, owed.length, feedRows,
+    (state.rewards || []).length === 0, showHowItWorks(state), newFamily(state), elite, Boolean(state.familyGoal),
+    weekCompare(state).any, Boolean(state.demo)].join('|')
+  const measured = oneCol.key === layoutKey
+  const twoCols = desk && !(measured && oneCol.one)
+  if (twoCols) {
     for (const c of floating) {
       if (rightH <= leftH) { right.push(c); rightH += c.h } else { left.push(c); leftH += c.h }
     }
   } else {
-    right.push(...floating)
+    right.push(...floating.filter((c) => c.id !== 'week'))
   }
+
+  useLayoutEffect(() => {
+    if (!desk || measured) return
+    const a = mainCol.current?.getBoundingClientRect().height || 0
+    const b = sideCol.current?.getBoundingClientRect().height || 0
+    setOneCol({ key: layoutKey, one: a > 0 && b > 0 && Math.min(a, b) / Math.max(a, b) < ONE_COLUMN_BELOW })
+  }, [desk, measured, layoutKey])
 
   /*
    * On a phone, one column. On a wide screen (1100px and up, styles/desk.css)
@@ -230,7 +260,7 @@ export default function ParentDashboard() {
    * and "How RankUp works". Each is drawn in one place only.
    */
   return (
-    <Screen className="dash-wide">
+    <Screen className={`dash-wide${desk && !twoCols ? ' dash-one' : ''}`}>
       <TrialBanner />
       {stopped && (
         <Banner className="mb-3" tone={stopped.tone} icon={stopped.icon} title={stopped.title}>
@@ -273,10 +303,10 @@ export default function ParentDashboard() {
         )}
       </header>
 
-      <div className="dash-cols">
-      <div className="dash-main">
+      <div className="dash-cols" data-cols={twoCols ? '2' : '1'}>
+      <div className="dash-main" ref={mainCol}>
       <DemoTour />
-      {!desk && <HowItWorks />}
+      {!twoCols && <HowItWorks />}
       <FirstWeek />
       {/* Elite, offered at a moment it is true; once a fortnight at most. */}
       <UpgradeNudge />
@@ -288,7 +318,7 @@ export default function ParentDashboard() {
       <GiftSaleBanner sale={deals?.gift_sale || null} />
       {!deals?.gift_sale && <GiftAYearCard />}
 
-      {!desk && stats}
+      {!twoCols && stats}
 
       {pending.length > 0 && (
         <Card className="mb-3" style={{ borderColor: 'var(--warn)' }} data-pilot-primary="" data-testid="waiting-card">
@@ -380,14 +410,14 @@ export default function ParentDashboard() {
       {left.map((c) => <Fragment key={c.id}>{c.el}</Fragment>)}
       </div>
 
-      <div className="dash-side">
-      {desk && (
+      <div className="dash-side" ref={sideCol}>
+      {twoCols && (
         <>
           {stats}
           <HowItWorks />
         </>
       )}
-      {!desk && <ThisWeek />}
+      {!twoCols && <ThisWeek />}
       {right.map((c) => <Fragment key={c.id}>{c.el}</Fragment>)}
       </div>
       </div>

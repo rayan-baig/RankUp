@@ -38,7 +38,13 @@
   }
   .door .door-head { grid-area: head; text-align: left; align-self: end; }
   .door .door-head > :first-child { justify-content: flex-start; }
-  .door .door-head [data-testid='what-it-is'] { margin-left: 0; max-width: 26rem; font-size: 15px; }
+  .door .door-head [data-testid='what-it-is'] { margin-left: 0; max-width: 26rem; font-size: 16px; }
+  /* A bigger title on a computer (0.32.0): the door's first words fill more of the window. */
+  .door .door-head h1 { font-size: 3.4rem; }
+  /* With the strip of screens under it (components/DoorStrip.jsx), the two
+     columns and the strip are centred together, not the columns alone. */
+  .door-grid:has(+ .door-strip) { margin-bottom: 0; }
+  .door-strip { margin-bottom: auto; }
   .door-ways { grid-area: ways; align-self: start; }
   .door-demo {
     grid-area: demo;
@@ -87,6 +93,11 @@
     column-gap: 24px;
     align-items: start;
   }
+  /* Not much to show yet (0.32.0, ParentDashboard's ONE_COLUMN_UNDER): one
+     column, in the phone's order, as wide as a card reads well, so nothing
+     ends half way down beside an empty space. */
+  .dash-cols[data-cols='1'] { display: block; }
+  html[data-area='parent'] body .shell.dash-wide.dash-one { max-width: 48rem; }
 }
 
 /* ---------------------------------------------------------------- a child's screens */

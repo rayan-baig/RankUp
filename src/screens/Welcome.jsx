@@ -1,8 +1,10 @@
+import { Suspense, useEffect, useState } from 'react'
 import Logo, { SLOGAN } from '../components/Logo.jsx'
 import LoopPreview, { BEATS } from '../components/LoopPreview.jsx'
 import { Words } from '../components/Motion.jsx'
 import { TIERS, TRIAL_DAYS } from '../state/initialState.js'
 import { OPERATOR } from '../data/legalText.js'
+import { lazyLoad } from '../lib/lazy.js'
 // On a computer the door is two columns, the demo beside the ways in.
 import '../styles/desk.css'
 
@@ -13,6 +15,24 @@ const BEAT_LINES = [
   'A photo from their own camera app, if you ask. RankUp keeps none.',
   'XP and coins land only when you accept.',
 ]
+
+/* The strip of RankUp's screens under the door, on a computer window (0.32.0):
+   fetched after the page has loaded, never on a phone. On a short window it
+   sits just under the fold, and the page scrolls to it. */
+const DoorStrip = lazyLoad(() => import('../components/DoorStrip.jsx'))
+const STRIP_QUERY = '(min-width: 960px) and (min-height: 700px)'
+function useStrip() {
+  const [on, setOn] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia?.(STRIP_QUERY)
+    if (!mq) return undefined
+    const check = () => setOn(mq.matches)
+    const t = setTimeout(check, 0)
+    mq.addEventListener?.('change', check)
+    return () => { clearTimeout(t); mq.removeEventListener?.('change', check) }
+  }, [])
+  return on
+}
 
 /* "$5.99", never "$5.990" or "$6". */
 const dollars = (n) => `$${n.toFixed(2)}`
@@ -43,9 +63,12 @@ const dollars = (n) => `$${n.toFixed(2)}`
  *
  * On a computer (960px and up, styles/desk.css) it is two columns: the words
  * and the ways in on the left, and on the right the demo, with its four steps
- * written out beside it. On a phone the order and the look are unchanged.
+ * written out beside it, and (0.32.0) a bigger title, and under both, on a
+ * window tall enough, a strip of four of the app's real screens
+ * (components/DoorStrip.jsx). On a phone the order and the look are unchanged.
  */
 export default function Welcome({ onLookAround, onParent, onKid, wiped = null, childPhone = false }) {
+  const strip = useStrip()
   return (
     <div className="shell door px-5 py-5 min-h-screen flex flex-col">
       {wiped && (
@@ -188,6 +211,7 @@ export default function Welcome({ onLookAround, onParent, onKid, wiped = null, c
       </div>
       </div>
       </div>
+      {strip && <Suspense fallback={null}><DoorStrip /></Suspense>}
     </div>
   )
 }

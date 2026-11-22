@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
-import { effectiveTier, onTrial, trialDaysLeft } from '../../state/reducer.js'
+import { effectiveTier, onTrial, trialDaysLeft, planOf } from '../../state/reducer.js'
+import { kidsThisWeek, boostWords } from '../../lib/thisWeek.js'
 import { TIERS, TIER_LADDER, PLAN_COMPARISON, ELITE_KID_PERKS, ELITE_PARENT_PERKS } from '../../state/initialState.js'
 import { noPaymentsWords, billingLive, startCheckout, openBillingPortal, fetchBillingStatus, billingError, billingNotice, keepPlan, keepOffers, PAUSE_MONTHS, planDate } from '../../lib/billing.js'
 import { Screen, Card, Button, SectionTitle, Banner, Chip, Modal } from '../../components/ui.jsx'
@@ -33,6 +34,8 @@ export default function ParentPlan() {
   const current = TIERS[state.family.tier] ? state.family.tier : 'starter'
   const trialTier = onTrial(state) ? effectiveTier(state.family) : null
   const trialDays = trialTier ? trialDaysLeft(state.family) : null
+  const boostX = planOf(state).xpMultiplier || 1
+  const boost = boostWords(kidsThisWeek(state, Date.now(), boostX), boostX)
   const [confirm, setConfirm] = useState(null)
   /*
    * Monthly or annual. Monthly is the default deliberately: annual is the
@@ -155,6 +158,13 @@ export default function ParentPlan() {
           ? ` Your gift of ${gift.name} starts on ${giftDate(gift.startsAt)} and runs until ${giftDate(gift.until)}${gift.then ? `, then ${gift.then.name} until ${giftDate(gift.then.until)}` : ''}.`
           : ` Your gift of ${gift.name} runs until ${giftDate(gift.until)}${gift.then ? `, then ${gift.then.name} until ${giftDate(gift.then.until)}` : ''}. A plan you choose now is first charged ${gift.then ? 'when the last gift ends' : 'that day'}, never before.`)}
       </p>
+      {/* What the boost gave this week, from the chores accepted (0.32.0). */}
+      {boost && (
+        <p className="week-boost mb-3" data-testid="plan-boost">
+          <span aria-hidden="true">⚡</span> <span data-pilot-private="">{boost}</span>
+          {trialDays ? ` That is the ${TIERS[trialTier].name} trial at work; everything earned stays theirs.` : ''}
+        </p>
+      )}
 
       {live ? (
         <>

@@ -1,0 +1,108 @@
+/*
+ * The strip of RankUp's screens under the front door on a computer
+ * (components/DoorStrip.jsx, 0.32.0). Fetched with the strip only, which a
+ * phone never loads. The child's screens use Pegasus Horizon's colours, as
+ * the demo phone above does; the parent's use the door's own.
+ */
+.door-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 22px;
+  margin-top: 36px;
+  animation: rankup-slide-up 420ms 200ms ease-out both;
+}
+.door-tile { margin: 0; min-width: 0; }
+.door-tile figcaption {
+  margin-top: 10px;
+  text-align: center;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+}
+.door-screen {
+  height: 184px;
+  padding: 13px;
+  border-radius: 22px;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.3;
+  box-shadow: 0 24px 60px -36px rgb(0 0 0 / 0.85);
+}
+.door-screen b { display: block; font-weight: 800; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.door-screen small { display: block; font-size: 10px; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ds-grow { flex: 1 1 auto; min-width: 0; }
+.ds-icon { flex: 0 0 auto; font-size: 18px; line-height: 1; }
+.ds-row, .ds-quest, .ds-reward, .ds-hero { display: flex; align-items: center; gap: 9px; }
+.ds-kicker { margin: 0 0 8px; font-size: 10px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.8; }
+
+/* The parent's screens: the door's own colours. */
+.door-screen-parent {
+  color: var(--ink);
+  background: linear-gradient(170deg, #142a52, #0d1b38);
+  border: 1px solid rgb(120 170 255 / 0.35);
+}
+.door-screen-parent .ds-card {
+  padding: 10px;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 0.05);
+  border: 1px solid rgb(120 170 255 / 0.3);
+}
+.door-screen-parent .ds-card + .ds-card { margin-top: 8px; }
+.door-screen-parent .ds-dim { opacity: 0.6; }
+.ds-xp { font-weight: 800; color: var(--accent); white-space: nowrap; }
+.ds-buttons { display: flex; gap: 6px; margin-top: 9px; }
+.ds-btn {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 11px;
+  background: rgb(255 255 255 / 0.08);
+  border: 1px solid rgb(120 170 255 / 0.35);
+}
+.ds-btn-go { color: #08142c; background: var(--accent); border-color: transparent; }
+.ds-week { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.ds-week > span {
+  min-width: 0;
+  padding: 8px 7px;
+  border-radius: 12px;
+  background: rgb(120 170 255 / 0.08);
+  border: 1px solid rgb(120 170 255 / 0.28);
+}
+.ds-week b { font-size: 18px; line-height: 1; }
+.ds-week small { margin-top: 4px; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; white-space: normal; }
+.ds-week i { display: block; margin-top: 4px; font-style: normal; font-weight: 800; font-size: 9px; color: #4ade80; }
+.ds-note { margin: 10px 0 0; font-weight: 600; font-size: 11px; }
+
+/* A child's screens: Pegasus Horizon's light colours. */
+.door-screen-kid {
+  color: #33235e;
+  background: radial-gradient(120% 90% at 20% 0%, #ffffff 0%, #f2ecff 55%, #e2d7ff 100%);
+  border: 1px solid #cfc2f5;
+}
+.ds-hero { padding: 7px 8px; margin-bottom: 8px; border-radius: 14px; background: rgb(255 255 255 / 0.85); border: 1px solid #cfc2f5; }
+.ds-hero img { flex: 0 0 38px; width: 38px; height: 38px; border-radius: 999px; background: #e8e0ff; box-shadow: 0 0 0 2px #fff, 0 0 12px -2px #7c5cd6; }
+.ds-bar { display: block; height: 6px; margin-top: 5px; border-radius: 999px; overflow: hidden; background: #e8e0ff; }
+.ds-bar > span { display: block; height: 100%; width: 64%; border-radius: 999px; background: linear-gradient(90deg, #7c5cd6, #1b9ae4); }
+.ds-bar-100 > span { width: 100%; }
+.ds-bar-69 > span { width: 69%; }
+.ds-bar-25 > span { width: 25%; }
+.ds-quest { padding: 7px 9px; border-radius: 14px; background: #fff; border: 1px solid #cfc2f5; }
+.ds-btn-kid {
+  display: flex;
+  margin-top: 8px;
+  height: 28px;
+  color: #fff;
+  border: 0;
+  background: linear-gradient(90deg, #7c5cd6, #1b9ae4);
+}
+.ds-reward { padding: 7px 8px; border-radius: 12px; background: rgb(255 255 255 / 0.9); border: 1px solid #cfc2f5; }
+.ds-reward + .ds-reward { margin-top: 6px; }
+.ds-cost { font-weight: 800; white-space: nowrap; font-size: 11px; color: #7c5cd6; }
+
+@media (min-width: 1280px) {
+  .door-screen { height: 192px; padding: 14px; }
+}

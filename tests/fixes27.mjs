@@ -43,14 +43,14 @@ ok('nothing on a phone but the hidden step list: every other rule is inside a mi
 ok('no transform, filter or backdrop-filter on a column (fixed moments stay pinned to the window)', !/transform|backdrop-filter|(^|[^-])filter:/.test(deskRules))
 const dash = read('src/screens/parent/ParentDashboard.jsx')
 ok('the dashboard brings desk.css with it, and splits into a main and a side column',
-  /import '\.\.\/\.\.\/styles\/desk\.css'/.test(dash) && /<Screen className="dash-wide">/.test(dash) && /className="dash-cols"/.test(dash) && /className="dash-main"/.test(dash) && /className="dash-side"/.test(dash))
+  /import '\.\.\/\.\.\/styles\/desk\.css'/.test(dash) && /<Screen className=\{`dash-wide/.test(dash) && /className="dash-cols"/.test(dash) && /className="dash-main"/.test(dash) && /className="dash-side"/.test(dash))
 const main = dash.slice(dash.indexOf('className="dash-main"'), dash.indexOf('className="dash-side"'))
 const side = dash.slice(dash.indexOf('className="dash-side"'))
 ok('Review and the kids on the main side', /waiting-card/.test(main) && />\s*Kids\s*<\/SectionTitle>/.test(main) && /<StarterRewards \/>/.test(main))
 // 0.30.0: the activity, the family goal and the tools go to whichever column
 // is shorter on a computer (tests/fixes30.mjs); on a phone they follow on the side.
 ok('the activity, the family goal and the tools: placed by length, on the side on a phone', /Recent activity/.test(dash) && /familyGoal/.test(dash) && /EliteTools/.test(dash)
-  && /right\.push\(\.\.\.floating\)/.test(dash) && /right\.map\(/.test(side) && /left\.map\(/.test(main))
+  && /right\.push\(\.\.\.floating/.test(dash) && /right\.map\(/.test(side) && /left\.map\(/.test(main))
 ok('the front door brings desk.css, with the four steps beside the demo',
   /import '\.\.\/styles\/desk\.css'/.test(read('src/screens/Welcome.jsx')) && /className="door-steps"/.test(read('src/screens/Welcome.jsx')) && /BEATS\.map/.test(read('src/screens/Welcome.jsx')))
 const kidScreens = ['KidHome', 'KidQuests', 'QuestDetail', 'KidGuild', 'KidShop', 'KidMarket', 'KidArcade', 'KidProfile', 'KidStory', 'KidDragon', 'KidSchool', 'KidLeaderboards', 'ThemeGenesis']

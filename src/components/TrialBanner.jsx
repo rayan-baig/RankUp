@@ -46,22 +46,27 @@ export default function TrialBanner() {
   const plan = planOf(state)
   const paid = TIERS[state.family.tier] || TIERS.starter
 
+  // More children than the plan they pay for has room for (0.32.0: only
+  // then is "room for every child" something the trial gives them).
+  const extra = state.kids.length > paid.limits.maxKids
   const gives = []
   if (plan.xpMultiplier > paid.xpMultiplier) gives.push(`${plan.xpMultiplier}× XP on every accepted chore`)
-  if (plan.limits.maxKids > paid.limits.maxKids) gives.push('room for every child')
+  if (extra && plan.limits.maxKids > paid.limits.maxKids) gives.push('room for every child')
   if (plan.limits.blueprints && !paid.limits.blueprints) gives.push('weekly charts of what got done')
-  const extra = state.kids.length > paid.limits.maxKids
   const compact = days > 3 && newFamily(state)
+  /* The heads-up (last three days) ends on "Everything your children have
+     earned stays theirs.", so the words above it leave that sentence out:
+     said once, not twice (0.32.0). */
+  const headsUp = days <= 3 ? trialHeadsUp(state, plan, paid, days) : null
   const words = (
     <>
       {gives.length > 0 ? `${plan.name} gives you ${gives.slice(0, 2).join(' and ')}.` : 'You are on the full product with no card on file.'}
-      {' '}Everything your children earn is theirs to keep, whatever you choose.
+      {!headsUp && ' Everything your children earn is theirs to keep, whatever you choose.'}
       {extra && ` On the free plan, ${paid.limits.maxKids === 1 ? 'one child plays' : `${paid.limits.maxKids} children play`} at a time.`}
     </>
   )
 
   const compare = more && <PlanCompare trialTier={plan.id} onClose={() => setMore(false)} />
-  const headsUp = days <= 3 ? trialHeadsUp(state, plan, paid, days) : null
 
   if (compact) {
     return (

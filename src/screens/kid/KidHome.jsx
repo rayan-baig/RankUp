@@ -75,10 +75,8 @@ export default function KidHome() {
   }, [cheerGoal, goalKey])
   useEffect(() => {
     if (!kid) return
-    if (news && !showingMine && !levelUp) {
-      setLevelUp(news)
-      chime(state, 'level')
-    }
+    // Its chime is the level-up's own (components/LevelUpOverlay.jsx, 0.32.0).
+    if (news && !showingMine && !levelUp) setLevelUp(news)
     if (!state.seen?.[levelKey(kid.id, levelNow)]) dispatch({ type: 'SEE_MOMENT', key: levelKey(kid.id, levelNow) })
     // When the child or their level changes, not on every change to the state.
   }, [kid?.id, levelNow, showingMine])

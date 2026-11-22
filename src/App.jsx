@@ -511,6 +511,8 @@ function renderRoute(route, fullPath, activeKid, state) {
   if (route === '/parent/plan') return <ParentPlan />
   if (route === '/parent/redeem') return <ParentRedeem />
   if (route === '/parent/settings') return <ParentSettings open={queryParam(fullPath, 'open')} />
+  // The rewards on a screen of their own name (0.32.0): Settings, opened at them.
+  if (route === '/parent/rewards') return <ParentSettings open="rewards" />
   if (route === '/parent/help') return <ParentHelp />
   if (route === '/parent/history') return <ParentHistory initialKidId={queryParam(fullPath, 'kid')} />
   if (route === '/parent/money') return <ParentMoney initialKidId={queryParam(fullPath, 'kid')} />

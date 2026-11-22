@@ -60,6 +60,12 @@ placement workaround of its own for 1.4.0 to replace: `dockedPlace` stays
 count the fixed tab bar as busy), and so does the avoid list, which marks
 the buttons a parent taps most rather than working round a corner.
 
+Core 1.4.1 (RankUp 0.32.0) hides the robot rather than cover a link, a
+button or a bar that stays put on a phone, and keeps it in one bottom corner
+while a page is scrolled. In the tab bar's slot nothing changes:
+`dockedPlace` still answers first. Off the slot (the parent's set-up, the gift
+and School League pages) the core's new rules apply as they are.
+
 On a computer (1100px and up, 0.29.0) Parent Mode's tab bar is a sidebar down
 the left edge, and the slot is at its foot: `dockedPlace` answers "bottom
 left" when the slot is on the left half of the window, so the robot sits in
@@ -119,6 +125,9 @@ Since core 1.2.0 a website can make the welcome its own, and RankUp does
   design's "Bring Your Own API Key"). Above the message box the welcome shows
   `keyNoteShort`, one line ("AI keys are for grown-ups (18+)."); the whole
   `keyNote` stays in the key settings, in help and on that line's tooltip.
+  Since core 1.4.1 the one line stays for the whole chat, with **More** to open
+  the whole note, and the welcome's pills come back in a small row under an
+  answer of RankUp's own.
 
 ## Useful before a key (core 1.4.0, RankUp 0.31.0)
 
@@ -137,18 +146,43 @@ family's own data (`src/pilot/pilotAnswers.js`, pure functions of the state):
 | **What does Elite Pass add?** (the plan screen) | Elite's extras by name, from the plan list, with a link to the plan screen. |
 | **How does RankUp work?**, **Is it safe for my kids?**, **What do the plans cost?** (the parent's set-up) | The loop, the privacy promises, and the prices from `TIERS` with the trial. |
 
-The AI prompts left are the ones that take the AI: "Accept the oldest one",
-"Add 3 starter chores", "Add a reward", and the gift and School League
-pages' questions. Under an answer, while there is no key, the core shows
-**"Want more? Add your AI key to ask anything."** (`answerMore`) with Key
-settings. Links in an answer are RankUp's own screens (`/#/parent/…`), and
-open in the same tab.
+**Every suggestion with no key (0.32.0).** The prompts that take the AI
+("Accept the oldest one" on Review, "Add 3 starter chores" on Assign, "Add a
+reward" on Settings and Rewards) are AI prompts only once there is a key
+(`keyOr` in `pilotRankUp.js` asks `Pilot.ready()`); before then each is
+answered: the oldest chore waiting, by name, and how long it has waited;
+where the quest packs are; how to add a reward. Pocket money, pauses and
+linking a phone, and the gift and School League pages' questions, are
+answered at once with or without a key. **"Summarise this"**, the follow-up
+the core adds under every chat, sent the screen to the AI and so, with no
+key, opened the key settings; RankUp now answers it itself while there is no
+key (`summaryAnswer`: the screen in one line, then its own counts). The core
+has no option for it, so the tap on that one chip is caught first (a capture
+listener on the window, `isSummaryChip`) and the answer is put in the chat
+through the core's own channel between tabs (`withAnswer`, the same way
+`forgetFamily` clears the chat); with a key the tap is left to the core.
 
-**No names in an answer.** An answer stays on the phone when it is shown, but
-the core keeps it as part of the chat (marked `local`), and once a key is
-added the chat goes with the next question to the parent's AI company. So the
-answers use counts and chore titles only, never a child's, the family's or a
-grown-up's name; every chore title loses any markdown of its own and goes
+**Each screen explained (0.32.0).** Every parent screen has its own words and
+its own "Right now" counts (`SCREEN_HELP` in `pilotAnswers.js`): Review the
+chores waiting and the oldest; Rewards (`#/parent/rewards`, Settings opened
+at the rewards) the rewards and what they cost; Plans the plan paid for, the
+trial's days left and the room for children; Kids the levels and linked
+phones; and so on. A page that is not one of RankUp's says so, with a link
+Home. While Pilot is open and the screen changes (it stays open beside the
+page on a computer), the suggestions are redrawn for the new screen
+(`Pilot.changed()`).
+
+Under an answer, while there is no key, the core shows **"Want more? Add your
+AI key to ask anything."** (`answerMore`) with Key settings, once per chat
+since core 1.4.1. Links in an answer are RankUp's own screens
+(`/#/parent/…`), and open in the same tab.
+
+**No names in an answer.** An answer stays on the phone when it is shown;
+since core 1.4.1 it never goes to the parent's AI company either, not even
+once a key is added (the core sends a stand-in, "(Pilot showed a built-in
+answer)", in its place). As a second guard the answers still use counts and
+chore titles only, never a child's, the family's or a grown-up's name; every
+chore title loses any markdown of its own and goes
 through `withoutNames` (a title like "Help Noah with his bike" is shown as
 "Help [name] with his bike"). On a page with no family yet (the parent's
 set-up), the family answers say what they will show once the family is set
@@ -172,10 +206,10 @@ on later; `src/styles/index.css` stops the resting robot's float).
 
 | File | What it is |
 |---|---|
-| `public/pilot/` | The shared core, **Pilot core 1.4.0** (MTRX Horizyn commit 3908422), copied unchanged with its robot pictures, layers and the 18 pictures in `poses/`. |
+| `public/pilot/` | The shared core, **Pilot core 1.4.1** (MTRX Horizyn commit f221ffc), copied unchanged with its robot pictures and layers (and since 1.4.1 the same in the sizes a phone draws them, named on the script tag as `robotSet` and `rest*Set`), and the 18 pictures in `poses/`. |
 | `src/lib/pilotGate.js`, `src/components/PilotGate.jsx` | The only part in the first load: where Pilot may be, and fetching the rest once the page has loaded. |
 | `src/pilot/pilotRankUp.js` | The config: the core's script tag, the welcome (tagline and pills), the screens, suggestions, `kidView`, hiding and showing, forgetting a family's chat. |
-| `src/pilot/pilotAnswers.js` | The answers Pilot gives with no key (core 1.4.0): what's waiting, This week, each screen explained, Elite, the plans. |
+| `src/pilot/pilotAnswers.js` | The answers Pilot gives with no key (core 1.4.0): what's waiting, This week, each screen explained with its own counts, its summary, each screen's own suggestion, Elite, the plans. |
 | `src/pilot/pilotKnowledge.js` | The knowledge pack and the "why RankUp" list, every number read from the app's own code. |
 | `src/pilot/pilotTools.js` | The tools. |
 | `public/pilot-rankup.js`, `public/pilot-rankup-pack.js` | The core's "app config" and "pack" files: they hand over to the two above. |
