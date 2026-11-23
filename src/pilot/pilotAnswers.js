@@ -358,7 +358,7 @@ const NEXT = {
     return 'Nothing needs you now. When a child taps "I did it!", it shows up here to accept.'
   },
   '/parent/approvals': (s, t, scrub) => (pendingOf(s).length
-    ? `Accept **${oldestTitle(s, scrub)}**, at the top: it has waited longest.`
+    ? (pendingOf(s).length === 1 ? `Accept **${oldestTitle(s, scrub)}**, the one waiting, or send it back with a note.` : `Accept **${oldestTitle(s, scrub)}**, at the top: it has waited longest.`)
     : `Nothing to accept. ${link('Add a chore', '/parent/assign')} for when they're ready.`),
   '/parent/assign': (s) => (openChores(s).length
     ? 'Pick a child and add one more, or choose **Quest packs** to add a ready-made set.'

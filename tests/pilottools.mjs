@@ -275,8 +275,11 @@ ok('and one plain sentence first: what an AI key is, and where a grown-up gets o
 console.log('\n=== The suggestions, RankUp\'s own first (0.26.0) ===')
 for (const r of ['/parent', '/parent/approvals', '/parent/assign', '/parent/kids', '/parent/settings', '/parent/plan', '/parent/money', '/parent/help']) {
   updatePilot({ state: parentState, route: r, dispatch: () => {} })
-  const labels = bridgeTest.chips().map((c) => c.label)
-  ok(`${r}: "What's waiting for me?" and "Add a chore for…" lead, then one for the screen`,
+  // With a key and a chat started (0.33.0: with no key, what a pill does is left out; tests/fixes33.mjs).
+  globalThis.window = { Pilot: { ready: () => true, store: { loadChat: () => [{ role: 'user', text: 'hi' }] } } }
+  let labels = []
+  try { labels = bridgeTest.chips().map((c) => c.label) } finally { delete globalThis.window }
+  ok(`${r}: with a key, "What's waiting for me?" and "Add a chore for…" lead, then one for the screen`,
     labels[0] === "What's waiting for me?" && labels[1] === 'Add a chore for…' && labels.length === 3 && !/Explain this screen/.test(labels[2]), labels.join(' | '))
 }
 
