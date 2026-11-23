@@ -66,11 +66,11 @@ const now = Date.now()
 const kid = { id: 'k1', xp: totalXpForLevel(5) + 1 }
 ok('a phone that never showed this child a level starts from now: nothing to celebrate', levelNews({ seen: {}, events: [] }, kid, now).news === null)
 ok('unless this phone logged a level-up for them in the last days: that one is shown',
-  JSON.stringify(levelNews({ seen: {}, events: [{ type: 'level_up', kidId: 'k1', at: now - day, meta: { from: 3, to: 5 } }] }, kid, now).news) === JSON.stringify({ kidId: 'k1', from: 3, to: 5 }))
+  JSON.stringify({ ...levelNews({ seen: {}, events: [{ type: 'level_up', kidId: 'k1', at: now - day, meta: { from: 3, to: 5 } }] }, kid, now).news, chores: undefined }) === JSON.stringify({ kidId: 'k1', from: 3, to: 5 }))
 ok('an old one is not news', levelNews({ seen: {}, events: [{ type: 'level_up', kidId: 'k1', at: now - 10 * day, meta: { from: 3, to: 5 } }] }, kid, now).news === null)
 ok('nor, in the demo, its own history (a day old)', levelNews({ demo: true, seen: {}, events: [{ type: 'level_up', kidId: 'k1', at: now - day, meta: { from: 3, to: 5 } }] }, kid, now).news === null)
 ok('a level above the last one shown on this phone is news, from that level',
-  JSON.stringify(levelNews({ seen: { [levelKey('k1', 4)]: 1, [levelKey('k1', 2)]: 1 } }, kid, now).news) === JSON.stringify({ kidId: 'k1', from: 4, to: 5 }))
+  JSON.stringify({ ...levelNews({ seen: { [levelKey('k1', 4)]: 1, [levelKey('k1', 2)]: 1 } }, kid, now).news, chores: undefined }) === JSON.stringify({ kidId: 'k1', from: 4, to: 5 }))
 ok('on a child\'s own phone, never (sync already shows it, and its first pull is old news)',
   levelNews({ device: { role: 'kid', linkedKidId: 'k1' }, seen: { [levelKey('k1', 1)]: 1 } }, kid, now).news === null)
 ok('the same level is not', levelNews({ seen: { [levelKey('k1', 5)]: 1 } }, kid, now).news === null && lastSeenLevel({ seen: { [levelKey('k1', 5)]: 1, 'kid-level:k2:9': 1 } }, 'k1') === 5)
@@ -78,7 +78,7 @@ ok('Home shows it (the level-up moment, speaking to the child), and remembers it
   /<LevelUpOverlay levelUp=\{levelUp\} kid=\{kid\} theme=\{theme\} away onClose=\{\(\) => setLevelUp\(null\)\} \/>/.test(home)
   && /dispatch\(\{ type: 'SEE_MOMENT', key: levelKey\(kid\.id, levelNow\) \}\)/.test(home))
 const overlay = read('src/components/LevelUpOverlay.jsx')
-ok('"Your chores were accepted. You went from level …"', /Your chores were accepted\. You went from level \$\{levelUp\.from\} to \$\{levelUp\.to\}!/.test(overlay))
+ok('"Your chores were accepted. You went from level …"', /Your chores were accepted'\}\. You went from level \$\{levelUp\.from\} to \$\{levelUp\.to\}!/.test(overlay))
 const app = read('src/App.jsx')
 ok('a level-up that came by sync, seen in the child\'s half, is not shown again on Home',
   /if \(isKidArea\) dispatch\(\{ type: 'SEE_MOMENT', key: levelKey\(state\.pendingLevelUp\.kidId, state\.pendingLevelUp\.to\) \}\)/.test(app))
@@ -96,7 +96,7 @@ ok('each card drawn once (activity, tools, school League)', (dash.match(/Recent 
 console.log('\n=== 3. The plans compared, across the banner ===')
 const trial = read('src/components/TrialBanner.jsx')
 const pc = read('src/components/PlanCompare.jsx')
-ok('the comparison follows the banner\'s words, outside their column: the whole width', /<\/p>\s*\{headsUp && [^\n]*\n\s*\{compare\}\s*<\/div>/.test(trial) && !/<Banner/.test(code('src/components/TrialBanner.jsx')))
+ok('the comparison follows the banner\'s words, outside their column: the whole width', /<\/p>\s*\{compare\}\s*<\/div>\s*\)\s*\}\s*$/.test(trial) && !/<Banner/.test(code('src/components/TrialBanner.jsx')))
 ok('"Any number", not "Unlimited", for children', /v === 'Unlimited' \? 'Any number'/.test(pc))
 const { PLAN_COMPARISON, TIERS } = await import('../src/state/initialState.js')
 ok('(the plan screen\'s own table is unchanged: no terms changed)', PLAN_COMPARISON[0].value(TIERS.elite) === 'Unlimited')

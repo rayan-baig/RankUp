@@ -257,7 +257,8 @@ ok('no "quest(s)"-style plural anywhere a person reads', brackets.length === 0, 
 ok('"1 chore", "3 chores" on the leaderboards', lb.scoreWithUnit(1, 'chores') === '1 chore' && lb.scoreWithUnit(3, 'chores') === '3 chores' && lb.scoreWithUnit(1, 'streak_best') === '1 day')
 const { plural } = await import('../src/lib/plural.js')
 ok('and the shared plural says "1 quest", "3 quests"', plural(1, 'quest') === '1 quest' && plural(3, 'quest') === '3 quests')
-ok('the parent dashboard\'s history uses it', /plural\(e\.meta\?\.count \|\| 0, 'quest'\)/.test(read('src/screens/parent/ParentDashboard.jsx')))
+// (Recent activity's words moved to src/lib/eventWords.js in 0.33.0.)
+ok('the parent dashboard\'s history uses it', /plural\(e\.meta\?\.count \|\| 0, 'quest'\)/.test(read('src/lib/eventWords.js')))
 
 ok('"Sent!" after Send to parent: noted by the quest page, shown by the list for a moment',
   /noteSent\(quest\.title/.test(detail) && /peekSent\(\)/.test(read('src/screens/kid/KidQuests.jsx')) && /data-testid="sent-moment"/.test(read('src/screens/kid/KidQuests.jsx')))

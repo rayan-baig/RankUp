@@ -6,7 +6,7 @@
  * the page has loaded, so it is never on a child's phone and never part of
  * the first load. It:
  *
- *   - adds the core's one script tag (public/pilot/, core 1.4.1, copied
+ *   - adds the core's one script tag (public/pilot/, core 1.4.2, copied
  *     unchanged from the MTRX Horizyn site), which
  *     then loads public/pilot-rankup.js, which calls start() here;
  *   - mounts Pilot with RankUp's config: who is using it, which screen, its
@@ -14,7 +14,9 @@
  *     second lock: Pilot.mount refuses on it, and the engine offers no tools);
  *   - answers the common questions itself, with no AI key and nothing sent
  *     (core 1.4.0, pilotAnswers.js): what's waiting, this week's numbers,
- *     this screen explained, and a link to Assign;
+ *     this screen explained, and a link to Assign; since core 1.4.2 (0.33.0)
+ *     its own "Summarise this" (config.screenChip) and `match` words, so a
+ *     question typed with no key finds the answer it fits;
  *   - takes the robot off the page the moment Pilot is not allowed (leaving
  *     Parent Mode, "Hand to Ava") and puts it back when it is;
  *   - forgets the chat, the memory and any key kept for this tab only when
@@ -161,7 +163,7 @@ const scrub = (text) => withoutNames(text, privateNames())
 const answerWaiting = () => waitingAnswer(state(), { scrub })
 const answerWeek = () => weekAnswer(state())
 const answerExplain = (ctx) => `${explainAnswer(fullRoute(), state())}${ctx && ctx.ready ? '\n\nAsk me anything about it in the box below.' : ''}`
-const answerSummary = () => summaryAnswer(fullRoute(), state())
+const answerSummary = () => summaryAnswer(fullRoute(), state(), { scrub })
 const answerOldest = () => oldestAnswer(state(), { scrub })
 
 /* A key is set: the AI can do it (accept a chore, add the starter chores). */
@@ -171,7 +173,7 @@ const keyReady = () => { try { return Boolean(window.Pilot?.ready?.()) } catch {
  * answers itself before then (0.32.0): every suggestion on a parent's screen
  * now does something with no key, instead of asking for one.
  */
-const keyOr = (withKey, withoutKey) => (keyReady() ? withKey : { ...withoutKey, label: withKey.label })
+const keyOr = (withKey, withoutKey) => (keyReady() ? withKey : { label: withKey.label, ...withoutKey })
 
 /*
  * The suggestions above the chat once it has started (the core shows three,
@@ -182,30 +184,55 @@ const keyOr = (withKey, withoutKey) => (keyReady() ? withKey : { ...withoutKey, 
  * prompt where it takes the AI (accepting a chore, the starter chores).
  * `id` ties a suggestion to the welcome pill that does the same.
  */
-const WAITING = { id: 'waiting', label: "What's waiting for me?", answer: answerWaiting }
-const ADD_CHORE = { id: 'add', label: 'Add a chore for…', link: screenLink('/parent/assign') }
-const KIDS_DOING = { id: 'week', label: 'How are the kids doing?', answer: answerWeek }
-const WHAT_HERE = { id: 'explain', label: 'What can I do here?', answer: answerExplain }
+/*
+ * `match` (core 1.4.2): more words a question typed with no key may use for
+ * the same answer ("Is anything pending?" finds what's waiting). The core
+ * takes an answer only when the typed words clearly fit it and no other
+ * comes as close; anything else still waits for a key. Nothing is sent.
+ */
+const M = {
+  waiting: ['waiting', 'wait', 'review', 'pending', 'finished', 'submitted', 'approve', 'approval'],
+  add: ['add', 'chore', 'assign', 'new', 'create', 'task', 'job'],
+  week: ['doing', 'progress', 'week', 'weekly', 'xp', 'streak', 'kid', 'child', 'children', 'stats', 'earned'],
+  explain: ['explain', 'screen', 'page', 'here', 'mean', 'means'],
+}
+const WAITING = { id: 'waiting', label: "What's waiting for me?", answer: answerWaiting, match: M.waiting }
+const ADD_CHORE = { id: 'add', label: 'Add a chore for…', link: screenLink('/parent/assign'), match: M.add }
+const KIDS_DOING = { id: 'week', label: 'How are the kids doing?', answer: answerWeek, match: M.week }
+const WHAT_HERE = { id: 'explain', label: 'What can I do here?', answer: answerExplain, match: M.explain }
 function screenChips() {
   const r = route()
   if (!state().onboarded && (r === '/welcome' || r === '/')) {
-    return [{ label: 'How does RankUp work?', answer: HOW_IT_WORKS },
-      { label: 'Is it safe for my kids?', answer: SAFE_FOR_KIDS },
-      { label: 'What do the plans cost?', answer: () => plansAnswer() }]
+    return [{ label: 'How does RankUp work?', answer: HOW_IT_WORKS, match: ['work', 'works', 'rankup', 'start', 'use', 'idea'] },
+      { label: 'Is it safe for my kids?', answer: SAFE_FOR_KIDS, match: ['safe', 'safety', 'privacy', 'private', 'data', 'kid', 'child', 'children'] },
+      { label: 'What do the plans cost?', answer: () => plansAnswer(), match: ['plan', 'cost', 'price', 'pricing', 'pay', 'free', 'much', 'trial', 'money'] }]
   }
-  if (r === '/gift' || r === '/gift/card') return [{ label: 'How does a gift work?', answer: GIFT_ANSWER }, { label: 'Which plan to give?', answer: GIFT_PLANS_ANSWER }]
-  if (r.startsWith('/school') || r === '/district') return [{ label: 'What is the School League?', answer: SCHOOL_ANSWER }, { label: 'Is it safe for students?', answer: SCHOOL_SAFE_ANSWER }]
+  if (r === '/gift' || r === '/gift/card') {
+    return [{ label: 'How do gifts work?', answer: GIFT_ANSWER, match: ['gift', 'give', 'present', 'work', 'card', 'code', 'redeem'] },
+      { label: 'Which plan to give?', answer: GIFT_PLANS_ANSWER, match: ['plan', 'which', 'cost', 'price', 'choose'] }]
+  }
+  if (r.startsWith('/school') || r === '/district') {
+    return [{ label: 'What is the School League?', answer: SCHOOL_ANSWER, match: ['school', 'league', 'class', 'teacher', 'principal', 'join'] },
+      { label: 'Is it safe for students?', answer: SCHOOL_SAFE_ANSWER, match: ['safe', 'safety', 'privacy', 'private', 'student', 'data', 'see'] }]
+  }
+  const reward = keyOr(C('Add a reward', 'Add a reward: '), { answer: REWARD_ANSWER, match: ['reward', 'prize', 'treat', 'spend', 'coin'] })
   const third = {
     '/parent': KIDS_DOING,
-    '/parent/approvals': keyOr(C('Accept the oldest one', 'Accept the oldest chore that is waiting.'), { answer: answerOldest }),
-    '/parent/assign': keyOr(C('Add 3 starter chores', 'Add the 3 starter chores.'), { answer: STARTERS_ANSWER }),
+    // With no key it asks what RankUp can answer itself (0.33.0): "Accept
+    // the oldest one" said it would do something it can't without the AI.
+    '/parent/approvals': keyOr(C('Accept the oldest one', 'Accept the oldest chore that is waiting.'),
+      { label: 'Which chore is oldest?', answer: answerOldest, match: ['oldest', 'first', 'longest', 'old'] }),
+    // Likewise with no key it asks where the ready-made chores are (0.33.0),
+    // which RankUp answers; "Add 3 starter chores" is the AI's, with a key.
+    '/parent/assign': keyOr(C('Add 3 starter chores', 'Add the 3 starter chores.'),
+      { label: 'Where are the quest packs?', answer: STARTERS_ANSWER, match: ['starter', 'pack', 'quest', 'ready', 'made', 'idea'] }),
     '/parent/kids': KIDS_DOING,
-    '/parent/plan': { label: `What does ${TIERS.elite.name} add?`, answer: () => eliteAnswer() },
-    '/parent/settings': keyOr(C('Add a reward', 'Add a reward: '), { answer: REWARD_ANSWER }),
-    '/parent/rewards': keyOr(C('Add a reward', 'Add a reward: '), { answer: REWARD_ANSWER }),
-    '/parent/money': { label: 'How does pocket money work?', answer: MONEY_ANSWER },
-    '/parent/override': { label: 'How do pauses work?', answer: PAUSE_ANSWER },
-    '/parent/pair': { label: "Link my child's phone", answer: PAIR_ANSWER },
+    '/parent/plan': { label: `What does ${TIERS.elite.name} add?`, answer: () => eliteAnswer(), match: ['elite', 'pass', 'extra', 'get', 'boost', 'feature'] },
+    '/parent/settings': reward,
+    '/parent/rewards': reward,
+    '/parent/money': { label: 'How does pocket money work?', answer: MONEY_ANSWER, match: ['pocket', 'money', 'allowance', 'pay', 'paid', 'cash'] },
+    '/parent/override': { label: 'How do pauses work?', answer: PAUSE_ANSWER, match: ['pause', 'limit', 'rule', 'break', 'stop', 'rest'] },
+    '/parent/pair': { label: "Link my child's phone", answer: PAIR_ANSWER, match: ['link', 'pair', 'phone', 'device', 'code', 'tablet'] },
     '/parent/history': KIDS_DOING,
   }[r] || WHAT_HERE
   return [WAITING, ADD_CHORE, third]
@@ -221,10 +248,10 @@ function screenChips() {
  * while there is no key, the core offers one (answerMore).
  */
 export const WELCOME_PILLS = [
-  { icon: 'chat', id: 'waiting', label: WAITING.label, answer: answerWaiting },
-  { icon: 'bolt', id: 'add', label: ADD_CHORE.label, link: ADD_CHORE.link },
-  { icon: 'spark', id: 'week', label: 'How is my kid doing?', answer: answerWeek },
-  { icon: 'bars', id: 'explain', label: 'Explain this screen', answer: answerExplain },
+  { icon: 'chat', id: 'waiting', label: WAITING.label, answer: answerWaiting, match: M.waiting },
+  { icon: 'bolt', id: 'add', label: ADD_CHORE.label, link: ADD_CHORE.link, match: M.add },
+  { icon: 'spark', id: 'week', label: 'How is my kid doing?', answer: answerWeek, match: M.week },
+  { icon: 'bars', id: 'explain', label: 'Explain this screen', answer: answerExplain, match: M.explain },
   { icon: 'key', label: 'Add my AI key', action: 'settings' },
 ]
 
@@ -244,9 +271,15 @@ export function welcomeChips(list) {
 function onWelcome() {
   try { return window.Pilot?.store?.loadChat?.().length === 0 } catch { return false }
 }
+/*
+ * With no key (core 1.4.2), the suggestions a pill already does are left out
+ * after the welcome too: the core offers the pills again under each of
+ * RankUp's answers, and two items with one answer would leave a typed
+ * question tied between them, answered by neither (core issue 9).
+ */
 function chips() {
   const list = screenChips()
-  return onWelcome() ? welcomeChips(list) : list
+  return onWelcome() || !keyReady() ? welcomeChips(list) : list
 }
 
 function taskPrompt() {
@@ -390,54 +423,18 @@ const config = {
   screen,
   chips,
   taskPrompt,
-}
-
-/*
- * "Summarise this" with no AI key (0.32.0). The core adds this follow-up
- * under every chat and, with no key, its only answer was the key settings
- * ("Pilot will look at this screen as soon as you add a key"). Without
- * changing the core's files, RankUp answers it itself while there is no key:
- * the tap on that one suggestion is caught first (capture phase, on the
- * window) and the screen's own summary (pilotAnswers.js, summaryAnswer) is
- * put in the chat as Pilot's own answer, through the core's channel between
- * tabs, as forgetFamily() clears it. Built on the phone; nothing is sent.
- * With a key, the tap is left to the core, which asks the AI.
- */
-export const SUMMARY_CHIP = 'Summarise this'
-export function isSummaryChip(target) {
-  const chip = target && typeof target.closest === 'function' ? target.closest('.pilot-root .pilot-chips .pilot-chip') : null
-  return Boolean(chip && chip.textContent.trim() === SUMMARY_CHIP && !chip.disabled)
-}
-/** The chat with this question and answer added, and the key offered once per chat (as core 1.4.1 does). */
-export function withAnswer(chat, label, text, more = config.answerMore) {
-  const list = Array.isArray(chat) ? chat.slice() : []
-  const add = [{ role: 'user', text: label }, { role: 'assistant', text, local: true }]
-  if (more && !list.some((m) => m && m.role === 'note' && m.kind === 'more')) add.push({ role: 'note', kind: 'more', text: more })
-  return list.concat(add)
-}
-function answerInChat(label, text) {
-  const store = window.Pilot?.store
-  if (!store || typeof store.loadChat !== 'function' || typeof BroadcastChannel !== 'function') return false
-  try {
-    const next = withAnswer(store.loadChat(), label, text)
-    store.saveChat(next)
-    const channel = new BroadcastChannel(`${STORAGE_PREFIX}-sync`)
-    channel.postMessage({ type: 'chat', messages: next, from: 'rankup' })
-    channel.close()
-    return true
-  } catch { return false }
-}
-let summaryWatch = false
-function watchSummary() {
-  if (summaryWatch) return
-  summaryWatch = true
-  window.addEventListener('click', (e) => {
-    if (!isSummaryChip(e.target) || keyReady() || !shows()) return
-    const text = answerSummary()
-    if (!text || !answerInChat('Summarise this screen', text)) return
-    e.preventDefault()
-    e.stopImmediatePropagation()
-  }, true)
+  /*
+   * "Summarise this" (core 1.4.2). With no key it is RankUp's own: the
+   * screen's numbers and one next step (pilotAnswers.js, summaryAnswer),
+   * built on the phone, nothing sent. With a key it is the core's, which asks
+   * the AI. Read by the core each time it draws the suggestions, so it
+   * follows the key. 0.32.0 caught the tap on the core's chip instead.
+   */
+  get screenChip() { return keyReady() ? undefined : { label: 'Summarise this', answer: answerSummary } },
+  // The handle at the screen's edge while the robot is hidden (core 1.4.2)
+  // stays on: only off Parent Mode (the set-up, gift and School League
+  // pages), since in Parent Mode the robot is always in its slot.
+  handle: true,
 }
 
 let mounted = false
@@ -452,7 +449,7 @@ function start() {
   if (!shows()) return false
   placeAroundTabBar()
   mounted = window.Pilot.mount(config) === true
-  if (mounted) { watch(); watchSummary() }
+  if (mounted) watch()
   return mounted
 }
 
@@ -507,7 +504,7 @@ function placeAroundTabBar() {
 function watch() {
   if (watching || typeof MutationObserver !== 'function') return
   watching = true
-  new MutationObserver(() => { if (!on) park() }).observe(document.body, { childList: true })
+  new MutationObserver(() => { if (!on) park(); watchOpen() }).observe(document.body, { childList: true })
   // Parent Mode's layout is chosen on the page's root (data-area, and
   // data-pilot-tabs for the tab bar's slot), which the core doesn't watch:
   // when either changes, it is asked to look again (it re-places on
@@ -515,6 +512,29 @@ function watch() {
   // instead of waiting in the corner it started in (0.29.0).
   new MutationObserver(lookAgain).observe(document.documentElement, { attributes: true, attributeFilter: ['data-area', 'data-pilot-tabs'] })
   lookAgain()
+  watchOpen()
+}
+/*
+ * Whether Pilot's chat is open, on the page's root (0.33.0): data-pilot-open
+ * ="on". On a computer the chat is docked at the right and the screen moves
+ * over for it (styles/index.css); the dashboard and the plans follow it.
+ */
+let openWatch = null
+function syncOpen(root) {
+  const open = Boolean(root && root.isConnected && root.classList.contains('pilot-open'))
+  const html = document.documentElement
+  if (open && html.dataset.pilotOpen !== 'on') html.dataset.pilotOpen = 'on'
+  else if (!open && html.dataset.pilotOpen) delete html.dataset.pilotOpen
+}
+function watchOpen() {
+  const root = document.querySelector('.pilot-root')
+  if (root && openWatch?.root !== root && typeof MutationObserver === 'function') {
+    openWatch?.mo.disconnect()
+    const mo = new MutationObserver(() => syncOpen(root))
+    mo.observe(root, { attributes: true, attributeFilter: ['class'] })
+    openWatch = { root, mo }
+  }
+  syncOpen(root)
 }
 function lookAgain() {
   try { window.dispatchEvent(new Event('resize')) } catch { /* nothing to place */ }
@@ -556,6 +576,7 @@ function park() {
   try { if (root.querySelector('.pilot-launcher')) window.Pilot?.close() } catch { /* not built yet */ }
   parked = root
   root.remove()
+  syncOpen(null)
 }
 
 function unpark() {
@@ -654,4 +675,4 @@ export function connect() {
   }
 }
 
-export const _test = { accountOf, chips, screenChips, screen, SCREENS, CORE_FILES, config, answerSummary }
+export const _test = { accountOf, chips, screenChips, screen, SCREENS, CORE_FILES, config, answerSummary, M }

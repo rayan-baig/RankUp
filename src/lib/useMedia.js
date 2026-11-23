@@ -18,3 +18,23 @@ export function useMedia(query) {
   }, [query])
   return on
 }
+
+/**
+ * True while the page's root carries data-<name>="on" (0.33.0: "pilotOpen",
+ * set by src/pilot/pilotRankUp.js while Pilot's chat is open), kept up to
+ * date. On a computer Pilot's chat is docked at the right and the page moves
+ * over for it (styles/index.css), so a layout with less room can follow.
+ */
+export function useRootFlag(name) {
+  const read = () => typeof document !== 'undefined' && document.documentElement?.dataset?.[name] === 'on'
+  const [on, setOn] = useState(read)
+  useEffect(() => {
+    if (typeof MutationObserver !== 'function') return undefined
+    const attr = `data-${name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`
+    const mo = new MutationObserver(() => setOn(read()))
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: [attr] })
+    setOn(read())
+    return () => mo.disconnect()
+  }, [name])
+  return on
+}

@@ -66,11 +66,28 @@ while a page is scrolled. In the tab bar's slot nothing changes:
 `dockedPlace` still answers first. Off the slot (the parent's set-up, the gift
 and School League pages) the core's new rules apply as they are.
 
+Core 1.4.2 (RankUp 0.33.0) hides the robot on a computer too rather than
+touch a link, and then shows a **handle** at the screen's edge (a slice of
+the robot, a 44px button that opens Pilot) once the page is still. In
+Parent Mode neither happens: `dockedPlace` answers first and never says
+"hide", so the robot is always in its slot; the handle can show only off
+the slot (the set-up, gift and School League pages). RankUp leaves
+`handle` on. It moves nothing by `--pilot-keep-d`, so 1.4.2's
+`--pilot-keep-dy` needs nothing from it.
+
 On a computer (1100px and up, 0.29.0) Parent Mode's tab bar is a sidebar down
 the left edge, and the slot is at its foot: `dockedPlace` answers "bottom
 left" when the slot is on the left half of the window, so the robot sits in
-the sidebar (`src/styles/index.css` puts it 8px in) and the chat window opens
-beside it, over no card.
+the sidebar (`src/styles/index.css` puts it 8px in). Since 0.33.0 the chat
+window is **docked down the right edge** there, the whole height
+(`--rk-dock`, 372 to 420px wide), and while it is open the screen moves over
+by its width (`padding-right` on the page, from `data-pilot-open="on"` on
+the root, which `pilotRankUp.js` sets from the core's own `pilot-open` class),
+so it is never over a card. Below 1400px the dashboard drops to one column
+and the plans to one card a row while it is open (`useRootFlag('pilotOpen')`
+in `ParentDashboard.jsx`, `.plan-cards`). Before, it opened beside the
+sidebar, over the left of the screen (the Free plan's card). This needs no
+core option: it is RankUp's own style on the core's window.
 
 Core 1.2's options, as RankUp sets them (0.28.0; the first look back on in 0.28.1):
 
@@ -113,10 +130,13 @@ Since core 1.2.0 a website can make the welcome its own, and RankUp does
   welcome too, under the pills. There RankUp leaves out what a pill already
   does, and any suggestion that ends on a gap for the parent to finish (only a
   pill can leave words in the box): on Home all three are pills, so none show;
-  on Review "Accept the oldest one" does. Once a chat has started the pills
-  are gone and the suggestions are the whole list again ("What's waiting for
-  me?" and "Add a chore for…" first, then one for the screen). A suggestion
-  carries the `id` of the pill that does the same (`welcomeChips`).
+  on Review "Which chore is oldest?" does. Once a chat has started, with a
+  key, the suggestions are the whole list again ("What's waiting for me?" and
+  "Add a chore for…" first, then one for the screen); with no key (0.33.0)
+  what a pill does stays out, since core 1.4.2 offers the pills again under
+  every answer of RankUp's own, and two items with the same answer would
+  leave a typed question tied between them. A suggestion carries the `id`
+  of the pill that does the same (`welcomeChips`).
 - **Chat keys only** (`hideKeySections: ['image', 'video']`): RankUp has no
   use for pictures or videos made by an AI.
 - **The key, asked for once** (core 1.3.0, RankUp 0.29.0): because RankUp's
@@ -150,23 +170,39 @@ family's own data (`src/pilot/pilotAnswers.js`, pure functions of the state):
 ("Accept the oldest one" on Review, "Add 3 starter chores" on Assign, "Add a
 reward" on Settings and Rewards) are AI prompts only once there is a key
 (`keyOr` in `pilotRankUp.js` asks `Pilot.ready()`); before then each is
-answered: the oldest chore waiting, by name, and how long it has waited;
-where the quest packs are; how to add a reward. Pocket money, pauses and
+answered, and since 0.33.0 the two that would promise what only the AI can
+do ask what RankUp answers instead: **Which chore is oldest?** (the chore
+by name, how long it has waited, and an **Open it** link to Review, where it
+is at the top) and **Where are the quest packs?**. Pocket money, pauses and
 linking a phone, and the gift and School League pages' questions, are
-answered at once with or without a key. **"Summarise this"**, the follow-up
-the core adds under every chat, sent the screen to the AI and so, with no
-key, opened the key settings; RankUp now answers it itself while there is no
-key (`summaryAnswer`: the screen in one line, then its own counts). The core
-has no option for it, so the tap on that one chip is caught first (a capture
-listener on the window, `isSummaryChip`) and the answer is put in the chat
-through the core's own channel between tabs (`withAnswer`, the same way
-`forgetFamily` clears the chat); with a key the tap is left to the core.
+answered at once with or without a key.
+
+**"Summarise this" (core 1.4.2, RankUp 0.33.0).** The core shows its own
+"Summarise this" (which asks the AI) only once a key is set, and takes an
+app's own in its place: `config.screenChip`. RankUp's is a getter: with no
+key `{ label: 'Summarise this', answer }` (`summaryAnswer`: the screen's
+numbers as short points, then one **Next:** step for that screen, never a
+repeat of "Explain this screen"); with a key nothing, so the core's own asks
+the AI. 0.32.0 caught the tap on the core's chip with a listener and wrote
+into the chat itself; that is gone.
+
+**A typed question with no key (core 1.4.2).** The core compares what is
+typed with RankUp's own answers and links and, when one clearly fits, shows
+it at once under "Here's what I can tell you without an AI key:" (nothing is
+sent). Each pill and suggestion carries `match` words for this ("pending",
+"review" and "approve" for what's waiting; "oldest" and "first" for the
+oldest chore; and so on, in `pilotRankUp.js`); anything else still waits in
+the box for a key. `tests/fixes33.mjs` runs a list of questions through the
+core's own `matchTyped`.
 
 **Each screen explained (0.32.0).** Every parent screen has its own words and
 its own "Right now" counts (`SCREEN_HELP` in `pilotAnswers.js`): Review the
 chores waiting and the oldest; Rewards (`#/parent/rewards`, Settings opened
-at the rewards) the rewards and what they cost; Plans the plan paid for, the
-trial's days left and the room for children; Kids the levels and linked
+at the rewards) the rewards and what they cost; Plans the plan in words that
+can all be true (0.33.0: "you're trying Elite Pass free — 14 days left",
+"you pay for Standard", "you're on Starter, the free plan", or in the demo
+"you're on Elite Pass in the demo (nothing is charged)") and the room for
+children; Kids the levels and linked
 phones; and so on. A page that is not one of RankUp's says so, with a link
 Home. While Pilot is open and the screen changes (it stays open beside the
 page on a computer), the suggestions are redrawn for the new screen
@@ -206,7 +242,7 @@ on later; `src/styles/index.css` stops the resting robot's float).
 
 | File | What it is |
 |---|---|
-| `public/pilot/` | The shared core, **Pilot core 1.4.1** (MTRX Horizyn commit f221ffc), copied unchanged with its robot pictures and layers (and since 1.4.1 the same in the sizes a phone draws them, named on the script tag as `robotSet` and `rest*Set`), and the 18 pictures in `poses/`. |
+| `public/pilot/` | The shared core, **Pilot core 1.4.2** (MTRX Horizyn commit a1c9253), copied unchanged with its robot pictures and layers (and since 1.4.1 the same in the sizes a phone draws them, named on the script tag as `robotSet` and `rest*Set`), and the 18 pictures in `poses/`. |
 | `src/lib/pilotGate.js`, `src/components/PilotGate.jsx` | The only part in the first load: where Pilot may be, and fetching the rest once the page has loaded. |
 | `src/pilot/pilotRankUp.js` | The config: the core's script tag, the welcome (tagline and pills), the screens, suggestions, `kidView`, hiding and showing, forgetting a family's chat. |
 | `src/pilot/pilotAnswers.js` | The answers Pilot gives with no key (core 1.4.0): what's waiting, This week, each screen explained with its own counts, its summary, each screen's own suggestion, Elite, the plans. |

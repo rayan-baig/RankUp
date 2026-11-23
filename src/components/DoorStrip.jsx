@@ -11,7 +11,9 @@ import '../styles/doorstrip.css'
  * Review with Accept, a child's world screen, the rewards a child saves for,
  * and the parent's This week. The child is Noah in Pegasus Horizon, the same
  * pretend child as the demo phone above, with RankUp's own drawing of that
- * world. Never Block Craft: those pictures are the owner's, kept for the
+ * world. Since 0.33.0 Noah is where the demo phone above rests (level 3,
+ * ✨ 47, before "Make your bed" is accepted), so the two never disagree.
+ * Never Block Craft: those pictures are the owner's, kept for the
  * children who pick that world.
  *
  * Fetched only on a computer window (960px wide, 700px tall), after the page
@@ -58,7 +60,7 @@ export default function DoorStrip() {
             <img src={WORLD_ART} alt="" width="38" height="38" loading="lazy" decoding="async" />
             <span className="ds-grow">
               <b>Noah</b>
-              <small>Level 4 · Pegasus Horizon</small>
+              <small>Level 3 · Pegasus Horizon · ✨ 47</small>
               <span className="ds-bar"><span /></span>
             </span>
           </div>
@@ -74,8 +76,8 @@ export default function DoorStrip() {
 
       <figure className="door-tile">
         <div className="door-screen door-screen-kid">
-          <p className="ds-kicker">Rewards · Noah has ✨ 62</p>
-          {[['🎬', 'Pick Friday’s film', 60, 100], ['🌙', 'An hour later bedtime', 90, 69], ['🎢', 'Day out, you choose', 250, 25]].map(([icon, name, cost, pct]) => (
+          <p className="ds-kicker">Rewards · Noah has ✨ 47</p>
+          {[['🎬', 'Pick Friday’s film', 60, 78], ['🌙', 'An hour later bedtime', 90, 52], ['🎢', 'Day out, you choose', 250, 19]].map(([icon, name, cost, pct]) => (
             <div key={name} className="ds-reward">
               <span className="ds-icon">{icon}</span>
               <span className="ds-grow">

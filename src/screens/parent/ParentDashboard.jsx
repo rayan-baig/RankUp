@@ -4,8 +4,6 @@ import { levelFromXp, formatXp } from '../../lib/xp.js'
 import { lastSevenDays, relativeTime } from '../../lib/dates.js'
 import { resolveKidTheme } from '../../data/kidThemes.js'
 import { storyProgress } from '../../lib/dragonFight.js'
-import { findGame } from '../../data/minigames.js'
-import { MARKET_SKINS } from '../../data/marketSkins.js'
 import { activeLockout, familyGoalProgress } from '../../state/reducer.js'
 import { TIERS } from '../../state/initialState.js'
 import { priceTag } from '../../lib/plans.js'
@@ -32,8 +30,8 @@ import EmptyNext from '../../components/EmptyNext.jsx'
 import { EMPTY_STATES } from '../../data/emptyStates.js'
 import { STARTER_REWARDS, newFamily, showFirstWeek, showHowItWorks } from '../../lib/firstWeek.js'
 import { weekCompare } from '../../lib/thisWeek.js'
-import { plural } from '../../lib/plural.js'
-import { useMedia } from '../../lib/useMedia.js'
+import { describeEvent } from '../../lib/eventWords.js'
+import { useMedia, useRootFlag } from '../../lib/useMedia.js'
 // The desktop layouts (two columns here), fetched with this screen.
 import '../../styles/desk.css'
 
@@ -45,7 +43,12 @@ export default function ParentDashboard() {
   const deals = useDeals()
   const elite = useElite()
   // Two columns from 1100px (styles/desk.css): some cards move across.
-  const desk = useMedia('(min-width: 1100px)')
+  // While Pilot's chat is docked at the right (0.33.0, styles/index.css), two
+  // columns only where there is still room for them (1400px and up).
+  const wide = useMedia('(min-width: 1100px)')
+  const roomy = useMedia('(min-width: 1400px)')
+  const pilotOpen = useRootFlag('pilotOpen')
+  const desk = wide && (!pilotOpen || roomy)
   // One column or two on a computer, for the layout it was measured for.
   const [oneCol, setOneCol] = useState({ key: null, one: false })
   const mainCol = useRef(null)
@@ -520,36 +523,3 @@ function elitePitch() {
   return `Adds ${parts.join(', ')} and a permanent ${TIERS.elite.xpMultiplier}× XP boost for kids.`
 }
 
-// The words for what the events store as ids: "Plan changed to elite" and
-// "Override (red)" were the database's words on a parent's screen.
-const OVERRIDE_NAMES = { tax: 'Coins taken back', dimension: 'A short break', red: 'A pause until lifted' }
-
-function describeEvent(e, kid) {
-  const who = kid?.name || 'Someone'
-  switch (e.type) {
-    case 'quest_approved': return `✅ ${who} earned ${e.meta?.xp} XP`
-    case 'quest_rejected': return `↩️ You sent a quest back to ${who}`
-    case 'quest_submitted': return `🙋 ${who} finished ${e.meta?.title ? `“${e.meta.title}”` : 'a quest'}`
-    case 'quests_assigned': return `📋 ${plural(e.meta?.count || 0, 'quest')} assigned to ${who}`
-    case 'level_up': return `🎉 ${who} reached level ${e.meta?.to}`
-    case 'reward_redeemed': return `🎁 ${who} redeemed ${e.meta?.name}`
-    case 'override_applied': return `🛡️ ${OVERRIDE_NAMES[e.meta?.kind] || 'An override'} applied to ${who}`
-    case 'override_lifted': return `▶️ ${who} can use the app again`
-    case 'login_bonus': return `🎁 ${who} claimed the daily bonus`
-    case 'tier_changed': return `💳 Plan changed to ${TIERS[e.meta?.tier]?.name || 'a new plan'}`
-    case 'theme_changed': return `🎨 ${who} changed theme`
-    case 'kid_added': return `👶 ${who} was added`
-    case 'alliance_joined': return '🏆 Joined a Parent Alliance'
-    case 'streak_freeze': return `🧊 ${who} used a streak freeze`
-    case 'family_created': return '🏠 Your family was created'
-    case 'device_paired': return `📱 ${who}'s phone was linked`
-    case 'device_linked': return `📱 ${who}'s phone joined the family`
-    case 'device_unlinked': return `📵 ${who}'s phone was unlinked`
-    case 'minigame_played': return `🎮 ${who} played ${findGame(e.meta?.game)?.name || 'a game'}`
-    case 'skin_bought':
-      return `✨ ${who} unlocked ${MARKET_SKINS.find((s) => s.id === e.meta?.skin)?.name || 'a skin'}`
-    // Never show the raw event key. It is a database word, and a parent reading
-    // "family_created" in their activity feed is reading a bug.
-    default: return '• Something happened'
-  }
-}

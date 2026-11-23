@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { effectiveTier, onTrial, trialDaysLeft, planOf } from '../../state/reducer.js'
 import { kidsThisWeek, boostWords } from '../../lib/thisWeek.js'
+import { trialBoostSoFar } from '../../lib/trialHeadsUp.js'
 import { TIERS, TIER_LADDER, PLAN_COMPARISON, ELITE_KID_PERKS, ELITE_PARENT_PERKS } from '../../state/initialState.js'
 import { noPaymentsWords, billingLive, startCheckout, openBillingPortal, fetchBillingStatus, billingError, billingNotice, keepPlan, keepOffers, PAUSE_MONTHS, planDate } from '../../lib/billing.js'
 import { Screen, Card, Button, SectionTitle, Banner, Chip, Modal } from '../../components/ui.jsx'
@@ -36,6 +37,8 @@ export default function ParentPlan() {
   const trialDays = trialTier ? trialDaysLeft(state.family) : null
   const boostX = planOf(state).xpMultiplier || 1
   const boost = boostWords(kidsThisWeek(state, Date.now(), boostX), boostX)
+  // What the trial's boost has given since it began, child by child (0.33.0).
+  const soFar = trialTier ? trialBoostSoFar(state, TIERS[trialTier], TIERS[current]) : null
   const [confirm, setConfirm] = useState(null)
   /*
    * Monthly or annual. Monthly is the default deliberately: annual is the
@@ -256,7 +259,7 @@ export default function ParentPlan() {
       )}
 
       {/* Side by side on a wide screen, one under another on a phone. */}
-      <div className="mt-3 grid gap-3 lg:grid-cols-3 lg:items-start" data-testid="plan-cards">
+      <div className="plan-cards mt-3 grid gap-3 lg:grid-cols-3 lg:items-start" data-testid="plan-cards">
         {TIER_LADDER.map((tier, i) => {
           const active = tier.id === current
           const below = TIER_LADDER[i - 1]
@@ -306,6 +309,12 @@ export default function ParentPlan() {
                   <Chip tone="var(--accent)" data-testid={`founding-badge-${tier.id}`}>First year {founding.percent}% off</Chip>
                 )}
               </div>
+              {tier.id === trialTier && soFar && (
+                <p className="week-boost mt-2" data-testid="plan-trial-boost">
+                  <span aria-hidden="true">⚡</span>{' '}
+                  Your trial's {tier.xpMultiplier}× boost so far: <span data-pilot-private="">{soFar}</span>
+                </p>
+              )}
               {yearly && (
                 <p className="text-xs text-muted mt-1.5">
                   Twelve months at ${usd(tier.price)} is ${usd((saving.savedCents + toCents(tier.yearPrice)) / 100)}.

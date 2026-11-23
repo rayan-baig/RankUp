@@ -99,7 +99,7 @@ for (const [w, h] of [[320, 640], [375, 812], [1440, 900]]) {
   const pills = await page.locator('.pilot-root .pilot-pill').allInnerTexts()
   ok(`${w}px: RankUp's five pills`, JSON.stringify(pills.map((p) => p.trim())) === JSON.stringify(["What's waiting for me?", 'Add a chore for…', 'How is my kid doing?', 'Explain this screen', 'Add my AI key']), JSON.stringify(pills))
   const chips = await page.locator('.pilot-root .pilot-chips-welcome .pilot-chip').allInnerTexts()
-  ok(`${w}px: under them, Review's own suggestion (the core's chips on the welcome), none repeating a pill`, JSON.stringify(chips) === '["Accept the oldest one"]', JSON.stringify(chips))
+  ok(`${w}px: under them, Review's own suggestion (the core's chips on the welcome), none repeating a pill`, JSON.stringify(chips) === '["Which chore is oldest?"]', JSON.stringify(chips))
   ok(`${w}px: no RankUp-made row in the welcome any more`, (await page.locator('.pilot-root [data-testid="pilot-starters"], .pilot-root .rk-starters').count()) === 0)
   const lastPill = await page.locator('.pilot-root .pilot-pill').last().boundingBox()
   ok(`${w}px: the pills fit across the window`, lastPill && lastPill.x >= 0 && lastPill.x + lastPill.width <= w, JSON.stringify(lastPill))
@@ -134,10 +134,12 @@ console.log('\n=== With no key: the question waits, and goes once a key is saved
   await page.waitForTimeout(500)
   // Since 0.31.0 (core 1.4.0) the pills are answered with no key, so the
   // question for the AI is typed (the waiting flow is for AI questions only).
-  await page.locator('.pilot-root .pilot-input').fill("What's waiting for me to review?")
+  // Since 0.33.0 (core 1.4.2) a typed question one of RankUp's own answers
+  // fits is answered at once, so this one is for the AI alone.
+  await page.locator('.pilot-root .pilot-input').fill('Draft a thank-you note for the kids, please.')
   await page.locator('.pilot-root .pilot-send').click()
   await page.waitForTimeout(600)
-  ok('no key: the question stays in the box', (await page.locator('.pilot-root .pilot-input').inputValue()) === "What's waiting for me to review?")
+  ok('no key: the question stays in the box', (await page.locator('.pilot-root .pilot-input').inputValue()) === 'Draft a thank-you note for the kids, please.')
   ok('and key settings open, saying it is waiting', /Your message is waiting in the box\. It sends as soon as you add a key\./.test(await page.locator('.pilot-root .pilot-settings-view').innerText()))
   ok('nothing was sent anywhere', bodies.length === 0)
   await shot(page, '375-waiting')
@@ -149,7 +151,7 @@ console.log('\n=== With no key: the question waits, and goes once a key is saved
   await page.locator('.pilot-root .pilot-keyform').getByRole('button', { name: 'Save' }).click()
   for (let t = 0; t < 6000 && !bodies.length; t += 200) await page.waitForTimeout(200)
   await page.waitForTimeout(800)
-  ok('the key saved: the waiting question is sent, once', bodies.length === 1 && bodies[0].includes("What's waiting for me to review?"), String(bodies.length))
+  ok('the key saved: the waiting question is sent, once', bodies.length === 1 && bodies[0].includes('Draft a thank-you note for the kids, please.'), String(bodies.length))
   ok('and answered in the chat', /One chore is waiting for you/.test(await page.locator('.pilot-root .pilot-log').innerText().catch(() => '')))
   ok('the box is empty again', (await page.locator('.pilot-root .pilot-input').inputValue()) === '')
   const later = await page.locator('.pilot-root .pilot-chips .pilot-chip').allInnerTexts()

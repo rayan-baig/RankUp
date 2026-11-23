@@ -2,9 +2,9 @@
  * 0.28.0, in plain Node: Pilot core 1.2 and RankUp's own Pilot welcome.
  * tests/fixes28ui.mjs walks the same in a real browser.
  *
- *   1. the core is 1.4.1 (since 0.32.0; 1.4.0 in 0.31.0, 1.3.0 in 0.29.0,
- *      1.2.1 in 0.28.1, 1.2.0 in 0.28.0), the MTRX Horizyn site's files
- *      (commit f221ffc) byte for byte;
+ *   1. the core is 1.4.2 (since 0.33.0; 1.4.1 in 0.32.0, 1.4.0 in 0.31.0,
+ *      1.3.0 in 0.29.0, 1.2.1 in 0.28.1, 1.2.0 in 0.28.0), the MTRX Horizyn
+ *      site's files (commit a1c9253) byte for byte;
  *   2. RankUp's welcome: its tagline and five pills, chat keys only, kept on
  *      the screen, the first look on again (0.28.1), its one pop-up that
  *      isn't a dialog, the avoid list and the tab bar's slot as before;
@@ -26,30 +26,30 @@ const ok = (label, cond, detail = '') => {
 const read = (f) => readFileSync(f, 'utf8')
 const code = (f) => read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-console.log('\n=== 1. Pilot core 1.4.1, copied unchanged ===')
+console.log('\n=== 1. Pilot core 1.4.2, copied unchanged ===')
 // The first 16 hex digits of each file's sha256 at MTRX Horizyn commit
-// f221ffc (core 1.4.1). A file edited here, or copied from another commit,
+// a1c9253 (core 1.4.2). A file edited here, or copied from another commit,
 // fails.
 const CORE = [
-  ['pilot.js', 'd6853ec88a77bd94'],
-  ['pilot-store.js', '714d5eaa154fcb22'],
-  ['pilot-mascot.js', '85f524c269a3113d'],
-  ['pilot-engine.js', '77487682c695f969'],
-  ['pilot-providers.js', 'b458d4a89d850b0a'],
-  ['pilot-media.js', '6750001f65407e77'],
-  ['pilot-render.js', '82ff4ad4a1c9a5e1'],
-  ['pilot-panel.js', '34054867d3aa5a0f'],
-  ['pilot-motion.js', 'c7044c5c44e965e9'],
-  ['pilot-actor.js', 'f98b9541abeaa599'],
-  ['pilot.css', '989bdcd7c57fdf5b'],
-  ['pilot-panel.css', 'ba9f9004398388d6'],
-  ['pilot-actor.css', '953df05a9274ac0f'],
+  ['pilot.js', 'b42d370592e27541'],
+  ['pilot-store.js', '7b1f93b7569eea47'],
+  ['pilot-mascot.js', '70137849a3a8ae3e'],
+  ['pilot-engine.js', '117d3e616162c14e'],
+  ['pilot-providers.js', '2ec1a989f9ec833d'],
+  ['pilot-media.js', 'ff6d67924334ca68'],
+  ['pilot-render.js', 'd4f6fcd3d64a63f6'],
+  ['pilot-panel.js', 'ecb25a6450b46555'],
+  ['pilot-motion.js', '8f120150bcec155b'],
+  ['pilot-actor.js', 'b5615a34ab14badf'],
+  ['pilot.css', 'd421e8108a3be1d3'],
+  ['pilot-panel.css', '34d975d7821c9cbf'],
+  ['pilot-actor.css', '2af8e3b6eb5c5602'],
 ]
 const changed = CORE.filter(([f, want]) => createHash('sha256').update(readFileSync(`public/pilot/${f}`)).digest('hex').slice(0, 16) !== want)
-ok('all thirteen core files are 1.4.1 as the MTRX Horizyn site has them', changed.length === 0, changed.map(([f]) => f).join(', '))
-ok('each says "Pilot core 1.4.1" on its first line', CORE.every(([f]) => read(`public/pilot/${f}`).split('\n')[0].includes(`Pilot core 1.4.1 · ${f}`)))
-ok('and the loader\'s VERSION is 1.4.1', /const VERSION = "1\.4\.1"/.test(read('public/pilot/pilot.js')))
-// Core 1.4.1's crisp robot on phones: its pictures in the sizes drawn, copied with the rest.
+ok('all thirteen core files are 1.4.2 as the MTRX Horizyn site has them', changed.length === 0, changed.map(([f]) => f).join(', '))
+ok('each says "Pilot core 1.4.2" on its first line', CORE.every(([f]) => read(`public/pilot/${f}`).split('\n')[0].includes(`Pilot core 1.4.2 · ${f}`)))
+ok('and the loader\'s VERSION is 1.4.2', /const VERSION = "1\.4\.2"/.test(read('public/pilot/pilot.js')))
+// Core 1.4.1's crisp robot on phones: its pictures in the sizes drawn, copied with the rest (unchanged in 1.4.2).
 const SETS = ['pilot-robot-112.webp', 'pilot-robot-168.webp', 'pilot-robot-176.webp', 'pilot-rest-body-112.webp', 'pilot-rest-body-168.webp',
   'pilot-rest-head-112.webp', 'pilot-rest-head-168.webp', 'pilot-rest-eyes-112.webp', 'pilot-rest-eyes-168.webp']
 const PICS = {
@@ -130,23 +130,27 @@ const withChat = (n, fn) => {
   globalThis.window = { Pilot: { store: { loadChat: () => Array.from({ length: n }, () => ({ role: 'user', text: 'hi' })) } } }
   try { return fn() } finally { delete globalThis.window }
 }
+const keyed = (n, fn) => { globalThis.window = { Pilot: { ready: () => true, store: { loadChat: () => Array.from({ length: n }, () => ({ role: 'user', text: 'hi' })) } } }; try { return fn() } finally { delete globalThis.window } }
 ok('(the gate sees Parent Mode)', at('/parent'))
 ok('Home, before any chat: no suggestion repeats a pill (all three are pills there)', withChat(0, () => chips()).length === 0, labels(withChat(0, () => chips())).join(' | '))
-ok('Home, once chatting (the pills are gone): the whole list again', JSON.stringify(labels(withChat(2, () => chips())))
+// 0.33.0 (core 1.4.2): with no key, what a pill does stays out once chatting
+// too (the pills come back under each answer); with a key, the whole list.
+ok('Home, once chatting with a key: the whole list again', JSON.stringify(labels(keyed(2, () => chips())))
   === JSON.stringify(["What's waiting for me?", 'Add a chore for…', 'How are the kids doing?']))
+ok('Home, once chatting with no key: still nothing a pill does', withChat(2, () => chips()).length === 0)
 at('/parent/approvals')
-ok('Review, before any chat: "Accept the oldest one", the one thing the pills don\'t do', JSON.stringify(labels(withChat(0, () => chips()))) === '["Accept the oldest one"]')
+ok('Review, before any chat, no key: "Which chore is oldest?", the one thing the pills don\'t do', JSON.stringify(labels(withChat(0, () => chips()))) === '["Which chore is oldest?"]')
+ok('Review, with a key: "Accept the oldest one", for the AI', JSON.stringify(labels(keyed(0, () => chips()))) === '["Accept the oldest one"]')
 at('/parent/settings')
 // 0.32.0: with no key "Add a reward" is RankUp's own answer, so it is on the
 // welcome too; once there is a key it is the AI prompt that ends on a gap.
-const keyed = (n, fn) => { globalThis.window = { Pilot: { ready: () => true, store: { loadChat: () => Array.from({ length: n }, () => ({ role: 'user', text: 'hi' })) } } }; try { return fn() } finally { delete globalThis.window } }
 ok('Settings, with a key: "Add a reward" ends on a gap for the parent to finish, which only a pill can leave, so not on the welcome',
   keyed(0, () => chips()).length === 0 && labels(keyed(1, () => chips())).includes('Add a reward'))
 ok('Settings, with no key: "Add a reward" is answered at once, so it is on the welcome', labels(withChat(0, () => chips())).includes('Add a reward')
   && typeof withChat(0, () => chips()).find((c) => c.label === 'Add a reward')?.answer === 'string')
 at('/parent/plan')
 ok('Plans: "What does Elite add?" on the welcome', labels(withChat(0, () => chips())).length === 1 && /add\?$/.test(labels(withChat(0, () => chips()))[0]))
-ok('no store to ask (Node, an old core): the whole list', labels(chips()).length === 3)
+ok('no store to ask (Node, an old core), so no key: the plan screen\'s one suggestion', labels(chips()).length === 1)
 ok('welcomeChips leaves out what a pill does (by its id since 0.31.0) and a gap to finish', rankup.welcomeChips([{ id: 'waiting', label: 'x', answer: 'x' },
   { id: 'week', label: 'How are the kids doing?', answer: 'x' }, { label: 'Gap', prompt: 'Add a reward: ' }, { label: 'Keep', prompt: 'Keep this.' }]).map((c) => c.label).join() === 'Keep')
 ok('the core shows them on the welcome itself (pilot-chips-welcome)', /class: "pilot-chips pilot-chips-welcome"/.test(read('public/pilot/pilot-panel.js')))

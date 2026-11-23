@@ -502,10 +502,13 @@ export default function KidHome() {
         <button
           type="button"
           onClick={() => navigate('/kid/market')}
-          className="card w-full mb-3 flex items-center gap-3 text-left transition-transform active:scale-[0.98]"
+          className="card w-full mb-3 p-3 flex items-center gap-3 text-left transition-transform active:scale-[0.98]"
           style={{ borderColor: 'var(--accent)' }}
+          data-testid="open-market"
         >
-          <span className="text-2xl" aria-hidden="true">🛍️</span>
+          {/* Padded like the Leaderboards and school rows above it (0.33.0):
+              the bag and the arrow sat on the card's very edges. */}
+          <span className="text-2xl shrink-0" aria-hidden="true">🛍️</span>
           <span className="flex-1 min-w-0">
             <span className="block font-semibold text-sm">The Sunday Market is open</span>
             <span className="block text-xs text-muted">Skins you cannot get any other day.</span>

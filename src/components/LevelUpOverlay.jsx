@@ -145,7 +145,7 @@ export default function LevelUpOverlay({ levelUp, streak = null, kid, theme, onC
         </h2>
         <p className="levelup-words text-muted mb-2">
           {away
-            ? `Your chores were accepted. You went from level ${levelUp.from} to ${levelUp.to}!`
+            ? `${levelUp.chores === 1 ? 'Your chore was accepted' : 'Your chores were accepted'}. You went from level ${levelUp.from} to ${levelUp.to}!`
             : `${kid.name} went from level ${levelUp.from} to ${levelUp.to}.`}
         </p>
         {streak && (

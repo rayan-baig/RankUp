@@ -87,9 +87,9 @@
 .ds-hero img { flex: 0 0 38px; width: 38px; height: 38px; border-radius: 999px; background: #e8e0ff; box-shadow: 0 0 0 2px #fff, 0 0 12px -2px #7c5cd6; }
 .ds-bar { display: block; height: 6px; margin-top: 5px; border-radius: 999px; overflow: hidden; background: #e8e0ff; }
 .ds-bar > span { display: block; height: 100%; width: 64%; border-radius: 999px; background: linear-gradient(90deg, #7c5cd6, #1b9ae4); }
-.ds-bar-100 > span { width: 100%; }
-.ds-bar-69 > span { width: 69%; }
-.ds-bar-25 > span { width: 25%; }
+.ds-bar-78 > span { width: 78%; }
+.ds-bar-52 > span { width: 52%; }
+.ds-bar-19 > span { width: 19%; }
 .ds-quest { padding: 7px 9px; border-radius: 14px; background: #fff; border: 1px solid #cfc2f5; }
 .ds-btn-kid {
   display: flex;
