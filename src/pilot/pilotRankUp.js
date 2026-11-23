@@ -6,7 +6,7 @@
  * the page has loaded, so it is never on a child's phone and never part of
  * the first load. It:
  *
- *   - adds the core's one script tag (public/pilot/, core 1.4.2, copied
+ *   - adds the core's one script tag (public/pilot/, core 1.4.3, copied
  *     unchanged from the MTRX Horizyn site), which
  *     then loads public/pilot-rankup.js, which calls start() here;
  *   - mounts Pilot with RankUp's config: who is using it, which screen, its
@@ -16,7 +16,10 @@
  *     (core 1.4.0, pilotAnswers.js): what's waiting, this week's numbers,
  *     this screen explained, and a link to Assign; since core 1.4.2 (0.33.0)
  *     its own "Summarise this" (config.screenChip) and `match` words, so a
- *     question typed with no key finds the answer it fits;
+ *     question typed with no key finds the answer it fits; since core 1.4.3
+ *     (0.33.1) one answer is one item however many buttons give it, and a
+ *     typed question nothing fits gets Pilot's "needs a key" reply in the
+ *     chat (noKeyReply, left on);
  *   - takes the robot off the page the moment Pilot is not allowed (leaving
  *     Parent Mode, "Hand to Ava") and puts it back when it is;
  *   - forgets the chat, the memory and any key kept for this tab only when
@@ -272,14 +275,17 @@ function onWelcome() {
   try { return window.Pilot?.store?.loadChat?.().length === 0 } catch { return false }
 }
 /*
- * With no key (core 1.4.2), the suggestions a pill already does are left out
- * after the welcome too: the core offers the pills again under each of
- * RankUp's answers, and two items with one answer would leave a typed
- * question tied between them, answered by neither (core issue 9).
+ * Once chatting, the whole list, key or not. 0.33.0 (core 1.4.2) left out
+ * what a pill already does while there was no key, since a suggestion and a
+ * pill with one answer tied a typed question ("What's waiting for me?" got
+ * key settings) and both showed under an answer. Core 1.4.3 counts the same
+ * answer or link as one item (sameItem), so 0.33.1 dropped that.
+ * The welcome keeps welcomeChips: there the core shows the pills and the
+ * suggestions side by side, each as given.
  */
 function chips() {
   const list = screenChips()
-  return onWelcome() || !keyReady() ? welcomeChips(list) : list
+  return onWelcome() ? welcomeChips(list) : list
 }
 
 function taskPrompt() {

@@ -110,12 +110,13 @@ for (const [w, h] of [[320, 640], [375, 667], [375, 812], [1440, 900]]) {
   ok(`${w}x${h}: and under it, the key offered ("Want more? …" and Key settings)`, (await page.locator('.pilot-root .pilot-more').count()) === 1
     && /Want more\? Add your AI key to ask anything\./.test(one))
   ok(`${w}x${h}: no key settings opened, nothing waiting in the box`, !(await page.locator('.pilot-root .pilot-settings-view').isVisible()) && (await page.locator('.pilot-root .pilot-input').inputValue()) === '')
-  // 0.33.0: with no key the suggestions leave out what a pill does; the pill
-  // "How is my kid doing?" (the same answer) is offered again under the answer.
-  await page.locator('.pilot-root .pilot-pill:visible', { hasText: 'How is my kid doing?' }).first().click()
+  // 0.33.1 (core 1.4.3): the suggestions are the whole list with no key too,
+  // and one answer is one item, so under the answer the week is offered once,
+  // as the suggestion "How are the kids doing?" (the pill's twin).
+  await page.locator('.pilot-root .pilot-again .pilot-pill:visible', { hasText: /How (are the kids|is my kid) doing\?/ }).first().click()
   await page.waitForTimeout(500)
   const two = await log(page)
-  ok(`${w}x${h}: "How is my kid doing?": the dashboard's own This week numbers`, shown.chores && two.includes(`Chores done: ${shown.chores}`)
+  ok(`${w}x${h}: "How are the kids doing?": the dashboard's own This week numbers`, shown.chores && two.includes(`Chores done: ${shown.chores}`)
     && two.includes(`XP earned: ${shown.xp}`) && two.includes(`Days in a row: ${shown.streak}`), JSON.stringify(shown) + ' ' + two.slice(-400))
   ok(`${w}x${h}: no child's or family's name in Pilot's answers`, !NAMES.test(two.replace(/^.*?(?=What's waiting)/s, '')), two.slice(0, 200))
   ok(`${w}x${h}: the answers fit the window (no sideways scroll)`, await page.evaluate(() => { const l = document.querySelector('.pilot-root .pilot-log'); return l.scrollWidth <= l.clientWidth + 1 }))

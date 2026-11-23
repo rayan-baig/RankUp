@@ -75,6 +75,14 @@ the slot (the set-up, gift and School League pages). RankUp leaves
 `handle` on. It moves nothing by `--pilot-keep-d`, so 1.4.2's
 `--pilot-keep-dy` needs nothing from it.
 
+Core 1.4.3 (RankUp 0.33.1) widens the phone's side gutter to 34px with
+`keepInViewport`, moves a scrolled phone robot off dense words near the
+page's end, and makes the window compact while its box is typed in on a
+short screen (a phone's keyboard open). RankUp sets `gutter: false` and sizes
+nothing from `--pilot-side`, so the gutter changes nothing here; in the slot
+`dockedPlace` still answers first, so the robot never moves off it; the
+compact window needs nothing from RankUp's theme.
+
 On a computer (1100px and up, 0.29.0) Parent Mode's tab bar is a sidebar down
 the left edge, and the slot is at its foot: `dockedPlace` answers "bottom
 left" when the slot is on the left half of the window, so the robot sits in
@@ -123,20 +131,26 @@ Since core 1.2.0 a website can make the welcome its own, and RankUp does
   for…**, **How is my kid doing?**, **Explain this screen** and **Add my AI
   key** (key settings). Since 0.31.0 (core 1.4.0) the first four need no key
   at all: see **Useful before a key** below. With no key, a question the
-  parent types (or an AI suggestion) stays in the box, key settings open
-  ("Your message is waiting in the box…") and it is sent the moment a key is
-  saved.
+  parent types (or an AI suggestion) stays in the box and is sent the moment
+  a key is saved. Since core 1.4.3 (RankUp 0.33.1) Pilot says so in the
+  chat ("I need an AI key to answer that one. Here's what I can help with
+  right now:", then what RankUp answers itself, each once, and **Add my AI
+  key**, then "Your message is waiting in the box…") instead of opening key
+  settings at once. RankUp leaves `noKeyReply` unset, so the core's words.
 - **This screen's suggestions** (`chips`): the core now shows them on the
   welcome too, under the pills. There RankUp leaves out what a pill already
   does, and any suggestion that ends on a gap for the parent to finish (only a
   pill can leave words in the box): on Home all three are pills, so none show;
-  on Review "Which chore is oldest?" does. Once a chat has started, with a
-  key, the suggestions are the whole list again ("What's waiting for me?" and
-  "Add a chore for…" first, then one for the screen); with no key (0.33.0)
-  what a pill does stays out, since core 1.4.2 offers the pills again under
-  every answer of RankUp's own, and two items with the same answer would
-  leave a typed question tied between them. A suggestion carries the `id`
-  of the pill that does the same (`welcomeChips`).
+  on Review "Which chore is oldest?" does. Once a chat has started the
+  suggestions are the whole list again, key or not ("What's waiting for me?"
+  and "Add a chore for…" first, then one for the screen). 0.33.0 left out
+  what a pill does while there was no key: under core 1.4.2 a suggestion and
+  a pill with the same answer tied a typed question ("What's waiting for
+  me?" opened key settings) and both showed in the row under an answer.
+  Core 1.4.3 counts the same answer, the same link or the same words as one
+  item (`sameItem`), so 0.33.1 removed that workaround (checked in a browser
+  first; `tests/fixes34.mjs` and `tests/fixes34ui.mjs`). A suggestion carries
+  the `id` of the pill that does the same (`welcomeChips`).
 - **Chat keys only** (`hideKeySections: ['image', 'video']`): RankUp has no
   use for pictures or videos made by an AI.
 - **The key, asked for once** (core 1.3.0, RankUp 0.29.0): because RankUp's
@@ -193,7 +207,10 @@ sent). Each pill and suggestion carries `match` words for this ("pending",
 "review" and "approve" for what's waiting; "oldest" and "first" for the
 oldest chore; and so on, in `pilotRankUp.js`); anything else still waits in
 the box for a key. `tests/fixes33.mjs` runs a list of questions through the
-core's own `matchTyped`.
+core's own `matchTyped`. Since core 1.4.3 a pill's or a suggestion's own
+words, typed (any case, with or without its "?"), always get its answer, and
+the row under a typed answer leaves out the item it matched;
+`tests/fixes34.mjs` types every one of RankUp's on every screen Pilot is on.
 
 **Each screen explained (0.32.0).** Every parent screen has its own words and
 its own "Right now" counts (`SCREEN_HELP` in `pilotAnswers.js`): Review the
@@ -242,7 +259,7 @@ on later; `src/styles/index.css` stops the resting robot's float).
 
 | File | What it is |
 |---|---|
-| `public/pilot/` | The shared core, **Pilot core 1.4.2** (MTRX Horizyn commit a1c9253), copied unchanged with its robot pictures and layers (and since 1.4.1 the same in the sizes a phone draws them, named on the script tag as `robotSet` and `rest*Set`), and the 18 pictures in `poses/`. |
+| `public/pilot/` | The shared core, **Pilot core 1.4.3** (MTRX Horizyn commit ea7498b), copied unchanged with its robot pictures and layers (and since 1.4.1 the same in the sizes a phone draws them, named on the script tag as `robotSet` and `rest*Set`), and the 18 pictures in `poses/`. |
 | `src/lib/pilotGate.js`, `src/components/PilotGate.jsx` | The only part in the first load: where Pilot may be, and fetching the rest once the page has loaded. |
 | `src/pilot/pilotRankUp.js` | The config: the core's script tag, the welcome (tagline and pills), the screens, suggestions, `kidView`, hiding and showing, forgetting a family's chat. |
 | `src/pilot/pilotAnswers.js` | The answers Pilot gives with no key (core 1.4.0): what's waiting, This week, each screen explained with its own counts, its summary, each screen's own suggestion, Elite, the plans. |
