@@ -67,11 +67,29 @@ const watch = (page) => page.evaluate(() => {
   new MutationObserver(note).observe(document.body, { childList: true, subtree: true })
 })
 const seen = (page) => page.evaluate(() => window.__seen)
+/*
+ * The demo's history is a few days old, so early in a week (a Monday) Ava has
+ * fewer of this week's chores than the goal: the goal is set to one more than
+ * she has, so the chore accepted next reaches it on any day (0.33.0).
+ */
+const goalWithinReach = async (page) => {
+  await page.evaluate(() => {
+    const st = JSON.parse(localStorage.getItem('rankup.state.v1'))
+    const ava = st.kids.find((k) => k.name === 'Ava')
+    const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+    const done = st.submissions.filter((x) => x.kidId === ava.id && x.status === 'approved' && x.decidedAt >= d.getTime()).length
+    st.family = { ...st.family, weeklyChoreGoal: Math.min(50, done + 1) }
+    localStorage.setItem('rankup.state.v1', JSON.stringify(st))
+  })
+  await page.reload({ waitUntil: 'networkidle' })
+  await page.waitForTimeout(1500)
+}
 
 console.log('\n=== 1. A child\'s celebrations (the demo, 375px) ===')
 {
   const { ctx, page } = await open(375, 812)
   await demo(page)
+  await goalWithinReach(page)
   await go(page, '/parent/approvals', 1200)
   await page.getByRole('button', { name: /^Accept/ }).first().click()
   await page.waitForTimeout(800)
@@ -140,6 +158,7 @@ console.log('\n=== 1. A child\'s celebrations (the demo, 375px) ===')
   // Reduce motion: the same moments, in words only.
   const { ctx, page } = await open(375, 812, { reduce: true })
   await demo(page)
+  await goalWithinReach(page)
   await go(page, '/parent/approvals', 1200)
   await page.getByRole('button', { name: /^Accept/ }).first().click()
   await page.waitForTimeout(3600)
