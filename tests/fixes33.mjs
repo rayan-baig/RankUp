@@ -79,8 +79,8 @@ function family({ trialDays = 6, tier = 'starter' } = {}) {
 
 console.log('\n=== 0. Pilot core 1.4.2 ===')
 const CORE = readdirSync('public/pilot').filter((f) => /\.(js|css)$/.test(f))
-ok('all thirteen core files say "Pilot core 1.4.2" (fingerprints in tests/fixes28.mjs)', CORE.length === 13
-  && CORE.every((f) => read(`public/pilot/${f}`).split('\n')[0].includes(`Pilot core 1.4.2 · ${f}`)))
+ok('all thirteen core files say "Pilot core 1.4.2" or later (1.4.3 since 0.33.1; fingerprints in tests/fixes28.mjs)', CORE.length === 13
+  && CORE.every((f) => new RegExp(`Pilot core 1\\.4\\.[2-9] · ${f.replace('.', '\\.')}`).test(read(`public/pilot/${f}`).split('\n')[0])))
 ok('the core has screenChip, matchTyped and the handle', typeof Panel.screenChip === 'function' && typeof Panel.matchTyped === 'function'
   && /function restHandle/.test(read('public/pilot/pilot-mascot.js')))
 const rk = code('src/pilot/pilotRankUp.js')
@@ -117,8 +117,11 @@ const HITS = [
 for (const [route, text, want] of HITS) ok(`typed on ${route}: "${text}" gets "${want}"`, typed(route, text) === want, String(typed(route, text)))
 const MISSES = [['/parent', 'Write me a poem about dragons'], ['/parent', 'How do I reset my password?'], ['/parent/plan', 'Can I get a refund?'], ['/parent', 'Is it ok?']]
 for (const [route, text] of MISSES) ok(`typed on ${route}: "${text}" gets nothing (the key flow, as before)`, typed(route, text) === null, String(typed(route, text)))
-ok('no key, once chatting: a suggestion the pills already make is left out, so no typed question is tied between two (core issue 9)',
-  (() => { at(demo, '/parent'); return withPilot(false, 2, () => chips()).length === 0 })())
+// 0.33.0 left the suggestions a pill already makes out with no key, so no
+// typed question was tied between two (core issue 9). Core 1.4.3 tells one
+// answer from two (sameItem), so 0.33.1 dropped that: the whole list, and
+// still no tie (the typed questions above; tests/fixes34.mjs).
+ok('no key, once chatting: the whole list too, since core 1.4.3 (0.33.1)', (() => { at(demo, '/parent'); return withPilot(false, 2, () => chips()).length === 3 })())
 ok('with a key, the whole list once chatting', (() => { at(demo, '/parent'); return withPilot(true, 2, () => chips()).length === 3 })())
 
 // The tab bar's slot (a phone) and the sidebar's (a computer), with core 1.4.2.

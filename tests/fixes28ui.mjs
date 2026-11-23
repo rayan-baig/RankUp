@@ -140,9 +140,14 @@ console.log('\n=== With no key: the question waits, and goes once a key is saved
   await page.locator('.pilot-root .pilot-send').click()
   await page.waitForTimeout(600)
   ok('no key: the question stays in the box', (await page.locator('.pilot-root .pilot-input').inputValue()) === 'Draft a thank-you note for the kids, please.')
-  ok('and key settings open, saying it is waiting', /Your message is waiting in the box\. It sends as soon as you add a key\./.test(await page.locator('.pilot-root .pilot-settings-view').innerText()))
+  // Since 0.33.1 (core 1.4.3, noKeyReply) Pilot says so in the chat, with
+  // what it can do now and the key pill, instead of opening key settings.
+  ok('and Pilot says in the chat that it needs a key, saying it is waiting', /I need an AI key to answer that one/.test(await page.locator('.pilot-root .pilot-log').innerText())
+    && /Your message is waiting in the box\. It sends as soon as you add a key\./.test(await page.locator('.pilot-root .pilot-nokey-row').innerText()))
   ok('nothing was sent anywhere', bodies.length === 0)
   await shot(page, '375-waiting')
+  await page.locator('.pilot-root .pilot-nokey-row .pilot-pill', { hasText: 'Add my AI key' }).click()
+  await page.waitForTimeout(400)
   await page.locator('.pilot-root .pilot-settings-view').getByRole('button', { name: '+ Add a key' }).click()
   await page.locator('.pilot-root select[aria-label="Provider"]').selectOption('anthropic')
   // "AI key" since core 1.3.0 (a website's words), "API key" before.
